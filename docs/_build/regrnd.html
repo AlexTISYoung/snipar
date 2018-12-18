@@ -1,0 +1,283 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Documentation for ‘regrnd’ module &#8212; regrnd 1.2.0a1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.2.0a1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="Guide" href="guide.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="documentation-for-regrnd-module">
+<h1>Documentation for &#8216;regrnd&#8217; module<a class="headerlink" href="#documentation-for-regrnd-module" title="Permalink to this headline">¶</a></h1>
+<p>Documentation for the regrnd model class.</p>
+<span class="target" id="module-regrnd"></span><dl class="class">
+<dt id="regrnd.model">
+<em class="property">class </em><code class="descclassname">regrnd.</code><code class="descname">model</code><span class="sig-paren">(</span><em>y</em>, <em>X</em>, <em>labels</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/regrnd.html#model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#regrnd.model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Define a linear model with repeated observations.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>y</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>1D array of phenotype observations</p>
+</div></blockquote>
+<p><strong>X</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>Design matrix for the fixed mean effects.</p>
+</div></blockquote>
+<p><strong>labels</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>1D array of sample labels</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><strong>model</strong> : <a class="reference internal" href="#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a></p>
+</td>
+</tr>
+</tbody>
+</table>
+<p class="rubric">Methods</p>
+<table border="1" class="longtable docutils">
+<colgroup>
+<col width="10%" />
+<col width="90%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td><a class="reference internal" href="#regrnd.model.likelihood_and_gradient" title="regrnd.model.likelihood_and_gradient"><code class="xref py py-obj docutils literal"><span class="pre">likelihood_and_gradient</span></code></a>(alpha,&nbsp;sigma2,&nbsp;tau,&nbsp;l)</td>
+<td>Compute the loss function, which is -2 times the likelihood plus a L2 regularisation term,</td>
+</tr>
+<tr class="row-even"><td><a class="reference internal" href="#regrnd.model.optimize_model" title="regrnd.model.optimize_model"><code class="xref py py-obj docutils literal"><span class="pre">optimize_model</span></code></a>(l[,&nbsp;init_params])</td>
+<td>Find the parameters that minimise the loss function for a given regularisation parameter</td>
+</tr>
+<tr class="row-odd"><td><a class="reference internal" href="#regrnd.model.predict" title="regrnd.model.predict"><code class="xref py py-obj docutils literal"><span class="pre">predict</span></code></a>(X)</td>
+<td>Predict new observations based on model regression coefficients</td>
+</tr>
+<tr class="row-even"><td><code class="xref py py-obj docutils literal"><span class="pre">set_alpha</span></code>(alpha)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<dl class="method">
+<dt id="regrnd.model.likelihood_and_gradient">
+<code class="descname">likelihood_and_gradient</code><span class="sig-paren">(</span><em>alpha</em>, <em>sigma2</em>, <em>tau</em>, <em>l</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/regrnd.html#model.likelihood_and_gradient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#regrnd.model.likelihood_and_gradient" title="Permalink to this definition">¶</a></dt>
+<dd><p>Compute the loss function, which is -2 times the likelihood plus a L2 regularisation term,
+along with its gradient</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>alpha</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>value of the regression coefficients</p>
+</div></blockquote>
+<p><strong>sigma2</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#float" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">float</span></code></a></p>
+<blockquote>
+<div><p>variance of model residuals</p>
+</div></blockquote>
+<p><strong>tau</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#float" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">float</span></code></a></p>
+<blockquote>
+<div><p>ratio of variance of model residuals to variance explained by mean differences between individuals</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>L, grad</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#float" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">float</span></code></a></p>
+<blockquote class="last">
+<div><p>loss function and gradient, divided by sample size</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="regrnd.model.optimize_model">
+<code class="descname">optimize_model</code><span class="sig-paren">(</span><em>l</em>, <em>init_params=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/regrnd.html#model.optimize_model"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#regrnd.model.optimize_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find the parameters that minimise the loss function for a given regularisation parameter</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>l</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>array of regularisation parameters for regression coefficients</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>optim</strong> : <code class="xref py py-class docutils literal"><span class="pre">list</span></code></p>
+<blockquote class="last">
+<div><p>the output of the scipy.fmin_l_bfgs_b function, first element has optimised parameters</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="regrnd.model.predict">
+<code class="descname">predict</code><span class="sig-paren">(</span><em>X</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/regrnd.html#model.predict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#regrnd.model.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict new observations based on model regression coefficients</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>X</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>matrix of feature observations to predict from</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>y</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote class="last">
+<div><p>predicted values</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="regrnd.simulate">
+<code class="descclassname">regrnd.</code><code class="descname">simulate</code><span class="sig-paren">(</span><em>n</em>, <em>alpha</em>, <em>sigma2</em>, <em>tau</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/regrnd.html#simulate"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#regrnd.simulate" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Simulate from a linear model with repeated observations from individuals. The mean for each individual</dt>
+<dd>is drawn from a normal distribution.</dd>
+</dl>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><p class="first"><strong>n</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#int" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">int</span></code></a></p>
+<blockquote>
+<div><p>sample size</p>
+</div></blockquote>
+<p><strong>alpha</strong> : <code class="xref py py-class docutils literal"><span class="pre">array</span></code></p>
+<blockquote>
+<div><p>value of regression coefficeints</p>
+</div></blockquote>
+<p><strong>sigma2</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#float" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">float</span></code></a></p>
+<blockquote>
+<div><p>variance of residuals</p>
+</div></blockquote>
+<p><strong>tau</strong> : <a class="reference external" href="https://docs.python.org/2/library/functions.html#float" title="(in Python v2.7)"><code class="xref py py-class docutils literal"><span class="pre">float</span></code></a></p>
+<blockquote>
+<div><p>ratio of variance of residuals to variance of distribution of between individual means</p>
+</div></blockquote>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>model</strong> : <a class="reference internal" href="#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a></p>
+<blockquote class="last">
+<div><p>linear model with repeated observations</p>
+</div></blockquote>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">regrnd</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="guide.html">Guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Documentation for &#8216;regrnd&#8217; module</a><ul class="simple">
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="guide.html" title="previous chapter">Guide</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Alexander Thomas Ian Strudwick Young.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.5.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/regrnd.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

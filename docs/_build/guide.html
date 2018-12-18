@@ -1,0 +1,140 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Guide &#8212; regrnd 1.2.0a1 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.2.0a1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Documentation for ‘regrnd’ module" href="regrnd.html" />
+    <link rel="prev" title="Welcome to regrnd’s documentation!" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="guide">
+<h1>Guide<a class="headerlink" href="#guide" title="Permalink to this headline">¶</a></h1>
+<p><strong>Introduction</strong></p>
+<p>regrnd is a python library for fitting L2 regularised regression models with repeated observations from the same sample.
+regrnd should be run with Anaconda built with Python 2.7.</p>
+<p>A regrnd model (<a class="reference internal" href="regrnd.html#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a>) consists of a linear model for the mean along
+with a vector of sample labels that allows for repeated observations from the same sample.</p>
+<p>The documentation for the regrnd module (<a class="reference internal" href="regrnd.html"><span class="doc">Documentation for &#8216;regrnd&#8217; module</span></a>) contains information on how to define a <a class="reference internal" href="regrnd.html#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a>,
+how to optimise a <a class="reference internal" href="regrnd.html#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a> given a L2 regularisation parameter, how to predict from
+a <a class="reference internal" href="regrnd.html#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a>, and how to simulate a <a class="reference internal" href="regrnd.html#regrnd.model" title="regrnd.model"><code class="xref py py-class docutils literal"><span class="pre">regrnd.model</span></code></a>.</p>
+<p><strong>Running tests</strong></p>
+<p>To check that the code is working properly and computing likelihoods and gradients accurately, you can
+run tests. In the regrnd/ subdirectory, type</p>
+<blockquote>
+<div><code class="docutils literal"><span class="pre">python</span> <span class="pre">tests.py</span></code></div></blockquote>
+<p>The output should say</p>
+<blockquote>
+<div><p><code class="docutils literal"><span class="pre">Ran</span> <span class="pre">4</span> <span class="pre">tests</span> <span class="pre">in...</span></code></p>
+<p><code class="docutils literal"><span class="pre">OK</span></code></p>
+</div></blockquote>
+<p><strong>Running the code</strong></p>
+<p>In the regrnd/ subdirectory, there is a script &#8216;met_analysis.py&#8217;. The script takes one
+command line argument that is the location of the training_data.csv file. Unless you wish to install
+regrnd as a package, the &#8216;met_analysis.py&#8217; script should be run from the regrnd/ subdirectory
+so that it can import the code in regrnd/regrnd.py.</p>
+<p>The cross-validation code is contained in this script, but it is commmented out as it
+takes some time to run for all the investigated regularisation parameters.</p>
+<p>Without modifying the script, it trains the model on the training data using the
+regularisation parameters found by cross-validation. It then predicts
+the &#8216;mets&#8217; of the test set, and prints the mean squared error on the test set.</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">regrnd</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="regrnd.html">Documentation for &#8216;regrnd&#8217; module</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="previous chapter">Welcome to regrnd&#8217;s documentation!</a></li>
+      <li>Next: <a href="regrnd.html" title="next chapter">Documentation for &#8216;regrnd&#8217; module</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Alexander Thomas Ian Strudwick Young.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.5.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+      |
+      <a href="_sources/guide.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

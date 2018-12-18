@@ -1,0 +1,289 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>regrnd &#8212; regrnd 1.2.0a1 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.2.0a1',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true,
+        SOURCELINK_SUFFIX: '.txt'
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head>
+  <body role="document">
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for regrnd</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy.optimize</span> <span class="k">import</span> <span class="n">fmin_l_bfgs_b</span>
+
+<div class="viewcode-block" id="model"><a class="viewcode-back" href="../regrnd.html#regrnd.model">[docs]</a><span class="k">class</span> <span class="nc">model</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Define a linear model with repeated observations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    y : :class:`~numpy:numpy.array`</span>
+<span class="sd">        1D array of phenotype observations</span>
+<span class="sd">    X : :class:`~numpy:numpy.array`</span>
+<span class="sd">        Design matrix for the fixed mean effects.</span>
+<span class="sd">    labels : :class:`~numpy:numpy.array`</span>
+<span class="sd">        1D array of sample labels</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    model : :class:`regrnd.model`</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">y</span><span class="p">,</span><span class="n">X</span><span class="p">,</span><span class="n">labels</span><span class="p">):</span>
+        <span class="c1"># Get sample size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">=</span><span class="n">X</span>
+        <span class="c1"># Label mapping</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">labels</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">if</span> <span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">]]</span><span class="o">=</span><span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span><span class="n">l</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">]]</span><span class="o">+=</span><span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">l</span><span class="p">]]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y_lab</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_lab</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="o">.</span><span class="n">iterkeys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">y_lab</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">=</span><span class="n">y</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="p">[</span><span class="n">label</span><span class="p">]]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">X_lab</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">=</span><span class="n">X</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="p">[</span><span class="n">label</span><span class="p">],:]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_labels</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y_lab</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="c1"># response</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="o">=</span><span class="n">y</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="o">=</span><span class="n">labels</span>
+
+
+    <span class="c1"># Compute likelihood of data given beta, alpha</span>
+<div class="viewcode-block" id="model.likelihood_and_gradient"><a class="viewcode-back" href="../regrnd.html#regrnd.model.likelihood_and_gradient">[docs]</a>    <span class="k">def</span> <span class="nf">likelihood_and_gradient</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">alpha</span><span class="p">,</span> <span class="n">sigma2</span><span class="p">,</span> <span class="n">tau</span><span class="p">,</span> <span class="n">l</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Compute the loss function, which is -2 times the likelihood plus a L2 regularisation term,</span>
+<span class="sd">        along with its gradient</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        alpha : :class:`~numpy:numpy.array`</span>
+<span class="sd">            value of the regression coefficients</span>
+<span class="sd">        sigma2 : :class:`float`</span>
+<span class="sd">            variance of model residuals</span>
+<span class="sd">        tau : :class:`float`</span>
+<span class="sd">            ratio of variance of model residuals to variance explained by mean differences between individuals</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        L, grad : :class:`float`</span>
+<span class="sd">            loss function and gradient, divided by sample size</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">l</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">l</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">l</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">()</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">l</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;Incorrect length of regularisation vector&#39;</span><span class="p">))</span>
+        <span class="n">alpha_T_scaled</span> <span class="o">=</span> <span class="n">alpha</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span> <span class="n">l</span>
+        <span class="c1">## Likelihood</span>
+        <span class="n">resid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">y</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+        <span class="n">RSS</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">resid</span><span class="p">))</span>
+
+        <span class="n">L</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">sigma2</span><span class="p">)</span><span class="o">+</span><span class="n">RSS</span><span class="o">/</span><span class="n">sigma2</span><span class="o">+</span><span class="n">alpha_T_scaled</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span>
+
+        <span class="c1">## Gradient with respect to alpha</span>
+        <span class="n">grad_alpha</span> <span class="o">=</span> <span class="o">-</span><span class="mi">2</span> <span class="o">*</span> <span class="n">resid</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">)</span><span class="o">/</span><span class="n">sigma2</span><span class="o">+</span><span class="mi">2</span><span class="o">*</span><span class="n">alpha_T_scaled</span>
+
+        <span class="c1">## Gradient with respect to sigma2</span>
+        <span class="n">grad_sigma2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="o">/</span><span class="n">sigma2</span><span class="o">-</span><span class="n">RSS</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">sigma2</span><span class="p">)</span>
+
+        <span class="c1">## Gradient with respect to tau</span>
+        <span class="n">grad_tau</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">y_lab</span><span class="o">.</span><span class="n">iterkeys</span><span class="p">():</span>
+            <span class="n">resid_label</span><span class="o">=</span><span class="n">resid</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">label_indices</span><span class="p">[</span><span class="n">label</span><span class="p">]]</span>
+            <span class="n">resid_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">resid_label</span><span class="p">)</span>
+            <span class="n">resid_square_sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">resid_sum</span><span class="p">)</span>
+            <span class="c1"># Add to likelihood</span>
+            <span class="n">L</span> <span class="o">=</span> <span class="n">L</span> <span class="o">-</span> <span class="n">resid_square_sum</span><span class="o">/</span><span class="p">(</span><span class="n">sigma2</span><span class="o">*</span><span class="p">(</span><span class="n">tau</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">]))</span><span class="o">+</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">/</span><span class="n">tau</span><span class="p">)</span>
+            <span class="c1"># Add to alpha gradient</span>
+            <span class="n">grad_alpha</span> <span class="o">=</span> <span class="n">grad_alpha</span> <span class="o">+</span> <span class="p">(</span><span class="mi">2</span><span class="o">/</span><span class="n">sigma2</span><span class="p">)</span><span class="o">*</span><span class="n">resid_sum</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">X_lab</span><span class="p">[</span><span class="n">label</span><span class="p">],</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">/</span><span class="p">(</span><span class="n">tau</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">])</span>
+            <span class="c1"># Add to grad sigma2</span>
+            <span class="n">grad_sigma2</span><span class="o">+=</span><span class="n">resid_square_sum</span><span class="o">/</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">sigma2</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">tau</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">]))</span>
+            <span class="c1"># Add to grad tau</span>
+            <span class="n">grad_tau</span><span class="o">+=</span><span class="p">(</span><span class="n">resid_square_sum</span><span class="o">/</span><span class="n">sigma2</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">*</span><span class="p">(</span><span class="mi">1</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">]</span><span class="o">/</span><span class="n">tau</span><span class="p">))</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">tau</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">label_counts</span><span class="p">[</span><span class="n">label</span><span class="p">])</span>
+
+        <span class="c1"># Overall gradient vector</span>
+        <span class="n">grad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">grad_alpha</span><span class="p">,</span><span class="n">grad_sigma2</span><span class="p">,</span><span class="n">grad_tau</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">L</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span><span class="p">,</span> <span class="n">grad</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">n</span></div>
+
+<div class="viewcode-block" id="model.optimize_model"><a class="viewcode-back" href="../regrnd.html#regrnd.model.optimize_model">[docs]</a>    <span class="k">def</span> <span class="nf">optimize_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">l</span><span class="p">,</span><span class="n">init_params</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Find the parameters that minimise the loss function for a given regularisation parameter</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        l : :class:`array`</span>
+<span class="sd">            array of regularisation parameters for regression coefficients</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        optim : :class:`list`</span>
+<span class="sd">            the output of the scipy.fmin_l_bfgs_b function, first element has optimised parameters</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Initialise parameters</span>
+        <span class="k">if</span> <span class="n">init_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">init_params</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># Optimize</span>
+        <span class="n">optimized</span> <span class="o">=</span> <span class="n">fmin_l_bfgs_b</span><span class="p">(</span><span class="n">func</span><span class="o">=</span><span class="n">lik_and_grad</span><span class="p">,</span><span class="n">x0</span><span class="o">=</span><span class="n">init_params</span><span class="p">,</span>
+                                <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">y</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="n">l</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">optimized</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+
+        <span class="k">return</span> <span class="n">optimized</span></div>
+
+<div class="viewcode-block" id="model.predict"><a class="viewcode-back" href="../regrnd.html#regrnd.model.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">X</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Predict new observations based on model regression coefficients</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        X : :class:`array`</span>
+<span class="sd">            matrix of feature observations to predict from</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        y : :class:`array`</span>
+<span class="sd">            predicted values</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s1">&#39;alpha&#39;</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">X</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span><span class="p">(</span><span class="ne">AttributeError</span><span class="p">(</span><span class="s1">&#39;Model does not have known regression coefficients. Try optimizing model first&#39;</span><span class="p">))</span></div>
+
+    <span class="k">def</span> <span class="nf">set_alpha</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">alpha</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span></div>
+
+<span class="k">def</span> <span class="nf">lik_and_grad</span><span class="p">(</span><span class="n">pars</span><span class="p">,</span><span class="o">*</span><span class="n">args</span><span class="p">):</span>
+    <span class="c1"># Wrapper for function to pass to L-BFGS-B</span>
+    <span class="n">y</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">l</span> <span class="o">=</span> <span class="n">args</span>
+    <span class="n">mod</span> <span class="o">=</span> <span class="n">model</span><span class="p">(</span><span class="n">y</span><span class="p">,</span><span class="n">X</span><span class="p">,</span><span class="n">labels</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mod</span><span class="o">.</span><span class="n">likelihood_and_gradient</span><span class="p">(</span><span class="n">pars</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">pars</span><span class="p">[</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]]),</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">pars</span><span class="p">[</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">]),</span> <span class="n">l</span><span class="p">)</span>
+
+<div class="viewcode-block" id="simulate"><a class="viewcode-back" href="../regrnd.html#regrnd.simulate">[docs]</a><span class="k">def</span> <span class="nf">simulate</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">alpha</span><span class="p">,</span><span class="n">sigma2</span><span class="p">,</span><span class="n">tau</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Simulate from a linear model with repeated observations from individuals. The mean for each individual</span>
+<span class="sd">     is drawn from a normal distribution.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    n : :class:`int`</span>
+<span class="sd">        sample size</span>
+<span class="sd">    alpha : :class:`~numpy:numpy.array`</span>
+<span class="sd">        value of regression coefficeints</span>
+<span class="sd">    sigma2 : :class:`float`</span>
+<span class="sd">        variance of residuals</span>
+<span class="sd">    tau : :class:`float`</span>
+<span class="sd">        ratio of variance of residuals to variance of distribution of between individual means</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    model : :class:`regrnd.model`</span>
+<span class="sd">        linear model with repeated observations</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">alpha</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">((</span><span class="n">n</span> <span class="o">*</span> <span class="n">c</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">c</span><span class="p">))</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">random_effects</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sigma2</span><span class="o">/</span><span class="n">tau</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span><span class="o">+</span><span class="n">random_effects</span><span class="p">[</span><span class="n">labels</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sigma2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">model</span><span class="p">(</span><span class="n">y</span><span class="p">,</span><span class="n">X</span><span class="p">,</span><span class="n">labels</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">regrnd</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../guide.html">Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../regrnd.html">Documentation for &#8216;regrnd&#8217; module</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2017, Alexander Thomas Ian Strudwick Young.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.5.6</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.10</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

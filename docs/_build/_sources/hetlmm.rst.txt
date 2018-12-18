@@ -1,0 +1,11 @@
+Documentation for 'regrnd' module
+=================================
+
+Documentation for the heteroskedastic linear mixed model class.
+
+.. automodule:: regrnd
+
+.. autoclass:: regrnd.model
+    :members:
+
+.. autofunction:: regrnd.simulate
