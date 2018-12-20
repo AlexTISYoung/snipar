@@ -145,7 +145,7 @@ class model(object):
         # Optimize
         optimized = fmin_l_bfgs_b(func=lik_and_grad,x0=init_params,
                                 args=(self.y, self.X, self.labels),
-                                  parbounds = parbounds)
+                                  bounds = parbounds)
 
         # Get MLE
         optim = {}
