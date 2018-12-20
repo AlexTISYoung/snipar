@@ -239,7 +239,7 @@ if __name__ == '__main__':
                 families = np.unique(pheno_ids[:,0])
                 for fam in families:
                     g_fam = genotypes[geno_fam_dict[fam],loc]
-                    g_fam_not_NA = np.logical_not(np.isnan(test_gts))
+                    g_fam_not_NA = np.logical_not(np.isnan(g_fam))
                     if np.sum(g_fam_not_NA) > 1:
                         g_mean[pheno_fam_dict[fam]] = np.mean(g_fam[g_fam_not_NA])
                 # Get proband genotypes
@@ -263,5 +263,6 @@ if __name__ == '__main__':
                     alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
                 else:
                     print('Maximisation of likelihood failed for for '+sid[loc])
+            print(loc)
         outfile.write(sid[loc] +'\t'+ str(allele_frq)+'\t'+alpha_out+'\n')
     outfile.close()
