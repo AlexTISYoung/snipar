@@ -9,25 +9,16 @@ import code
 def neglog10pval(x,df):
     return -np.log10(np.e)*chi2.logsf(x,df)
 
-def vector_out(alpha,se,digits=4):
-##Output parameter estimates along with standard errors, t-statistics, and -log10(p-values) ##
+def vector_out(alpha_mle,digits=4):
+##Output parameter estimates along with standard errors ##
     ## Calculate test statistics
-    # t-statistic
-    t=alpha/se
-    # chi-square statistic
-    x2=np.square(t)
-    # Create output strings
-    if len(alpha.shape)==0:
-        pval=neglog10pval(x2,1)
-        alpha_print=str(round(alpha,digits))+'\t'+str(round(se,digits))+'\t'+str(round(t,digits))+'\t'+str(round(pval,digits))
-    else:
-        pvals=[neglog10pval(x,1) for x in x2]
-        alpha_print=''
-        for i in xrange(0,len(alpha)-1):
-            alpha_print+=str(round(alpha[i],digits))+'\t'+str(round(se[i],digits))+'\t'+str(round(t[i],digits))+'\t'+str(round(pvals[i],digits))+'\t'
-        i+=1
-        alpha_print+=str(round(alpha[i],digits))+'\t'+str(round(se[i],digits))+'\t'+str(round(t[i],digits))+'\t'+str(round(pvals[i],digits))
-    return alpha_print
+    alpha_est = alpha_l[0]
+    alpha_cov = alpha_l[1]
+    alpha_ses = np.sqrt(np.diag(alpha_cov))
+    alpha_out = str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
+    alpha_out += str(round(alpha_est[1]))+'\t'+str(round(alpha_ses[1],digits))+'\t'
+    alpha_out += str(round(alpha_cov[1,2]/(alpha_ses[0]*alpha_ses[1]),digits))+'\n'
+    return alpha_out
 
 def id_dict_make(ids):
 ## Make a dictionary mapping from IDs to indices ##
@@ -157,8 +148,18 @@ if __name__ == '__main__':
     y = y[pheno_ids_in_common]
     pheno_ids = pheno_ids[pheno_ids_in_common,:]
     pheno_id_dict = id_dict_make(pheno_ids)
+    # Dictionary to look up rows for each family
+    pheno_fam_dict = {}
+    for fam in np.unique(pheno_ids[:,0]):
+        pheno_fam_dict[fam] = np.where(pheno_ids[:,0]==fam)[0]
+    # Get relevant covariate rows
     X = X[pheno_ids_in_common,:]
+    # Vector to match genotype with phenotype ids
     geno_id_match = np.array([geno_id_dict[tuple(x)] for x in pheno_ids])
+    # Dictionary to look up rows for each family
+    geno_fam_dict = {}
+    for fam in np.unique(pheno_ids[:,0]):
+        geno_fam_dict[fam] = np.where(iid[:,0]==fam)[0]
 
 ### Get sample size
     n = y.shape[0]
@@ -175,10 +176,10 @@ if __name__ == '__main__':
         write_mode='wb'
     outfile=open(args.outprefix+'.models.gz',write_mode)
     if not args.append:
-        header='SNP\tn\tfrequency\tWF\tWF_se\tWF_t\tBF\tBF_se\tBF_t\tr_WF_BF\n'
+        header='SNP\tn\tfrequency\tWF\tWF_se\tBF\tBF_se\tr_WF_BF\n'
         outfile.write(header)
 
-    ######### Fit Null Model ##########
+######### Fit Null Model ##########
     ## Get initial guesses for null model
     print('Fitting Null Model')
     # Optimize null model
@@ -204,3 +205,63 @@ if __name__ == '__main__':
                    delimiter='\t', fmt='%s')
 
     # Fit SNP specific models
+    ### Project out mean covariates
+    if not args.fit_covariates:
+        # Residual y
+        y=y-X.dot(null_alpha[0])
+        # Reformulate fixed_effects
+        X=np.ones((int(n),1))
+        n_X=1
+
+    ############### Loop through loci and fit models ######################
+    print('Fitting models for genome-wide SNPs')
+    for loc in xrange(0,chr_length):
+        alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
+        # Filler for output if locus doesn't pass thresholds
+        allele_frq=np.nan
+        # Get test genotypes
+        test_gts=genotypes[:,loc]
+        # Find missingness and allele freq
+        test_gt_not_na=np.logical_not(np.isnan(test_gts))
+        n_l=np.sum(test_gt_not_na)
+        # Threshold on missingness
+        missingness = 100.0 * (1 - float(n_l) / n)
+        if missingness<args.max_missing:
+            t=test_gts[test_gt_not_na]
+            allele_frq=np.mean(t)/2
+            if allele_frq>0.5:
+                allele_frq=1-allele_frq
+            if allele_frq>args.min_maf:
+                del t
+                # Compute within family mean genotypes
+                g_mean = np.zeros((y.shape[0]))
+                g_mean[:] = np.nan
+                families = np.unique(pheno_ids[test_gt_not_na,0])
+                for fam in families:
+                    g_fam = genotypes[geno_fam_dict[fam],loc]
+                    g_fam_not_NA = np.logical_not(np.isnan(test_gts))
+                    if np.sum(g_fam_not_NA) > 1:
+                        g_mean[pheno_fam_dict[fam]] = np.mean(g_fam[g_fam_not_NA])
+                # Get proband genotypes
+                test_gts = test_gts[geno_id_match]
+                # Remove those with missing proband genotypes and families with less than two observed sib genotypes
+                not_na = np.logical_and(np.logical_not(np.isnan(test_gts)),np.logical_not(np.isnan(g_mean)))
+                test_gts = test_gts[not_na]
+                y_l = y_l[not_na]
+                g_mean = g_mean[not_na]
+                test_gts = test_gts[not_na]
+                n_loc = g_mean.shape[0]
+                fam_l = pheno_ids[not_na,:]
+                # Optimize model for SNP
+                X_l = np.ones((y_l.shape[0],3))
+                X_l[:,1] = test_gts-g_mean
+                X_l[:,2] = g_mean
+                model_l = sibreg.model(y_l,X_l,fam_l)
+                optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']))
+                if optim_l['success']:
+                    alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
+                    alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
+                else:
+                    print('Maximisation of likelihood failed for for '+sid[loc])
+        outfile.write(sid[loc] +'\t'+ str(allele_frq)+'\t'+alpha_out+'\n')
+    outfile.close()
