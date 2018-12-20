@@ -196,3 +196,5 @@ if __name__ == '__main__':
         np.savetxt(args.outprefix + '.null_covariate_effects.txt',
                    np.hstack((X_names.reshape((n_X, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
+
+    # Fit SNP specific models
