@@ -248,7 +248,7 @@ if __name__ == '__main__':
                 # Remove those with missing proband genotypes and families with less than two observed sib genotypes
                 not_na = np.logical_and(np.logical_not(np.isnan(test_gts)),np.logical_not(np.isnan(g_mean)))
                 test_gts = test_gts[not_na]
-                y_l = y_l[not_na]
+                y_l = y[not_na]
                 g_mean = g_mean[not_na]
                 test_gts = test_gts[not_na]
                 n_loc = g_mean.shape[0]
