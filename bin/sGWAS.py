@@ -250,7 +250,6 @@ if __name__ == '__main__':
                 test_gts = test_gts[not_na]
                 y_l = y[not_na]
                 g_mean = g_mean[not_na]
-                test_gts = test_gts[not_na]
                 n_loc = g_mean.shape[0]
                 fam_l = pheno_ids[not_na,:]
                 # Optimize model for SNP
