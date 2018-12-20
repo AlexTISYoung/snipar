@@ -215,7 +215,8 @@ if __name__ == '__main__':
 
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
-    for loc in xrange(0,chr_length):
+    #for loc in xrange(0,chr_length):
+    for loc in xrange(0, 100):
         print(str(loc))
         alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         # Filler for output if locus doesn't pass thresholds
@@ -251,7 +252,7 @@ if __name__ == '__main__':
                 y_l = y[not_na]
                 g_mean = g_mean[not_na]
                 n_loc = g_mean.shape[0]
-                fam_l = pheno_ids[not_na,:]
+                fam_l = pheno_ids[not_na,0]
                 # Optimize model for SNP
                 X_l = np.ones((y_l.shape[0],3))
                 X_l[:,1] = test_gts-g_mean
