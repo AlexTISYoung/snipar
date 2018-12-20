@@ -218,7 +218,7 @@ if __name__ == '__main__':
     #for loc in xrange(0,chr_length):
     for loc in xrange(0, 100):
         print(str(loc))
-        alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
+        alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
         # Filler for output if locus doesn't pass thresholds
         allele_frq=np.nan
         # Get test genotypes
