@@ -1,3 +1,4 @@
+#!/apps/well/python/2.7.8/bin/python
 import argparse
 import numpy as np
 from pysnptools.snpreader import Bed, Pheno
