@@ -236,7 +236,7 @@ if __name__ == '__main__':
                 # Compute within family mean genotypes
                 g_mean = np.zeros((y.shape[0]))
                 g_mean[:] = np.nan
-                families = np.unique(pheno_ids[test_gt_not_na,0])
+                families = np.unique(pheno_ids[:,0])
                 for fam in families:
                     g_fam = genotypes[geno_fam_dict[fam],loc]
                     g_fam_not_NA = np.logical_not(np.isnan(test_gts))
