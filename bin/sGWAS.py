@@ -92,6 +92,7 @@ if __name__ == '__main__':
     ####################### Read in data #########################
     #### Read phenotype ###
     pheno = Pheno(args.phenofile, missing=args.missing_char).read()
+    #pheno = Pheno('gwas/h2_0.4/h2_0.4.ped', missing='NA').read()
     y = np.array(pheno.val)
     pheno_ids = np.array(pheno.iid)
     if y.ndim == 1:
@@ -101,13 +102,13 @@ if __name__ == '__main__':
     else:
         raise (ValueError('Incorrect dimensions of phenotype array'))
     # Remove y NAs
-    y_not_nan = np.logical_not(np.isnan(y))
-    if np.sum(y_not_nan) < y.shape[0]:
-        y = y[y_not_nan]
-        pheno_ids = pheno_ids[y_not_nan,:]
-    pheno_id_dict = id_dict_make(np.array(pheno_ids))
-    pheno_fam_id_set = set(pheno_ids[:,0])
-    print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
+y_not_nan = np.logical_not(np.isnan(y))
+if np.sum(y_not_nan) < y.shape[0]:
+    y = y[y_not_nan]
+    pheno_ids = pheno_ids[y_not_nan,:]
+pheno_id_dict = id_dict_make(np.array(pheno_ids))
+pheno_fam_id_set = set(pheno_ids[:,0])
+print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
 
     ### Get covariates
     ## Get mean covariates
@@ -122,47 +123,48 @@ if __name__ == '__main__':
         X_stds = np.std(X[:, 1:n_X], axis=0)
         X[:, 1:n_X] = zscore(X[:, 1:n_X], axis=0)
     else:
-        X = np.ones((int(y.shape[0]), 1))
-        n_X = 1
-        X_names = np.array(['Intercept'])
+X = np.ones((int(y.shape[0]), 1))
+n_X = 1
+X_names = np.array(['Intercept'])
 
 ### Read genotypes ###
-    test_chr = Bed(args.genofile)
-    # select subset to test
-    iid = test_chr.iid
-    sid = test_chr.sid
-    pos = test_chr.pos
-    # Find ids from same families as those with phenotype data
-    fid_with_phen = np.array([x in pheno_fam_id_set for x in iid[:,0]])
-    test_chr = test_chr[fid_with_phen,:].read()
-    genotypes = test_chr.val
-    # Get genotype matrix
-    if genotypes.ndim == 1:
-        chr_length = 1
-        genotypes = genotypes.reshape(genotypes.shape[0], 1)
-    else:
-        chr_length = genotypes.shape[1]
-    print('Number of test loci: ' + str(genotypes.shape[1]))
-    print('Genotypes for '+str(genotypes.shape[0])+' individuals read')
-    # Get sample ids
-    geno_id_dict = id_dict_make(np.array(test_chr.iid))
+test_chr = Bed(args.genofile)
+#test_chr = Bed('full_sib_genotypes/chr_22.bed')
+# select subset to test
+iid = test_chr.iid
+sid = test_chr.sid
+pos = test_chr.pos
+# Find ids from same families as those with phenotype data
+fid_with_phen = np.array([x in pheno_fam_id_set for x in iid[:,0]])
+test_chr = test_chr[fid_with_phen,:].read()
+genotypes = test_chr.val
+# Get genotype matrix
+if genotypes.ndim == 1:
+    chr_length = 1
+    genotypes = genotypes.reshape(genotypes.shape[0], 1)
+else:
+    chr_length = genotypes.shape[1]
+print('Number of test loci: ' + str(genotypes.shape[1]))
+print('Genotypes for '+str(genotypes.shape[0])+' individuals read')
+# Get sample ids
+geno_id_dict = id_dict_make(np.array(test_chr.iid))
 
 ### Intersect and match genotype data with covariate and phenotype data ###
     # Intersect with phenotype IDs
-    ids_in_common = {tuple(x) for x in pheno_ids} & geno_id_dict.viewkeys()
-    pheno_ids_in_common = np.array([tuple(x) in ids_in_common for x in pheno_ids])
-    y = y[pheno_ids_in_common]
-    pheno_ids = pheno_ids[pheno_ids_in_common,:]
-    pheno_id_dict = id_dict_make(pheno_ids)
-    X = X[pheno_ids_in_common,:]
-    geno_id_match = np.array([geno_id_dict[tuple(x)] for x in pheno_ids])
+ids_in_common = {tuple(x) for x in pheno_ids} & geno_id_dict.viewkeys()
+pheno_ids_in_common = np.array([tuple(x) in ids_in_common for x in pheno_ids])
+y = y[pheno_ids_in_common]
+pheno_ids = pheno_ids[pheno_ids_in_common,:]
+pheno_id_dict = id_dict_make(pheno_ids)
+X = X[pheno_ids_in_common,:]
+geno_id_match = np.array([geno_id_dict[tuple(x)] for x in pheno_ids])
 
 ### Get sample size
-    n = y.shape[0]
-    if n == 0:
-        raise (ValueError('No non-missing observations with both phenotype and genotype data'))
-    print(str(n) + ' individuals in genotype file with no missing phenotype or covariate observations')
-    n = float(n)
+n = y.shape[0]
+if n == 0:
+    raise (ValueError('No non-missing observations with both phenotype and genotype data'))
+print(str(n) + ' individuals in genotype file with no missing phenotype or covariate observations')
+n = float(n)
 
 ######### Initialise output files #######
     ## Output file
@@ -180,8 +182,10 @@ if __name__ == '__main__':
     print('Fitting Null Model')
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
+    #sigma_2_init = np.var(y) * 1 / (1 + 1)
     null_model = sibreg.model(y, X, pheno_ids[:,0])
-    null_optim = null_model.optimize_model(np.log(np.array([sigma_2_init,args.tau_init])))
+    null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
+    #null_optim = null_model.optimize_model(np.array([sigma_2_init,1]))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
     ## Record fitting of null model
     # Get print out for fixed mean effects

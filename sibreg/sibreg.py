@@ -82,13 +82,10 @@ class model(object):
     # Compute likelihood of data given beta, alpha
     def likelihood_and_gradient(self, sigma2, tau):
         """
-        Compute the loss function, which is -2 times the likelihood plus a L2 regularisation term,
-        along with its gradient
+        Compute the loss function, which is -2 times the likelihood plus, along with its gradient
 
         Parameters
         ----------
-        alpha : :class:`~numpy:numpy.array`
-            value of the regression coefficients
         sigma2 : :class:`float`
             variance of model residuals
         tau : :class:`float`
@@ -129,7 +126,7 @@ class model(object):
 
         return L/self.n, grad/self.n
 
-    def optimize_model(self,init_params = None):
+    def optimize_model(self,init_params):
         """
         Find the parameters that minimise the loss function for a given regularisation parameter
 
@@ -143,12 +140,12 @@ class model(object):
         optim : :class:`list`
             the output of the scipy.fmin_l_bfgs_b function, first element has optimised parameters
         """
-        # Initialise parameters
-        if init_params is None:
-            init_params=np.ones((2))
+        # Paramtere boundaries
+        parbounds=[(0.00001, None),(0.00001, None)]
         # Optimize
         optimized = fmin_l_bfgs_b(func=lik_and_grad,x0=init_params,
-                                args=(self.y, self.X, self.labels))
+                                args=(self.y, self.X, self.labels),
+                                  parbounds = parbounds)
 
         # Get MLE
         optim = {}
@@ -157,8 +154,8 @@ class model(object):
         if optim['warnflag'] != 0:
             print('Optimization unsuccessful.')
             optim['success'] = False
-        optim['sigma2'] = np.exp(optimized[0])
-        optim['tau'] = np.exp(optimized[1])
+        optim['sigma2'] = optimized[0][0]
+        optim['tau'] = optimized[0][1]
         # Get parameter covariance
         optim['likelihood'] = -0.5 * np.float64(self.n) * (optimized[1] + np.log(2 * np.pi))
 
@@ -190,7 +187,7 @@ def lik_and_grad(pars,*args):
     # Wrapper for function to pass to L-BFGS-B
     y, X, labels = args
     mod = model(y,X,labels)
-    return mod.likelihood_and_gradient(np.exp(pars[0]),np.exp(pars[1]))
+    return mod.likelihood_and_gradient(pars[0],pars[1])
 
 def simulate(n,alpha,sigma2,tau):
     """Simulate from a linear model with correlated observations within-class. The mean for each class
