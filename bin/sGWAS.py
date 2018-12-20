@@ -189,7 +189,7 @@ if __name__ == '__main__':
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     #null_optim = null_model.optimize_model(np.array([sigma_2_init,1]))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
-    code.interact(local=locals())
+    #code.interact(local=locals())
     ## Record fitting of null model
     # Get print out for fixed mean effects
     alpha_out=np.zeros((n_X,2))
