@@ -1,1 +1,1 @@
-import sibreg
+from . import sibreg

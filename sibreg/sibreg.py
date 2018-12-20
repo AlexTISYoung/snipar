@@ -43,8 +43,44 @@ class model(object):
         self.labels=labels
 
 
+    # Compute MLE of alpha given variance parameters
+    def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False):
+        """
+        Compute the MLE of alpha given variance parameters
+
+        Parameters
+        ----------
+        sigma2 : :class:`float`
+            variance of model residuals
+        tau : :class:`float`
+            ratio of variance of model residuals to variance explained by mean differences between classes
+
+        Returns
+        -------
+        alpha : :class:`~numpy:numpy.array`
+            MLE of alpha
+
+        """
+        X_T_X = np.dot(self.X.T,self.X)
+        X_T_y = np.dot(self.X.T,self.y).reshape((self.X.shape[1],1))
+
+        for label in self.y_lab.iterkeys():
+            X_sum = np.sum(self.X_lab[label],axis=0).reshape((1,self.X.shape[1]))
+            y_sum = np.sum(self.y_lab[label],axis=0)
+            X_T_X = X_T_X-np.dot(X_sum.T,X_sum)/(tau+self.label_counts[label])
+            X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
+
+        alpha = np.linalg.solve(X_T_X,X_T_y)
+        alpha = alpha.reshape((alpha.shape[0],))
+
+        if compute_cov:
+            alpha_cov = sigma2*np.linalg.inv(X_T_X)
+            return [alpha,alpha_cov]
+        else:
+            return alpha
+
     # Compute likelihood of data given beta, alpha
-    def likelihood_and_gradient(self, alpha, sigma2, tau, l):
+    def likelihood_and_gradient(self, sigma2, tau):
         """
         Compute the loss function, which is -2 times the likelihood plus a L2 regularisation term,
         along with its gradient
@@ -56,7 +92,7 @@ class model(object):
         sigma2 : :class:`float`
             variance of model residuals
         tau : :class:`float`
-            ratio of variance of model residuals to variance explained by mean differences between individuals
+            ratio of variance of model residuals to variance explained by mean differences between classes
 
         Returns
         -------
@@ -64,20 +100,12 @@ class model(object):
             loss function and gradient, divided by sample size
 
         """
-        l = np.array(l)
-        if l.shape == () or len(l) == self.X.shape[1]:
-            pass
-        else:
-            raise(ValueError('Incorrect length of regularisation vector'))
-        alpha_T_scaled = alpha.T * l
         ## Likelihood
+        alpha = self.alpha_mle(tau)
         resid = self.y - self.X.dot(alpha)
         RSS = np.sum(np.square(resid))
 
-        L = self.n * np.log(sigma2)+RSS/sigma2+alpha_T_scaled.dot(alpha)
-
-        ## Gradient with respect to alpha
-        grad_alpha = -2 * resid.T.dot(self.X)/sigma2+2*alpha_T_scaled
+        L = self.n * np.log(sigma2)+RSS/sigma2
 
         ## Gradient with respect to sigma2
         grad_sigma2 = self.n/sigma2-RSS/np.square(sigma2)
@@ -91,19 +119,17 @@ class model(object):
             resid_square_sum = np.square(resid_sum)
             # Add to likelihood
             L = L - resid_square_sum/(sigma2*(tau+self.label_counts[label]))+np.log(1+self.label_counts[label]/tau)
-            # Add to alpha gradient
-            grad_alpha = grad_alpha + (2/sigma2)*resid_sum*np.sum(self.X_lab[label],axis=0)/(tau+self.label_counts[label])
             # Add to grad sigma2
             grad_sigma2+=resid_square_sum/(np.square(sigma2)*(tau+self.label_counts[label]))
             # Add to grad tau
             grad_tau+=(resid_square_sum/sigma2-self.label_counts[label]*(1+self.label_counts[label]/tau))/np.square(tau+self.label_counts[label])
 
         # Overall gradient vector
-        grad = np.hstack((grad_alpha,grad_sigma2,grad_tau))
+        grad = np.hstack((grad_sigma2,grad_tau))
 
         return L/self.n, grad/self.n
 
-    def optimize_model(self,l,init_params = None):
+    def optimize_model(self,init_params = None):
         """
         Find the parameters that minimise the loss function for a given regularisation parameter
 
@@ -119,13 +145,23 @@ class model(object):
         """
         # Initialise parameters
         if init_params is None:
-            init_params=np.zeros((self.X.shape[1]+2))
+            init_params=np.ones((2))
         # Optimize
         optimized = fmin_l_bfgs_b(func=lik_and_grad,x0=init_params,
-                                args=(self.y, self.X, self.labels, l))
-        self.alpha = optimized[0][0:self.X.shape[1]]
+                                args=(self.y, self.X, self.labels))
 
-        return optimized
+        # Get MLE
+        optim = {}
+        optim['success'] = True
+        optim['warnflag'] = optimized[2]['warnflag']
+        if optim['warnflag'] != 0:
+            print('Optimization unsuccessful.')
+            optim['success'] = False
+        optim['theta'] = optimized[0]
+        # Get parameter covariance
+        optim['likelihood'] = -0.5 * np.float64(self.n) * (optimized[1] + np.log(2 * np.pi))
+
+        return optim
 
     def predict(self,X):
         """
@@ -151,12 +187,12 @@ class model(object):
 
 def lik_and_grad(pars,*args):
     # Wrapper for function to pass to L-BFGS-B
-    y, X, labels, l = args
+    y, X, labels = args
     mod = model(y,X,labels)
-    return mod.likelihood_and_gradient(pars[0:X.shape[1]],np.exp(pars[X.shape[1]]),np.exp(pars[X.shape[1]+1]), l)
+    return mod.likelihood_and_gradient(np.exp(pars[0]),np.exp(pars[1]))
 
 def simulate(n,alpha,sigma2,tau):
-    """Simulate from a linear model with repeated observations from individuals. The mean for each individual
+    """Simulate from a linear model with correlated observations within-class. The mean for each class
      is drawn from a normal distribution.
 
     Parameters
