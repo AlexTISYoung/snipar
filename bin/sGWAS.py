@@ -176,7 +176,7 @@ if __name__ == '__main__':
         write_mode='wb'
     outfile=open(args.outprefix+'.models.gz',write_mode)
     if not args.append:
-        header='SNP\tn\tfrequency\tWF\tWF_se\tBF\tBF_se\tr_WF_BF\n'
+        header='SNP\tfrequency\tn\tWF\tWF_se\tBF\tBF_se\tr_WF_BF\n'
         outfile.write(header)
 
 ######### Fit Null Model ##########
