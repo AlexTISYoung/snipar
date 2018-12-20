@@ -157,7 +157,8 @@ class model(object):
         if optim['warnflag'] != 0:
             print('Optimization unsuccessful.')
             optim['success'] = False
-        optim['theta'] = optimized[0]
+        optim['sigma2'] = np.exp(optimized[0])
+        optim['tau'] = np.exp(optimized[1])
         # Get parameter covariance
         optim['likelihood'] = -0.5 * np.float64(self.n) * (optimized[1] + np.log(2 * np.pi))
 

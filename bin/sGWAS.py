@@ -179,18 +179,20 @@ if __name__ == '__main__':
     ## Get initial guesses for null model
     print('Fitting Null Model')
     # Optimize null model
-    null_optim = sibreg.model(y, X, pheno_ids[:,0]).optimize_model()
-
+    sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
+    null_model = sibreg.model(y, X, pheno_ids[:,0])
+    null_optim = null_model.optimize_model(np.log(np.array([sigma_2_init,args.tau_init])))
+    null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
     ## Record fitting of null model
     # Get print out for fixed mean effects
     alpha_out=np.zeros((n_X,2))
-    alpha_out[:,0]=null_optim['alpha']
-    alpha_out[:,1]=null_optim['alpha_se']
+    alpha_out[:,0]=null_alpha[0]
+    alpha_out[:,1]=np.sqrt(np.diag(null_alpha[1]))
     # Rescale
     if n_X>1:
         for i in xrange(0,2):
             alpha_out[1:n_X,i] = alpha_out[1:n_X,i]/X_stds
     if not args.append and not args.no_covariate_estimates and args.mean_covar is not None:
-        np.savetxt(args.outprefix + '.null_mean_effects.txt',
+        np.savetxt(args.outprefix + '.null_covariate_effects.txt',
                    np.hstack((X_names.reshape((n_X, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
