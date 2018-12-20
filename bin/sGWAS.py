@@ -159,7 +159,7 @@ if __name__ == '__main__':
     # Dictionary to look up rows for each family
     geno_fam_dict = {}
     for fam in np.unique(pheno_ids[:,0]):
-        geno_fam_dict[fam] = np.where(iid[:,0]==fam)[0]
+        geno_fam_dict[fam] = np.where(test_chr.iid[:,0]==fam)[0]
 
 ### Get sample size
     n = y.shape[0]
@@ -216,6 +216,7 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     for loc in xrange(0,chr_length):
+        print(str(loc))
         alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         # Filler for output if locus doesn't pass thresholds
         allele_frq=np.nan
@@ -263,6 +264,6 @@ if __name__ == '__main__':
                     alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
                 else:
                     print('Maximisation of likelihood failed for for '+sid[loc])
-            print(loc)
+            print('finished successfully')
         outfile.write(sid[loc] +'\t'+ str(allele_frq)+'\t'+alpha_out+'\n')
     outfile.close()
