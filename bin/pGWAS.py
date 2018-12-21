@@ -138,7 +138,8 @@ if __name__ == '__main__':
             freqs[i]=1-freqs[i]
     maf_pass = freqs>args.min_maf
     print(str(freqs.shape[0]-np.sum(maf_pass))+' below minimum MAF ('+str(args.min_maf)+') removed')
-    genotypes = np.array(test_chr['gts'][fid_with_phen,maf_pass])
+    genotypes = np.array(test_chr['gts'][:,:,maf_pass])
+    genotypes = genotypes[fid_with_phen,:,:]
     sid = np.array(test_chr['vnames'])
     sid = sid[maf_pass]
     chr_length = genotypes.shape[2]
