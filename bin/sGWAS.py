@@ -188,6 +188,8 @@ if __name__ == '__main__':
     #sigma_2_init = np.var(y) * 1 / (1 + 1)
     null_model = sibreg.model(y, X, pheno_ids[:,0])
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
+    print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],digits=4)))
+    print('Residual variance estimate: ' + str(round(null_optim['sigma2'], digits=4)))
     #null_optim = null_model.optimize_model(np.array([sigma_2_init,1]))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
     #code.interact(local=locals())
