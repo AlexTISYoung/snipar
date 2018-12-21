@@ -132,7 +132,14 @@ if __name__ == '__main__':
     # Find ids from same families as those with phenotype data
     fid_with_phen = np.array([str(x) in pheno_fam_id_set for x in iid[:,0]])
     iid = iid[fid_with_phen,:]
-    genotypes = np.array(test_chr['gts'][fid_with_phen,:])
+    # Get frequencies
+    freqs = np.array(test_chr['freqs'])
+    for i in xrange(0,freqs.shape[0]):
+        if freqs[i]>0.5:
+            freqs[i]=1-freqs[i]
+    maf_pass = freqs>args.min_maf
+    print(str(freqs.shape[0]-np.sum(maf_pass))+' below minimum MAF ('+str(args.min_maf)+') removed')
+    genotypes = np.array(test_chr['gts'][fid_with_phen,maf_pass])
     chr_length = genotypes.shape[2]
     print('Number of test loci: ' + str(genotypes.shape[1]))
 
