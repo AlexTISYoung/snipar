@@ -139,11 +139,12 @@ if __name__ == '__main__':
             freqs[i]=1-freqs[i]
     print('Filtering on MAF')
     maf_pass = freqs>args.min_maf
-    print(str(freqs.shape[0]-np.sum(maf_pass))+' below minimum MAF ('+str(args.min_maf)+') removed')
-    genotypes = np.array(test_chr['gts'][:,:,maf_pass])
-    genotypes = genotypes[fid_with_phen,:,:]
+    print(str(freqs.shape[0]-np.sum(maf_pass))+' SNPs below minimum MAF ('+str(args.min_maf)+') removed')
+    genotypes = test_chr['gts'][:,:,maf_pass]
+    genotypes = np.array(genotypes[fid_with_phen,:,:])
     sid = np.array(test_chr['vnames'])
     sid = sid[maf_pass]
+    freqs = freqs[maf_pass]
     chr_length = genotypes.shape[2]
     print('Number of test loci: ' + str(genotypes.shape[2]))
 
@@ -267,23 +268,16 @@ if __name__ == '__main__':
     for loc in xrange(0,G.shape[2]):
         print(str(loc))
         alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\t\tNA\tNA\tNA\n'
-        # Filler for output if locus doesn't pass thresholds
-        allele_frq=np.nan
-        # Get test genotypes
-        allele_frq=np.mean(G[:,0:2,loc])/2
-        if allele_frq>0.5:
-            allele_frq=1-allele_frq
-        if allele_frq>args.min_maf:
-            # Optimize model for SNP
-            X_l = np.ones((y.shape[0],4))
-            X_l[:,1:4] = G[:,:,loc]
-            model_l = sibreg.model(y,X_l,pheno_ids[:,0])
-            optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
-            if optim_l['success']:
-                alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
-                alpha_out = vector_out(alpha_l)
-            else:
-                print('Maximisation of likelihood failed for for '+sid[loc])
-            print('finished successfully')
-        outfile.write(sid[loc] +'\t'+str(allele_frq)+'\t'+str(int(n)) +'\t'+alpha_out+'\n')
+        # Optimize model for SNP
+        X_l = np.ones((y.shape[0],4))
+        X_l[:,1:4] = G[:,:,loc]
+        model_l = sibreg.model(y,X_l,pheno_ids[:,0])
+        optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
+        if optim_l['success']:
+            alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
+            alpha_out = vector_out(alpha_l)
+        else:
+            print('Maximisation of likelihood failed for for '+sid[loc])
+        print('finished successfully')
+        outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+str(int(n)) +'\t'+alpha_out+'\n')
     outfile.close()
