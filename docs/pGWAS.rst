@@ -13,7 +13,7 @@ The genentic data is specified in a HDF5 file. Let M be the number of sibling pa
     is the IID of the second sib in the pair.
 
 --gts
-    an [M x 3 x L] array, where each row corresponds to a sib pair. The second index gives the
+    an [M x 3 x L] numeric array, where each row corresponds to a sib pair. The second index gives the
     genotype of the first sib, the genotype of the second sib, and the parental genotype imputed
     from this sib pair. The third index gives the SNP.
 
@@ -23,7 +23,7 @@ The genentic data is specified in a HDF5 file. Let M be the number of sibling pa
 --vnames
     an [L] vector of names of the SNPs
 
-The scripts fits models for all SNPs in a .hdf5 file passing MAF and missingness thresholds.
+The script fits models for all SNPs in a .hdf5 file passing MAF and missingness thresholds.
 
 The phenotype file should be a tab separate text file with columns FID, IID, Y1, Y2, ...
 
@@ -34,7 +34,7 @@ column is family ID, and the second column is individual ID; subsequent columns 
 observations.
 
 Minimally, the script will output a file outprefix.models.gz, which contains a table of within direct effects,
- indirect effects from siblings, and parental/confounding effects, along with their correlations
+indirect effects from siblings, and parental/confounding effects, along with their correlations
 
 If covariates are also specified, it will output estimates of the covariate effects from the null model as
 outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output.
@@ -58,7 +58,7 @@ Options:
    Location of mean covariate file (default no mean covariates)
 
 --fit_covariates
-   Fit covariates for each locus. Default is to fit covariates for the null model and project out (mean) and rescale (variance)'
+   Fit covariates for each locus. Default is to fit covariates for the null model and project out the mean covariates.'
 
 --tau_init
    Initial value for the ratio of within family variance to residual variance. Default 1.0.
@@ -87,7 +87,7 @@ Options:
 
 Minimal usage:
 
-   ``python pGWAAS.py genotypes.bed phenotype.fam phenotype``
+   ``python pGWAS.py genotypes.bed phenotype.fam phenotype``
 
 This will estimate between effects for all the SNPs in genotypes.bed passing MAF and missingness thresholds, using the first phenotype in phenotype.fam. It will output
 the results of fitting the models to phenotype.models.gz.

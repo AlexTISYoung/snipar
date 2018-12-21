@@ -2,7 +2,7 @@ import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
 
 class model(object):
-    """Define a linear model with repeated observations.
+    """Define a linear model with within-class correlations.
 
     Parameters
     ----------
@@ -82,7 +82,7 @@ class model(object):
     # Compute likelihood of data given beta, alpha
     def likelihood_and_gradient(self, sigma2, tau):
         """
-        Compute the loss function, which is -2 times the likelihood plus, along with its gradient
+        Compute the loss function, which is -2 times the likelihood along with its gradient
 
         Parameters
         ----------
@@ -132,13 +132,17 @@ class model(object):
 
         Parameters
         ----------
-        l : :class:`array`
-            array of regularisation parameters for regression coefficients
+        init_param : :class:`array`
+            initial values for residual variance (sigma^2_epsilon) followed by ratio
+            of residual variance to within-class variance (tau)
 
         Returns
         -------
-        optim : :class:`list`
-            the output of the scipy.fmin_l_bfgs_b function, first element has optimised parameters
+        optim : :class:`dict`
+            dictionary with keys: 'success', whether optimisation was successful (bool);
+            'warnflag', output of L-BFGS-B algorithm giving warnings; 'sigma2', MLE of
+            residual variance; 'tau', MLE of ratio of residual variance to within-class variance;
+            'likelihood', maximum of likelihood.
         """
         # Paramtere boundaries
         parbounds=[(0.00001, None),(0.00001, None)]
@@ -168,7 +172,7 @@ class model(object):
         Parameters
         ----------
         X : :class:`array`
-            matrix of feature observations to predict from
+            matrix of covariates to predict from
 
         Returns
         -------

@@ -4,7 +4,7 @@ Documentation for sGWAS.py script
 
 This script uses genotypes of siblings to estimate 'within family' and 'between family' effects of SNPs.
 
-The scripts fits models for all SNPs in a .bed file passing MAF and missingness thresholds.
+The script fits models for all SNPs in a .bed file passing MAF and missingness thresholds.
 
 The phenotype file should be a tab separate text file with columns FID, IID, Y1, Y2, ...
 
@@ -39,7 +39,7 @@ Options:
    Location of mean covariate file (default no mean covariates)
 
 --fit_covariates
-   Fit covariates for each locus. Default is to fit covariates for the null model and project out (mean) and rescale (variance)'
+   Fit covariates for each locus. Default is to fit covariates for the null model and project out the covariates'
 
 --tau_init
    Initial value for the ratio of within family variance to residual variance. Default 1.0.
@@ -68,7 +68,7 @@ Options:
 
 Minimal usage:
 
-   ``python sGWAAS.py genotypes.bed phenotype.fam phenotype``
+   ``python sGWAS.py genotypes.bed phenotype.fam phenotype``
 
 This will estimate between family and within family effects for all the SNPs in genotypes.bed passing MAF and missingness thresholds, using the first phenotype in phenotype.fam. It will output
 the results of fitting the models to phenotype.models.gz.
