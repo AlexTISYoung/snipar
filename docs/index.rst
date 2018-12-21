@@ -1,12 +1,12 @@
-Welcome to regrnd's documentation!
-================================
+Welcome to sibreg's documentation!
+==================================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    guide
-   regrnd
+   sibreg
 
 Indices and tables
 ==================

@@ -266,7 +266,6 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     for loc in xrange(0,G.shape[2]):
-        print(str(loc))
         alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\t\tNA\tNA\tNA\n'
         # Optimize model for SNP
         X_l = np.ones((y.shape[0],4))
@@ -278,6 +277,6 @@ if __name__ == '__main__':
             alpha_out = vector_out(alpha_l)
         else:
             print('Maximisation of likelihood failed for for '+sid[loc])
-        print('finished successfully')
+        print(sid[loc]+' finished successfully')
         outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+str(int(n)) +'\t'+alpha_out+'\n')
     outfile.close()
