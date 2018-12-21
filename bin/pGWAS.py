@@ -158,29 +158,29 @@ if __name__ == '__main__':
     geno_fam_dict = {}
     for fam in np.unique(pheno_ids[:,0]):
         geno_fam_dict[fam] = np.where(iid[:,0]==fam)[0]
-        G = np.zeros((y.shape[0],3,genotypes.shape[2]))
-        for fam in np.unique(pheno_ids[:, 0]):
-            gts_fam = genotypes[geno_fam_dict[fam],:,:]
-            iid_fam = iid[geno_fam_dict[fam],1:3]
-            pheno_id_fam = pheno_ids[pheno_fam_dict[fam],1]
-            G_fam = np.zeros((pheno_id_fam.shape[0],3,genotypes.shape[2]))
-            # Average imputed parental
-            G_fam[:,2,:] = np.mean(gts_fam[:,2,:],axis=0)
-            # Get proband genotypes
-            for i in xrange(0,pheno_id_fam.shape[0]):
-                sib = pheno_id_fam[i]
-                sibmatch = np.where(sib==iid_fam[:,0])[0]
-                if len(sibmatch)>0:
-                    sibmatch = sibmatch[0]
-                    G_fam[i,0,:] = gts_fam[sibmatch,0,:]
-                else:
-                    sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
-                    G_fam[i,0,:] = gts_fam[sibmatch,1,:]
-            # Compute sum of sib genotypes for each proband
-            G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
-            G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
-            # Set in full matrix
-            G[pheno_fam_dict[fam],:,:] = G_fam
+    G = np.zeros((y.shape[0],3,genotypes.shape[2]))
+    for fam in np.unique(pheno_ids[:, 0]):
+        gts_fam = genotypes[geno_fam_dict[fam],:,:]
+        iid_fam = iid[geno_fam_dict[fam],1:3]
+        pheno_id_fam = pheno_ids[pheno_fam_dict[fam],1]
+        G_fam = np.zeros((pheno_id_fam.shape[0],3,genotypes.shape[2]))
+        # Average imputed parental
+        G_fam[:,2,:] = np.mean(gts_fam[:,2,:],axis=0)
+        # Get proband genotypes
+        for i in xrange(0,pheno_id_fam.shape[0]):
+            sib = pheno_id_fam[i]
+            sibmatch = np.where(sib==iid_fam[:,0])[0]
+            if len(sibmatch)>0:
+                sibmatch = sibmatch[0]
+                G_fam[i,0,:] = gts_fam[sibmatch,0,:]
+            else:
+                sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
+                G_fam[i,0,:] = gts_fam[sibmatch,1,:]
+        # Compute sum of sib genotypes for each proband
+        G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
+        G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
+        # Set in full matrix
+        G[pheno_fam_dict[fam],:,:] = G_fam
     del genotypes
     del G_fam
 
