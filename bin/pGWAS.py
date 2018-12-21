@@ -135,7 +135,6 @@ if __name__ == '__main__':
     genotypes = np.array(test_chr['gts'][fid_with_phen,:])
     chr_length = genotypes.shape[2]
     print('Number of test loci: ' + str(genotypes.shape[1]))
-    print('Genotypes for '+str(genotypes.shape[0])+' individuals read')
 
 ### Intersect and match genotype data with covariate and phenotype data ###
     # Intersect with phenotype IDs
