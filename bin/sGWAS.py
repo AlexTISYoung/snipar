@@ -259,6 +259,7 @@ if __name__ == '__main__':
                 X_l[:,2] = g_mean
                 model_l = sibreg.model(y_l,X_l,fam_l)
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
+                code.interact(local=locals())
                 if optim_l['success']:
                     alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
                     alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
