@@ -10,15 +10,15 @@ import code
 def neglog10pval(x,df):
     return -np.log10(np.e)*chi2.logsf(x,df)
 
-def vector_out(alpha_mle,digits=4):
+def vector_out(alpha_mle,digits=6):
 ##Output parameter estimates along with standard errors ##
     ## Calculate test statistics
-    alpha_est = alpha_l[0]
-    alpha_cov = alpha_l[1]
+    alpha_est = alpha_l[0][1:3]
+    alpha_cov = alpha_l[1][1:3,1:3]
     alpha_ses = np.sqrt(np.diag(alpha_cov))
     alpha_out = str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
-    alpha_out += str(round(alpha_est[1]))+'\t'+str(round(alpha_ses[1],digits))+'\t'
-    alpha_out += str(round(alpha_cov[1,2]/(alpha_ses[0]*alpha_ses[1]),digits))+'\n'
+    alpha_out += str(round(alpha_est[1],digits))+'\t'+str(round(alpha_ses[1],digits))+'\t'
+    alpha_out += str(round(alpha_cov[0,1]/(alpha_ses[0]*alpha_ses[1]),digits))+'\n'
     return alpha_out
 
 def id_dict_make(ids):
@@ -259,7 +259,6 @@ if __name__ == '__main__':
                 X_l[:,2] = g_mean
                 model_l = sibreg.model(y_l,X_l,fam_l)
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
-                code.interact(local=locals())
                 if optim_l['success']:
                     alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
                     alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
