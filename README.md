@@ -5,9 +5,17 @@ model for within family phenotypic correlations
 
 # Main features:
 
-regrnd class: given data, find the parameters that maximise
-the likelihood and their sampling distribution.
+sibreg class: random effects regression model allowing for intra-class correlation
 
+pGWAS.py: script for estimating direct genetic effects, indirect genetic effects, and
+confounding using sibling and imputed parental genotypes
+
+sGWAS.py:  script for estimating 'within-family' and 'between-family' effects of SNPs
+using sibling genotypes
+
+# Documentation
+
+Documentation for the modules and scripts is at: https://readthedocs.org/projects/sibreg
 
 # Package Install Instructions
 
