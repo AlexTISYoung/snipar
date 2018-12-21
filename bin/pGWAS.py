@@ -142,7 +142,7 @@ if __name__ == '__main__':
     sid = np.array(test_chr['vnames'])
     sid = sid[maf_pass]
     chr_length = genotypes.shape[2]
-    print('Number of test loci: ' + str(genotypes.shape[1]))
+    print('Number of test loci: ' + str(genotypes.shape[2]))
 
 ### Intersect and match genotype data with covariate and phenotype data ###
     # Intersect with phenotype IDs
