@@ -124,6 +124,7 @@ if __name__ == '__main__':
         X_names = np.array(['Intercept'])
 
 ### Read genotypes ###
+    print('Reading genotype file')
     test_chr = h5py.File(args.genofile,'r')
     #test_chr = h5py.File('imputed_parental_hdf5/chr_22.hdf5','r')
     # select subset to test
@@ -136,6 +137,7 @@ if __name__ == '__main__':
     for i in xrange(0,freqs.shape[0]):
         if freqs[i]>0.5:
             freqs[i]=1-freqs[i]
+    print('Filtering on MAF')
     maf_pass = freqs>args.min_maf
     print(str(freqs.shape[0]-np.sum(maf_pass))+' below minimum MAF ('+str(args.min_maf)+') removed')
     genotypes = np.array(test_chr['gts'][:,:,maf_pass])
