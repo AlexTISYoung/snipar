@@ -176,10 +176,23 @@ if __name__ == '__main__':
             else:
                 sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
                 G_fam[i,0,:] = gts_fam[sibmatch,1,:]
-        # Compute sum of sib genotypes for each proband
+        ## Compute sum of sib genotypes for each proband
         G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
+        # remove proband genotype from sum
         G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
-        # Set in full matrix
+        # add to sib column genotypes of any sibs with genotype but not phenotype data
+        if iid_fam.shape[0]>pheno_id_fam.shape[0]:
+            geno_sib_ids = np.unique(iid_fam[:,1:3])
+            for sib in geno_sib_ids:
+                if sib not in pheno_id_fam:
+                    sibmatch = np.where(sib == iid_fam[:, 0])[0]
+                    if len(sibmatch) > 0:
+                        sibmatch = sibmatch[0]
+                        G_fam[:, 1, :] += gts_fam[sibmatch, 0, :]
+                    else:
+                        sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
+                        G_fam[:, 1, :] += gts_fam[sibmatch, 1, :]
+        ## Set in full matrix
         G[pheno_fam_dict[fam],:,:] = G_fam
     del genotypes
     del G_fam
@@ -261,6 +274,6 @@ if __name__ == '__main__':
                 alpha_out = vector_out(alpha_l)
             else:
                 print('Maximisation of likelihood failed for for '+sid[loc])
-        print('finished successfully')
+            print('finished successfully')
         outfile.write(sid[loc] +'\t'+str(allele_frq)+'\t'+str(int(n)) +'\t'+alpha_out+'\n')
     outfile.close()
