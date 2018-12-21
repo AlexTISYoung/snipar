@@ -7,6 +7,8 @@ Welcome to sibreg's documentation!
 
    guide
    sibreg
+   pGWAS
+   sGWAS
 
 Indices and tables
 ==================
