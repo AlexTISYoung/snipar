@@ -15,7 +15,7 @@ using sibling genotypes
 
 # Documentation
 
-Documentation for the modules and scripts is at: https://readthedocs.org/projects/sibreg
+Documentation for the modules and scripts is at: https://readthedocs.org/projects/sibreg/latest
 
 # Package Install Instructions
 
