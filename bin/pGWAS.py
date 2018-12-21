@@ -128,7 +128,6 @@ if __name__ == '__main__':
     #test_chr = h5py.File('imputed_parental_hdf5/chr_22.hdf5','r')
     # select subset to test
     iid = np.array(np.array(test_chr['ped'],dtype=int).T,dtype='S21')
-    sid = np.array(test_chr['vnames'])
     # Find ids from same families as those with phenotype data
     fid_with_phen = np.array([str(x) in pheno_fam_id_set for x in iid[:,0]])
     iid = iid[fid_with_phen,:]
@@ -140,6 +139,8 @@ if __name__ == '__main__':
     maf_pass = freqs>args.min_maf
     print(str(freqs.shape[0]-np.sum(maf_pass))+' below minimum MAF ('+str(args.min_maf)+') removed')
     genotypes = np.array(test_chr['gts'][fid_with_phen,maf_pass])
+    sid = np.array(test_chr['vnames'])
+    sid = sid[maf_pass]
     chr_length = genotypes.shape[2]
     print('Number of test loci: ' + str(genotypes.shape[1]))
 
