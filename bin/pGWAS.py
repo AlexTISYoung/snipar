@@ -254,7 +254,7 @@ if __name__ == '__main__':
 
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
-    for loc in xrange(0,10):
+    for loc in xrange(0,100):
         print(str(loc))
         alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\t\tNA\tNA\tNA\n'
         # Filler for output if locus doesn't pass thresholds
