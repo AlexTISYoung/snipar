@@ -27,7 +27,7 @@ The output should say
 
 **Running the code**
 
-In the sibreg/ subdirectory, there are two scripts: 'pGWAS.py' and 'sGWAS.py'.
+In the sibreg/bin subdirectory, there are two scripts: 'pGWAS.py' (:doc:`pGWAS`) and 'sGWAS.py' (:doc:`sGWAS`).
 
 These perform different kinds of robust GWAS using genotype data from siblings (sGWAS)
 or genotype data from siblings and imputed parental genotypes (pGWAS).
