@@ -15,7 +15,7 @@ class model(object):
 
     Returns
     -------
-    model : :class:`regrnd.model`
+    model : :class:`sibreg.model`
 
     """
     def __init__(self,y,X,labels):
