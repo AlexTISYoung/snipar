@@ -11,15 +11,15 @@ import code
 def neglog10pval(x,df):
     return -np.log10(np.e)*chi2.logsf(x,df)
 
-def vector_out(alpha_mle, no_sib, digits=6):
+def vector_out(alpha_mle, no_sib, n_X, digits=6):
 ##Output parameter estimates along with standard errors ##
     ## Calculate test statistics
     if args.no_sib:
-        X_length = 3
+        X_length = n_X+2
     else:
-        X_length = 4
-    alpha_est = alpha_l[0][1:X_length]
-    alpha_cov = alpha_l[1][1:X_length,1:X_length]
+        X_length = n_X+3
+    alpha_est = alpha_l[0][n_X:X_length]
+    alpha_cov = alpha_l[1][n_X:X_length,n_X:X_length]
     alpha_ses = np.sqrt(np.diag(alpha_cov))
     alpha_corr = np.dot(np.diag(1/alpha_ses).dot(alpha_cov),np.diag(1/alpha_ses))
     alpha_out = str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
@@ -294,16 +294,16 @@ if __name__ == '__main__':
             alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         # Optimize model for SNP
         if args.no_sib:
-            X_length = 3
+            X_length = n_X+2
         else:
-            X_length = 4
+            X_length = n_X+3
         X_l = np.ones((y.shape[0], X_length))
-        X_l[:, 1:X_length] = G[:, :, loc]
+        X_l[:, n_X:X_length] = G[:, :, loc]
         model_l = sibreg.model(y,X_l,pheno_ids[:,0])
         optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
         if optim_l['success']:
             alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
-            alpha_out = vector_out(alpha_l, args.no_sib)
+            alpha_out = vector_out(alpha_l, args.no_sib, n_X)
         else:
             print('Maximisation of likelihood failed for for '+sid[loc])
         print(sid[loc]+' finished successfully')
