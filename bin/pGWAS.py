@@ -25,10 +25,10 @@ def vector_out(alpha_mle, no_sib, digits=6):
     alpha_out = str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
     alpha_out += str(round(alpha_est[1],digits))+'\t'+str(round(alpha_ses[1],digits))+'\t'
     if args.no_sib:
+        alpha_out += str(round(alpha_corr[0, 1], digits)) + '\n'
+    else:
         alpha_out += str(round(alpha_est[2],digits))+'\t'+str(round(alpha_ses[2],digits))+'\t'
         alpha_out += str(round(alpha_corr[0,1],digits))+'\t'+str(round(alpha_corr[0,2],digits))+'\t'+str(round(alpha_corr[2,1],digits))+'\n'
-    else:
-        alpha_out += str(round(alpha_corr[0, 1], digits)) + '\n'
     return alpha_out
 
 def id_dict_make(ids):
@@ -287,7 +287,8 @@ if __name__ == '__main__':
 
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
-    for loc in xrange(0,G.shape[2]):
+    #for loc in xrange(0,G.shape[2]):
+    for loc in xrange(0, 100):
         if args.no_sib:
             alpha_out = 'NA\tNA\tNA\tNA\tNA\n'
         else:
