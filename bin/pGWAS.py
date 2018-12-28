@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.05)',default=0.05)
+    parser.add_argument('--max_maf',type=float,help='Ignore SNPs with minor allele frequency above max_maf (default 0.5)',default=0.5)
     parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
@@ -146,8 +147,8 @@ if __name__ == '__main__':
         if freqs[i]>0.5:
             freqs[i]=1-freqs[i]
     print('Filtering on MAF')
-    maf_pass = freqs>args.min_maf
-    print(str(freqs.shape[0]-np.sum(maf_pass))+' SNPs below minimum MAF ('+str(args.min_maf)+') removed')
+    maf_pass = np.logical_and(freqs>args.min_maf,freqs<args.max_maf)
+    print(str(freqs.shape[0]-np.sum(maf_pass))+' SNPs outside of MAF range removed')
     genotypes = test_chr['gts'][:,:,maf_pass]
     genotypes = np.array(genotypes[fid_with_phen,:,:])
     sid = np.array(test_chr['vnames'])
