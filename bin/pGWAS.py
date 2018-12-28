@@ -11,17 +11,24 @@ import code
 def neglog10pval(x,df):
     return -np.log10(np.e)*chi2.logsf(x,df)
 
-def vector_out(alpha_mle,digits=6):
+def vector_out(alpha_mle, no_sib, digits=6):
 ##Output parameter estimates along with standard errors ##
     ## Calculate test statistics
-    alpha_est = alpha_l[0][1:4]
-    alpha_cov = alpha_l[1][1:4,1:4]
+    if args.no_sib:
+        X_length = 3
+    else:
+        X_length = 4
+    alpha_est = alpha_l[0][1:X_length]
+    alpha_cov = alpha_l[1][1:X_length,1:X_length]
     alpha_ses = np.sqrt(np.diag(alpha_cov))
     alpha_corr = np.dot(np.diag(1/alpha_ses).dot(alpha_cov),np.diag(1/alpha_ses))
     alpha_out = str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
     alpha_out += str(round(alpha_est[1],digits))+'\t'+str(round(alpha_ses[1],digits))+'\t'
-    alpha_out += str(round(alpha_est[2],digits))+'\t'+str(round(alpha_ses[2],digits))+'\t'
-    alpha_out += str(round(alpha_corr[0,1],digits))+'\t'+str(round(alpha_corr[0,2],digits))+'\t'+str(round(alpha_corr[2,1],digits))+'\n'
+    if args.no_sib:
+        alpha_out += str(round(alpha_est[2],digits))+'\t'+str(round(alpha_ses[2],digits))+'\t'
+        alpha_out += str(round(alpha_corr[0,1],digits))+'\t'+str(round(alpha_corr[0,2],digits))+'\t'+str(round(alpha_corr[2,1],digits))+'\n'
+    else:
+        alpha_out += str(round(alpha_corr[0, 1], digits)) + '\n'
     return alpha_out
 
 def id_dict_make(ids):
@@ -83,6 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
+    parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
     args=parser.parse_args()
 
     ####################### Read in data #########################
@@ -169,14 +177,23 @@ if __name__ == '__main__':
     geno_fam_dict = {}
     for fam in np.unique(pheno_ids[:,0]):
         geno_fam_dict[fam] = np.where(iid[:,0]==fam)[0]
-    G = np.zeros((y.shape[0],3,genotypes.shape[2]))
+    if args.no_sib:
+        G = np.zeros((y.shape[0], 2, genotypes.shape[2]))
+        p_index = 1
+    else:
+        G = np.zeros((y.shape[0], 3, genotypes.shape[2]))
+        p_index = 2
     for fam in np.unique(pheno_ids[:, 0]):
         gts_fam = genotypes[geno_fam_dict[fam],:,:]
         iid_fam = iid[geno_fam_dict[fam],1:3]
         pheno_id_fam = pheno_ids[pheno_fam_dict[fam],1]
-        G_fam = np.zeros((pheno_id_fam.shape[0],3,genotypes.shape[2]))
+        if args.no_sib:
+            G_fam = np.zeros((pheno_id_fam.shape[0], 2, genotypes.shape[2]))
+
+        else:
+            G_fam = np.zeros((pheno_id_fam.shape[0], 3, genotypes.shape[2]))
         # Average imputed parental
-        G_fam[:,2,:] = np.mean(gts_fam[:,2,:],axis=0)
+        G_fam[:,p_index,:] = np.mean(gts_fam[:,2,:],axis=0)
         # Get proband genotypes
         for i in xrange(0,pheno_id_fam.shape[0]):
             sib = pheno_id_fam[i]
@@ -188,21 +205,22 @@ if __name__ == '__main__':
                 sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
                 G_fam[i,0,:] = gts_fam[sibmatch,1,:]
         ## Compute sum of sib genotypes for each proband
-        G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
-        # remove proband genotype from sum
-        G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
-        # add to sib column genotypes of any sibs with genotype but not phenotype data
-        if iid_fam.shape[0]>pheno_id_fam.shape[0]:
-            geno_sib_ids = np.unique(iid_fam[:,1:3])
-            for sib in geno_sib_ids:
-                if sib not in pheno_id_fam:
-                    sibmatch = np.where(sib == iid_fam[:, 0])[0]
-                    if len(sibmatch) > 0:
-                        sibmatch = sibmatch[0]
-                        G_fam[:, 1, :] += gts_fam[sibmatch, 0, :]
-                    else:
-                        sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
-                        G_fam[:, 1, :] += gts_fam[sibmatch, 1, :]
+        if not args.no_sib:
+            G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
+            # remove proband genotype from sum
+            G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
+            # add to sib column genotypes of any sibs with genotype but not phenotype data
+            if iid_fam.shape[0]>pheno_id_fam.shape[0]:
+                geno_sib_ids = np.unique(iid_fam[:,1:3])
+                for sib in geno_sib_ids:
+                    if sib not in pheno_id_fam:
+                        sibmatch = np.where(sib == iid_fam[:, 0])[0]
+                        if len(sibmatch) > 0:
+                            sibmatch = sibmatch[0]
+                            G_fam[:, 1, :] += gts_fam[sibmatch, 0, :]
+                        else:
+                            sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
+                            G_fam[:, 1, :] += gts_fam[sibmatch, 1, :]
         ## Set in full matrix
         G[pheno_fam_dict[fam],:,:] = G_fam
     del genotypes
@@ -223,8 +241,12 @@ if __name__ == '__main__':
         write_mode='wb'
     outfile=open(args.outprefix+'.models.gz',write_mode)
     if not args.append:
-        header = 'SNP\tfrequency\tn\tdelta\tdelta_SE\teta_s\teta_s_SE\tbeta\tbeta_SE\t'
-        header += 'r_delta_eta_s\tr_delta_beta\tr_eta_s_beta\n'
+        if args.no_sib:
+            header = 'SNP\tfrequency\tn\tdelta\tdelta_SE\tbeta\tbeta_SE\t'
+            header += 'r_delta_beta\n'
+        else:
+            header = 'SNP\tfrequency\tn\tdelta\tdelta_SE\teta_s\teta_s_SE\tbeta\tbeta_SE\t'
+            header += 'r_delta_eta_s\tr_delta_beta\tr_eta_s_beta\n'
         outfile.write(header)
 
 ######### Fit Null Model ##########
@@ -266,15 +288,22 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     for loc in xrange(0,G.shape[2]):
-        alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\t\tNA\tNA\tNA\n'
+        if args.no_sib:
+            alpha_out = 'NA\tNA\tNA\tNA\tNA\n'
+        else:
+            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         # Optimize model for SNP
-        X_l = np.ones((y.shape[0],4))
-        X_l[:,1:4] = G[:,:,loc]
+        if args.no_sib:
+            X_length = 3
+        else:
+            X_length = 4
+        X_l = np.ones((y.shape[0], X_length))
+        X_l[:, 1:X_length] = G[:, :, loc]
         model_l = sibreg.model(y,X_l,pheno_ids[:,0])
         optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
         if optim_l['success']:
             alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
-            alpha_out = vector_out(alpha_l)
+            alpha_out = vector_out(alpha_l, args.no_sib)
         else:
             print('Maximisation of likelihood failed for for '+sid[loc])
         print(sid[loc]+' finished successfully')
