@@ -80,6 +80,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
+    parser.add_argument('--fix_VC', action='store_true', default=False,
+                        help='Fix the variance components to the values from the null model')
     args=parser.parse_args()
 
     ####################### Read in data #########################
@@ -260,12 +262,15 @@ if __name__ == '__main__':
                 X_l[:,1] = test_gts-g_mean
                 X_l[:,2] = g_mean
                 model_l = sibreg.model(y_l,X_l,fam_l)
-                optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
-                if optim_l['success']:
-                    alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
-                    alpha_out = str(n_loc)+'\t'+vector_out(alpha_l)
+                if not args.fix_VC:
+                    optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
+                    if optim_l['success']:
+                        alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
+                    else:
+                        print('Maximisation of likelihood failed for for ' + sid[loc])
                 else:
-                    print('Maximisation of likelihood failed for for '+sid[loc])
+                    alpha_l = model_l.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
+                alpha_out = str(n_loc) + '\t' + vector_out(alpha_l)
             print('finished successfully')
         outfile.write(sid[loc] +'\t'+ str(allele_frq)+'\t'+alpha_out+'\n')
     outfile.close()
