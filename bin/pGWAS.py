@@ -303,7 +303,6 @@ if __name__ == '__main__':
         X_l = np.ones((y.shape[0], X_length))
         X_l[:, n_X:X_length] = G[:, :, loc]
         model_l = sibreg.model(y,X_l,pheno_ids[:,0])
-        alpha_out = str(n_loc) + '\t' + vector_out(alpha_l)
         if not args.fix_VC:
             optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
             if optim_l['success']:
