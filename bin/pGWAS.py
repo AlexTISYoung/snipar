@@ -92,6 +92,8 @@ if __name__ == '__main__':
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
+    parser.add_argument('--fix_VC', action='store_true', default=False,
+                        help='Fix the variance components to the values from the null model')
     args=parser.parse_args()
 
     ####################### Read in data #########################
@@ -301,12 +303,15 @@ if __name__ == '__main__':
         X_l = np.ones((y.shape[0], X_length))
         X_l[:, n_X:X_length] = G[:, :, loc]
         model_l = sibreg.model(y,X_l,pheno_ids[:,0])
-        optim_l = model_l.optimize_model(np.array([null_optim['sigma2'],null_optim['tau']]))
-        if optim_l['success']:
-            alpha_l = model_l.alpha_mle(optim_l['tau'],optim_l['sigma2'],compute_cov = True)
-            alpha_out = vector_out(alpha_l, args.no_sib, n_X)
+        if not args.fix_VC:
+            optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
+            if optim_l['success']:
+                alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True)
+            else:
+                print('Maximisation of likelihood failed for for ' + sid[loc])
         else:
-            print('Maximisation of likelihood failed for for '+sid[loc])
+            alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
+        alpha_out = vector_out(alpha_l, args.no_sib, n_X)
         print(sid[loc]+' finished successfully')
         outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+str(int(n)) +'\t'+alpha_out+'\n')
     outfile.close()
