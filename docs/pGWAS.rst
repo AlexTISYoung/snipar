@@ -41,7 +41,7 @@ outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output
 
 **Arguments**
 
-Required positional arguments:
+Required arguments:
 
 **genofile**
    Path to genotype file in HDF5 format
