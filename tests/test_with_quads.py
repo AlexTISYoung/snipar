@@ -38,11 +38,32 @@ for i in xrange(0,par_sid.shape[0]):
 
 genotypes = genotypes[:,:,sid_match]
 
-# Find par indices
-par_rows = quad_rows = np.zeros((quads.shape[0],2),dtype=int)
+# Find sib indices
+sib_rows = np.zeros((quads.shape[0],2),dtype=int)
 for i in xrange(0,quads.shape[0]):
-    par_rows[i,0] = np.where(par_iid[:, 0] == quads[i, 2])[0][0]
-    par_rows[i, 1] = np.where(par_iid[:, 0] == quads[i, 3])[0][0]
+    sib_rows[i,0] = np.where(par_iid[:, 0] == quads[i, 1])[0][0]
+    sib_rows[i, 1] = np.where(par_iid[:, 0] == quads[i, 2])[0][0]
+
+# Get sib genotypes
+sib_par_gts = np.zeros((quads.shape[0],par_sid.shape[0],2),dtype=int)
+
+for i in xrange(0,quads.shape[0]):
+    sib_par_gts[i,:,0] = par_gts[sib_rows[i,0],:]
+    sib_par_gts[i, :, 1] = par_gts[sib_rows[i, 1], :]
+
+sib_par_gts[sib_par_gts<0] = -1
+
+np.savetxt(dir+'/imputed_parental_hdf5/test/par_sib_gts.txt',
+           np.hstack((sib_par_gts[:,:,0],sib_par_gts[:,:,1])),fmt='%d')
+
+np.savetxt(dir+'/imputed_parental_hdf5/test/sib_gts.txt',
+           np.hstack((genotypes[:,0,:],genotypes[:,1,:])),fmt='%d')
+
+# Find par indices
+par_rows = np.zeros((quads.shape[0],2),dtype=int)
+for i in xrange(0,quads.shape[0]):
+    par_rows[i,0] = np.where(par_iid[:, 0] == quads[i, 3])[0][0]
+    par_rows[i, 1] = np.where(par_iid[:, 0] == quads[i, 4])[0][0]
 
 quad_par_gts = np.zeros((quads.shape[0],par_sid.shape[0],2),dtype=int)
 
