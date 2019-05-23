@@ -1,11 +1,10 @@
 #!/apps/well/python/2.7.8/bin/python
-import argparse
 import numpy as np
+import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import chi2, zscore
 from sibreg import sibreg
-import h5py
-import code
+import h5py, argparse, code
 
 ####### Output functions ##########
 def neglog10pval(x,df):
@@ -73,7 +72,9 @@ def read_covariates(covar_file,ids_to_match,missing):
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('genofile',type=str,help='Path to genotypes in HDF5')
+    parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
+    parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
+    parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
     parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
@@ -113,8 +114,10 @@ if __name__ == '__main__':
     if np.sum(y_not_nan) < y.shape[0]:
         y = y[y_not_nan]
         pheno_ids = pheno_ids[y_not_nan,:]
-    pheno_id_dict = id_dict_make(np.array(pheno_ids))
-    pheno_fam_id_set = set(pheno_ids[:,0])
+    pheno_id_dict = {}
+    for i in xrange(0,y.shape[0]):
+        pheno_id_dict[pheno_ids[i,1]] = i
+    pheno_fams = set(pheno_ids[:,0])
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
 
     ### Get covariates
@@ -134,107 +137,153 @@ if __name__ == '__main__':
         n_X = 1
         X_names = np.array(['Intercept'])
 
-### Read genotypes ###
-    print('Reading genotype file')
-    test_chr = h5py.File(args.genofile,'r')
-    #test_chr = h5py.File('imputed_parental_hdf5/chr_22.hdf5','r')
-    # select subset to test
-    iid = np.array(np.array(test_chr['ped'],dtype=int).T,dtype='S21')
-    # Find ids from same families as those with phenotype data
-    fid_with_phen = np.array([str(x) in pheno_fam_id_set for x in iid[:,0]])
-    iid = iid[fid_with_phen,:]
-    # Get frequencies
-    freqs = np.array(test_chr['freqs'])
-    for i in xrange(0,freqs.shape[0]):
-        if freqs[i]>0.5:
-            freqs[i]=1-freqs[i]
-    print('Filtering on MAF')
-    maf_pass = np.logical_and(freqs>args.min_maf,freqs<args.max_maf)
-    print(str(freqs.shape[0]-np.sum(maf_pass))+' SNPs outside of MAF range removed')
-    genotypes = test_chr['gts'][:,:,maf_pass]
-    genotypes = np.array(genotypes[fid_with_phen,:,:])
-    sid = np.array(test_chr['vnames'])
-    sid = sid[maf_pass]
-    freqs = freqs[maf_pass]
-    chr_length = genotypes.shape[2]
-    print('Number of test loci: ' + str(genotypes.shape[2]))
+### Read pedigree file ###
+    ### Load pedigree
+    ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
+    sibs = np.unique(ped[:, 1])
 
-### Intersect and match genotype data with covariate and phenotype data ###
-    # Intersect with phenotype IDs
-    geno_id_set = np.vstack((iid[:,np.array([0,1])],iid[:,np.array([0,2])]))
-    geno_id_set = {tuple(geno_id_set[x,]) for x in xrange(0,geno_id_set.shape[0])}
-    ids_in_common = {tuple(x) for x in pheno_ids} & geno_id_set
-    pheno_ids_in_common = np.array([tuple(x) in ids_in_common for x in pheno_ids])
-    y = y[pheno_ids_in_common]
-    pheno_ids = pheno_ids[pheno_ids_in_common,:]
-    pheno_id_dict = id_dict_make(pheno_ids)
-    # Dictionary to look up rows for each family
-    pheno_fam_dict = {}
-    for fam in np.unique(pheno_ids[:,0]):
-        pheno_fam_dict[fam] = np.where(pheno_ids[:,0]==fam)[0]
-    # Get relevant covariate rows
-    X = X[pheno_ids_in_common,:]
+    ### Create family dictionary
+    fams = {}
+    fam_ids = np.unique(ped[:, 0])
+    for f in fam_ids:
+        fams[f] = tuple(ped[ped[:, 0] == f, 1])
+    # reverse lookup dict
+    sib_fam_dict = {}
+    for i in xrange(0, ped.shape[0]):
+        sib_fam_dict[ped[i, 1]] = ped[i, 0]
+
+### Read sibling genotypes ###
+    #### Load genotypes
+    gts_f = Bed(args.sibgts)
+    gts_ids = gts_f.iid
+    # Build dict
+    id_dict = {}
+    for i in xrange(0, gts_ids.shape[0]):
+        id_dict[gts_ids[i, 1]] = i
+
+    # Find sibling indices
+    sib_indices = []
+    sibs_new = sibs
+    for i in xrange(0, sibs.shape[0]):
+        s = sibs[i]
+        if s in id_dict:
+            sib_indices.append(id_dict[s])
+        else:
+            print('No genotype data for ' + str(s))
+            fam_i = sib_fam_dict[s]
+            sfam = fams[fam_i]
+            # Remove family if only two sibs and one missing
+            if len(sfam) == 2:
+                sindices = np.array([np.where(sibs == x)[0][0] for x in sfam])
+                sibs_new = np.delete(sibs_new, sindices)
+                fam_ids = np.delete(fam_ids, np.where(fam_ids == fam_i)[0][0])
+                del fams[fam_i]
+            # otherwise remove sib and keep fam
+            else:
+                sibs_new = np.delete(sibs, i)
+                sfam = np.delete(sfam, np.where(sfam == s))
+                fams[fam_i] = sfam
+
+    sibs = sibs_new
+    sib_indices = np.sort(sib_indices)
+
+    # Read sibling genotypes
+    gts = gts_f[sib_indices, :].read().val
+    pos = gts_f.pos[:, 2]
+    sid = gts_f.sid
+    sid_dict = {}
+    for i in range(0,sid.shape[0]):
+        sid_dict[sid[i]] = i
+    gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
+
+    # rebuild ID dictionary
+    gts_ids = gts_ids[sib_indices]
+    # Build dict
+    id_dict = {}
+    for i in xrange(0, gts_ids.shape[0]):
+        id_dict[gts_ids[i, 1]] = i
+
+    ### Read imputed parental genotypes ###
+    print('Reading imputed parental genotype file')
+    pargts_f = h5py.File(args.pargts,'r')
+    # get families
+    par_fams = np.array(pargts_f['families'])
+    # build family dictionary
+    par_fam_dict = {}
+    for i in range(0,par_fams.shape[0]):
+        par_fam_dict[par_fams[i]] = i
+    pargts = np.array(pargts_f['imputed_par_gts'])
+    par_sid = np.array(pargts_f['sid'])
+    par_sid_dict = {}
+    for i in range(0,par_sid.shape[0]):
+        par_sid_dict[par_sid[i]] = i
+
+    ### Match SIDs of sibling and par gts ###
+    in_sib_sid = np.zeros((par_sid.shape[0]),dtype=bool)
+    sib_sid_indices = []
+    for s in range(0,par_sid.shape[0]):
+        sid_s = par_sid[s]
+        if sid_s in sid_dict:
+            in_sib_sid[s] = True
+            sib_sid_indices.append(sid_dict[sid_s])
+    if np.sum(in_sib_sid)>0:
+        pargts = pargts[:,in_sib_sid]
+        par_sid = par_sid[in_sib_sid]
+        gts = gts[:,sib_sid_indices]
+        print(str(gts.shape[0])+' variants in common between parental and sibling genotypes')
+    else:
+        raise(ValueError('No variants in common between sibling and parental genotypes'))
 
 ### Construct genetic covariate matrix
-    print('Constructing genetic covariates')
-    geno_fam_dict = {}
-    for fam in np.unique(pheno_ids[:,0]):
-        geno_fam_dict[fam] = np.where(iid[:,0]==fam)[0]
+    # Find families with phenotype data, covariate data, at least two siblings genotyped, and
+    fams_with_data = []
+    sibs_with_pheno = []
+    sibs_with_geno = []
+    sample_size = 0
+    for f in fam_ids:
+        if f in par_fams and fams and pheno_fams:
+            sibs = np.array(fams[f])
+            sibs_in_gts = np.array([x in id_dict for x in sibs])
+            if np.sum(sibs_in_gts) > 1:
+                sibs_with_geno.append(sibs[sibs_in_gts])
+                sibs_in_pheno = np.array([x in pheno_id_dict for x in sibs])
+                sibs_in_pheno = np.logical_and(sibs_in_pheno,sibs_in_gts)
+                nphen = np.sum(sibs_in_pheno)
+                if nphen > 0:
+                    fams_with_data.append(f)
+                    sibs_with_pheno.append(sibs[sibs_in_pheno])
+                    sample_size += nphen
+
+    nfam = len(fams_with_data)
+    print('Sample of '+str(sample_size)+' comprised of '+str(nfam)+' families with at least two siblings genotyped and at least one sibling phenotyped')
+
     if args.no_sib:
-        G = np.zeros((y.shape[0], 2, genotypes.shape[2]))
+        G = np.zeros((sample_size, 2, gts.shape[1]))
         p_index = 1
     else:
-        G = np.zeros((y.shape[0], 3, genotypes.shape[2]))
+        G = np.zeros((sample_size, 3, gts.shape[1]))
         p_index = 2
-    for fam in np.unique(pheno_ids[:, 0]):
-        gts_fam = genotypes[geno_fam_dict[fam],:,:]
-        iid_fam = iid[geno_fam_dict[fam],1:3]
-        pheno_id_fam = pheno_ids[pheno_fam_dict[fam],1]
-        if args.no_sib:
-            G_fam = np.zeros((pheno_id_fam.shape[0], 2, genotypes.shape[2]))
-
-        else:
-            G_fam = np.zeros((pheno_id_fam.shape[0], 3, genotypes.shape[2]))
-        # Average imputed parental
-        G_fam[:,p_index,:] = np.mean(gts_fam[:,2,:],axis=0)
-        # Get proband genotypes
-        for i in xrange(0,pheno_id_fam.shape[0]):
-            sib = pheno_id_fam[i]
-            sibmatch = np.where(sib==iid_fam[:,0])[0]
-            if len(sibmatch)>0:
-                sibmatch = sibmatch[0]
-                G_fam[i,0,:] = gts_fam[sibmatch,0,:]
-            else:
-                sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
-                G_fam[i,0,:] = gts_fam[sibmatch,1,:]
-        ## Compute sum of sib genotypes for each proband
+    start = 0
+    y_new = np.zeros((sample_size))
+    X_new = np.zeros((sample_size))
+    for i in xrange(0,nfam):
+        fam = fams_with_data[i]
+        end = start + len(sibs_with_pheno[i])
+        # Fill in phenotype vector
+        y_new[start:end] = y[np.array([pheno_id_dict[x] for x in sibs_with_pheno[i]])]
+        # Fill in proband genotype column
+        G[start:end,0,:] = gts[np.array([id_dict[x] for x in sibs_with_pheno[i]])]
+        # Fill in parental genotype column
+        for j in xrange(start,end):
+            G[j,p_index,:] = pargts[par_fam_dict[fams_with_data[0]],:]
         if not args.no_sib:
-            G_fam[:,1,:] = np.sum(G_fam[:,0,:],axis=0)
-            # remove proband genotype from sum
-            G_fam[:,1,:] = G_fam[:,1,:] - G_fam[:,0,:]
-            # add to sib column genotypes of any sibs with genotype but not phenotype data
-            if iid_fam.shape[0]>pheno_id_fam.shape[0]:
-                geno_sib_ids = np.unique(iid_fam[:,1:3])
-                for sib in geno_sib_ids:
-                    if sib not in pheno_id_fam:
-                        sibmatch = np.where(sib == iid_fam[:, 0])[0]
-                        if len(sibmatch) > 0:
-                            sibmatch = sibmatch[0]
-                            G_fam[:, 1, :] += gts_fam[sibmatch, 0, :]
-                        else:
-                            sibmatch = np.where(sib == iid_fam[:, 1])[0][0]
-                            G_fam[:, 1, :] += gts_fam[sibmatch, 1, :]
-        ## Set in full matrix
-        G[pheno_fam_dict[fam],:,:] = G_fam
-    del genotypes
-    del G_fam
+            # Fill in average sibling genotype column
+            gsum = np.sum(gts[np.array([id_dict[x] for x in sibs_with_geno[i]]),:],axis=0)
+            for s in range(0,sibs_with_pheno[i].shape[0]):
+                sname = sibs_with_pheno[i][s]
+                G[s,1,:] = gsum-gts[id_dict[sname],:]
+            G[:,1,:] = G[:,1,:]/float(sibs_with_geno[i].shape[0]-1)
 
-### Get sample size
-    n = y.shape[0]
-    if n == 0:
-        raise (ValueError('No non-missing observations with both phenotype and genotype data'))
-    print(str(n) + ' individuals in genotype file with no missing phenotype or covariate observations')
-    n = float(n)
 
 ######### Initialise output files #######
     ## Output file

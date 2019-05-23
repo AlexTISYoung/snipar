@@ -8,8 +8,7 @@ sibreg is a python library for performing regression with correlated observation
 
 In the sibreg/bin subdirectory, there are two scripts: 'pGWAS.py' (:doc:`pGWAS`) and 'sGWAS.py' (:doc:`sGWAS`).
 
-These perform different kinds of robust GWAS using genotype data from siblings (sGWAS)
-or genotype data from siblings and imputed parental genotypes (pGWAS).
+These perform different kinds of robust GWAS.
 
 The core model is the sibreg model (:class:`sibreg.model`), which consists of a linear model for the mean along
 with a vector of class labels that allows for correlations within-class. (The correlations within-class result
