@@ -270,9 +270,12 @@ if __name__ == '__main__':
     start = 0
     y_new = np.zeros((sample_size))
     X_new = np.zeros((sample_size,X.shape[1]))
+    fam_labels = np.zeros((sample_size),dtype='S20')
     for i in xrange(0,nfam):
         fam = fams_with_data[i]
         end = start + len(sibs_with_pheno[i])
+        # Fill in family labels vector
+        fam_labels[start:end] = fam
         # Fill in phenotype vector
         pheno_indices_i = np.array([pheno_id_dict[x] for x in sibs_with_pheno[i]])
         y_new[start:end] = y[pheno_indices_i]
@@ -325,7 +328,7 @@ if __name__ == '__main__':
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
     #sigma_2_init = np.var(y) * 1 / (1 + 1)
-    null_model = sibreg.model(y, X, families)
+    null_model = sibreg.model(y, X, fam_labels)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
     print('Residual variance estimate: ' + str(round(null_optim['sigma2'],4)))
@@ -379,7 +382,7 @@ if __name__ == '__main__':
             X_l = np.ones((n_l, X_length),dtype=np.float32)
             X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
             X_l[:,X_length-1] = G_par[not_nans,loc]
-            model_l = sibreg.model(y[not_nans],X_l,pheno_ids[:,0])
+            model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
             if not args.fix_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
                 if optim_l['success']:
