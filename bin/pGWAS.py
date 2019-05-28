@@ -377,7 +377,8 @@ if __name__ == '__main__':
                 not_nans = np.logical_not(G[:,1,loc].mask)
             n_l = np.sum(not_nans)
             X_l = np.ones((n_l, X_length),dtype=np.float32)
-            X_l[:, n_X:X_length] = G[not_nans, :, loc]
+            X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
+            X_l[:,X_length-1] = G_par[not_nans,loc]
             model_l = sibreg.model(y[not_nans],X_l,pheno_ids[:,0])
             if not args.fix_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
