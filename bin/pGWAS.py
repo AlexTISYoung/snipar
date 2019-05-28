@@ -383,7 +383,7 @@ if __name__ == '__main__':
             X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
             X_l[:,X_length-1] = G_par[not_nans,loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
-            if not args.fix_VC:
+            if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
                 if optim_l['success']:
                     alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True)
