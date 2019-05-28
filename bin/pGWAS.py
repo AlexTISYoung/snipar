@@ -286,7 +286,7 @@ if __name__ == '__main__':
         G[start:end,0,:] = gts[gindices,:]
         G.mask[start:end,0,:] = gts.mask[gindices,:]
         # Fill in parental genotype column
-        par_index_i = par_fam_dict[fams_with_data[0]]
+        par_index_i = par_fam_dict[fams_with_data[i]]
         for j in xrange(start,end):
             G_par[j,:] = pargts[par_index_i,:]
         if not args.no_sib:
