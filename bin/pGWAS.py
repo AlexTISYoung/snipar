@@ -243,18 +243,19 @@ if __name__ == '__main__':
     sibs_with_geno = []
     sample_size = 0
     for f in fam_ids:
-        if f in par_fams and fams and pheno_fams:
+        if f in par_fams and f in fams and f in pheno_fams:
             sibs = np.array(fams[f])
             sibs_in_gts = np.array([x in id_dict for x in sibs])
             if np.sum(sibs_in_gts) > 1:
-                sibs_with_geno.append(sibs[sibs_in_gts])
                 sibs_in_pheno = np.array([x in pheno_id_dict for x in sibs])
                 sibs_in_pheno = np.logical_and(sibs_in_pheno,sibs_in_gts)
                 nphen = np.sum(sibs_in_pheno)
                 if nphen > 0:
                     fams_with_data.append(f)
+                    sibs_with_geno.append(sibs[sibs_in_gts])
                     sibs_with_pheno.append(sibs[sibs_in_pheno])
                     sample_size += nphen
+
 
     nfam = len(fams_with_data)
     print('Sample of '+str(sample_size)+' comprised of '+str(nfam)+' families with at least two siblings genotyped and at least one sibling phenotyped')
