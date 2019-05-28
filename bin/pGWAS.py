@@ -92,7 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
-    parser.add_argument('--fix_VC', action='store_true', default=False,
+    parser.add_argument('--fit_VC', action='store_true', default=True,
                         help='Fix the variance components to the values from the null model')
     args=parser.parse_args()
 
