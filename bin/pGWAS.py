@@ -295,8 +295,10 @@ if __name__ == '__main__':
             gmask = np.sum(gts[gindices, :].mask, axis=0) > 0
             for s in range(0,sibs_with_pheno[i].shape[0]):
                 sname = sibs_with_pheno[i][s]
-                sindex = np.where(sibs_with_geno[i]==sname)[0][0]
-                G[start+s,1,:] = ma.mean(gts[np.delete(gindices,sindex),:],axis=0)
+                sindex = np.where(sibs_with_geno[i]==sname)[0]
+                if sindex.shape[0]==0:
+                    code.interact(local=locals())
+                G[start+s,1,:] = ma.mean(gts[np.delete(gindices,sindex[0]),:],axis=0)
                 G[start+s,1,:].mask = gmask
         start = end
 
