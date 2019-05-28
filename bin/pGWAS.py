@@ -367,7 +367,8 @@ if __name__ == '__main__':
         X_length = n_X + 3
     freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
-    for loc in xrange(0,G.shape[2]):
+    #for loc in xrange(0,G.shape[2]):
+    for loc in xrange(41,42):
         if args.no_sib:
             alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
         else:
@@ -392,5 +393,6 @@ if __name__ == '__main__':
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
+            code.interact(local=locals())
         outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out)
     outfile.close()
