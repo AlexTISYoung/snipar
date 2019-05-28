@@ -292,13 +292,11 @@ if __name__ == '__main__':
         if not args.no_sib:
             # Fill in average sibling genotype column
             gindices = np.array([id_dict[x] for x in sibs_with_geno[i]])
-            gsum = ma.sum(gts[gindices,:],axis=0)
             gmask = np.sum(gts[gindices, :].mask, axis=0) > 0
             for s in range(0,sibs_with_pheno[i].shape[0]):
                 sname = sibs_with_pheno[i][s]
-                G[start+s,1,:] = gsum-gts[id_dict[sname],:]
+                G[start+s,1,:] = ma.mean(gts[np.delete(gindices,s),:],axis=0)
                 G[start+s,1,:].mask = gmask
-            G[start:end,1,:] = G[start:end,1,:]/float(sibs_with_geno[i].shape[0]-1)
         start = end
 
     y = y_new
@@ -392,5 +390,6 @@ if __name__ == '__main__':
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
+            code.interact(local=locals())
         outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out)
     outfile.close()
