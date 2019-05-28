@@ -369,9 +369,9 @@ if __name__ == '__main__':
     missingness = ma.mean(G.mask[:,0,:],axis=0)
     for loc in xrange(0,G.shape[2]):
         if args.no_sib:
-            alpha_out = 'NA\tNA\tNA\tNA\tNA\n'
+            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
         else:
-            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
+            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and missingness[loc] < args.max_missing:
             # Find NAs
             if args.no_sib:
@@ -392,5 +392,5 @@ if __name__ == '__main__':
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
-        outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out+'\n')
+        outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out)
     outfile.close()
