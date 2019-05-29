@@ -381,7 +381,7 @@ if __name__ == '__main__':
             else:
                 not_nans = np.logical_not(G[:,1,loc].mask)
             n_l = np.sum(not_nans)
-            X_l = np.ones((n_l, X_length),dtype=np.float64)
+            X_l = np.ones((n_l, X_length),dtype=np.float32)
             X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
             X_l[:,X_length-1] = G_par[not_nans,loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
