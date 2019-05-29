@@ -393,6 +393,14 @@ if __name__ == '__main__':
                     print('Maximisation of likelihood failed for for ' + sid[loc])
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
-            alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
+            # If rank is deficient, output NAs
+            if np.isnan(alpha_l[0][0]):
+                print('Insufficient information to fit model for '+str(sid[loc]))
+                if args.no_sib:
+                    alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
+                else:
+                    alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
+            else:
+                alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
         outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out)
     outfile.close()
