@@ -75,7 +75,7 @@ class model(object):
             X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
 
         if xtx_out:
-            return [X_T_X,X_T_y]
+            return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
         else:
             alpha = np.linalg.solve(X_T_X,X_T_y)
             alpha = alpha.reshape((alpha.shape[0],))
