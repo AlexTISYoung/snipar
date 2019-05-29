@@ -394,7 +394,7 @@ if __name__ == '__main__':
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             # If X_T_X matrix is ill conditioned, return NAs
-            if np.min(alpha_l[1])<0:
+            if np.min(np.diag(alpha_l[1]))<0:
                 print('Insufficient information to fit model for '+str(sid[loc]))
                 if args.no_sib:
                     alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
