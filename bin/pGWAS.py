@@ -92,7 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
-    parser.add_argument('--fit_VC', action='store_true', default=True,
+    parser.add_argument('--fit_VC', action='store_true', default=False,
                         help='Fix the variance components to the values from the null model')
     args=parser.parse_args()
 
@@ -391,6 +391,7 @@ if __name__ == '__main__':
                     alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True)
                 else:
                     print('Maximisation of likelihood failed for for ' + sid[loc])
+                    alpha_l = [np.array(np.nan)]
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             # If X_T_X matrix is ill conditioned, return NAs
