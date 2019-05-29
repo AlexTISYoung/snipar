@@ -318,8 +318,8 @@ if __name__ == '__main__':
         X_length = n_X + 2
     else:
         X_length = n_X + 3
-    outfile.create_dataset('xtx',(gts.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (gts.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
+    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
 
 ######### Fit Null Model ##########
