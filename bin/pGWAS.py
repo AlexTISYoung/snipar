@@ -220,6 +220,8 @@ if __name__ == '__main__':
     for i in range(0,par_sid.shape[0]):
         par_sid_dict[par_sid[i]] = i
 
+    pargts_f.close()
+
     ### Match SIDs of sibling and par gts ###
     in_sib_sid = np.zeros((par_sid.shape[0]),dtype=bool)
     sib_sid_indices = []
@@ -235,6 +237,7 @@ if __name__ == '__main__':
         print(str(gts.shape[1])+' variants in common between parental and sibling genotypes')
     else:
         raise(ValueError('No variants in common between sibling and parental genotypes'))
+    sid = sid[sib_sid_indices]
 
 ### Construct genetic covariate matrix
     # Find families with phenotype data, covariate data, at least two siblings genotyped, and
