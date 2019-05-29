@@ -381,7 +381,7 @@ if __name__ == '__main__':
             else:
                 not_nans = np.logical_not(G[:,1,loc].mask)
             n_l = np.sum(not_nans)
-            X_l = np.ones((n_l, X_length),dtype=np.float32)
+            X_l = np.ones((n_l, X_length),dtype=np.float64)
             X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
             X_l[:,X_length-1] = G_par[not_nans,loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
@@ -393,7 +393,7 @@ if __name__ == '__main__':
                     print('Maximisation of likelihood failed for for ' + sid[loc])
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
-            # If rank is deficient, output NAs
+            # If X_T_X matrix is ill conditioned, return NAs
             if np.isnan(alpha_l[0][0]):
                 print('Insufficient information to fit model for '+str(sid[loc]))
                 if args.no_sib:

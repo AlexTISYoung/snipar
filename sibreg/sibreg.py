@@ -74,9 +74,8 @@ class model(object):
             X_T_X = X_T_X-np.dot(X_sum.T,X_sum)/(tau+self.label_counts[label])
             X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
 
-        # Check if rank is deficient
-        r = np.linalg.matrix_rank(X_T_X)
-        if r < self.X.shape[1]:
+        # Check X_T_X matrix is ill-conditioned
+        if np.linalg.cond(X_T_X) > np.finfo(X_T_X.dtype).eps:
             alpha = np.zeros(self.X.shape[1])
             alpha[:] = np.nan
             if compute_cov:
