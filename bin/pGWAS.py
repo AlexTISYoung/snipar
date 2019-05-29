@@ -390,12 +390,11 @@ if __name__ == '__main__':
                 if optim_l['success']:
                     alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True)
                 else:
-                    print('Maximisation of likelihood failed for for ' + sid[loc])
-                    alpha_l = [np.array(np.nan)]
+                    raise(ValueError('Maximisation of likelihood failed for for ' + sid[loc]))
             else:
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
             # If X_T_X matrix is ill conditioned, return NAs
-            if np.isnan(alpha_l[0][0]):
+            if np.min(alpha_l[1])<0:
                 print('Insufficient information to fit model for '+str(sid[loc]))
                 if args.no_sib:
                     alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
