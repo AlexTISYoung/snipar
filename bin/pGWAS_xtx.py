@@ -385,4 +385,7 @@ if __name__ == '__main__':
                 alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True, xtx_out= True)
             outfile['xtx'][loc,:,:] = alpha_l[0]
             outfile['xty'][loc,:] = alpha_l[1]
+        else:
+            outfile['xtx'][loc, :, :] = np.nan
+            outfile['xty'][loc, :] = np.nan
     outfile.close()
