@@ -301,6 +301,8 @@ if __name__ == '__main__':
                 G[start+s,1,:].mask = gmask
         start = end
 
+    del gts
+    del pargts
     y = y_new
     X = X_new
     families = np.array(fams_with_data)

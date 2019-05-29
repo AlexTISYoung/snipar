@@ -74,14 +74,26 @@ class model(object):
             X_T_X = X_T_X-np.dot(X_sum.T,X_sum)/(tau+self.label_counts[label])
             X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
 
-        alpha = np.linalg.solve(X_T_X,X_T_y)
-        alpha = alpha.reshape((alpha.shape[0],))
-
-        if compute_cov:
-            alpha_cov = sigma2*np.linalg.inv(X_T_X)
-            return [alpha,alpha_cov]
+        # Check if rank is deficient
+        r = np.linalg.matrix_rank(X_T_X)
+        if r < self.X.shape[1]:
+            alpha = np.zeros(self.X.shape[1])
+            alpha[:] = np.nan
+            if compute_cov:
+                alpha_cov = np.zeros((alpha.shape[0],alpha.shape[0]))
+                alpha_cov[:] = np.nan
+                return [alpha,alpha_cov]
+            else:
+                return alpha
         else:
-            return alpha
+            alpha = np.linalg.solve(X_T_X,X_T_y)
+            alpha = alpha.reshape((alpha.shape[0],))
+
+            if compute_cov:
+                alpha_cov = sigma2*np.linalg.inv(X_T_X)
+                return [alpha,alpha_cov]
+            else:
+                return alpha
 
     # Compute likelihood of data given beta, alpha
     def likelihood_and_gradient(self, sigma2, tau):
