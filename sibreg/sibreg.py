@@ -48,7 +48,7 @@ class model(object):
 
 
     # Compute MLE of alpha given variance parameters
-    def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
+    def alpha_mle_2(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
         """
         Compute the MLE of alpha given variance parameters
 
@@ -86,6 +86,47 @@ class model(object):
             else:
                 return alpha
 
+    def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
+        """
+        Compute the MLE of alpha given variance parameters
+
+        Parameters
+        ----------
+        sigma2 : :class:`float`
+            variance of model residuals
+        tau : :class:`float`
+            ratio of variance of model residuals to variance explained by mean differences between classes
+
+        Returns
+        -------
+        alpha : :class:`~numpy:numpy.array`
+            MLE of alpha
+
+        """
+        X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]))
+        X_T_y = np.zeros((self.X.shape[1]))
+
+        for label in self.y_lab.iterkeys():
+            sigma_u = sigma2/tau
+            Sigma_lab = sigma_u*np.ones((self.label_counts[label],self.label_counts[label]))
+            np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
+            Sigma_lab_inv = np.linalg.inv(Sigma_lab)
+            X_T_X = X_T_X + np.dot(self.X_lab[label].T,Sigma_lab_inv.dot(self.X_lab[label]))
+            X_T_y = X_T_y + np.dot(self.X_lab[label].T, Sigma_lab_inv.dot(self.y_lab[label]))
+
+        if xtx_out:
+            return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
+        else:
+            alpha = np.linalg.solve(X_T_X,X_T_y)
+            alpha = alpha.reshape((alpha.shape[0],))
+
+            if compute_cov:
+                alpha_cov = sigma2*np.linalg.inv(X_T_X)
+                return [alpha,alpha_cov]
+            else:
+                return alpha
+
+
     # Compute likelihood of data given beta, alpha
     def likelihood_and_gradient(self, sigma2, tau):
         """
@@ -105,7 +146,7 @@ class model(object):
 
         """
         ## Likelihood
-        alpha = self.alpha_mle(tau)
+        alpha = self.alpha_mle(tau, sigma2)
         resid = self.y - self.X.dot(alpha)
         RSS = np.sum(np.square(resid))
 

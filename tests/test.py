@@ -14,6 +14,11 @@ def random_design(labels):
         Z[i,label_dict[labels[i]]]=1
     return Z
 
+def Sigma_make(labels,sigma2,tau):
+    Z = random_design(labels)
+    sigmau = sigma2/tau
+    return sigmau * Z.dot(Z.T) + sigma2 * np.identity(Z.shape[0])
+
 def safe_likelihood(y,X,Sigma):
     alpha = safe_alpha_mle(y,X,Sigma)
     alpha = alpha.reshape((alpha.shape[0],))
@@ -45,7 +50,7 @@ class test_regrnd_functions(unittest.TestCase):
             # code.interact(local=locals())
             Sigma = sigmau * Z.dot(Z.T) + sigma2 * np.identity(n)
             safe_alpha = safe_alpha_mle(m.y, m.X, Sigma)
-            alpha_mle = m.alpha_mle(tau)
+            alpha_mle = m.alpha_mle(tau,sigma2)
             testing.assert_almost_equal(alpha_mle, safe_alpha, decimal=5)
 
     def test_likelihood(self):
