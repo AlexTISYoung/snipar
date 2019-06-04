@@ -46,46 +46,6 @@ class model(object):
         self.y=y
         self.labels=labels
 
-
-    # Compute MLE of alpha given variance parameters
-    def alpha_mle_2(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
-        """
-        Compute the MLE of alpha given variance parameters
-
-        Parameters
-        ----------
-        sigma2 : :class:`float`
-            variance of model residuals
-        tau : :class:`float`
-            ratio of variance of model residuals to variance explained by mean differences between classes
-
-        Returns
-        -------
-        alpha : :class:`~numpy:numpy.array`
-            MLE of alpha
-
-        """
-        X_T_X = np.dot(self.X.T,self.X)
-        X_T_y = np.dot(self.X.T,self.y).reshape((self.X.shape[1],1))
-
-        for label in self.y_lab.iterkeys():
-            X_sum = np.sum(self.X_lab[label],axis=0).reshape((1,self.X.shape[1]))
-            y_sum = np.sum(self.y_lab[label],axis=0)
-            X_T_X = X_T_X-np.dot(X_sum.T,X_sum)/(tau+self.label_counts[label])
-            X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
-
-        if xtx_out:
-            return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
-        else:
-            alpha = np.linalg.solve(X_T_X,X_T_y)
-            alpha = alpha.reshape((alpha.shape[0],))
-
-            if compute_cov:
-                alpha_cov = sigma2*np.linalg.inv(X_T_X)
-                return [alpha,alpha_cov]
-            else:
-                return alpha
-
     def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
         """
         Compute the MLE of alpha given variance parameters
@@ -234,6 +194,45 @@ class model(object):
 
     def set_alpha(self,alpha):
         self.alpha = alpha
+
+    # Compute MLE of alpha given variance parameters
+    # def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
+    #     """
+    #     Compute the MLE of alpha given variance parameters
+    #
+    #     Parameters
+    #     ----------
+    #     sigma2 : :class:`float`
+    #         variance of model residuals
+    #     tau : :class:`float`
+    #         ratio of variance of model residuals to variance explained by mean differences between classes
+    #
+    #     Returns
+    #     -------
+    #     alpha : :class:`~numpy:numpy.array`
+    #         MLE of alpha
+    #
+    #     """
+    #     X_T_X = np.dot(self.X.T,self.X)
+    #     X_T_y = np.dot(self.X.T,self.y).reshape((self.X.shape[1],1))
+    #
+    #     for label in self.y_lab.iterkeys():
+    #         X_sum = np.sum(self.X_lab[label],axis=0).reshape((1,self.X.shape[1]))
+    #         y_sum = np.sum(self.y_lab[label],axis=0)
+    #         X_T_X = X_T_X-np.dot(X_sum.T,X_sum)/(tau+self.label_counts[label])
+    #         X_T_y = X_T_y-np.dot(X_sum.T,y_sum)/(tau+self.label_counts[label])
+    #
+    #     if xtx_out:
+    #         return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
+    #     else:
+    #         alpha = np.linalg.solve(X_T_X,X_T_y)
+    #         alpha = alpha.reshape((alpha.shape[0],))
+    #
+    #         if compute_cov:
+    #             alpha_cov = sigma2*np.linalg.inv(X_T_X)
+    #             return [alpha,alpha_cov]
+    #         else:
+    #             return alpha
 
 def lik_and_grad(pars,*args):
     # Wrapper for function to pass to L-BFGS-B

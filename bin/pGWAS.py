@@ -93,7 +93,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
     parser.add_argument('--fit_VC', action='store_true', default=False,
-                        help='Fix the variance components to the values from the null model')
+                        help='Fit the variance components for each SNP (default is to use null model MLE)')
     args=parser.parse_args()
 
     ####################### Read in data #########################
