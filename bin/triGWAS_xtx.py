@@ -154,18 +154,16 @@ if __name__ == '__main__':
     # Find indices
     indices = np.zeros((ped.shape),dtype = int)
     indices[:] = -1
-    phen_indices = np.zeros((ped.shape[0]),dtype=int)
-    phen_indices[:] = -1
     ped_new = ped
     for i in xrange(0, ped.shape[0]):
         if ped[i,0] in id_dict and ped[i,1] in id_dict and ped[i,2] in id_dict and ped[i,0] in pheno_id_dict:
             indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
-            phen_indices[i] = pheno_id_dict[ped[i,0]]
         else:
             print('Missing data for '+ped[i,0])
             ped_new = np.delete(ped_new,i,0)
 
     ped = ped_new
+    indices = indices[indices[:,0]>0,:]
     index_vector = np.sort(np.unique(indices.reshape(indices.shape[0]*indices.shape[1])))
 
     # Read genotypes
@@ -180,6 +178,13 @@ if __name__ == '__main__':
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
+
+    # find indices
+    indices = np.zeros((ped.shape),dtype = int)
+    phen_indices = np.zeros((ped.shape[0]),dtype=int)
+    for i in xrange(0, ped.shape[0]):
+        indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
+        phen_indices[i] = pheno_id_dict[ped[i,0]]
 
     print('Sample of '+str(ped.shape[0])+' individuals with phenotype data and both parents genotyped')
 
