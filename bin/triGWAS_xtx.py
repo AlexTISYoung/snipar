@@ -272,6 +272,6 @@ if __name__ == '__main__':
         else:
             outfile['xtx'][loc, :, :] = np.nan
             outfile['xty'][loc, :] = np.nan
-    outfile['sigma2'] = null_optim['sigma2']
-    outfile['tau'] = null_optim['tau']
+    outfile['sigma2'] = np.array(null_optim['sigma2'])
+    outfile['tau'] = np.array(null_optim['tau'])
     outfile.close()
