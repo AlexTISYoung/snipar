@@ -192,8 +192,8 @@ if __name__ == '__main__':
     G = ma.array(np.zeros((ped.shape[0], 3),dtype=np.int8),
                  mask=np.zeros((ped.shape[0], 3), dtype=bool))
     for i in range(0,3):
-        G[:,i] = gts[indices[i,:],:]
-        G[:,i].mask = gts[indices[i,:],:].mask
+        G[:,i] = gts[indices[:,i],:]
+        G[:,i].mask = gts[indices[:,i],:].mask
     del gts
 
 ######### Initialise output files #######
