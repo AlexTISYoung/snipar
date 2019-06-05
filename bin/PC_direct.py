@@ -12,7 +12,7 @@ def id_dict_make(ids):
     return id_dict
 
 
-pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
+pheno = Pheno('phenotypes/height_resid.ped', missing='NA').read()
 
 y = np.array(pheno.val)
 pheno_ids = np.array(pheno.iid)
@@ -24,7 +24,7 @@ if np.sum(y_not_nan) < y.shape[0]:
     pheno_ids = pheno_ids[y_not_nan, :]
 
 # Read PCs
-PCs = Pheno('pcs/white_british_PCs.ped', missing='NA').read()
+PCs = Pheno('pcs/UKB_PCs.ped', missing='NA').read()
 pcs = np.array(PCs.val)
 pc_ids = np.array(PCs.iid)
 # remove nan
@@ -48,16 +48,25 @@ for family in families:
 pc_diff = pcs - pc_means
 
 # Write in GCTA format
-np.savetxt('pcs/white_british_PCs_BF_WF.gcta',np.hstack((pc_means,pc_diff)))
-np.savetxt('pcs/white_british_PCs_ids.gcta',np.array(pc_ids,dtype=int),fmt='%d')
+np.savetxt('pcs/UKB_PC_BF_WF.gcta',np.hstack((pc_means,pc_diff)))
+np.savetxt('pcs/UKB_PC_ids.txt',np.array(pc_ids,dtype=int),fmt='%d')
 
 # match with pheno ids
 id_match = np.zeros((y.shape[0]),dtype=int)
+in_pc_ids = np.zeros((y.shape[0]),dtype=bool)
 for i in xrange(0,y.shape[0]):
-    id_match[i] = pc_id_dict[tuple(pheno_ids[i,:])]
+    pid = tuple(pheno_ids[i,:])
+    if pid in pc_id_dict:
+        id_match[i] = pc_id_dict[pid]
+        in_pc_ids[i] = True
+
+y = y[in_pc_ids]
+pheno_ids = pheno_ids[in_pc_ids,:]
 
 pc_means = pc_means[id_match,:]
+pc_means = pc_means[in_pc_ids]
 pc_diff = pc_diff[id_match,:]
+pc_diff = pc_diff[in_pc_ids,:]
 
 pc_all = np.hstack((np.ones((pc_means.shape[0],1)),pc_means,pc_diff))
 

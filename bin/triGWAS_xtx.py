@@ -73,7 +73,7 @@ def read_covariates(covar_file,ids_to_match,missing):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('gts',type=str,help='Path to bed file with sibling genotypes')
-    parser.add_argument('ped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
+    parser.add_argument('ped',type=str,help='Path to pedigree file with FID, IID, MOTHER_ID, FATHER_ID')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
     parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
@@ -187,8 +187,8 @@ if __name__ == '__main__':
     G = ma.array(np.zeros((ped.shape[0], 3),dtype=np.int8),
                  mask=np.zeros((ped.shape[0], 3), dtype=bool))
     for i in range(0,3):
-        G[:,i] = gts[index_vector[i,:],:]
-        G[:,i].mask = gts[index_vector[i,:],:].mask
+        G[:,i] = gts[indices[i,:],:]
+        G[:,i].mask = gts[indices[i,:],:].mask
     del gts
 
 ######### Initialise output files #######
