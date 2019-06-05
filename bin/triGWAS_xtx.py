@@ -196,11 +196,15 @@ if __name__ == '__main__':
         G[:,i,:].mask = gts[indices[:,i],:].mask
     del gts
 
+    # Form phenotype
+    y = y[phen_indices]
+    X = X[phen_indices,:]
+
 ######### Initialise output files #######
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = sid
-    X_length = n_X + 2
+    X_length = n_X + 3
     outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
