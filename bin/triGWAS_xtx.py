@@ -189,11 +189,11 @@ if __name__ == '__main__':
     print('Sample of '+str(ped.shape[0])+' individuals with phenotype data and both parents genotyped')
 
     print('Forming family-wise genotype matrix')
-    G = ma.array(np.zeros((ped.shape[0], 3),dtype=np.int8),
-                 mask=np.zeros((ped.shape[0], 3), dtype=bool))
+    G = ma.array(np.zeros((ped.shape[0], 3, gts.shape[1]),dtype=np.int8),
+                 mask=np.zeros((ped.shape[0], 3,gts.shape[1]), dtype=bool))
     for i in range(0,3):
-        G[:,i] = gts[indices[:,i],:]
-        G[:,i].mask = gts[indices[:,i],:].mask
+        G[:,i,:] = gts[indices[:,i],:]
+        G[:,i,:].mask = gts[indices[:,i],:].mask
     del gts
 
 ######### Initialise output files #######
@@ -201,8 +201,8 @@ if __name__ == '__main__':
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = sid
     X_length = n_X + 2
-    outfile.create_dataset('xtx',(G.shape[1],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (G.shape[1], X_length), dtype='f', chunks=True, compression='gzip',
+    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
 
 ######### Fit Null Model ##########
@@ -244,15 +244,16 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     # Optimize model for SNP
-    freqs = ma.mean(G,axis=0)/2.0
+    freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
-    for loc in xrange(0,G.shape[1]):
+    for loc in xrange(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
-            not_nans = np.sum(G.mask,axis = 1)>0
+            not_nans = np.sum(G[:,:,loc].mask,axis = 1)>0
             n_l = np.sum(not_nans)
             X_l = np.ones((n_l, X_length),dtype=np.float32)
-            X_l[:, n_X:X_length] = G[not_nans, loc]
+            X_l[:,0:n_X] = X[not_nans,:]
+            X_l[:, n_X:X_length] = G[not_nans,:, loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
             if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
