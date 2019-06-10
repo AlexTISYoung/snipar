@@ -72,8 +72,9 @@ def read_covariates(covar_file,ids_to_match,missing):
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('gts',type=str,help='Path to bed file with sibling genotypes')
-    parser.add_argument('ped',type=str,help='Path to pedigree file with FID, IID, MOTHER_ID, FATHER_ID')
+    parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
+    parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
+    parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
     parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
@@ -136,15 +137,33 @@ if __name__ == '__main__':
         X_names = np.array(['Intercept'])
 
 ### Read pedigree file ###
+    ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
-    fam_labels = ped[:,0]
-    ped = ped[:,1:4]
+    # ped = np.loadtxt('relatedness/one_parent_genotyped.ped', dtype='S20', skiprows=1)
 
-### Read genotypes ###
+    ### Read imputed parental genotypes ###
+    print('Reading imputed parental genotype file')
+    pargts_f = h5py.File(args.pargts,'r')
+    #pargts_f = h5py.File('23andme/chr_22.hdf5','r')
+    # get families
+    par_ped = np.array(pargts_f['ped'])
+    # build family dictionary
+    par_dict = {}
+    for i in range(0,par_ped.shape[0]):
+        par_dict[par_ped[i,0]] = i
+    pargts = np.array(pargts_f['imputed_par_gts'])
+    par_sid = np.array(pargts_f['sid'])
+    par_sid_dict = {}
+    for i in range(0,par_sid.shape[0]):
+        par_sid_dict[par_sid[i]] = i
+
+    pargts_f.close()
+
+    ### Read genotypes ###
     #### Load genotypes
     gts_f = Bed(args.gts)
-    #gts_f = Bed('genotypes/chr_22.bed')
+    # gts_f = Bed('genotypes/chr_22.bed')
     gts_ids = gts_f.iid
     # Build dict
     id_dict = {}
@@ -152,25 +171,29 @@ if __name__ == '__main__':
         id_dict[gts_ids[i, 1]] = i
 
     # Find indices
-    indices = np.zeros((ped.shape),dtype = int)
+    indices = np.zeros((ped.shape[0],3), dtype=int)
     indices[:] = -1
+    phen_indices = np.zeros((ped.shape[0]), dtype=int)
+    phen_indices[:] = -1
     ped_new = ped
     for i in xrange(0, ped.shape[0]):
-        if ped[i,0] in id_dict and ped[i,1] in id_dict and ped[i,2] in id_dict and ped[i,0] in pheno_id_dict:
-            indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
+        if ped[i, 0] in id_dict and ped[i, 1] in id_dict and ped[i,0] in pheno_id_dict and ped[i,0] in par_dict:
+            indices[i, :] = np.array([id_dict[x] for x in ped[i, :],par_dict[ped[i,0]]])
+            phen_indices[i] = pheno_id_dict[ped[i,0]]
         else:
-            print('Missing data for '+ped[i,0])
-            ped_new = np.delete(ped_new,i,0)
+            print('Missing data for ' + ped[i, 0])
+            ped_new = np.delete(ped_new, i, 0)
 
     ped = ped_new
-    indices = indices[indices[:,0]>0,:]
-    index_vector = np.sort(np.unique(indices.reshape(indices.shape[0]*indices.shape[1])))
+    indices = indices[indices[:, 0] > 0, :]
+    phen_indices = phen_indices[phen_indices>0]
+    index_vector = np.sort(np.unique(indices.reshape(indices.shape[0] * indices.shape[1])))
 
     # Read genotypes
     gts = gts_f[index_vector, :].read().val
     pos = gts_f.pos[:, 2]
     sid = gts_f.sid
-    gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
+    gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
 
     # rebuild ID dictionary
     gts_ids = gts_ids[index_vector]
@@ -179,22 +202,36 @@ if __name__ == '__main__':
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
-    # find indices
-    indices = np.zeros((ped.shape),dtype = int)
-    phen_indices = np.zeros((ped.shape[0]),dtype=int)
-    for i in xrange(0, ped.shape[0]):
-        indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
-        phen_indices[i] = pheno_id_dict[ped[i,0]]
+    ### Match SIDs of sibling and par gts ###
+    in_gts_sid = np.zeros((par_sid.shape[0]),dtype=bool)
+    gts_sid_indices = []
+    for s in range(0,par_sid.shape[0]):
+        sid_s = par_sid[s]
+        if sid_s in par_sid_dict:
+            in_gts_sid[s] = True
+            gts_sid_indices.append(par_sid_dict[sid_s])
+    if np.sum(in_gts_sid)>0:
+        pargts = pargts[:,in_gts_sid]
+        par_sid = par_sid[in_gts_sid]
+        gts = gts[:,gts_sid_indices]
+        print(str(gts.shape[1])+' variants in common between parental and sibling genotypes')
+    else:
+        raise(ValueError('No variants in common between sibling and parental genotypes'))
+    sid = sid[gts_sid_indices]
 
-    print('Sample of '+str(ped.shape[0])+' individuals with phenotype data and both parents genotyped')
+### Construct genetic covariate matrix
+    # Find parent-offspring pairs with genotype data and phenotyped offspring
+    print('Sample size: '+str(ped.shape[0]))
 
     print('Forming family-wise genotype matrix')
-    G = ma.array(np.zeros((ped.shape[0], 3, gts.shape[1]),dtype=np.int8),
-                 mask=np.zeros((ped.shape[0], 3,gts.shape[1]), dtype=bool))
-    for i in range(0,3):
+    G = ma.array(np.zeros((ped.shape[0], 2, gts.shape[1]),dtype=np.int8),
+                 mask=np.zeros((ped.shape[0], 2,gts.shape[1]), dtype=bool))
+    for i in range(0,2):
         G[:,i,:] = gts[indices[:,i],:]
         G[:,i,:].mask = gts[indices[:,i],:].mask
     del gts
+    # Permute pargts
+    pargts = pargts[indices[:,2],:]
 
     # Form phenotype
     y = y[phen_indices]
@@ -215,6 +252,7 @@ if __name__ == '__main__':
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
     #sigma_2_init = np.var(y) * 1 / (1 + 1)
+    fam_labels = np.array([x for x in xrange(0,ped.shape[0])])
     null_model = sibreg.model(y, X, fam_labels)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
@@ -250,14 +288,16 @@ if __name__ == '__main__':
     # Optimize model for SNP
     freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
+    N_L = np.zeros((G.shape[2]),dtype = int)
     for loc in xrange(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
-            not_nans = np.sum(G[:,:,loc].mask,axis = 1)==0
+            not_nans = np.logical_and(np.sum(G[:,:,loc].mask,axis = 1)==0,np.logical_not(np.isnan(pargts[:,loc])))
             n_l = np.sum(not_nans)
+            N_L[loc] = n_l
             X_l = np.ones((n_l, X_length),dtype=np.float32)
-            X_l[:,0:n_X] = X[not_nans,:]
-            X_l[:, n_X:X_length] = G[not_nans,:, loc]
+            X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
+            X_l[:,X_length-1] = pargts[not_nans,loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
             if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
@@ -272,6 +312,7 @@ if __name__ == '__main__':
         else:
             outfile['xtx'][loc, :, :] = np.nan
             outfile['xty'][loc, :] = np.nan
-    outfile['sigma2'] = np.array(null_optim['sigma2'])
-    outfile['tau'] = np.array(null_optim['tau'])
+    outfile['sigma2'] = null_optim['sigma2']
+    outfile['tau'] = null_optim['tau']
+    outfile['N_L'] = N_L
     outfile.close()
