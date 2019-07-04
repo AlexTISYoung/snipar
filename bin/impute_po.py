@@ -4,20 +4,75 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 import h5py, argparse, code
 
-def impute(g,pg,f):
-    if pg==2:
-        if g>0:
-            return (g-1+f)
-        else:
-            return np.nan
-    elif pg==1:
-        return 0.5*g+f
-    elif pg==0:
-        if g<2:
-            return g+f
-        else:
-            return np.nan
+# def impute(g,pg,f):
+#     if pg==2:
+#         if g>0:
+#             return (g-1+f)
+#         else:
+#             return np.nan
+#     elif pg==1:
+#         return 0.5*g+f
+#     elif pg==0:
+#         if g<2:
+#             return g+f
+#         else:
+#             return np.nan
 
+def impute(g,pg,f):
+    gcounts = np.array([np.sum(g==x) for x in range(0,3)])
+    if pg == 2:
+        if gcounts[0]>0:
+            return np.nan
+        elif gcounts[1] == 0:
+            return (1+f*(2**g.shape[0]-1))/(1+f*(2**(g.shape[0]-1)-1))
+        elif gcounts[1] == g.shape[0]:
+            return f/(2**(g.shape[0]-1)-f*(2**(g.shape[0]-1)-1))
+        else:
+            return 1
+    if pg == 1:
+        if gcounts[0] == 0 and gcounts[2]>0:
+            return (1 + f * (2 ** gcounts[2] - 1)) / (1 + f * (2 ** (gcounts[2] - 1) - 1))
+        if gcounts[0]>0 and gcounts[2]>0:
+            return 1
+        if gcounts[2]==0 and gcounts[0]>0:
+            e = g.shape[0]-gcounts[1]-1
+            return f/(2**e-f*(2**e-1))
+        if gcounts[1] == g.shape[0]:
+            return 2*f
+    if pg == 0:
+        if gcounts[2]>0:
+            return np.nan
+        elif gcounts[1] == g.shape[0]:
+            return (1+f*(2**g.shape[0]-1))/(1+f*(2**(g.shape[0]-1)-1))
+        elif gcounts[1] == 0:
+            return f/(2**(g.shape[0]-1)-f*(2**(g.shape[0]-1)-1))
+        else:
+            return 1
+
+def simulate_sib(father,mother):
+    return np.random.choice(father,1)+np.random.choice(mother,1)
+
+def simulate_fam(n,f):
+    father = np.random.binomial(1,f,2)
+    mother = np.random.binomial(1,f,2)
+    return [np.sum(father),np.sum(mother),np.array([simulate_sib(father,mother) for x in range(0,n)]).reshape((n))]
+
+def test_impute(n,f):
+    fam = simulate_fam(n,f)
+    imputed = impute(fam[2],fam[0],f)
+    return np.array([imputed,fam[1]])
+
+# nrep = 10**6
+# imputed = np.zeros((nrep,2))
+# for i in xrange(0,nrep):
+#  imputed[i,:] = test_impute(2,0.5)
+#
+# imps = np.unique(imputed[:, 0])
+# imp_means = np.zeros((imps.shape[0]))
+# for i in range(0, imps.shape[0]):
+#     imp_means[i] = np.mean(imputed[imputed[:, 0] == imps[i], 1])
+#
+# imps - imp_means
 
 ######### Command line arguments #########
 if __name__ == '__main__':
