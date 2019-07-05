@@ -169,7 +169,7 @@ if __name__ == '__main__':
         parent_pairs = np.array([pfam[x,2]+pfam[x,3] for x in range(0,pfam.shape[0])])
         unique_parent_pairs = np.unique(parent_pairs)
         for par in unique_parent_pairs:
-            psib = pfam[parent_pairs==unique_parent_pairs,:]
+            psib = pfam[parent_pairs==par,:]
             sib_indices = np.array([id_dict[x] for x in psib[:,1]])
             cgts = gts[sib_indices, :]
             sib_ped_indices = np.array([ped_dict[x] for x in psib[:,1]])
