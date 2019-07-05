@@ -149,32 +149,41 @@ if __name__ == '__main__':
 
     # Restricted pedigree
     ped = ped[one_parent_genotyped,:]
+    ped_dict = {}
+    for i in xrange(0,ped.shape[0]):
+        ped_dict[ped[i,1]] = i
     # Get families
     fams = np.unique(ped[:,0])
 
     # Output array
-    imputed_par_gts = np.zeros((fams.shape[0], gts.shape[1]), dtype=np.float32)
+    imputed_par_gts = np.zeros((ped.shape[0], gts.shape[1]), dtype=np.float32)
     imputed_par_gts[:] = np.nan
 
     freqs = ma.mean(gts,axis=0)/2.0
 
-    father_genotyped = np.zeros((fams.shape[0]),dtype=bool)
+    father_genotyped = np.zeros((ped.shape[0]),dtype=bool)
     for f in range(0,fams.shape[0]):
         fam = fams[f]
         pfam = ped[ped[:,0]==fam,:]
-        sib_indices = np.array([id_dict[x] for x in pfam[:,1]])
-        cgts = gts[sib_indices,:]
-        if pfam[0,2] in id_dict:
-            pgts = gts[id_dict[pfam[0,2]],:]
-            father_genotyped[f] = True
-        elif pfam[0,3] in id_dict:
-            pgts = gts[id_dict[pfam[0,3]],:]
-        else:
-            raise(ValueError('Missing parental genotype'))
-        for j in range(0,gts.shape[1]):
-            not_nan = np.logical_not(cgts.mask[:,j])
-            if np.sum(not_nan)>0 and np.logical_not(pgts.mask[j]):
-                imputed_par_gts[f,j] = impute(cgts[not_nan,j],pgts[j],freqs[j])
+        # Identify sibships
+        parent_pairs = np.array([pfam[x,2]+pfam[x,3] for x in range(0,pfam.shape[0])])
+        unique_parent_pairs = np.unique(parent_pairs)
+        for par in unique_parent_pairs:
+            psib = pfam[parent_pairs==unique_parent_pairs,:]
+            sib_indices = np.array([id_dict[x] for x in psib[:,1]])
+            cgts = gts[sib_indices, :]
+            sib_ped_indices = np.array([ped_dict[x] for x in psib[:,1]])
+            if psib[0,2] in id_dict:
+                pgts = gts[id_dict[psib[0,2]],:]
+                father_genotyped[sib_ped_indices] = True
+            elif psib[0,3] in id_dict:
+                pgts = gts[id_dict[psib[0,3]],:]
+            else:
+                raise(ValueError('Missing parental genotype'))
+            for j in range(0,gts.shape[1]):
+                not_nan = np.logical_not(cgts.mask[:,j])
+                if np.sum(not_nan)>0 and np.logical_not(pgts.mask[j]):
+                    imputed_par_gts[sib_ped_indices,j] = impute(cgts[not_nan,j],pgts[j],freqs[j])
 
     par_gt_f = h5py.File(args.out+'.hdf5','w')
     par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)

@@ -74,7 +74,7 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
-    parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
+    parser.add_argument('ped',type=str,help='Path to pedigree file')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
     parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
-    # ped = np.loadtxt('relatedness/one_parent_genotyped.ped', dtype='S20', skiprows=1)
+    # ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
     ### Read imputed parental genotypes ###
     print('Reading imputed parental genotype file')
