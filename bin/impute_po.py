@@ -149,8 +149,6 @@ if __name__ == '__main__':
 
     # Restricted pedigree
     ped = ped[one_parent_genotyped,:]
-    father_genotyped = father_genotyped[one_parent_genotyped]
-    mother_genotyped = mother_genotyped[one_parent_genotyped]
     # Get families
     fams = np.unique(ped[:,0])
 
@@ -160,6 +158,7 @@ if __name__ == '__main__':
 
     freqs = ma.mean(gts,axis=0)/2.0
 
+    father_genotyped = np.zeros((fams.shape[0]),dtype=bool)
     for f in range(0,fams.shape[0]):
         fam = fams[f]
         pfam = ped[ped[:,0]==fam,:]
@@ -167,6 +166,7 @@ if __name__ == '__main__':
         cgts = gts[sib_indices,:]
         if pfam[0,2] in id_dict:
             pgts = gts[id_dict[pfam[0,2]],:]
+            father_genotyped[f] = True
         elif pfam[0,3] in id_dict:
             pgts = gts[id_dict[pfam[0,3]],:]
         else:
@@ -179,6 +179,7 @@ if __name__ == '__main__':
     par_gt_f = h5py.File(args.out+'.hdf5','w')
     par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     par_gt_f['imputed_par_gts'][:] = imputed_par_gts
+    par_gt_f['father_genotyped'] = father_genotyped
     par_gt_f['families'] = fams
     par_gt_f['pos'] = pos
     par_gt_f['sid'] = sid
