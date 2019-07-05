@@ -78,7 +78,7 @@ def test_impute(n,f):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('gts',type=str,help='Path to bed file with parent and offspring genotypes')
-    parser.add_argument('ped',type=str,help='Path to pedigree file with parent offspring pairs')
+    parser.add_argument('ped',type=str,help='Path to pedigree file')
     parser.add_argument('out',type=str,help='Prefix of HDF5 output file with imputed parental genotypes')
     args=parser.parse_args()
 
@@ -86,7 +86,7 @@ if __name__ == '__main__':
 ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
-    #ped = np.loadtxt('relatedness/one_parent_genotyped.ped', dtype='S20', skiprows=1)
+    #ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
 ### Read genotypes ###
     #### Load genotypes
@@ -98,20 +98,41 @@ if __name__ == '__main__':
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
-    # Find indices
-    indices = np.zeros((ped.shape),dtype = int)
-    indices[:] = -1
-    ped_new = ped
-    for i in xrange(0, ped.shape[0]):
-        if ped[i,0] in id_dict and ped[i,1] in id_dict:
-            indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
-        else:
-            print('Missing data for '+ped[i,0])
-            ped_new = np.delete(ped_new,i,0)
+    # Find individuals with one parent genotyped
+    genotyped = np.zeros((ped.shape[0],3),dtype=int)
+    genotyped[:] = -1
+    for i in xrange(0,ped.shape[0]):
+        if ped[i,1] in id_dict:
+            genotyped[i,0] = id_dict[ped[i,1]]
+        if ped[i,2] in id_dict:
+            genotyped[i,1] = id_dict[ped[i,2]]
+        if ped[i,3] in id_dict:
+            genotyped[i,2] = id_dict[ped[i,3]]
 
-    ped = ped_new
-    indices = indices[indices[:,0]>0,:]
-    index_vector = np.sort(np.unique(indices.reshape(indices.shape[0]*indices.shape[1])))
+    pcount = np.array(genotyped[:,1]>=0,dtype=int)+np.array(genotyped[:,2]>=0,dtype=int)
+
+    father_genotyped = np.logical_and(np.logical_and(genotyped[:,0]>=0,genotyped[:,1]>=0),genotyped[:,2]<0)
+    mother_genotyped = np.logical_and(np.logical_and(genotyped[:,0]>=0,genotyped[:,2]>=0),genotyped[:,1]<0)
+    one_parent_genotyped = np.logical_or(father_genotyped,mother_genotyped)
+
+    index_vector = np.sort(np.unique(np.hstack((genotyped[one_parent_genotyped,0],
+                                           genotyped[father_genotyped,1],
+                                           genotyped[mother_genotyped,2]))))
+
+    # # Find indices
+    # indices = np.zeros((ped.shape[0],2),dtype = int)
+    # indices[:] = -1
+    # ped_new = ped
+    # for i in xrange(0, ped.shape[0]):
+    #     if ped[i,0] in id_dict and ped[i,1] in id_dict:
+    #         indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
+    #     else:
+    #         print('Missing data for '+ped[i,0])
+    #         ped_new = np.delete(ped_new,i,0)
+    #
+    # ped = ped_new
+    # indices = indices[indices[:,0]>0,:]
+    # index_vector = np.sort(np.unique(indices.reshape(indices.shape[0]*indices.shape[1])))
 
     # Read genotypes
     gts = gts_f[index_vector, :].read().val
@@ -126,23 +147,39 @@ if __name__ == '__main__':
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
+    # Restricted pedigree
+    ped = ped[one_parent_genotyped,:]
+    father_genotyped = father_genotyped[one_parent_genotyped]
+    mother_genotyped = mother_genotyped[one_parent_genotyped]
+    # Get families
+    fams = np.unique(ped[:,0])
+
     # Output array
-    imputed_par_gts = np.zeros((ped.shape[0], gts.shape[1]), dtype=np.float32)
+    imputed_par_gts = np.zeros((fams.shape[0], gts.shape[1]), dtype=np.float32)
     imputed_par_gts[:] = np.nan
 
     freqs = ma.mean(gts,axis=0)/2.0
 
-    for i in range(0,ped.shape[0]):
-        cgts = gts[id_dict[ped[i,0]],:]
-        pgts = gts[id_dict[ped[i,1]],:]
+    for f in range(0,fams.shape[0]):
+        fam = fams[f]
+        pfam = ped[ped[:,0]==fam,:]
+        sib_indices = np.array([id_dict[x] for x in pfam[:,1]])
+        cgts = gts[sib_indices,:]
+        if pfam[0,2] in id_dict:
+            pgts = gts[id_dict[pfam[0,2]],:]
+        elif pfam[0,3] in id_dict:
+            pgts = gts[id_dict[pfam[0,3]],:]
+        else:
+            raise(ValueError('Missing parental genotype'))
         for j in range(0,gts.shape[1]):
-            if np.sum(np.array([cgts.mask[j],pgts.mask[j]]))==0:
-                imputed_par_gts[i,j] = impute(cgts[j],pgts[j],freqs[j])
+            not_nan = np.logical_not(cgts.mask[:,j])
+            if np.sum(not_nan)>0 and np.logical_not(pgts.mask[j]):
+                imputed_par_gts[f,j] = impute(cgts[not_nan,j],pgts[j],freqs[j])
 
     par_gt_f = h5py.File(args.out+'.hdf5','w')
     par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     par_gt_f['imputed_par_gts'][:] = imputed_par_gts
-    par_gt_f['ped'] = ped
+    par_gt_f['families'] = fams
     par_gt_f['pos'] = pos
     par_gt_f['sid'] = sid
     par_gt_f.close()
