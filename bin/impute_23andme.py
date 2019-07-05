@@ -1,0 +1,235 @@
+#!/well/kong/users/wiw765/anaconda2/bin/python
+import numpy as np
+import numpy.ma as ma
+import argparse, h5py
+from pysnptools.snpreader import Bed
+
+parser = argparse.ArgumentParser()
+parser.add_argument('chr',type=int,help='Which chromosome (integer)')
+parser.add_argument('ibd',type=str,help='IBD file in 23andme format')
+parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
+parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
+parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
+args=parser.parse_args()
+chr=args.chr
+
+def pair_index(i,j):
+    if j > i:
+        return j*(j-1)/2+i
+    else:
+        return i*(i-1)/2+j
+
+def impute_gt_2(ibd,sib1,sib2,f):
+    if ibd==0:
+        return sib1+sib2
+    elif ibd==2:
+        return sib1+2*f
+    elif ibd==1:
+        sibsum = sib1+sib2
+        if sibsum==0:
+            return f
+        elif sibsum==1:
+            return 1+f
+        elif sibsum==2:
+            return 1+2*f
+        elif sibsum==3:
+            return 2+f
+        elif sibsum==4:
+            return 3+f
+
+def impute_gt(sibgts,ibd,f):
+    n = len(sibgts)
+    if not len(ibd) == n*(n-1)/2:
+        raise(ValueError('Length of IBD state vector does not match number of sib pairs'))
+    # If pair, do imputation
+    if n < 2:
+        raise(ValueError('Too few siblings'))
+    if n == 2:
+        return impute_gt_2(ibd,sibgts[0],sibgts[1],f)
+    # Check for IBD_0
+    imputed = 0
+    count = 0
+    ibd_0_count = 0
+    for i in xrange(1,n):
+        for j in xrange(0,i):
+            if ibd[count]==0:
+                imputed += sibgts[i]+sibgts[j]
+                ibd_0_count += 1
+            count += 1
+    if ibd_0_count>0:
+        return imputed/float(ibd_0_count)
+    else:
+        # Check if all IBD_1 (implies IBD inference error)
+        if np.sum(ibd==1) == ibd.shape[0]:
+            # Average over pairs
+            imputed = 0
+            for i in xrange(1,n):
+                for j in xrange(0,i):
+                    imputed += impute_gt_2(1,sibgts[i],sibgts[j],f)
+            return imputed/float(ibd.shape[0])
+        # Check if all IBD_2
+        # return most common genotype + imputation from pop. freq.
+        if np.sum(ibd==2) == ibd.shape[0]:
+            return np.argmax(np.bincount(sibgts))+2*f
+        # Collapse IBD_2
+        ibd_2_count = np.zeros((n),dtype=int)
+        remove = []
+        count = 0
+        for i in xrange(1, n):
+            for j in xrange(0, i):
+                if ibd[count] == 2:
+                    ibd_2_count[np.array([i,j])] += 1
+                count += 1
+        remove = np.where(ibd_2_count==np.max(ibd_2_count))[0][0]
+        keep = np.array([x for x in xrange(0,n)])
+        keep = np.delete(keep,remove)
+        sibgts = sibgts[keep]
+        new_ibd = np.zeros((keep.shape[0]*(keep.shape[0]-1)/2),dtype=np.int8)
+        count = 0
+        for i in xrange(1,keep.shape[0]):
+            i_index = keep[i]
+            for j in xrange(0,i):
+                j_index = keep[j]
+                orig_index = i_index*(i_index-1)/2+j_index
+                new_ibd[count] = ibd[orig_index]
+                count += 1
+        return impute_gt(sibgts,new_ibd,f)
+
+### Load pedigree
+ped = np.loadtxt(args.ped,dtype='S20',skiprows=1)
+sibs = np.unique(ped[:,1])
+
+### Create family dictionary
+fams = {}
+fam_ids = np.unique(ped[:,0])
+for f in fam_ids:
+    fams[f] = tuple(ped[ped[:,0]==f,1])
+# reverse lookup dict
+sib_fam_dict = {}
+for i in xrange(0,ped.shape[0]):
+    sib_fam_dict[ped[i,1]] = ped[i,0]
+
+### Load IBD
+ibd = np.loadtxt(args.ibd,dtype='S20',skiprows=1)
+# filter by chromosome
+ibd=ibd[ibd[:,2]==str(chr),:]
+## split columns
+# sibpairs
+ibd_sibs = ibd[:,0:2]
+# map to families
+ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
+
+# start and end
+ibd_lims = np.array(ibd[:,np.array([3,6])],dtype=int)
+
+# IBD_2
+ibd_2 = np.zeros((ibd.shape[0]),dtype=bool)
+ibd_2[ibd[:,4]=='True'] = True
+# delete
+del ibd
+
+#### Load genotypes
+dir = '/well/kong/users/wiw765/'
+gts_f = Bed(args.genotypes)
+gts_ids = gts_f.iid
+# Build dict
+id_dict = {}
+for i in xrange(0,gts_ids.shape[0]):
+    id_dict[gts_ids[i,1]] = i
+
+# Find sibling indices
+sib_indices = []
+sibs_new = sibs
+for i in xrange(0,sibs.shape[0]):
+    s = sibs[i]
+    if s in id_dict:
+        sib_indices.append(id_dict[s])
+    else:
+        print('No genotype data for '+str(s))
+        fam_i = sib_fam_dict[s]
+        sfam = fams[fam_i]
+        # Remove family if only two sibs and one missing
+        if len(sfam)==2:
+            sindices = np.array([np.where(sibs==x)[0][0] for x in sfam])
+            sibs_new = np.delete(sibs_new,sindices)
+            fam_ids = np.delete(fam_ids,np.where(fam_ids==fam_i)[0][0])
+        # otherwise remove sib and keep fam
+        else:
+            sibs_new = np.delete(sibs,i)
+            sfam = np.delete(sfam,np.where(sfam==s))
+            fams[fam_i] = sfam
+
+sibs = sibs_new
+sib_indices = np.sort(sib_indices)
+
+# Read sibling genotypes
+gts = gts_f[sib_indices,:].read().val
+pos = gts_f.pos[:,2]
+sid = gts_f.sid
+gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
+
+# rebuild ID dictionary
+gts_ids = gts_ids[sib_indices]
+# Build dict
+id_dict = {}
+for i in xrange(0,gts_ids.shape[0]):
+    id_dict[gts_ids[i,1]] = i
+
+# Calculate allele frequencies
+freqs = ma.mean(gts,axis=0)/2.0
+
+# Impute parental genotypes
+imputed_par_gts = np.zeros((fam_ids.shape[0],gts.shape[1]),dtype=np.float32)
+
+for i in range(0,fam_ids.shape[0]):
+    # Get sibs in fam
+    sibs_i = fams[fam_ids[i]]
+    n_i = len(sibs_i)
+    npair_i = n_i*(n_i-1)/2
+    # sib dict for family
+    sib_dict_i = {}
+    for j in xrange(0,n_i):
+        sib_dict_i[sibs_i[j]] = j
+    # Get sib indices and genotypess
+    sib_indices = np.array([id_dict[sibs_i[x]] for x in xrange(0,len(sibs_i))])
+    sib_gts = gts[sib_indices, :]
+    # Find IBD segments
+    ibd_i = np.zeros((npair_i, gts.shape[1]), dtype=np.int8)
+    ibd_segs_i = ibd_fams==fam_ids[i]
+    nsegs_i = np.sum(ibd_segs_i)
+    # Set IBD 1 and 2 segments
+    if nsegs_i > 0:
+        ibd_lims_i = ibd_lims[ibd_segs_i,:]
+        ibd_sibs_i = ibd_sibs[ibd_segs_i,:]
+        ibd_2_i = ibd_2[ibd_segs_i]
+        for j in xrange(0,nsegs_i):
+            pair_indices = [sib_dict_i[x] for x in ibd_sibs_i[j]]
+            pindex = pair_index(pair_indices[0],pair_indices[1])
+            ibd_i[pindex,np.logical_and(pos>=ibd_lims_i[j,0],pos<=ibd_lims_i[j,1])] += (1+int(ibd_2_i[j]))
+    # Impute GTs
+    for j in range(0,gts.shape[1]):
+        # Deal with missing sib genotypes
+        if np.sum(sib_gts[:,j].mask)>0:
+            par_impute = 0
+            if sib_gts.mask[0, j]:
+                par_impute += 2 * freqs[j]
+            else:
+                par_impute += sib_gts[ 0, j]
+            if sib_gts.mask[1, j]:
+                par_impute += 2 * freqs[j]
+            else:
+                par_impute += sib_gts[1, j]
+            imputed_par_gts[i, j] = par_impute
+        # Or impute based on IBD and observed sib genotypes
+        else:
+            imputed_par_gts[i, j] = impute_gt(sib_gts[:, j],ibd_i[:,j], freqs[j])
+    if np.mod(i, 1000) == 0:
+        print(i)
+
+par_gt_f = h5py.File(args.out+'.hdf5','w')
+par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+par_gt_f['imputed_par_gts'][:] = imputed_par_gts
+par_gt_f['families'] = fam_ids
+par_gt_f['pos'] = pos
+par_gt_f['sid'] = sid
+par_gt_f.close()

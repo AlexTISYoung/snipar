@@ -145,7 +145,7 @@ if __name__ == '__main__':
     ### Read imputed parental genotypes ###
     print('Reading imputed parental genotype file')
     pargts_f = h5py.File(args.pargts,'r')
-    #pargts_f = h5py.File('23andme/chr_22.hdf5','r')
+    #pargts_f = h5py.File('one_parent_genotyped/imputed/chr_21.hdf5','r')
     # get families
     par_ped = np.array(pargts_f['ped'])
     # build family dictionary
