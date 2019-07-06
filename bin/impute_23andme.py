@@ -117,7 +117,7 @@ ibd_sibs = ibd[:,0:2]
 ibd_sibs_in_ped = np.array([x in sib_fam_dict for x in ibd_sibs[:,0]])
 ibd = ibd[ibd_sibs_in_ped,:]
 ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
-ibd_sibs = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
+ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
 
 # start and end
 ibd_lims = np.array(ibd[:,np.array([3,6])],dtype=int)
