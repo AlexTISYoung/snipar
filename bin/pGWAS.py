@@ -257,7 +257,7 @@ if __name__ == '__main__':
         fam_i = sib_fam_dict[gts_ids[i,1]]
         fam_labels[i] = fam_i
         # Find siblings
-        if not args.nosib:
+        if not args.no_sib:
             sibs_i = sibships[fam_i]
             sibs_i = np.delete(sibs_i,np.where(sibs_i == gts_ids[i,1])[0][0])
             sibs_i = np.array([id_dict[x] for x in sibs_i])
