@@ -72,7 +72,7 @@ def read_covariates(covar_file,ids_to_match,missing):
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
+    parser.add_argument('gts',type=str,help='Path to bed file with sibling genotypes')
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
     parser.add_argument('ped',type=str,help='Path to pedigree file')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
@@ -256,6 +256,8 @@ if __name__ == '__main__':
     X = X[y_not_nan,:]
     par_ped = par_ped[y_not_nan,:]
 
+    print(str(G.shape[0])+' individuals with one parent genotyped and observed phenotype')
+
 ######### Initialise output files #######
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
@@ -298,7 +300,7 @@ if __name__ == '__main__':
         # Residual y
         y=y-X.dot(null_alpha[0])
         # Reformulate fixed_effects
-        X=np.ones((ped.shape[0],1))
+        X=np.ones((X.shape[0],1))
         n_X=1
 
     ############### Loop through loci and fit models ######################
