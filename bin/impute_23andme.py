@@ -142,9 +142,6 @@ for i in xrange(0,gts_ids.shape[0]):
 parent_genotyped = np.array([ped[i,2] in id_dict or ped[i,3] in id_dict for i in range(0,ped.shape[0])])
 ped = ped[np.logical_not(parent_genotyped),:]
 ped_fams = np.unique(ped[:,0])
-ped_dict = {}
-for i in range(0,ped.shape[0]):
-    ped_dict[ped[i,1]] = i
 sibships = {}
 sibship_indices = []
 for f in ped_fams:

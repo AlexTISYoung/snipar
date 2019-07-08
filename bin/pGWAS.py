@@ -139,8 +139,7 @@ if __name__ == '__main__':
 ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
-    #ped = np.loadtxt('23andme/sibs.ped', dtype='S20', skiprows=1)
-    sibs = np.unique(ped[:, 1])
+    #ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
     ### Create family dictionary
     fams = {}
@@ -162,34 +161,35 @@ if __name__ == '__main__':
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
-    # Find sibling indices
-    sib_indices = []
-    sibs_new = sibs
-    for i in xrange(0, sibs.shape[0]):
-        s = sibs[i]
-        if s in id_dict:
-            sib_indices.append(id_dict[s])
-        else:
-            print('No genotype data for ' + str(s))
-            fam_i = sib_fam_dict[s]
-            sfam = fams[fam_i]
-            # Remove family if only two sibs and one missing
-            if len(sfam) == 2:
-                sindices = np.array([np.where(sibs == x)[0][0] for x in sfam])
-                sibs_new = np.delete(sibs_new, sindices)
-                fam_ids = np.delete(fam_ids, np.where(fam_ids == fam_i)[0][0])
-                del fams[fam_i]
-            # otherwise remove sib and keep fam
-            else:
-                sibs_new = np.delete(sibs, i)
-                sfam = np.delete(sfam, np.where(sfam == s))
-                fams[fam_i] = sfam
+    ### Identify siblings without genotyped parents
+    # Remove individuals with genotyped parents
+    parent_genotyped = np.array([ped[i, 2] in id_dict or ped[i, 3] in id_dict for i in range(0, ped.shape[0])])
+    ped = ped[np.logical_not(parent_genotyped), :]
+    ped_fams = np.unique(ped[:, 0])
+    sibships = {}
+    sibship_indices = []
+    for f in ped_fams:
+        pedf = ped[ped[:, 0] == f, :]
+        parent_pairs = np.array([pedf[x, 2] + pedf[x, 3] for x in range(0, pedf.shape[0])])
+        unique_parent_pairs = np.unique(parent_pairs)
+        pcount = 0
+        for par in unique_parent_pairs:
+            pmatch = parent_pairs == par
+            if np.sum(pmatch) > 1:
+                sibs = pedf[pmatch, 1]
+                sibs_genotyped = np.array([x in id_dict for x in sibs])
+                if np.sum(sibs_genotyped) > 1:
+                    sibships[f] = sibs
+                    sibship_indices = sibship_indices + [id_dict[x] for x in sibs[sibs_genotyped]]
+                pcount += 1
+        if pcount > 1:
+            print('More than one sibship without genotyped parents in family ' + str(
+                f) + '. Implies incorrect/unsupported pedigree.')
 
-    sibs = sibs_new
-    sib_indices = np.sort(sib_indices)
+    sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 
     # Read sibling genotypes
-    gts = gts_f[sib_indices, :].read().val
+    gts = gts_f[sibship_indices, :].read().val
     pos = gts_f.pos[:, 2]
     sid = gts_f.sid
     sid_dict = {}
@@ -198,7 +198,7 @@ if __name__ == '__main__':
     gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
 
     # rebuild ID dictionary
-    gts_ids = gts_ids[sib_indices]
+    gts_ids = gts_ids[sibship_indices,:]
     # Build dict
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
@@ -239,76 +239,50 @@ if __name__ == '__main__':
         raise(ValueError('No variants in common between sibling and parental genotypes'))
     sid = sid[sib_sid_indices]
 
-### Construct genetic covariate matrix
-    # Find families with phenotype data, covariate data, at least two siblings genotyped, and
-    fams_with_data = []
-    sibs_with_pheno = []
-    sibs_with_geno = []
-    sample_size = 0
-    for f in fam_ids:
-        if f in par_fams and f in fams and f in pheno_fams:
-            sibs = np.array(fams[f])
-            sibs_in_gts = np.array([x in id_dict for x in sibs])
-            if np.sum(sibs_in_gts) > 1:
-                sibs_in_pheno = np.array([x in pheno_id_dict for x in sibs])
-                sibs_in_pheno = np.logical_and(sibs_in_pheno,sibs_in_gts)
-                nphen = np.sum(sibs_in_pheno)
-                if nphen > 0:
-                    fams_with_data.append(f)
-                    sibs_with_geno.append(sibs[sibs_in_gts])
-                    sibs_with_pheno.append(sibs[sibs_in_pheno])
-                    sample_size += nphen
-
-
-    nfam = len(fams_with_data)
-    print('Sample of '+str(sample_size)+' comprised of '+str(nfam)+' families with at least two siblings genotyped and at least one sibling phenotyped')
-
+    ### Construct genetic covariate matrix
     print('Forming family-wise genotype matrix')
     if args.no_sib:
-        gsize = 1
-    else:
         gsize = 2
-    G = ma.array(np.zeros((sample_size, gsize, gts.shape[1]),dtype=np.int8),
-                 mask=np.zeros((sample_size, gsize, gts.shape[1]), dtype=bool))
-    G_par = np.zeros((sample_size, gts.shape[1]), dtype=np.float32)
-    start = 0
-    y_new = np.zeros((sample_size))
-    X_new = np.zeros((sample_size,X.shape[1]))
-    fam_labels = np.zeros((sample_size),dtype='S20')
-    for i in xrange(0,nfam):
-        fam = fams_with_data[i]
-        end = start + len(sibs_with_pheno[i])
-        # Fill in family labels vector
-        fam_labels[start:end] = fam
-        # Fill in phenotype vector
-        pheno_indices_i = np.array([pheno_id_dict[x] for x in sibs_with_pheno[i]])
-        y_new[start:end] = y[pheno_indices_i]
-        # Fill in phenotype vector
-        X_new[start:end,:] = X[pheno_indices_i,:]
-        # Fill in proband genotype column
-        gindices = np.array([id_dict[x] for x in sibs_with_pheno[i]])
-        G[start:end,0,:] = gts[gindices,:]
-        G.mask[start:end,0,:] = gts.mask[gindices,:]
-        # Fill in parental genotype column
-        par_index_i = par_fam_dict[fams_with_data[i]]
-        for j in xrange(start,end):
-            G_par[j,:] = pargts[par_index_i,:]
-        if not args.no_sib:
-            # Fill in average sibling genotype column
-            gindices = np.array([id_dict[x] for x in sibs_with_geno[i]])
-            gmask = np.sum(gts[gindices, :].mask, axis=0) > 0
-            for s in range(0,sibs_with_pheno[i].shape[0]):
-                sname = sibs_with_pheno[i][s]
-                sindex = np.where(sibs_with_geno[i]==sname)[0][0]
-                G[start+s,1,:] = ma.mean(gts[np.delete(gindices,sindex),:],axis=0)
-                G[start+s,1,:].mask = gmask
-        start = end
+    else:
+        gsize = 3
+    G = ma.array(np.zeros((gts.shape[0], gsize, gts.shape[1]),dtype=np.float32),
+                 mask=np.zeros((gts.shape[0], gsize, gts.shape[1]), dtype=bool))
+    y_new = np.zeros((sibship_indices.shape[0]))
+    y_new[:] = np.nan
+    X_new = np.zeros((sibship_indices.shape[0],X.shape[1]))
+    X_new[:] = np.nan
+    fam_labels = np.zeros((sibship_indices.shape[0]),dtype='S20')
+    G[:,0,:] = gts
+    for i in xrange(0,sibship_indices.shape[0]):
+        fam_i = sib_fam_dict[gts_ids[i,1]]
+        fam_labels[i] = fam_i
+        # Find siblings
+        if not args.nosib:
+            sibs_i = sibships[fam_i]
+            sibs_i = np.delete(sibs_i,np.where(sibs_i == gts_ids[i,1])[0][0])
+            sibs_i = np.array([id_dict[x] for x in sibs_i])
+            G[i,1,:] = ma.mean(gts[sibs_i,:],axis=0)
+        # Get imputed parental genotype
+        G[i,gsize-1,:] = pargts[par_fam_dict[fam_i],:]
+        G.mask[i,gsize-1,:] = np.isnan(pargts[par_fam_dict[fam_i],:])
+        # Get phenotype
+        if gts_ids[i,1] in pheno_id_dict:
+            pindex = pheno_id_dict[gts_ids[i, 1]]
+            y_new[i] = y[pindex]
+            X_new[i,:] = X[pindex,:]
 
     del gts
     del pargts
     y = y_new
     X = X_new
-    families = np.array(fams_with_data)
+
+    y_not_nan = np.logical_not(np.isnan(y))
+    y = y[y_not_nan]
+    X = X[y_not_nan,:]
+    G = G[y_not_nan,:]
+    fam_labels = fam_labels[y_not_nan]
+
+    print(str(y.shape[0])+' genotyped individuals with phenotype data and imputed parental genotyped')
 
 ######### Initialise output files #######
     ## Output file
@@ -360,7 +334,7 @@ if __name__ == '__main__':
         # Residual y
         y=y-X.dot(null_alpha[0])
         # Reformulate fixed_effects
-        X=np.ones((sample_size,1))
+        X=np.ones((X.shape[0],1))
         n_X=1
 
     ############### Loop through loci and fit models ######################
@@ -379,14 +353,11 @@ if __name__ == '__main__':
             alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
-            if args.no_sib:
-                not_nans = np.logical_not(G[:,0,loc].mask)
-            else:
-                not_nans = np.logical_not(G[:,1,loc].mask)
+            not_nans = np.sum(G[:,:,loc].mask,axis=1)==0
             n_l = np.sum(not_nans)
             X_l = np.ones((n_l, X_length),dtype=np.float32)
-            X_l[:, n_X:(X_length-1)] = G[not_nans, :, loc]
-            X_l[:,X_length-1] = G_par[not_nans,loc]
+            X_l[:,0:n_X] = X[not_nans,:]
+            X_l[:, n_X:X_length] = G[not_nans, :, loc]
             model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
             if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
