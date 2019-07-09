@@ -7,7 +7,7 @@ parser.add_argument('gts', type=str, help='Path to bed file with sibling genotyp
 parser.add_argument('ncausal',type=int,help='Number of causal variants')
 parser.add_argument('h2',type=float,help='heritability of trait')
 parser.add_argument('c2',type=float,help='proportion of variance explained by family environment')
-parser.add_argument('nrep',type=float,help='Number of phenotypes to simulate')
+parser.add_argument('nrep',type=int,help='Number of phenotypes to simulate')
 parser.add_argument('outprefix', type=str, help='Location to output csv file with association statistics')
 args=parser.parse_args()
 
