@@ -138,8 +138,7 @@ if __name__ == '__main__':
 ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
-    fam_labels = ped[:,0]
-    ped = ped[:,1:4]
+    #ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
 ### Read genotypes ###
     #### Load genotypes
@@ -152,53 +151,53 @@ if __name__ == '__main__':
         id_dict[gts_ids[i, 1]] = i
 
     # Find indices
-    indices = np.zeros((ped.shape),dtype = int)
-    indices[:] = -1
-    ped_new = ped
-    for i in xrange(0, ped.shape[0]):
-        if ped[i,0] in id_dict and ped[i,1] in id_dict and ped[i,2] in id_dict and ped[i,0] in pheno_id_dict:
-            indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
+    genotype_indices = []
+    remove = []
+    for i in range(0, ped.shape[0]):
+        in_genotype = np.zeros((ped.shape[1]), dtype=bool)
+        in_genotype[1:4] = np.array([x in id_dict for x in ped[i, 1:4]])
+        if np.sum(in_genotype[1:4]) == 3 and ped[i,1] in pheno_id_dict:
+            genotype_indices = genotype_indices + [id_dict[x] for x in ped[i, in_genotype]]
         else:
-            print('Missing data for '+ped[i,0])
-            ped_new = np.delete(ped_new,i,0)
+            remove.append(i)
 
-    ped = ped_new
-    indices = indices[indices[:,0]>0,:]
-    index_vector = np.sort(np.unique(indices.reshape(indices.shape[0]*indices.shape[1])))
+    if len(remove)>0:
+        remove = np.array(remove)
+        ped = np.delete(ped,remove,axis=0)
 
+    genotype_indices = np.sort(np.array(genotype_indices))
     # Read genotypes
-    gts = gts_f[index_vector, :].read().val
+    gts = gts_f[genotype_indices, :].read().val
     pos = gts_f.pos[:, 2]
     sid = gts_f.sid
     gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
 
     # rebuild ID dictionary
-    gts_ids = gts_ids[index_vector]
+    gts_ids = gts_ids[genotype_indices]
     # Build dict
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
-    # find indices
-    indices = np.zeros((ped.shape),dtype = int)
-    phen_indices = np.zeros((ped.shape[0]),dtype=int)
-    for i in xrange(0, ped.shape[0]):
-        indices[i,:] = np.array([id_dict[x] for x in ped[i,:]])
-        phen_indices[i] = pheno_id_dict[ped[i,0]]
-
-    print('Sample of '+str(ped.shape[0])+' individuals with phenotype data and both parents genotyped')
-
     print('Forming family-wise genotype matrix')
     G = ma.array(np.zeros((ped.shape[0], 3, gts.shape[1]),dtype=np.int8),
                  mask=np.zeros((ped.shape[0], 3,gts.shape[1]), dtype=bool))
-    for i in range(0,3):
-        G[:,i,:] = gts[indices[:,i],:]
-        G[:,i,:].mask = gts[indices[:,i],:].mask
+    y_new = np.zeros((ped.shape[0]))
+    y_new[:] = np.nan
+    X_new = np.zeros((ped.shape[0],X.shape[1]))
+    X_new[:] = np.nan
+    for i in range(0,ped.shape[0]):
+        y_new[i] = y[pheno_id_dict[ped[i,1]]]
+        X_new[i] = X[pheno_id_dict[ped[i,1]],:]
+        for j in range(0,3):
+            G[i,j,:] = gts[id_dict[ped[i,j+1]],:]
     del gts
 
+    print('Sample of '+str(G.shape[0])+' individuals with phenotype data and both parents genotyped')
+
     # Form phenotype
-    y = y[phen_indices]
-    X = X[phen_indices,:]
+    y = y_new
+    X = X_new
 
 ######### Initialise output files #######
     ## Output file
@@ -215,7 +214,7 @@ if __name__ == '__main__':
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
     #sigma_2_init = np.var(y) * 1 / (1 + 1)
-    null_model = sibreg.model(y, X, fam_labels)
+    null_model = sibreg.model(y, X, ped[:,0])
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
     print('Residual variance estimate: ' + str(round(null_optim['sigma2'],4)))
@@ -250,15 +249,17 @@ if __name__ == '__main__':
     # Optimize model for SNP
     freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
+    N_L = np.zeros((G.shape[2]), dtype=int)
     for loc in xrange(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
             not_nans = np.sum(G[:,:,loc].mask,axis = 1)==0
             n_l = np.sum(not_nans)
+            N_L[loc] = np.sum(not_nans)
             X_l = np.ones((n_l, X_length),dtype=np.float32)
             X_l[:,0:n_X] = X[not_nans,:]
             X_l[:, n_X:X_length] = G[not_nans,:, loc]
-            model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
+            model_l = sibreg.model(y[not_nans],X_l,ped[not_nans,0])
             if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
                 if optim_l['success']:
@@ -274,4 +275,5 @@ if __name__ == '__main__':
             outfile['xty'][loc, :] = np.nan
     outfile['sigma2'] = np.array(null_optim['sigma2'])
     outfile['tau'] = np.array(null_optim['tau'])
+    outfile['N_L'] = N_L
     outfile.close()
