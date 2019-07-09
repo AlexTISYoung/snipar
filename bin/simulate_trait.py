@@ -60,4 +60,4 @@ y = a*a_factor+np.sqrt(args.c2)*(fam_effects/np.std(fam_effects,axis=0))+np.sqrt
 
 # Write phenotype
 yout = np.hstack((gts_ids,np.array(y,dtype=str)))
-np.savetxt(args.outprex+'.ped',yout,fmt='%s')
+np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
