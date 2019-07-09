@@ -11,6 +11,7 @@ parser.add_argument('nrep',type=float,help='Number of phenotypes to simulate')
 parser.add_argument('outprefix', type=str, help='Location to output csv file with association statistics')
 args=parser.parse_args()
 
+print('reading genotypes')
 gts_f = Bed(args.gts)
 #gts_f = Bed('genotypes/causal_sim/causal_sim.bed')
 gts_ids = gts_f.iid
@@ -29,6 +30,7 @@ gts_nans = np.isnan(gts)
 for j in range(0,gts.shape[1]):
     gts[gts_nans[:,j],j] = np.mean(gts[np.logical_not(gts_nans[:,j]),j])
 
+print('simulating trait')
 # Simulate genetic effects
 b = np.random.randn(gts.shape[1],args.nrep)
 # additive genetic component
