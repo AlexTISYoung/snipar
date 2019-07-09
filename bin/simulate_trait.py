@@ -64,4 +64,4 @@ np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
 # Write effects
 b_out = np.hstack((causal_sid.reshape((causal_sid.shape[0],1)),np.array(b,dtype=str)))
-np.savetxt(args.outprefix+'.effects.txt',yout,fmt='%s')
+np.savetxt(args.outprefix+'.effects.txt',b_out,fmt='%s')
