@@ -63,5 +63,5 @@ yout = np.hstack((gts_ids,np.array(y,dtype=str)))
 np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
 # Write effects
-b_out = np.hstack((causal_sid,np.array(b,dtype=str)))
+b_out = np.hstack((causal_sid.reshape((causal_sid.shape[0],1)),np.array(b,dtype=str)))
 np.savetxt(args.outprefix+'.effects.txt',yout,fmt='%s')
