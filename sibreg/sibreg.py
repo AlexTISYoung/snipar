@@ -46,7 +46,7 @@ class model(object):
         self.y=y
         self.labels=labels
 
-    def alpha_mle(self, tau, sigma2 = np.nan, compute_cov = False, xtx_out = False):
+    def alpha_mle(self, tau, sigma2, compute_cov = False, xtx_out = False):
         """
         Compute the MLE of alpha given variance parameters
 
