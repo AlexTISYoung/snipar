@@ -75,13 +75,13 @@ class model(object):
             X_T_y = X_T_y + np.dot(self.X_lab[label].T, Sigma_lab_inv.dot(self.y_lab[label]))
 
         if xtx_out:
-            return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
+            return [0.5*X_T_X,0.5*X_T_y.reshape((self.X.shape[1]))]
         else:
             alpha = np.linalg.solve(X_T_X,X_T_y)
             alpha = alpha.reshape((alpha.shape[0],))
 
             if compute_cov:
-                alpha_cov = sigma2*np.linalg.inv(X_T_X)
+                alpha_cov = 2*sigma2*np.linalg.inv(X_T_X)
                 return [alpha,alpha_cov]
             else:
                 return alpha
