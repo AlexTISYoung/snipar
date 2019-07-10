@@ -77,7 +77,7 @@ a_factor = np.sqrt(args.h2trio)*np.power(np.std(A,axis=0),-1)
 y = A*a_factor+np.sqrt(1-args.h2trio)*e
 
 # Write phenotype
-yout = np.hstack((gts_ids,np.array(y,dtype=str)))
+yout = np.hstack((ped[:,0:2],np.array(y,dtype=str)))
 np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
 # Write effects
