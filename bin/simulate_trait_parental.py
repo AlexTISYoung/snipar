@@ -81,5 +81,5 @@ yout = np.hstack((ped[:,0:2],np.array(y,dtype=str)))
 np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
 # Write effects
-b_out = np.hstack((causal_sid.reshape((causal_sid.shape[0],1)),np.array(b[:,:,0],dtype=str),np.array(b[:,:,1],dtype=str)))
+b_out = np.hstack((causal_sid.reshape((causal_sid.shape[0],1)),np.array(b[:,:,0]*a_factor,dtype=str),np.array(b[:,:,1]*a_factor,dtype=str)))
 np.savetxt(args.outprefix+'.effects.txt',b_out,fmt='%s')
