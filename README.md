@@ -7,13 +7,19 @@ and from parent-offspring pairs (with one missing parent)
 
 # Main features:
 
-sibreg class: random effects regression model allowing for intra-class correlation
+Impute the expected sum of maternal and paternal genotypes given genotype data on the sibling
+    offspring of the parents and IBD sharing between the sibling offspring
 
-pGWAS.py: script for estimating direct genetic effects, indirect genetic effects, and
-confounding using sibling and imputed parental genotypes
+Imputes the expected genotype of the missing parent given one parent and a number of sibling offspring
+    of the parent and the missing parent
 
-sGWAS.py:  script for estimating 'within-family' and 'between-family' effects of SNPs
-using sibling genotypes
+Performs GWAS using observed sibling genotypes and the missing parental genotypes imputed from
+    the sibling genotypes (produced by 'impute_from_sibs.py')
+
+Performs GWAS using observed sibling genotypes, the single observed parental genotype in each family, and the imputed missing parental genotypes
+    (produced by 'impute_po.py')
+
+Performs GWAS using observed sibling genotypes and observed maternal and paternal genotypes
 
 # Documentation
 
