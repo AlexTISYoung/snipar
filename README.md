@@ -1,7 +1,9 @@
 # sibreg
-sibreg is a python library for performing robust GWAS using sibling pairs with a random effects
+sibreg is a python library for performing robust GWAS using nuclear family data with a random effects
 model for within family phenotypic correlations
 
+sibreg also contains scripts for imputing missing parental genotypes from sibling pairs (provided IBD sharing information)
+and from parent-offspring pairs (with one missing parent)
 
 # Main features:
 
