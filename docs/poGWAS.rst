@@ -15,7 +15,7 @@ The rows/columns of the X^T X and the columns of the X^T Y matrices correspond t
 paternal effect, maternal effect. The .hdf5 file also contains the estimated variance
 parameters: sigma2, the residual variance estimate; and tau, the estimated ratio between the within-family variance and the residual variance.
 
-The covariate file formats is the same. The first
+The covariate file format is the same as the phenotype file format.  The first
 column is family ID, and the second column is individual ID; subsequent columns are phenotype or covariate
 observations.
 

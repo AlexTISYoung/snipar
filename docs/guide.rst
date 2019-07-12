@@ -30,11 +30,11 @@ There are three scripts for performing GWAS depending on the number of missing p
     Performs GWAS using observed sibling genotypes and the missing parental genotypes imputed from
     the sibling genotypes (produced by 'impute_from_sibs.py'(:doc:`impute_from_sibs`))
 
---'poGWAS.py'(:doc:`pGWAS`)
+--'poGWAS.py'(:doc:`poGWAS`)
     Performs GWAS using observed sibling genotypes, the single observed parental genotype in each family, and the imputed missing parental genotypes
-    (produced by 'impute_po.py'(:doc:`impute_from_sibs`))
+    (produced by 'impute_po.py'(:doc:`impute_po`))
 
---'triGWAS.py'(:doc:`pGWAS`)
+--'triGWAS.py'(:doc:`triGWAS`)
     Performs GWAS using observed sibling genotypes and observed maternal and paternal genotypes
 
 All of the above scripts require provision of a pedigree file. The pedigree file is a plain text file
