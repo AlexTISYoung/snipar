@@ -48,8 +48,7 @@ for family in families:
 pc_diff = pcs - pc_means
 
 # Write in GCTA format
-np.savetxt('pcs/UKB_PC_BF_WF.gcta',np.hstack((pc_means,pc_diff)))
-np.savetxt('pcs/UKB_PC_ids.txt',np.array(pc_ids,dtype=int),fmt='%d')
+np.savetxt('pcs/UKB_PC_BF_WF.gcta',np.hstack((pc_ids,np.array(pc_means,dtype=pc_ids.dtype),np.array(pc_means,dtype=pc_ids.dtype))))
 
 # match with pheno ids
 id_match = np.zeros((y.shape[0]),dtype=int)

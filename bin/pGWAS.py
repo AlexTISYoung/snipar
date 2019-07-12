@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
     parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
-    parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
+    parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
     parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
                         default=None)
     parser.add_argument('--fit_covariates',action='store_true',
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     ####################### Read in data #########################
     #### Read phenotype ###
     pheno = Pheno(args.phenofile, missing=args.missing_char).read()
-    #pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
+    # pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
     y = np.array(pheno.val)
     pheno_ids = np.array(pheno.iid)
     if y.ndim == 1:
@@ -112,22 +112,22 @@ if __name__ == '__main__':
     y_not_nan = np.logical_not(np.isnan(y))
     if np.sum(y_not_nan) < y.shape[0]:
         y = y[y_not_nan]
-        pheno_ids = pheno_ids[y_not_nan,:]
+        pheno_ids = pheno_ids[y_not_nan, :]
     pheno_id_dict = {}
-    for i in xrange(0,y.shape[0]):
-        pheno_id_dict[pheno_ids[i,1]] = i
-    pheno_fams = set(pheno_ids[:,0])
+    for i in xrange(0, y.shape[0]):
+        pheno_id_dict[pheno_ids[i, 1]] = i
+    pheno_fams = set(pheno_ids[:, 0])
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
 
     ### Get covariates
     ## Get mean covariates
     if not args.mean_covar == None:
-        X, X_names, pheno_in = read_covariates(args.mean_covar,pheno_ids, args.missing_char)
+        X, X_names, pheno_in = read_covariates(args.mean_covar, pheno_ids, args.missing_char)
         n_X = X.shape[1]
         # Remove rows with missing values
         if np.sum(pheno_in) < y.shape[0]:
             y = y[pheno_in]
-            pheno_ids = pheno_ids[pheno_in,:]
+            pheno_ids = pheno_ids[pheno_in, :]
         # Normalise non-constant cols
         X_stds = np.std(X[:, 1:n_X], axis=0)
         X[:, 1:n_X] = zscore(X[:, 1:n_X], axis=0)
@@ -136,10 +136,10 @@ if __name__ == '__main__':
         n_X = 1
         X_names = np.array(['Intercept'])
 
-### Read pedigree file ###
+    ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
-    #ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
+    # ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
     ### Create family dictionary
     fams = {}
@@ -151,10 +151,10 @@ if __name__ == '__main__':
     for i in xrange(0, ped.shape[0]):
         sib_fam_dict[ped[i, 1]] = ped[i, 0]
 
-### Read sibling genotypes ###
+    ### Read sibling genotypes ###
     #### Load genotypes
     gts_f = Bed(args.sibgts)
-    #gts_f = Bed('genotypes/chr_22.bed')
+    # gts_f = Bed('genotypes/chr_22.bed')
     gts_ids = gts_f.iid
     # Build dict
     id_dict = {}
@@ -193,12 +193,12 @@ if __name__ == '__main__':
     pos = gts_f.pos[:, 2]
     sid = gts_f.sid
     sid_dict = {}
-    for i in range(0,sid.shape[0]):
+    for i in range(0, sid.shape[0]):
         sid_dict[sid[i]] = i
-    gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
+    gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
 
     # rebuild ID dictionary
-    gts_ids = gts_ids[sibship_indices,:]
+    gts_ids = gts_ids[sibship_indices, :]
     # Build dict
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
@@ -206,37 +206,37 @@ if __name__ == '__main__':
 
     ### Read imputed parental genotypes ###
     print('Reading imputed parental genotype file')
-    pargts_f = h5py.File(args.pargts,'r')
-    #pargts_f = h5py.File('23andme/chr_22.hdf5','r')
+    pargts_f = h5py.File(args.pargts, 'r')
+    # pargts_f = h5py.File('23andme/chr_22.hdf5','r')
     # get families
     par_fams = np.array(pargts_f['families'])
     # build family dictionary
     par_fam_dict = {}
-    for i in range(0,par_fams.shape[0]):
+    for i in range(0, par_fams.shape[0]):
         par_fam_dict[par_fams[i]] = i
     pargts = np.array(pargts_f['imputed_par_gts'])
     par_sid = np.array(pargts_f['sid'])
     par_sid_dict = {}
-    for i in range(0,par_sid.shape[0]):
+    for i in range(0, par_sid.shape[0]):
         par_sid_dict[par_sid[i]] = i
 
     pargts_f.close()
 
     ### Match SIDs of sibling and par gts ###
-    in_sib_sid = np.zeros((par_sid.shape[0]),dtype=bool)
+    in_sib_sid = np.zeros((par_sid.shape[0]), dtype=bool)
     sib_sid_indices = []
-    for s in range(0,par_sid.shape[0]):
+    for s in range(0, par_sid.shape[0]):
         sid_s = par_sid[s]
         if sid_s in sid_dict:
             in_sib_sid[s] = True
             sib_sid_indices.append(sid_dict[sid_s])
-    if np.sum(in_sib_sid)>0:
-        pargts = pargts[:,in_sib_sid]
+    if np.sum(in_sib_sid) > 0:
+        pargts = pargts[:, in_sib_sid]
         par_sid = par_sid[in_sib_sid]
-        gts = gts[:,sib_sid_indices]
-        print(str(gts.shape[1])+' variants in common between parental and sibling genotypes')
+        gts = gts[:, sib_sid_indices]
+        print(str(gts.shape[1]) + ' variants in common between parental and sibling genotypes')
     else:
-        raise(ValueError('No variants in common between sibling and parental genotypes'))
+        raise (ValueError('No variants in common between sibling and parental genotypes'))
     sid = sid[sib_sid_indices]
 
     ### Construct genetic covariate matrix
@@ -245,31 +245,31 @@ if __name__ == '__main__':
         gsize = 2
     else:
         gsize = 3
-    G = ma.array(np.zeros((gts.shape[0], gsize, gts.shape[1]),dtype=np.float32),
+    G = ma.array(np.zeros((gts.shape[0], gsize, gts.shape[1]), dtype=np.float32),
                  mask=np.zeros((gts.shape[0], gsize, gts.shape[1]), dtype=bool))
     y_new = np.zeros((sibship_indices.shape[0]))
     y_new[:] = np.nan
-    X_new = np.zeros((sibship_indices.shape[0],X.shape[1]))
+    X_new = np.zeros((sibship_indices.shape[0], X.shape[1]))
     X_new[:] = np.nan
-    fam_labels = np.zeros((sibship_indices.shape[0]),dtype='S20')
-    G[:,0,:] = gts
-    for i in xrange(0,sibship_indices.shape[0]):
-        fam_i = sib_fam_dict[gts_ids[i,1]]
+    fam_labels = np.zeros((sibship_indices.shape[0]), dtype='S20')
+    G[:, 0, :] = gts
+    for i in xrange(0, sibship_indices.shape[0]):
+        fam_i = sib_fam_dict[gts_ids[i, 1]]
         fam_labels[i] = fam_i
         # Find siblings
         if not args.no_sib:
             sibs_i = sibships[fam_i]
-            sibs_i = np.delete(sibs_i,np.where(sibs_i == gts_ids[i,1])[0][0])
+            sibs_i = np.delete(sibs_i, np.where(sibs_i == gts_ids[i, 1])[0][0])
             sibs_i = np.array([id_dict[x] for x in sibs_i])
-            G[i,1,:] = ma.mean(gts[sibs_i,:],axis=0)
+            G[i, 1, :] = ma.mean(gts[sibs_i, :], axis=0)
         # Get imputed parental genotype
-        G[i,gsize-1,:] = pargts[par_fam_dict[fam_i],:]
-        G.mask[i,gsize-1,:] = np.isnan(pargts[par_fam_dict[fam_i],:])
+        G[i, gsize - 1, :] = pargts[par_fam_dict[fam_i], :]
+        G.mask[i, gsize - 1, :] = np.isnan(pargts[par_fam_dict[fam_i], :])
         # Get phenotype
-        if gts_ids[i,1] in pheno_id_dict:
+        if gts_ids[i, 1] in pheno_id_dict:
             pindex = pheno_id_dict[gts_ids[i, 1]]
             y_new[i] = y[pindex]
-            X_new[i,:] = X[pindex,:]
+            X_new[i, :] = X[pindex, :]
 
     del gts
     del pargts
@@ -278,28 +278,23 @@ if __name__ == '__main__':
 
     y_not_nan = np.logical_not(np.isnan(y))
     y = y[y_not_nan]
-    X = X[y_not_nan,:]
-    G = G[y_not_nan,:]
+    X = X[y_not_nan, :]
+    G = G[y_not_nan, :]
     fam_labels = fam_labels[y_not_nan]
 
-    print(str(y.shape[0])+' genotyped individuals with phenotype data and imputed parental genotyped')
+    print(str(y.shape[0]) + ' genotyped individuals with phenotype data and imputed parental genotyped')
 
-######### Initialise output files #######
+    ######### Initialise output files #######
     ## Output file
-    if args.append:
-        write_mode='ab'
+    outfile = h5py.File(args.outprefix+'.hdf5','w')
+    outfile['sid'] = sid
+    if args.no_sib:
+        X_length = n_X + 2
     else:
-        write_mode='wb'
-    outfile=open(args.outprefix+'.models.gz',write_mode)
-    #outfile = open('23andme/test.models.gz', 'wb')
-    if not args.append:
-        if args.no_sib:
-            header = 'SNP\tfrequency\tn\tdelta\tdelta_SE\tbeta\tbeta_SE\t'
-            header += 'r_delta_beta\n'
-        else:
-            header = 'SNP\tfrequency\tn\tdelta\tdelta_SE\teta_s\teta_s_SE\tbeta\tbeta_SE\t'
-            header += 'r_delta_eta_s\tr_delta_beta\tr_eta_s_beta\n'
-        outfile.write(header)
+        X_length = n_X + 3
+    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
 
 ######### Fit Null Model ##########
     ## Get initial guesses for null model
@@ -340,41 +335,33 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     # Optimize model for SNP
-    if args.no_sib:
-        X_length = n_X + 2
-    else:
-        X_length = n_X + 3
     freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
+    N_L = np.zeros((G.shape[2]), dtype=int)
     for loc in xrange(0,G.shape[2]):
-        if args.no_sib:
-            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
-        else:
-            alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
-            not_nans = np.sum(G[:,:,loc].mask,axis=1)==0
+            not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
             n_l = np.sum(not_nans)
-            X_l = np.ones((n_l, X_length),dtype=np.float32)
-            X_l[:,0:n_X] = X[not_nans,:]
+            N_L[loc] = n_l
+            X_l = np.ones((n_l, X_length), dtype=np.float32)
+            X_l[:, 0:n_X] = X[not_nans, :]
             X_l[:, n_X:X_length] = G[not_nans, :, loc]
-            model_l = sibreg.model(y[not_nans],X_l,fam_labels[not_nans])
+            model_l = sibreg.model(y[not_nans], X_l, fam_labels[not_nans])
             if args.fit_VC:
                 optim_l = model_l.optimize_model(np.array([null_optim['sigma2'], null_optim['tau']]))
                 if optim_l['success']:
-                    alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True)
+                    alpha_l = model_l.alpha_mle(optim_l['tau'], optim_l['sigma2'], compute_cov=True, xtx_out= True)
                 else:
                     raise(ValueError('Maximisation of likelihood failed for for ' + sid[loc]))
             else:
-                alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
-            # If X_T_X matrix is ill conditioned, return NAs
-            if np.min(np.diag(alpha_l[1]))<0:
-                print('Insufficient information to fit model for '+str(sid[loc]))
-                if args.no_sib:
-                    alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\n'
-                else:
-                    alpha_out = 'NA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\tNA\n'
-            else:
-                alpha_out = vector_out(n_l,alpha_l, args.no_sib, n_X)
-        outfile.write(sid[loc] +'\t'+str(freqs[loc])+'\t'+alpha_out)
+                alpha_l = model_l.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True, xtx_out= True)
+            outfile['xtx'][loc,:,:] = alpha_l[0]
+            outfile['xty'][loc,:] = alpha_l[1]
+        else:
+            outfile['xtx'][loc, :, :] = np.nan
+            outfile['xty'][loc, :] = np.nan
+    outfile['sigma2'] = null_optim['sigma2']
+    outfile['tau'] = null_optim['tau']
+    outfile['N_L'] = N_L
     outfile.close()
