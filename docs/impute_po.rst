@@ -1,4 +1,4 @@
-Documentation for poGWAS.py script
+Documentation for impute_po.py script
 ====================================
 
 This script imputes the missing parental genotype in a families where one parent and at least one offspring are observed.
