@@ -1,9 +1,7 @@
-Documentation for pGWAS.py script
+Documentation for poGWAS.py script
 ====================================
 
-
-This script uses genotypes of siblings and parental genotypes imputed from sibling genotypes to estimate direct genetic effects, indirect genetic effects from siblings,
-and indirect genetic effects from parents effects/confounding effects.
+This script uses observed genotypes of individuals and their mothers and fathers to estimate direct and indirect genetic effects/confounding effects.
 
 The script fits models for all SNPs in common between the sibling and parental genotypes passing MAF and missingness thresholds.
 
@@ -24,13 +22,10 @@ outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output
 
 Required arguments:
 
-**sibgts**
-    path to .bed file with genotypes of siblings
+**gts**
+    path to .bed file with genotypes of siblings observed parents
 
-**pargts**
-    path to hdf5 file with imputed parental genotypes
-
-**sibped**
+**ped**
     path to pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
 
 **phenofile**

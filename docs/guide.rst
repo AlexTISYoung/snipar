@@ -38,7 +38,9 @@ There are three scripts for performing GWAS depending on the number of missing p
     Performs GWAS using observed sibling genotypes and observed maternal and paternal genotypes
 
 All of the above scripts require provision of a pedigree file. The pedigree file is a plain text file
-with header and columns: IID (individual ID), FID (family ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
+with header and columns: FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
+
+Note that individuals are assumed to have unique individual IDS (IID).
 
 Siblings are identified through individuals that have the same FID and the same FATHER_ID and MOTHER_ID.
 
