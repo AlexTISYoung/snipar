@@ -5,36 +5,17 @@ Documentation for pGWAS.py script
 This script uses genotypes of siblings and parental genotypes imputed from sibling genotypes to estimate direct genetic effects, indirect genetic effects from siblings,
 and indirect genetic effects from parents effects/confounding effects.
 
-The genentic data is specified in a HDF5 file. Let M be the number of sibling pairs in the data. The HDF5 file must include datasets:
-
---ped
-    a [M x 3] array, where each row corresponds to a sibpair. The first column is the family ID (FID),
-    the second column is the IID (individual ID) of the first sib in the pair, and the third column
-    is the IID of the second sib in the pair.
-
---gts
-    an [M x 3 x L] numeric array, where each row corresponds to a sib pair. The second index gives the
-    genotype of the first sib, the genotype of the second sib, and the parental genotype imputed
-    from this sib pair. The third index gives the SNP.
-
---freqs
-    an [L] vector of allele frequencies
-
---vnames
-    an [L] vector of names of the SNPs
-
-The script fits models for all SNPs in a .hdf5 file passing MAF and missingness thresholds.
+The script fits models for all SNPs in common between the sibling and parental genotypes passing MAF and missingness thresholds.
 
 The phenotype file should be a tab separate text file with columns FID, IID, Y1, Y2, ...
 
-Siblings should have the same family id (FID), and non-siblings should have different FIDs.
+Siblings should have the same family id (FID), FATHER_ID, and MOTHER_ID in the pedigree file.
 
 The covariate file formats is the same. The first
 column is family ID, and the second column is individual ID; subsequent columns are phenotype or covariate
 observations.
 
-Minimally, the script will output a file outprefix.models.gz, which contains a table of within direct effects,
-indirect effects from siblings, and parental/confounding effects, along with their correlations
+The script outputs a .hdf5 file with variance parameter estimates and estimates of the X^T X and X^T Y matrices
 
 If covariates are also specified, it will output estimates of the covariate effects from the null model as
 outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output.
@@ -43,14 +24,20 @@ outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output
 
 Required arguments:
 
-**genofile**
-   Path to genotype file in HDF5 format
+**sibgts**
+    path to .bed file with genotypes of siblings
+
+**pargts**
+    path to hdf5 file with imputed parental genotypes
+
+**sibped**
+    path to pedigree file with columns IID (individual ID), FID (family ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
 
 **phenofile**
-   Location of the phenotype (response) file with format: FID, IID, y1, y2, ...
+    path to phenotype file
 
 **outprefix**
-   Location to output csv file with association statistics
+    prefix of output hdf5 file
 
 Options:
 
@@ -58,7 +45,7 @@ Options:
    Location of mean covariate file (default no mean covariates)
 
 --fit_covariates
-   Fit covariates for each locus. Default is to fit covariates for the null model and project out the mean covariates.'
+   Fit covariates for each locus. Default is to fit covariates for the null model and project out the covariates'
 
 --tau_init
    Initial value for the ratio of within family variance to residual variance. Default 1.0.
@@ -82,12 +69,13 @@ Options:
 --no_covariate_estimates
    Suppress output of covariate effect estimates
 
+--no_sib
+    If this flag is given, no indirect genetic effects from siblings will be fit. (Fit by default.)
 
-**Example Usage**
+--fit_VC
+    If this flag is given, variance components (within-family and residual) will be estimated for each SNP.
+    Default is to fit for the null model and fix.
 
-Minimal usage:
 
-   ``python pGWAS.py genotypes.bed phenotype.fam phenotype``
 
-This will estimate between effects for all the SNPs in genotypes.bed passing MAF and missingness thresholds, using the first phenotype in phenotype.fam. It will output
-the results of fitting the models to phenotype.models.gz.
+**Example Usag
