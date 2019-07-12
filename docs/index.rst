@@ -8,7 +8,10 @@ Welcome to sibreg's documentation!
    guide
    sibreg
    pGWAS
-   sGWAS
+   poGWAS
+   triGWAS
+   impute_from_sibs
+   impute_po
 
 Indices and tables
 ==================
