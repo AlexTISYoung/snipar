@@ -211,13 +211,13 @@ if __name__ == '__main__':
         # Count number of siblings
         sibcount = np.zeros((par_ped.shape[0]),dtype=int)
         if args.fit_sib:
-            sib_indices = []
+            sibs_list = []
         for i in xrange(0,par_ped.shape[0]):
             sibs_i = np.logical_and(par_ped[:,0]==par_ped[i,0],np.logical_and(par_ped[:,2]==par_ped[i,2],par_ped[:,3]==par_ped[i,3]))
             sibs_i[i] = False
             sibcount[i] = np.sum(sibs_i)
             if sibcount[i]>0 and args.fit_sib:
-                sib_indices.append(np.where(sibs_i)[0])
+                sibs_list.append(par_ped[sibs_i,1])
 
         if args.no_sib:
             no_sibs = sibcount==0
@@ -274,7 +274,7 @@ if __name__ == '__main__':
         G[i,0,:] = gts[id_dict[par_ped[i, 1]],:]
         # If fitting sib effects, get sib genotypes
         if args.fit_sib:
-            G[i,1,:] = ma.mean(gts[np.array([id_dict[par_ped[x,1]] for x in sib_indices[i]]),:],axis=0)
+            G[i,1,:] = ma.mean(gts[np.array([id_dict[x] for x in sibs_list[i]]),:],axis=0)
         # get parental genotypes
         if father_genotyped[i]:
             G[i,1+G_plus,:] = gts[id_dict[par_ped[i, 2]],:]
