@@ -188,6 +188,7 @@ if __name__ == '__main__':
         remove = np.array(remove)
         par_ped = np.delete(par_ped,remove,axis=0)
         pargts = np.delete(pargts,remove,axis=0)
+        father_genotyped = np.delete(pargts,remove)
 
     # check for individuals with genotyped siblings
     genotype_indices = np.sort(np.unique(np.array(genotype_indices)))
@@ -222,12 +223,14 @@ if __name__ == '__main__':
             no_sibs = sibcount==0
             par_ped = par_ped[no_sibs,:]
             pargts = pargts[no_sibs,:]
+            father_genotyped = father_genotyped[no_sibs]
             print(str(np.sum(no_sibs))+' individuals remaining after removing those with genotyped siblings')
 
         if args.fit_sib:
             has_sibs = sibcount>0
             par_ped = par_ped[has_sibs,:]
             pargts = pargts[has_sibs,:]
+            father_genotyped = father_genotyped[has_sibs]
             print(str(np.sum(has_sibs))+' individuals remaining after removing those without genotyped siblings')
 
 
