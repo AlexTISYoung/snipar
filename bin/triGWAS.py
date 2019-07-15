@@ -90,7 +90,10 @@ if __name__ == '__main__':
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
-    parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
+    parser.add_argument('--no_sib', action='store_true', default=False,
+                        help='Remove individuals with genotyped siblings and do not fit indirect effects from sibs')
+    parser.add_argument('--fit_sib', action='store_true', default=False,
+                        help='Only analyse individuals with genotyped siblings and fit indirect effects from sibs')
     parser.add_argument('--fit_VC', action='store_true', default=False,
                         help='Fit the variance components for each SNP (default is to use null model MLE)')
     args=parser.parse_args()
@@ -179,9 +182,36 @@ if __name__ == '__main__':
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
 
+    # remove/keep individuals on basis of genotyped siblings
+    if args.no_sib or args.fit_sib:
+        # Count number of siblings
+        sibcount = np.zeros((ped.shape[0]),dtype=int)
+        if args.fit_sib:
+            sibs_list = []
+        for i in xrange(0,ped.shape[0]):
+            sibs_i = np.logical_and(ped[:,0]==ped[i,0],np.logical_and(ped[:,2]==ped[i,2],ped[:,3]==ped[i,3]))
+            sibs_i[i] = False
+            sibcount[i] = np.sum(sibs_i)
+            if sibcount[i]>0 and args.fit_sib:
+                sibs_list.append(ped[sibs_i,1])
+
+        if args.no_sib:
+            no_sibs = sibcount==0
+            print('Removing ' + str(np.sum(sibcount > 0)) + ' individuals with genotyped siblings')
+            ped = ped[no_sibs,:]
+
+        if args.fit_sib:
+            has_sibs = sibcount>0
+            print('Removing '+str(np.sum(sibcount==0))+' individuals without genotyped siblings')
+            ped = ped[has_sibs,:]
+
     print('Forming family-wise genotype matrix')
-    G = ma.array(np.zeros((ped.shape[0], 3, gts.shape[1]),dtype=np.int8),
-                 mask=np.zeros((ped.shape[0], 3,gts.shape[1]), dtype=bool))
+    if args.fit_sib:
+        G_plus = 1
+    else:
+        G_plus = 0
+    G = ma.array(np.zeros((ped.shape[0], 3+G_plus, gts.shape[1]),dtype=np.int8),
+                 mask=np.zeros((ped.shape[0], 3+G_plus,gts.shape[1]), dtype=bool))
     y_new = np.zeros((ped.shape[0]))
     y_new[:] = np.nan
     X_new = np.zeros((ped.shape[0],X.shape[1]))
@@ -189,8 +219,12 @@ if __name__ == '__main__':
     for i in range(0,ped.shape[0]):
         y_new[i] = y[pheno_id_dict[ped[i,1]]]
         X_new[i] = X[pheno_id_dict[ped[i,1]],:]
-        for j in range(0,3):
-            G[i,j,:] = gts[id_dict[ped[i,j+1]],:]
+        G[i,0,:] = gts[id_dict[ped[i,1]],:]
+        # Find siblings
+        if args.fit_sib:
+            G[i,1,:] = ma.mean(gts[np.array([id_dict[x] for x in sibs_list[i]]),:],axis=0)
+        for j in range(1,3):
+            G[i,j+G_plus,:] = gts[id_dict[ped[i,j+1]],:]
     del gts
 
     print('Sample of '+str(G.shape[0])+' individuals with phenotype data and both parents genotyped')
@@ -203,7 +237,7 @@ if __name__ == '__main__':
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = sid
-    X_length = n_X + 3
+    X_length = n_X + 3 + G_plus
     outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
