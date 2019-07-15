@@ -271,7 +271,7 @@ if __name__ == '__main__':
         G[i,0,:] = gts[id_dict[par_ped[i, 1]],:]
         # If fitting sib effects, get sib genotypes
         if args.fit_sib:
-            G[i,1,:] = ma.mean(gts[np.array(id_dict[par_ped[x,1]] for x in sib_indices[i]),:],axis=0)
+            G[i,1,:] = ma.mean(gts[np.array([id_dict[par_ped[x,1]] for x in sib_indices[i]]),:],axis=0)
         # get parental genotypes
         if father_genotyped[i]:
             G[i,1+G_plus,:] = gts[id_dict[par_ped[i, 2]],:]
