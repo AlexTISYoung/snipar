@@ -221,17 +221,17 @@ if __name__ == '__main__':
 
         if args.no_sib:
             no_sibs = sibcount==0
+            print('Removing ' + str(np.sum(sibcount > 0)) + ' individuals with genotyped siblings')
             par_ped = par_ped[no_sibs,:]
             pargts = pargts[no_sibs,:]
             father_genotyped = father_genotyped[no_sibs]
-            print(str(np.sum(no_sibs))+' individuals remaining after removing those with genotyped siblings')
 
         if args.fit_sib:
             has_sibs = sibcount>0
+            print('Removing '+str(np.sum(sibcount==0))+' individuals without genotyped siblings')
             par_ped = par_ped[has_sibs,:]
             pargts = pargts[has_sibs,:]
             father_genotyped = father_genotyped[has_sibs]
-            print(str(np.sum(has_sibs))+' individuals remaining after removing those without genotyped siblings')
 
 
     ### Match SIDs of sibling and par gts ###
