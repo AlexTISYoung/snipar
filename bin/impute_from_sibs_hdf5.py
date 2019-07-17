@@ -5,8 +5,7 @@ import argparse, h5py
 from pysnptools.snpreader import Bed
 
 parser = argparse.ArgumentParser()
-parser.add_argument('chr',type=int,help='Which chromosome (integer)')
-parser.add_argument('ibd',type=str,help='IBD file in 23andme format')
+parser.add_argument('ibd',type=str,help='IBD file hdf5 format')
 parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
 parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
 parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
@@ -106,11 +105,9 @@ for i in xrange(0,ped.shape[0]):
     sib_fam_dict[ped[i,1]] = ped[i,0]
 
 ### Load IBD
-ibd = np.loadtxt(args.ibd,dtype='S20',skiprows=1)
-#ibd = np.loadtxt('23andme/ibd_chr_22.txt',dtype='S20',skiprows=1)
-# filter by chromosome
-ibd=ibd[ibd[:,2]==str(chr),:]
-## split columns
+ibd_f = h5py.File(args.ibd,'r')
+ibd = np.array(ibd_f['ibd'])
+ibd_sibs = ibd_f['ibd_sibs']
 # sibpairs
 ibd_sibs = ibd[:,0:2]
 # map to families
@@ -119,15 +116,6 @@ ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:
 ibd = ibd[ibd_sibs_in_ped,:]
 ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
 ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
-
-# start and end
-ibd_lims = np.array(ibd[:,np.array([3,6])],dtype=int)
-
-# IBD_2
-ibd_2 = np.zeros((ibd.shape[0]),dtype=bool)
-ibd_2[ibd[:,4]=='True'] = True
-# delete
-del ibd
 
 #### Load genotypes
 gts_f = Bed(args.genotypes)
@@ -198,18 +186,7 @@ for i in range(0,nfam):
     sib_indices = np.array([id_dict[sibs_i[x]] for x in xrange(0,len(sibs_i))])
     sib_gts = gts[sib_indices, :]
     # Find IBD segments
-    ibd_i = np.zeros((npair_i, gts.shape[1]), dtype=np.int8)
-    ibd_segs_i = ibd_fams==fams[i]
-    nsegs_i = np.sum(ibd_segs_i)
-    # Set IBD 1 and 2 segments
-    if nsegs_i > 0:
-        ibd_lims_i = ibd_lims[ibd_segs_i,:]
-        ibd_sibs_i = ibd_sibs[ibd_segs_i,:]
-        ibd_2_i = ibd_2[ibd_segs_i]
-        for j in xrange(0,nsegs_i):
-            pair_indices = [sib_dict_i[x] for x in ibd_sibs_i[j]]
-            pindex = pair_index(pair_indices[0],pair_indices[1])
-            ibd_i[pindex,np.logical_and(pos>=ibd_lims_i[j,0],pos<=ibd_lims_i[j,1])] += (1+int(ibd_2_i[j]))
+    ibd_i = ibd[ibd_fams==fams[i],:]
     # Impute GTs
     for j in range(0,gts.shape[1]):
         # Deal with missing sib genotypes
