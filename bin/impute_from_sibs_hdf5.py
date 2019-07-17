@@ -10,7 +10,6 @@ parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
 parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
 parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
 args=parser.parse_args()
-chr=args.chr
 
 def pair_index(i,j):
     if j > i:
