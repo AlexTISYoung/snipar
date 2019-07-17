@@ -18,7 +18,7 @@ def pair_index(i,j):
         return i*(i-1)/2+j
 
 def impute_gt_2(ibd,sib1,sib2,f):
-    if ibd==0:f
+    if ibd==0:
         return sib1+sib2
     elif ibd==2:
         return sib1+2*f
