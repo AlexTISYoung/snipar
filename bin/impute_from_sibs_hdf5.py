@@ -18,7 +18,7 @@ def pair_index(i,j):
         return i*(i-1)/2+j
 
 def impute_gt_2(ibd,sib1,sib2,f):
-    if ibd==0:
+    if ibd==0:f
         return sib1+sib2
     elif ibd==2:
         return sib1+2*f
@@ -107,8 +107,6 @@ for i in xrange(0,ped.shape[0]):
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
 ibd_sibs = ibd_f['ibd_sibs']
-# sibpairs
-ibd_sibs = ibd[:,0:2]
 # map to families
 ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:,0]]),
                                  np.array([x in sib_fam_dict for x in ibd_sibs[:,1]]))
