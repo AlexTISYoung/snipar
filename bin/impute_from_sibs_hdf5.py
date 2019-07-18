@@ -106,7 +106,7 @@ for i in xrange(0,ped.shape[0]):
 ### Load IBD
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
-ibd_sibs = ibd_f['ibd_sibs']
+ibd_sibs = np.array(ibd_f['ibd_sibs'])
 # map to families
 ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:,0]]),
                                  np.array([x in sib_fam_dict for x in ibd_sibs[:,1]]))
@@ -163,7 +163,9 @@ for i in xrange(0,gts_ids.shape[0]):
     id_dict[gts_ids[i,1]] = i
 
 # Calculate allele frequencies
-freqs = ma.mean(gts,axis=0)/2.0
+#freqs = ma.mean(gts,axis=0)/2.0
+freqs = np.zeros((gts.shape[1]))
+freqs[:] = 0.5
 
 nfam = len(sibships)
 fams = np.sort(np.array(sibships.keys()))
@@ -175,15 +177,22 @@ for i in range(0,nfam):
     sibs_i = sibships[fams[i]]
     n_i = len(sibs_i)
     npair_i = n_i*(n_i-1)/2
-    # sib dict for family
-    sib_dict_i = {}
-    for j in xrange(0,n_i):
-        sib_dict_i[sibs_i[j]] = j
     # Get sib indices and genotypess
     sib_indices = np.array([id_dict[sibs_i[x]] for x in xrange(0,len(sibs_i))])
     sib_gts = gts[sib_indices, :]
     # Find IBD segments
-    ibd_i = ibd[ibd_fams==fams[i],:]
+    fam_indices = ibd_fams == fams[i]
+    ibd_sibs_fam = ibd_sibs[fam_indices,:]
+    ibd_fam = ibd[fam_indices,:]
+    ibd_i = np.zeros(ibd_fam.shape,dtype=np.int8)
+    pcount = 0
+    for j in range(0,n_i-1):
+        for k in range(j+1,n_i):
+            jk_index = np.logical_and(ibd_sibs_fam[:,0] == sibs_i[j],ibd_sibs_fam[:,1] == sibs_i[k])
+            if np.sum(jk_index)==0:
+                jk_index = np.logical_and(ibd_sibs_fam[:, 1] == sibs_i[j], ibd_sibs_fam[:, 0] == sibs_i[k])
+            ibd_i[pcount,:] = ibd_fam[jk_index,:]
+            pcount+= 1
     # Impute GTs
     for j in range(0,gts.shape[1]):
         # Deal with missing sib genotypes
@@ -203,6 +212,7 @@ for i in range(0,nfam):
             imputed_par_gts[i, j] = impute_gt(sib_gts[:, j],ibd_i[:,j], freqs[j])
     if np.mod(i, 1000) == 0:
         print(i)
+
 
 par_gt_f = h5py.File(args.out+'.hdf5','w')
 par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
