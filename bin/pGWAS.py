@@ -4,16 +4,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import zscore
 from sibreg import sibreg
-import h5py, argparse
-
-def id_dict_make(ids):
-## Make a dictionary mapping from IDs to indices ##
-    if not type(ids)==np.ndarray:
-        raise(ValueError('Unsupported ID type: should be numpy nd.array'))
-    id_dict={}
-    for id_index in xrange(0,len(ids)):
-        id_dict[tuple(ids[id_index,:])]=id_index
-    return id_dict
+import h5py, argparse, code
 
 def read_covariates(covar_file,ids_to_match,missing):
 ## Read a covariate file and reorder to match ids_to_match ##
@@ -35,13 +26,14 @@ def read_covariates(covar_file,ids_to_match,missing):
         print('Number of rows removed from covariate file due to missing observations: '+str(np.sum(NA_rows)))
         X = X[~NA_rows]
         ids = ids[~NA_rows]
-    id_dict = id_dict_make(ids)
+    id_dict = {}
+    for i in range(0,ids.shape[0]):
+        id_dict[ids[i,1]] = i
     # Match with pheno_ids
-    ids_to_match_tuples = [tuple(x) for x in ids_to_match]
-    common_ids = id_dict.viewkeys() & set(ids_to_match_tuples)
-    pheno_in = np.array([(tuple(x) in common_ids) for x in ids_to_match])
-    match_ids = ids_to_match[pheno_in,:]
-    X_id_match = np.array([id_dict[tuple(x)] for x in match_ids])
+    common_ids = id_dict.viewkeys() & set(ids_to_match[:,1])
+    pheno_in = np.array([x in common_ids for x in ids_to_match[:,1]])
+    match_ids = ids_to_match[pheno_in,1]
+    X_id_match = np.array([id_dict[x] for x in match_ids])
     X = X[X_id_match, :]
     return [X,X_names,pheno_in]
 
@@ -104,6 +96,7 @@ if __name__ == '__main__':
         if np.sum(pheno_in) < y.shape[0]:
             y = y[pheno_in]
             pheno_ids = pheno_ids[pheno_in, :]
+        code.interact(local=locals())
         # Normalise non-constant cols
         X_stds = np.std(X[:, 1:n_X], axis=0)
         X[:, 1:n_X] = zscore(X[:, 1:n_X], axis=0)
