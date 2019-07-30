@@ -18,7 +18,7 @@ def read_covariates(covar_file,ids_to_match,missing):
     # Get covariate names
     X_names = np.zeros((n_X), dtype='S10')
     X_names[0] = 'Intercept'
-    X_names[1:n_X] = np.array(covar_f._col, dtype='S20')n
+    X_names[1:n_X] = np.array(covar_f._col, dtype='S20')
     # Remove NAs
     NA_rows = np.isnan(X).any(axis=1)
     n_NA_row = np.sum(NA_rows)
