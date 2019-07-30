@@ -286,10 +286,6 @@ if __name__ == '__main__':
         # Reformulate fixed_effects
         X=np.ones((X.shape[0],1))
         n_X=1
-        if args.no_sib:
-            X_length = n_X + 2
-        else:
-            X_length = n_X + 3
 
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
