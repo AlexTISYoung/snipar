@@ -107,7 +107,6 @@ if __name__ == '__main__':
     ### Read pedigree file ###
     ### Load pedigree
     ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
-    # ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
     ### Create family dictionary
     fams = {}
@@ -122,7 +121,6 @@ if __name__ == '__main__':
     ### Read sibling genotypes ###
     #### Load genotypes
     gts_f = Bed(args.sibgts)
-    # gts_f = Bed('genotypes/chr_22.bed')
     gts_ids = gts_f.iid
     # Build dict
     id_dict = {}
@@ -175,7 +173,6 @@ if __name__ == '__main__':
     ### Read imputed parental genotypes ###
     print('Reading imputed parental genotype file')
     pargts_f = h5py.File(args.pargts, 'r')
-    # pargts_f = h5py.File('23andme/chr_22.hdf5','r')
     # get families
     par_fams = np.array(pargts_f['families'])
     # build family dictionary
@@ -258,7 +255,6 @@ if __name__ == '__main__':
     print('Fitting Null Model')
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
-    #sigma_2_init = np.var(y) * 1 / (1 + 1)
     null_model = sibreg.model(y, X, fam_labels)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))

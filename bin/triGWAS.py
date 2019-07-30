@@ -4,40 +4,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import chi2, zscore
 from sibreg import sibreg
-import h5py, argparse, code
-
-####### Output functions ##########
-def neglog10pval(x,df):
-    return -np.log10(np.e)*chi2.logsf(x,df)
-
-def vector_out(n,alpha_l, no_sib, n_X, digits=6):
-    ##Output parameter estimates along with standard errors ##
-    ## Calculate test statistics
-    if no_sib:
-        X_length = n_X+2
-    else:
-        X_length = n_X+3
-    alpha_est = alpha_l[0][n_X:X_length]
-    alpha_cov = alpha_l[1][n_X:X_length,n_X:X_length]
-    alpha_ses = np.sqrt(np.diag(alpha_cov))
-    alpha_corr = np.dot(np.diag(1/alpha_ses).dot(alpha_cov),np.diag(1/alpha_ses))
-    alpha_out = str(n)+'\t'+str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
-    alpha_out += str(round(alpha_est[1],digits))+'\t'+str(round(alpha_ses[1],digits))+'\t'
-    if no_sib:
-        alpha_out += str(round(alpha_corr[0, 1], digits)) + '\n'
-    else:
-        alpha_out += str(round(alpha_est[2],digits))+'\t'+str(round(alpha_ses[2],digits))+'\t'
-        alpha_out += str(round(alpha_corr[0,1],digits))+'\t'+str(round(alpha_corr[0,2],digits))+'\t'+str(round(alpha_corr[2,1],digits))+'\n'
-    return alpha_out
-
-def id_dict_make(ids):
-## Make a dictionary mapping from IDs to indices ##
-    if not type(ids)==np.ndarray:
-        raise(ValueError('Unsupported ID type: should be numpy nd.array'))
-    id_dict={}
-    for id_index in xrange(0,len(ids)):
-        id_dict[tuple(ids[id_index,:])]=id_index
-    return id_dict
+import h5py, argparse
 
 def read_covariates(covar_file,ids_to_match,missing):
 ## Read a covariate file and reorder to match ids_to_match ##
@@ -59,13 +26,14 @@ def read_covariates(covar_file,ids_to_match,missing):
         print('Number of rows removed from covariate file due to missing observations: '+str(np.sum(NA_rows)))
         X = X[~NA_rows]
         ids = ids[~NA_rows]
-    id_dict = id_dict_make(ids)
+    id_dict = {}
+    for i in range(0,ids.shape[0]):
+        id_dict[ids[i,1]] = i
     # Match with pheno_ids
-    ids_to_match_tuples = [tuple(x) for x in ids_to_match]
-    common_ids = id_dict.viewkeys() & set(ids_to_match_tuples)
-    pheno_in = np.array([(tuple(x) in common_ids) for x in ids_to_match])
-    match_ids = ids_to_match[pheno_in,:]
-    X_id_match = np.array([id_dict[tuple(x)] for x in match_ids])
+    common_ids = id_dict.viewkeys() & set(ids_to_match[:,1])
+    pheno_in = np.array([x in common_ids for x in ids_to_match[:,1]])
+    match_ids = ids_to_match[pheno_in,1]
+    X_id_match = np.array([id_dict[x] for x in match_ids])
     X = X[X_id_match, :]
     return [X,X_names,pheno_in]
 
@@ -76,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('ped',type=str,help='Path to pedigree file with FID, IID, MOTHER_ID, FATHER_ID')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output csv file with association statistics')
-    parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
+    parser.add_argument('--covar',type=str,help='Location of covariate file (default None)',
                         default=None)
     parser.add_argument('--fit_covariates',action='store_true',
                         help='Fit covariates for each locus. Default is to fit for null model and project out (mean) and rescale (variance)',
@@ -123,8 +91,8 @@ if __name__ == '__main__':
 
     ### Get covariates
     ## Get mean covariates
-    if not args.mean_covar == None:
-        X, X_names, pheno_in = read_covariates(args.mean_covar,pheno_ids, args.missing_char)
+    if not args.covar == None:
+        X, X_names, pheno_in = read_covariates(args.covar,pheno_ids, args.missing_char)
         n_X = X.shape[1]
         # Remove rows with missing values
         if np.sum(pheno_in) < y.shape[0]:
@@ -233,28 +201,16 @@ if __name__ == '__main__':
     y = y_new
     X = X_new
 
-######### Initialise output files #######
-    ## Output file
-    outfile = h5py.File(args.outprefix+'.hdf5','w')
-    outfile['sid'] = sid
-    X_length = n_X + 3 + G_plus
-    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
-                           compression_opts=9)
-
 ######### Fit Null Model ##########
     ## Get initial guesses for null model
     print('Fitting Null Model')
     # Optimize null model
     sigma_2_init = np.var(y)*args.tau_init/(1+args.tau_init)
-    #sigma_2_init = np.var(y) * 1 / (1 + 1)
     null_model = sibreg.model(y, X, ped[:,0])
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
     print('Residual variance estimate: ' + str(round(null_optim['sigma2'],4)))
-    #null_optim = null_model.optimize_model(np.array([sigma_2_init,1]))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
-    #code.interact(local=locals())
     ## Record fitting of null model
     # Get print out for fixed mean effects
     alpha_out=np.zeros((n_X,2))
@@ -264,7 +220,7 @@ if __name__ == '__main__':
     if n_X>1:
         for i in xrange(0,2):
             alpha_out[1:n_X,i] = alpha_out[1:n_X,i]/X_stds
-    if not args.append and not args.no_covariate_estimates and args.mean_covar is not None:
+    if not args.append and not args.no_covariate_estimates and args.covar is not None:
         np.savetxt(args.outprefix + '.null_covariate_effects.txt',
                    np.hstack((X_names.reshape((n_X, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
@@ -277,6 +233,16 @@ if __name__ == '__main__':
         # Reformulate fixed_effects
         X=np.ones((ped.shape[0],1))
         n_X=1
+
+    ######### Initialise output files #######
+    ## Output file
+    outfile = h5py.File(args.outprefix + '.hdf5', 'w')
+    outfile['sid'] = sid
+    X_length = n_X + 3 + G_plus
+    outfile.create_dataset('xtx', (G.shape[2], X_length, X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
+    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
 
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
