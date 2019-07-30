@@ -374,4 +374,5 @@ if __name__ == '__main__':
     outfile['sigma2'] = null_optim['sigma2']
     outfile['tau'] = null_optim['tau']
     outfile['N_L'] = N_L
+    outfile['father_genotyped'] = father_genotyped
     outfile.close()

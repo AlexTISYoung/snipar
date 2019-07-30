@@ -2,33 +2,9 @@
 import numpy as np
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
-from scipy.stats import chi2, zscore
+from scipy.stats import zscore
 from sibreg import sibreg
-import h5py, argparse, code
-
-####### Output functions ##########
-def neglog10pval(x,df):
-    return -np.log10(np.e)*chi2.logsf(x,df)
-
-def vector_out(n,alpha_l, no_sib, n_X, digits=6):
-    ##Output parameter estimates along with standard errors ##
-    ## Calculate test statistics
-    if no_sib:
-        X_length = n_X+2
-    else:
-        X_length = n_X+3
-    alpha_est = alpha_l[0][n_X:X_length]
-    alpha_cov = alpha_l[1][n_X:X_length,n_X:X_length]
-    alpha_ses = np.sqrt(np.diag(alpha_cov))
-    alpha_corr = np.dot(np.diag(1/alpha_ses).dot(alpha_cov),np.diag(1/alpha_ses))
-    alpha_out = str(n)+'\t'+str(round(alpha_est[0],digits))+'\t'+str(round(alpha_ses[0],digits))+'\t'
-    alpha_out += str(round(alpha_est[1],digits))+'\t'+str(round(alpha_ses[1],digits))+'\t'
-    if no_sib:
-        alpha_out += str(round(alpha_corr[0, 1], digits)) + '\n'
-    else:
-        alpha_out += str(round(alpha_est[2],digits))+'\t'+str(round(alpha_ses[2],digits))+'\t'
-        alpha_out += str(round(alpha_corr[0,1],digits))+'\t'+str(round(alpha_corr[0,2],digits))+'\t'+str(round(alpha_corr[2,1],digits))+'\n'
-    return alpha_out
+import h5py, argparse
 
 def id_dict_make(ids):
 ## Make a dictionary mapping from IDs to indices ##
