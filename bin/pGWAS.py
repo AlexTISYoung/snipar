@@ -270,7 +270,6 @@ if __name__ == '__main__':
         alpha_out = np.zeros((n_X, 2))
         alpha_out[:, 0] = null_alpha[0]
         alpha_out[:, 1] = np.sqrt(np.diag(null_alpha[1]))
-        code.interact(local=locals())
         # Rescale
         if n_X > 1:
             for i in xrange(0, 2):
