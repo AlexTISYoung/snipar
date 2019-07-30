@@ -4,7 +4,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import zscore
 from sibreg import sibreg
-import h5py, argparse, code
+import h5py, argparse
 
 def read_covariates(covar_file,ids_to_match,missing):
 ## Read a covariate file and reorder to match ids_to_match ##
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
-    parser.add_argument('--covar',type=str,help='Location of mean covariate file (default None)',
+    parser.add_argument('--covar',type=str,help='Location of covariate file (default None)',
                         default=None)
     parser.add_argument('--fit_covariates',action='store_true',
                         help='Fit covariates for each locus. Default is to fit for null model and project out (mean) and rescale (variance)',
