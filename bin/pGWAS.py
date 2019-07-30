@@ -267,15 +267,16 @@ if __name__ == '__main__':
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
     #code.interact(local=locals())
     ## Record fitting of null model
-    # Get print out for fixed mean effects
-    alpha_out=np.zeros((n_X,2))
-    alpha_out[:,0]=null_alpha[0]
-    alpha_out[:,1]=np.sqrt(np.diag(null_alpha[1]))
-    # Rescale
-    if n_X>1:
-        for i in xrange(0,2):
-            alpha_out[1:n_X,i] = alpha_out[1:n_X,i]/X_stds
     if not args.append and not args.no_covariate_estimates and args.covar is not None:
+        # Get print out for fixed mean effects
+        alpha_out = np.zeros((n_X, 2))
+        alpha_out[:, 0] = null_alpha[0]
+        alpha_out[:, 1] = np.sqrt(np.diag(null_alpha[1]))
+        code.interact(local=locals())
+        # Rescale
+        if n_X > 1:
+            for i in xrange(0, 2):
+                alpha_out[1:n_X, i] = alpha_out[1:n_X, i] / X_stds
         np.savetxt(args.outprefix + '.null_covariate_effects.txt',
                    np.hstack((X_names.reshape((n_X, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
