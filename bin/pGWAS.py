@@ -252,18 +252,7 @@ if __name__ == '__main__':
 
     print(str(y.shape[0]) + ' genotyped individuals with phenotype data and imputed parental genotyped')
 
-    ######### Initialise output files #######
-    ## Output file
-    outfile = h5py.File(args.outprefix+'.hdf5','w')
-    outfile['sid'] = sid
-    if args.no_sib:
-        X_length = n_X + 2
-    else:
-        X_length = n_X + 3
-    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
-                           compression_opts=9)
-
+    ######### Initialise output files ######
 ######### Fit Null Model ##########
     ## Get initial guesses for null model
     print('Fitting Null Model')
@@ -303,6 +292,17 @@ if __name__ == '__main__':
             X_length = n_X + 2
         else:
             X_length = n_X + 3
+
+    ## Output file
+    outfile = h5py.File(args.outprefix+'.hdf5','w')
+    outfile['sid'] = sid
+    if args.no_sib:
+        X_length = n_X + 2
+    else:
+        X_length = n_X + 3
+    outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
 
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
