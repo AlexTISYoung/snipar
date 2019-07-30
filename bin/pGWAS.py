@@ -18,7 +18,7 @@ def read_covariates(covar_file,ids_to_match,missing):
     # Get covariate names
     X_names = np.zeros((n_X), dtype='S10')
     X_names[0] = 'Intercept'
-    X_names[1:n_X] = np.array(covar_f._col, dtype='S20')
+    X_names[1:n_X] = np.array(covar_f._col, dtype='S20')n
     # Remove NAs
     NA_rows = np.isnan(X).any(axis=1)
     n_NA_row = np.sum(NA_rows)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
-    parser.add_argument('--mean_covar',type=str,help='Location of mean covariate file (default None)',
+    parser.add_argument('--covar',type=str,help='Location of mean covariate file (default None)',
                         default=None)
     parser.add_argument('--fit_covariates',action='store_true',
                         help='Fit covariates for each locus. Default is to fit for null model and project out (mean) and rescale (variance)',
@@ -89,14 +89,13 @@ if __name__ == '__main__':
 
     ### Get covariates
     ## Get mean covariates
-    if not args.mean_covar == None:
-        X, X_names, pheno_in = read_covariates(args.mean_covar, pheno_ids, args.missing_char)
+    if not args.covar == None:
+        X, X_names, pheno_in = read_covariates(args.covar, pheno_ids, args.missing_char)
         n_X = X.shape[1]
         # Remove rows with missing values
         if np.sum(pheno_in) < y.shape[0]:
             y = y[pheno_in]
             pheno_ids = pheno_ids[pheno_in, :]
-        code.interact(local=locals())
         # Normalise non-constant cols
         X_stds = np.std(X[:, 1:n_X], axis=0)
         X[:, 1:n_X] = zscore(X[:, 1:n_X], axis=0)
@@ -287,7 +286,7 @@ if __name__ == '__main__':
     if n_X>1:
         for i in xrange(0,2):
             alpha_out[1:n_X,i] = alpha_out[1:n_X,i]/X_stds
-    if not args.append and not args.no_covariate_estimates and args.mean_covar is not None:
+    if not args.append and not args.no_covariate_estimates and args.covar is not None:
         np.savetxt(args.outprefix + '.null_covariate_effects.txt',
                    np.hstack((X_names.reshape((n_X, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
