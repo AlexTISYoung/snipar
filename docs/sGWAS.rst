@@ -35,8 +35,8 @@ Required positional arguments:
 
 Options:
 
---mean_covar
-   Location of mean covariate file (default no mean covariates)
+--covar
+   Location of covariate file (default no mean covariates)
 
 --fit_covariates
    Fit covariates for each locus. Default is to fit covariates for the null model and project out the covariates'
