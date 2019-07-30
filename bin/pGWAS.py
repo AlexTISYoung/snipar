@@ -263,9 +263,7 @@ if __name__ == '__main__':
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     print('Within family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
     print('Residual variance estimate: ' + str(round(null_optim['sigma2'],4)))
-    #null_optim = null_model.optimize_model(np.array([sigma_2_init,1]))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
-    #code.interact(local=locals())
     ## Record fitting of null model
     if not args.append and not args.no_covariate_estimates and args.covar is not None:
         # Get print out for fixed mean effects
