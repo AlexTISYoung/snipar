@@ -5,7 +5,6 @@ from pysnptools.snpreader import Bed
 parser = argparse.ArgumentParser()
 parser.add_argument('gts', type=str, help='Path to bed file with sibling genotypes')
 parser.add_argument('ped', type=str, help='Path to pedigree file')
-parser.add_argument('ncausal',type=int,help='Number of causal variants')
 parser.add_argument('h2quad',type=float,help='heritability explained by combined direct, sib, and parental effects')
 parser.add_argument('outprefix', type=str, help='prefix of output phenotyped file (.ped)')
 parser.add_argument('--no_sib',action='store_true',default=False,help='No indirect genetic effects from sibs')
@@ -59,7 +58,7 @@ else:
     b = np.random.multivariate_normal(np.zeros((4)),effect_cov,(gts.shape[1]))
 # # additive genetic component
 if args.no_sib:
-    A = G[:,0,:].dot(b[:,0])+G[:,2,:].dot(b[:,2])+G[:,3,:].dot(b[:,3])
+    A = G[:,0,:].dot(b[:,0])+G[:,1,:].dot(b[:,1])+G[:,2,:].dot(b[:,2])
 else:
     A = G[:,0,:].dot(b[:,0])+G[:,1,:].dot(b[:,1])+G[:,2,:].dot(b[:,2])+G[:,3,:].dot(b[:,3])
 
@@ -82,6 +81,6 @@ if args.no_sib:
                        np.array(b[:,2]*a_factor,dtype=str),np.array(b[:,3]*a_factor,dtype=str)))
 else:
     b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),
-                       np.array(b[:,2]*a_factor,dtype=str),np.array(b[:,3]*a_factor,dtype=str)))
+                       np.array(b[:,1]*a_factor,dtype=str),np.array(b[:,2]*a_factor,dtype=str)))
 b_out = b_out.T
 np.savetxt(args.outprefix+'.effects.txt',b_out,fmt='%s')
