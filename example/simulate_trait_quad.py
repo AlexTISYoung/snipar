@@ -77,10 +77,10 @@ np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
 # Write effects
 if args.no_sib:
-    b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),np.array(b[:,1]*a_factor,dtype=str),
-                       np.array(b[:,2]*a_factor,dtype=str),np.array(b[:,3]*a_factor,dtype=str)))
-else:
     b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),
                        np.array(b[:,1]*a_factor,dtype=str),np.array(b[:,2]*a_factor,dtype=str)))
+else:
+    b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),np.array(b[:,1]*a_factor,dtype=str),
+                       np.array(b[:,2]*a_factor,dtype=str),np.array(b[:,3]*a_factor,dtype=str)))
 b_out = b_out.T
 np.savetxt(args.outprefix+'.effects.txt',b_out,fmt='%s')
