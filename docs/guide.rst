@@ -51,14 +51,40 @@ the GWAS applications, the classes are the families given by the pedigree file.
 
 The documentation for the sibreg module (:doc:`sibreg`) contains information on how to define a :class:`sibreg.model`,
 how to optimise a :class:`sibreg.model`, how to predict from
-a :class:`sibreg.model`, and how to simulate a :class:`sibreg.model`.
+a :class:`sibreg.model`, and how to simulate a :class:`sibreg.model`. Note that to run the imputation and GWAS scripts it
+is not necessary for the user to interact directly with the sibreg module.
+
+***Package Install Instructions**
+
+sibreg has the following dependencies:
+
+python 2.7
+
+Packages:
+
+- numpy
+- scipy
+- pysnptools
+
+We highly recommend using a python distribution such as Anaconda (https://store.continuum.io/cshop/anaconda/).
+This will come with both numpy and scipy installed and can include an MKL-compiled distribution
+for optimal speed.
+
+To install from source, clone the git repository, and in the directory
+containing the sibreg source code, at the shell type
+
+    'sudo python setupy.py install'
+
+or, on the windows command prompt, type
+
+    'python setup.py install'
 
 **Running tests**
 
 To check that the code is working properly and computing likelihoods and gradients accurately, you can
 run tests. In the sibreg/tests subdirectory, type
 
-    ``python tests.py``
+    ``python test.py``
 
 The output should say
 
