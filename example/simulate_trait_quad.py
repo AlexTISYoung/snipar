@@ -46,7 +46,11 @@ for i in range(0,fams.shape[0]):
 
 print('simulating trait')
 # Simulate genetic effects
-effect_cov = np.zeros((4,4))
+if args.no_sib:
+    effect_cov = np.zeros((3,3))
+else:
+    effect_cov = np.zeros((4, 4))
+
 effect_cov[:] = args.dncor
 np.fill_diagonal(effect_cov,1)
 if args.no_sib:
