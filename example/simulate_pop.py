@@ -52,7 +52,7 @@ nfam = args.nfam
 outprefix = args.outprefx
 n_sib_only = args.n_sib_only
 n_one_parent = args.n_one_parent
-f_sib_missing = args.p_sib_missing
+p_sib_missing = args.p_sib_missing
 
 father_gts = np.zeros((nfam,nsnp),dtype=np.int8)
 mother_gts = np.zeros((nfam,nsnp),dtype=np.int8)
@@ -158,12 +158,12 @@ for i in range(n_sib_only, n_sib_only + n_one_parent):
     else:
         remove.write(ped[4 * i + 3, 0] + ' ' + ped[4 * i + 3, 1]+'\n')
     # Remove sib
-    remove_sib = np.random.binomial(1, f_sib_missing, 1)
+    remove_sib = np.random.binomial(1, p_sib_missing, 1)
     if remove_sib==1:
         remove.write(ped[4 * i + 1, 0] + ' ' + ped[4 * i + 1, 1]+'\n')
 
 for i in range(n_sib_only+n_one_parent,nfam):
-    remove_sib = np.random.binomial(1, f_sib_missing, 1)
+    remove_sib = np.random.binomial(1, p_sib_missing, 1)
     if remove_sib==1:
         remove.write(ped[4 * i + 1, 0] + ' ' + ped[4 * i + 1, 1]+'\n')
 
