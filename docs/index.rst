@@ -6,6 +6,7 @@ Welcome to sibreg's documentation!
    :caption: Contents:
 
    guide
+   tutorial
    sibreg
    pGWAS
    poGWAS

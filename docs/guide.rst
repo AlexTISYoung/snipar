@@ -44,6 +44,8 @@ Note that individuals are assumed to have unique individual IDS (IID).
 
 Siblings are identified through individuals that have the same FID and the same FATHER_ID and MOTHER_ID.
 
+We recommend working through the (:doc:`tutorial`) to get an idea of the workflow required for a full analysis.
+
 The core model is the sibreg model (:class:`sibreg.model`), which consists of a linear model for the mean along
 with a vector of class labels that allows for correlations within-class. (The correlations within-class result
 from modelling mean differences between classes as independent, normally distributed random effects.) For
