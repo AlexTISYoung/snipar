@@ -1,6 +1,6 @@
 library(rhdf5)
 
-args = commandArgs(trailingonly = T)
+args = commandArgs(trailingOnly = T)
 
 sib_file = args[1]
 po_file = args[2]
