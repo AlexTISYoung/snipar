@@ -10,7 +10,7 @@ out = args[5]
 
 if (is.null(args[6])){
   no_sib = FALSE
-} else {no_sib = args[6]}
+} else {no_sib = as.logical(args[6])}
 
 beta_list = list()
 beta_cov_list = list()
