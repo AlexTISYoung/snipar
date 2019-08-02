@@ -6,7 +6,7 @@ To run this tutorial, you need plink installed and in your system path. (See htt
 
 You also need R installed and in your system path. (See https://www.r-project.org/).
 
-In the installation folder for sibreg, there is an examples/ folder. Change to the examples/ folder.
+In the installation folder for sibreg, there is an example/ folder. Change to the example/ folder.
 
 In this folder, there is a script 'simulate_pop.py'. At the command line, type
 
