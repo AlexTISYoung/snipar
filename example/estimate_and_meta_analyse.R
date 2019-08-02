@@ -108,7 +108,7 @@ for (i in 1:3){
 
 h5out = paste(out,'hdf5',sep='.')
 h5createFile(h5out)
-h5write(beta_meta,h5out)
-h5write(beta_se_meta,h5out)
-h5write(beta_cov_meta,h5out)
+h5write(beta_meta,h5out,'beta_meta')
+h5write(beta_se_meta,h5out,'beta_se_meta')
+h5write(beta_cov_meta,h5out,'beta_cov_meta')
 H5close()
