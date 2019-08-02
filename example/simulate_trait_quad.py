@@ -1,5 +1,5 @@
 import numpy as np
-import h5py, argparse
+import argparse
 from pysnptools.snpreader import Bed
 
 parser = argparse.ArgumentParser()
@@ -24,11 +24,10 @@ gts = np.array(gts)
 
 # Find parents
 ped = np.loadtxt(args.ped, dtype='S20')
-# ped = np.loadtxt('relatedness/families.ped', dtype='S20', skiprows=1)
 
 fams = np.unique(ped[:,0])
 
-G = np.zeros((fams.shape[0]*2,4,gts.shape[1]),dtype=np.float32)
+G = np.zeros((fams.shape[0]*2,4,gts.shape[1]),dtype=np.int8)
 ped_out = np.zeros((fams.shape[0]*2,2),dtype='S20')
 for i in range(0,fams.shape[0]):
     ped_fam = ped[ped[:,0]==fams[i],:]
@@ -47,6 +46,7 @@ print('simulating trait')
 # Simulate genetic effects
 if args.no_sib:
     effect_cov = np.zeros((3,3))
+    G = G[:,np.array([0,2,3]),:]
 else:
     effect_cov = np.zeros((4, 4))
 

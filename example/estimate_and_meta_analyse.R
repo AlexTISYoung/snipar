@@ -3,9 +3,11 @@ library(rhdf5)
 beta_list = list()
 beta_cov_list = list()
 
-sib_file = 'sibs/sim_60k_parental.hdf5'
-po_file = 'one_parent_genotyped/sim_60k_parental.hdf5'
-bpg_file = 'both_parents_genotyped/sim_60k_parental.hdf5'
+sib_file = 'pGWAS_parental.hdf5'
+po_file = 'poGWAS_parental.hdf5'
+bpg_file = 'triGWAS_parental.hdf5'
+
+no_sib = TRUE
 
 ###### Sibs only ######
 xtx = h5read(sib_file,'xtx')
@@ -17,8 +19,14 @@ beta_cov = array(NA,dim=c(dim(xty)[2],3,3))
 beta_se = matrix(NA,nrow=dim(xty)[2],ncol=3)
 
 for (i in 1:dim(xty)[2]){
-  beta[i,] = solve(xtx[-3,-3,i],xty[-3,i])
-  beta_cov[i,,] = sigma2*solve(xtx[-3,-3,i])
+  xtx_i = xtx[,,i]
+  xty_i = xty[,i]
+  if (!no_sib){
+    xtx_i = xtx_i[-3,-3]
+    xty_i = xty_i[-3]
+  }
+  beta[i,] = solve(xtx_i,xty_i)
+  beta_cov[i,,] = sigma2*solve(xtx_i)
   beta_se[i,] = sqrt(diag(beta_cov[i,,]))
 }
 
@@ -79,9 +87,8 @@ for (i in 1:dim(xty)[2]){
 }
 
 ##### Check #####
-effects = read.table('sim_60k_parental.effects.txt')
+effects = read.table('h2_parental_0.5.effects.txt')
 r = lm(beta_meta[,1]~effects[,2])
-plot(r)
 z = (beta_meta[,1]-effects[,2])/beta_se_meta[,1]
 1-pchisq(sum(z^2),length(z))
 
