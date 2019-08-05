@@ -136,7 +136,7 @@ for f in ped_fams:
             sibs = pedf[pmatch, 1]
             sibs_genotyped = np.array([x in id_dict for x in sibs])
             if np.sum(sibs_genotyped)>1:
-                sibships[f] = sibs
+                sibships[f] = sibs[sibs_genotyped]
                 sibship_indices = sibship_indices+[id_dict[x] for x in sibs[sibs_genotyped]]
             pcount += 1
     if pcount>1:
@@ -168,7 +168,7 @@ fams = np.sort(np.array(sibships.keys()))
 imputed_par_gts = np.zeros((nfam,gts.shape[1]),dtype=np.float32)
 
 for i in range(0,10):
-    code.interact(local=locals())
+    #code.interact(local=locals())
     # Get sibs in fam
     sibs_i = sibships[fams[i]]
     n_i = len(sibs_i)
