@@ -1,7 +1,7 @@
 #!/well/kong/users/wiw765/anaconda2/bin/python
 import numpy as np
 import numpy.ma as ma
-import argparse, h5py
+import argparse, h5py, code
 from pysnptools.snpreader import Bed
 
 parser = argparse.ArgumentParser()
@@ -168,6 +168,7 @@ fams = np.sort(np.array(sibships.keys()))
 imputed_par_gts = np.zeros((nfam,gts.shape[1]),dtype=np.float32)
 
 for i in range(0,10):
+    code.interact(local=locals())
     # Get sibs in fam
     sibs_i = sibships[fams[i]]
     n_i = len(sibs_i)
