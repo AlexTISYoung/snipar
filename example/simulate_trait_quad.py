@@ -28,20 +28,21 @@ ped = np.loadtxt(args.ped, dtype='S20')
 
 fams = np.unique(ped[:,0])
 
-G = np.zeros((fams.shape[0]*2,4,gts.shape[1]),dtype=np.int8)
+G = np.zeros((fams.shape[0]*args.fsize,4,gts.shape[1]),dtype=np.int8)
 ped_out = np.zeros((fams.shape[0]*2,2),dtype='S20')
 for i in range(0,fams.shape[0]):
     ped_fam = ped[ped[:,0]==fams[i],:]
-    sib_1_index = id_dict[ped_fam[0,1]]
-    G[2*i,0,:] = gts[sib_1_index,:]
-    G[2 * i+1, 1, :] = gts[sib_1_index, :]
-    sib_2_index = id_dict[ped_fam[1, 1]]
-    G[2 * i+1, 0, :] = gts[sib_2_index, :]
-    G[2*i,1,:] = gts[sib_2_index, :]
-    G[np.array([2*i,2*i+1]),2,:] = gts[id_dict[ped_fam[2, 1]],:]
-    G[np.array([2 * i, 2 * i + 1]), 3, :] = gts[id_dict[ped_fam[3, 1]], :]
-    ped_out[2*i,:] = ped_fam[0,0:2]
-    ped_out[2*i+1,:] = ped_fam[1,0:2]
+    sib_indices = np.array([id_dict[ped_fam[j,1]] for j in range(0,args.fsize)])
+    # Genotypes
+    for j in range(0,args.fsize):
+        G[args.fsize*i+j,0,:] = gts[sib_indices[j],:]
+    # Average of other sib genotypes
+    for j in range(0,args.fsize):
+        sib_indices_j = np.delete(sib_indices,j)
+        G[args.fsize*i+j,1,:] = np.mean(gts[sib_indices_j,:],axis=0)
+    G[(args.fsize*i):(args.fsize*(i+1)),2,:] = gts[id_dict[ped_fam[args.fsize, 1]],:]
+    G[(args.fsize*i):(args.fsize*(i+1)),3,:] = gts[id_dict[ped_fam[args.fsize+1, 1]],:]
+    ped_out[(args.fsize*i):(args.fsize*(i+1)),:] = ped_fam[0:args.fsize,0:2]
 
 print('simulating trait')
 # Simulate genetic effects

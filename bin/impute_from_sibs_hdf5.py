@@ -107,12 +107,8 @@ for i in xrange(0,ped.shape[0]):
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
 ibd_sibs = np.array(ibd_f['ibd_sibs'])
-# map to families
-ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:,0]]),
-                                 np.array([x in sib_fam_dict for x in ibd_sibs[:,1]]))
-ibd = ibd[ibd_sibs_in_ped,:]
-ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
-ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
+ibd_fams = np.array(ibd_f['ibd_fams'])
+ibd_ped = np.array(ibd_f['ped'])
 
 #### Load genotypes
 gts_f = Bed(args.genotypes)
@@ -182,17 +178,7 @@ for i in range(0,nfam):
     sib_gts = gts[sib_indices, :]
     # Find IBD segments
     fam_indices = ibd_fams == fams[i]
-    ibd_sibs_fam = ibd_sibs[fam_indices,:]
-    ibd_fam = ibd[fam_indices,:]
-    ibd_i = np.zeros(ibd_fam.shape,dtype=np.int8)
-    pcount = 0
-    for j in range(0,n_i-1):
-        for k in range(j+1,n_i):
-            jk_index = np.logical_and(ibd_sibs_fam[:,0] == sibs_i[j],ibd_sibs_fam[:,1] == sibs_i[k])
-            if np.sum(jk_index)==0:
-                jk_index = np.logical_and(ibd_sibs_fam[:, 1] == sibs_i[j], ibd_sibs_fam[:, 0] == sibs_i[k])
-            ibd_i[pcount,:] = ibd_fam[jk_index,:]
-            pcount+= 1
+    ibd_i = ibd[i,:,:]
     # Impute GTs
     for j in range(0,gts.shape[1]):
         # Deal with missing sib genotypes

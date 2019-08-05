@@ -122,7 +122,7 @@ for i in range(0,n_sib_only):
     if fsize>2:
         for j in range(2,fsize):
             remove_sib = np.random.binomial(1, p_sib_missing, 1)
-            if remove_sib:
+            if remove_sib==1:
                 remove.write(ped[fp * i + j, 0] + ' ' + ped[fp * i + j, 1]+'\n')
 
 for i in range(n_sib_only, n_sib_only + n_one_parent):
@@ -134,13 +134,13 @@ for i in range(n_sib_only, n_sib_only + n_one_parent):
     # Remove sib
     for j in range(1, fsize):
         remove_sib = np.random.binomial(1, p_sib_missing, 1)
-        if remove_sib:
+        if remove_sib==1:
             remove.write(ped[fp * i + j, 0] + ' ' + ped[fp * i + j, 1] + '\n')
 
 for i in range(n_sib_only+n_one_parent,nfam):
     for j in range(1, fsize):
         remove_sib = np.random.binomial(1, p_sib_missing, 1)
-        if remove_sib:
+        if remove_sib==1:
             remove.write(ped[fp * i + j, 0] + ' ' + ped[fp * i + j, 1] + '\n')
 
 remove.close()
