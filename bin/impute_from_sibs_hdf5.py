@@ -107,6 +107,9 @@ for i in xrange(0,ped.shape[0]):
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
 ibd_fams = np.array(ibd_f['ibd_fams'])
+ibd_fam_dict = {}
+for i in range(0,ibd_fams.shape[0]):
+    ibd_fam_dict[ibd_fams[i]] = i
 ibd_ped = np.array(ibd_f['ped'])
 
 #### Load genotypes
@@ -183,6 +186,7 @@ for i in range(0,10):
     ibd_f_dict = {}
     for j in range(0,ibd_f.shape[0]):
         ibd_f_dict[ibd_f[j,1]] = j
+    ibd_full = ibd[ibd_fam_dict[fams[i]],:]
     pcount = 0
     for j in range(1,n_i):
         sib_j_index = ibd_f_dict[sibs_i[j]]
@@ -192,7 +196,7 @@ for i in range(0,10):
                 pindex = j*(j-1)/2+k
             else:
                 pindex = k*(k-1)/2+j
-            ibd_i[pcount,:] = ibd_f[pindex,:]
+            ibd_i[pcount,:] = ibd_full[pindex,:]
             pcount += 1
     # Impute GTs
     for j in range(0,gts.shape[1]):
