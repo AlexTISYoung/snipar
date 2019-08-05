@@ -9,6 +9,7 @@ parser.add_argument('h2quad',type=float,help='heritability explained by combined
 parser.add_argument('outprefix', type=str, help='prefix of output phenotyped file (.ped)')
 parser.add_argument('--no_sib',action='store_true',default=False,help='No indirect genetic effects from sibs')
 parser.add_argument('--dncor',type=float,help='Correlation between direct, sib, and parental effects (default 0.8)',default=0.8)
+parser.add_argument('--fsize',type=int,help='family size (number of children). Default is 2.',default=2)
 args=parser.parse_args()
 
 print('reading genotypes')

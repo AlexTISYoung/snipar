@@ -14,7 +14,7 @@ In this folder, there is a script 'simulate_pop.py'. At the command line, type
 
 This will produce a simulated population of 12,000 families genotyped at 5,000
 independent SNPs with allele frequency 0.5. The genotypes will be in sim.ped (plink ped format)
-and the pedigree will be in sim_fam.ped.
+and the pedigree will be in sim_fams.ped.
 
 We need to convert this to plink .bed format (binary ped) for further use. To do this, type
 
@@ -25,8 +25,9 @@ To simulate the test phenotype, at the command line, type
     ``python simulate_trait_quad.py sim.bed sim_fams.ped 0.5 h2_trio_0.5 --no_sib``
 
 This simulates a trait with direct, paternal, and maternal effects, where 50% of the phenotypic
-variance is explained by the combined direct, paternal and maternal effects of the 5,000 SNPs. In
-the following tutorial, we do not fit indirect genetic effects from siblings to keep it simple.
+variance is explained by the combined direct, paternal and maternal effects of the 5,000 SNPs. The
+ phenotype file is h2_trio_0.5.ped. In the following tutorial, we do not fit indirect genetic
+ effects from siblings to keep it simple.
 
 To simulate missing genotypes of parents/siblings, type the following command:
 
@@ -42,9 +43,13 @@ To impute the missing parental genotypes for the families with one parent genoty
 
     ``python ../bin/impute_po.py sim_reduced.bed sim_fams.ped po_impute``
 
+The imputed parental genotypes are in po_impute.hdf5.
+
 To impute the sum of the missing parents' genotypes for the families without genotyped parents, type:
 
     ``python ../bin/impute_from_sibs_hdf5.py sim.hdf5 sim_reduced.bed sim_fams.ped sib_impute``
+
+The imputed parental genotypes are in sib_impute.hdf5.
 
 To estimate effects for the families with both parents genotyped, type:
 
