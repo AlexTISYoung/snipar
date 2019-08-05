@@ -168,7 +168,7 @@ fams = np.sort(np.array(sibships.keys()))
 # Impute parental genotypes
 imputed_par_gts = np.zeros((nfam,gts.shape[1]),dtype=np.float32)
 
-for i in range(0,nfam):
+for i in range(0,10):
     # Get sibs in fam
     sibs_i = sibships[fams[i]]
     n_i = len(sibs_i)
@@ -178,7 +178,22 @@ for i in range(0,nfam):
     sib_gts = gts[sib_indices, :]
     # Find IBD segments
     fam_indices = ibd_fams == fams[i]
-    ibd_i = ibd[i,:,:]
+    ibd_i = np.zeros((npair_i,gts.shape[1]))
+    ibd_f = ibd_ped[ibd_ped[:,0]==fams[i],:]
+    ibd_f_dict = {}
+    for j in range(0,ibd_f.shape[0]):
+        ibd_f_dict[ibd_f[j,1]] = j
+    pcount = 0
+    for j in range(1,n_i):
+        sib_j_index = ibd_f_dict[sibs_i[j]]
+        for k in range(0,j):
+            sib_k_index = ibd_f_dict[sibs_i[k]]
+            if sib_j_index>sib_k_index:
+                pindex = j*(j-1)/2+k
+            else:
+                pindex = k*(k-1)/2+j
+            ibd_i[pcount,:] = ibd_f[pindex,:]
+            pcount += 1
     # Impute GTs
     for j in range(0,gts.shape[1]):
         # Deal with missing sib genotypes
