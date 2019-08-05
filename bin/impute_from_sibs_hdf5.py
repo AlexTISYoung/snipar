@@ -106,7 +106,7 @@ for i in xrange(0,ped.shape[0]):
 ### Load IBD
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
-ibd_fams = np.array(ibd_f['ibd_fams'])
+ibd_fams = np.array(ibd_f['ibd_fams'],dtype='S20')
 ibd_fam_dict = {}
 for i in range(0,ibd_fams.shape[0]):
     ibd_fam_dict[ibd_fams[i]] = i
