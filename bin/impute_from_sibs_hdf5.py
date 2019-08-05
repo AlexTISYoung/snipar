@@ -106,7 +106,6 @@ for i in xrange(0,ped.shape[0]):
 ### Load IBD
 ibd_f = h5py.File(args.ibd,'r')
 ibd = np.array(ibd_f['ibd'])
-ibd_sibs = np.array(ibd_f['ibd_sibs'])
 ibd_fams = np.array(ibd_f['ibd_fams'])
 ibd_ped = np.array(ibd_f['ped'])
 
