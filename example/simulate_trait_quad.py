@@ -12,9 +12,13 @@ parser.add_argument('--dncor',type=float,help='Correlation between direct, sib, 
 parser.add_argument('--fsize',type=int,help='family size (number of children). Default is 2.',default=2)
 args=parser.parse_args()
 
+fsize = args.fsize
+
 print('reading genotypes')
 gts_f = Bed(args.gts)
 gts_ids = gts_f.iid
+#gts_ids = np.loadtxt('fsize4.fam', dtype='S20')
+gts_ids = gts_ids[:,0:2]
 id_dict = {}
 for i in range(0,gts_ids.shape[0]):
     id_dict[gts_ids[i,1]] =i
@@ -28,21 +32,21 @@ ped = np.loadtxt(args.ped, dtype='S20')
 
 fams = np.unique(ped[:,0])
 
-G = np.zeros((fams.shape[0]*args.fsize,4,gts.shape[1]),dtype=np.int8)
-ped_out = np.zeros((fams.shape[0]*2,2),dtype='S20')
+G = np.zeros((fams.shape[0]*fsize,4,gts.shape[1]),dtype=np.int8)
+ped_out = np.zeros((fams.shape[0]*fsize,2),dtype='S20')
 for i in range(0,fams.shape[0]):
     ped_fam = ped[ped[:,0]==fams[i],:]
-    sib_indices = np.array([id_dict[ped_fam[j,1]] for j in range(0,args.fsize)])
+    sib_indices = np.array([id_dict[ped_fam[j,1]] for j in range(0,fsize)])
     # Genotypes
-    for j in range(0,args.fsize):
-        G[args.fsize*i+j,0,:] = gts[sib_indices[j],:]
+    for j in range(0,fsize):
+        G[fsize*i+j,0,:] = gts[sib_indices[j],:]
     # Average of other sib genotypes
-    for j in range(0,args.fsize):
+    for j in range(0,fsize):
         sib_indices_j = np.delete(sib_indices,j)
-        G[args.fsize*i+j,1,:] = np.mean(gts[sib_indices_j,:],axis=0)
-    G[(args.fsize*i):(args.fsize*(i+1)),2,:] = gts[id_dict[ped_fam[args.fsize, 1]],:]
-    G[(args.fsize*i):(args.fsize*(i+1)),3,:] = gts[id_dict[ped_fam[args.fsize+1, 1]],:]
-    ped_out[(args.fsize*i):(args.fsize*(i+1)),:] = ped_fam[0:args.fsize,0:2]
+        G[fsize*i+j,1,:] = np.mean(gts[sib_indices_j,:],axis=0)
+    G[(fsize*i):(fsize*(i+1)),2,:] = gts[id_dict[ped_fam[fsize, 1]],:]
+    G[(fsize*i):(fsize*(i+1)),3,:] = gts[id_dict[ped_fam[fsize+1, 1]],:]
+    ped_out[(fsize*i):(fsize*(i+1)),:] = ped_fam[0:fsize,0:2]
 
 print('simulating trait')
 # Simulate genetic effects

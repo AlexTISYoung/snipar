@@ -145,7 +145,7 @@ if __name__ == '__main__':
                 sibs = pedf[pmatch, 1]
                 sibs_genotyped = np.array([x in id_dict for x in sibs])
                 if np.sum(sibs_genotyped) > 1:
-                    sibships[f] = sibs
+                    sibships[f] = sibs[sibs_genotyped]
                     sibship_indices = sibship_indices + [id_dict[x] for x in sibs[sibs_genotyped]]
                 pcount += 1
         if pcount > 1:
