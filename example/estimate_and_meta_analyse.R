@@ -3,8 +3,10 @@ library(rhdf5)
 args = commandArgs(trailingOnly = T)
 
 sib_file = args[1]
+#sib_file = 'pGWAS.hdf5'
 po_file = args[2]
 bpg_file = args[3]
+#bpg_file = 'tri_sib.hdf5'
 effect_file = args[4]
 out = args[5]
 
@@ -21,14 +23,16 @@ xtx = h5read(sib_file,'xtx')
 xty = h5read(sib_file,'xty')
 sigma2 = h5read(sib_file,'sigma2')
 
-beta = matrix(NA,nrow=dim(xty)[2],ncol=3)
-beta_cov = array(NA,dim=c(dim(xty)[2],3,3))
-beta_se = matrix(NA,nrow=dim(xty)[2],ncol=3)
+psize = 4
+
+beta = matrix(NA,nrow=dim(xty)[2],ncol=psize)
+beta_cov = array(NA,dim=c(dim(xty)[2],psize,psize))
+beta_se = matrix(NA,nrow=dim(xty)[2],ncol=psize)
 
 for (i in 1:dim(xty)[2]){
   xtx_i = xtx[,,i]
   xty_i = xty[,i]
-  if (!no_sib){
+  if (no_sib){
     xtx_i = xtx_i[-3,-3]
     xty_i = xty_i[-3]
   }
@@ -46,9 +50,11 @@ xtx = h5read(po_file,'xtx')
 xty = h5read(po_file,'xty')
 sigma2 = h5read(po_file,'sigma2')
 
-beta = matrix(NA,nrow=dim(xty)[2],ncol=4)
-beta_cov = array(NA,dim=c(dim(xty)[2],4,4))
-beta_se = matrix(NA,nrow=dim(xty)[2],ncol=4)
+psize = 4
+
+beta = matrix(NA,nrow=dim(xty)[2],ncol=psize)
+beta_cov = array(NA,dim=c(dim(xty)[2],psize,psize))
+beta_se = matrix(NA,nrow=dim(xty)[2],ncol=psize)
 
 for (i in 1:dim(xty)[2]){
   beta[i,] = solve(xtx[,,i],xty[,i])
@@ -65,9 +71,11 @@ xtx = h5read(bpg_file,'xtx')
 xty = h5read(bpg_file,'xty')
 sigma2 = h5read(bpg_file,'sigma2')
 
-beta = matrix(NA,nrow=dim(xty)[2],ncol=4)
-beta_cov = array(NA,dim=c(dim(xty)[2],4,4))
-beta_se = matrix(NA,nrow=dim(xty)[2],ncol=4)
+psize = 5
+
+beta = matrix(NA,nrow=dim(xty)[2],ncol=psize)
+beta_cov = array(NA,dim=c(dim(xty)[2],psize,psize))
+beta_se = matrix(NA,nrow=dim(xty)[2],ncol=psize)
 
 for (i in 1:dim(xty)[2]){
   beta[i,] = solve(xtx[,,i],xty[,i])
