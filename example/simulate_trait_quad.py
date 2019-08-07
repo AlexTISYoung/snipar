@@ -43,7 +43,7 @@ for i in range(0,fams.shape[0]):
     # Average of other sib genotypes
     for j in range(0,fsize):
         sib_indices_j = np.delete(sib_indices,j)
-        G[fsize*i+j,1,:] = np.mean(gts[sib_indices_j,:],axis=0)
+        G[fsize*i+j,1,:] = np.sum(gts[sib_indices_j,:],axis=0)
     G[(fsize*i):(fsize*(i+1)),2,:] = gts[id_dict[ped_fam[fsize, 1]],:]
     G[(fsize*i):(fsize*(i+1)),3,:] = gts[id_dict[ped_fam[fsize+1, 1]],:]
     ped_out[(fsize*i):(fsize*(i+1)),:] = ped_fam[0:fsize,0:2]
