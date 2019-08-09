@@ -10,9 +10,9 @@ In the installation folder for sibreg, there is an example/ folder. Change to th
 
 In this folder, there is a script 'simulate_pop.py'. At the command line, type this:
 
-    ``python simulate_pop.py 5000 0.5 12000 4000 4000 0.5 sim``
+    ``python simulate_pop.py 2000 0.5 6000 2000 2000 0.5 sim``
 
-This will produce a simulated population of 12,000 families genotyped at 5,000
+This will produce a simulated population of 6,000 families genotyped at 2,000
 independent SNPs with allele frequency 0.5. The genotypes will be in sim.ped (plink ped format)
 and the pedigree will be in sim_fams.ped.
 
@@ -22,19 +22,18 @@ We need to convert this to plink .bed format (binary ped) for further use. To do
 
 To simulate the test phenotype, at the command line, type
 
-    ``python simulate_trait_quad.py sim.bed sim_fams.ped 0.5 h2_trio_0.5 --no_sib``
+    ``python simulate_trait_quad.py sim.bed sim_fams.ped 0.5 h2_quad_0.5``
 
-This simulates a trait with direct, paternal, and maternal effects, where 50% of the phenotypic
-variance is explained by the combined direct, paternal and maternal effects of the 5,000 SNPs. The
- phenotype file is h2_trio_0.5.ped. In the following tutorial, we do not fit indirect genetic
- effects from siblings to keep it simple.
+This simulates a trait with direct, sibling, paternal, and maternal effects, where 50% of the phenotypic
+variance is explained by the combined direct, paternal and maternal effects of the SNPs. The
+ phenotype file is h2_quad_0.5.ped.
 
 To simulate missing genotypes of parents/siblings, type the following command:
 
     ``plink --bfile sim --remove sim_remove.txt --make-bed --out sim_reduced``
 
-This removes the genotypes of both parents for 4,000 families, the genotype of one parent
-for 4,000 other families, and randomly removes siblings with probability 0.5 from
+This removes the genotypes of both parents for 2,000 families, the genotype of one parent
+for 2,000 other families, and randomly removes siblings with probability 0.5 from
 the families with at least one genotyped parent. The resulting reduced bed file is 'sim_reduced.bed'
 
 We note that the following commands can take some time to run (10s of minutes depending on hardware).
@@ -51,25 +50,32 @@ To impute the sum of the missing parents' genotypes for the families without gen
 
 The imputed parental genotypes are in sib_impute.hdf5.
 
-To estimate effects for the families with both parents genotyped, type:
+To estimate effects for the families with both parents genotyped and without genotyped siblings, type:
 
-    ``python ../bin/triGWAS.py sim_reduced.bed sim_fams.ped h2_trio_0.5.ped triGWAS``
+    ``python ../bin/triGWAS.py sim_reduced.bed sim_fams.ped h2_quad_0.5.ped triGWAS_no_sib --no_sib``
 
-To estimate effects for the families with only one parent genotyped, type:
+To estimate effects for the families with both parents genotyped and with genotyped siblings, type:
 
-    ``python ../bin/poGWAS.py sim_reduced.bed po_impute.hdf5 sim_fams.ped h2_trio_0.5.ped poGWAS``
+    ``python ../bin/triGWAS.py sim_reduced.bed sim_fams.ped h2_quad_0.5.ped triGWAS_sib --fit_sib``
+
+To estimate effects for the families with only one parent genotyped and without genotyped siblings, type:
+
+    ``python ../bin/poGWAS.py sim_reduced.bed po_impute.hdf5 sim_fams.ped h2_quad_0.5.ped poGWAS_no_sib --no_sib``
+
+To estimate effects for the families with only one parent genotyped and with genotyped siblings, type:
+
+    ``python ../bin/poGWAS.py sim_reduced.bed po_impute.hdf5 sim_fams.ped h2_quad_0.5.ped poGWAS_sib --fit_sib``
+
 
 To estimate effects for the families without genotyped parents, type:
 
-    ``python ../bin/pGWAS.py sim_reduced.bed sib_impute.hdf5 sim_fams.ped h2_trio_0.5.ped pGWAS --no_sib``
+    ``python ../bin/pGWAS.py sim_reduced.bed sib_impute.hdf5 sim_fams.ped h2_quad_0.5.ped pGWAS``
 
 The '--no_sib' option stops the script from fitting indirect effects from siblings (the default behaviour).
 
-Now we have estimated effects from the three different subsets of data (no missing parents, one missing parent,
-both parents missing). To meta-analyse the mutlidimensional parameter vector (direct, paternal, and maternal),
-type:
+Now we have estimated effects from the five different subsets of data (both parents missing, no missing parents with sibs, no missing parents without sibs, one missing parent with sibs, one parent missing without sibs) . To meta-analyse the effects
 
-    ``Rscript estimate_and_meta_analyse.R pGWAS.hdf5 poGWAS.hdf5 triGWAS.hdf5 h2_trio_0.5.effects.txt h2_trio_0.5.estimates TRUE``
+    ``Rscript estimate_and_meta_analyse.R pGWAS.hdf5 poGWAS_no_sib.hdf5 poGWAS_sib.hdf5 triGWAS_no_sib.hdf5 triGWAS_sib.hdf5 h2_quad_0.5.effects.txt h2_quad_0.5.estimates FALSE``
 
 This should print estimates of the bias of the effect estimates, with output something like this:
 
@@ -81,4 +87,4 @@ This should print estimates of the bias of the effect estimates, with output som
 
 If everything has worked, the bias should not be statistically significant from zero (with high probability).
 
-The meta-analysis estimates along with their sampling covariance matrices and standard errors are output in h2_trio_0.5.estimates.hdf5.
+The meta-analysis estimates along with their sampling covariance matrices and standard errors are output in h2_quad_0.5.estimates.hdf5.
