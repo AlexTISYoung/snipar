@@ -81,10 +81,8 @@ This should print estimates of the bias of the effect estimates, with output som
 
     ``[1] "bias for direct effects: -0.021 (0.0426 S.E.)"``
 
-    ``[1] "bias for paternal effects: -0.008 (0.0509 S.E.)"``
-
-    ``[1] "bias for maternal effects: -0.049 (0.0511 S.E.)"``
+    ``[1] "bias for sib effects: -0.012 (0.0426 S.E.)"``
 
 If everything has worked, the bias should not be statistically significant from zero (with high probability).
 
-The meta-analysis estimates along with their sampling covariance matrices and standard errors are output in h2_quad_0.5.estimates.hdf5.
+The meta-analysis estimates along with their standard errors are output in h2_quad_0.5.estimates.hdf5.
