@@ -25,8 +25,7 @@ To simulate the test phenotype, at the command line, type
     ``python simulate_trait_quad.py sim.bed sim_fams.ped 0.5 h2_quad_0.5``
 
 This simulates a trait with direct, sibling, paternal, and maternal effects, where 50% of the phenotypic
-variance is explained by the combined direct, paternal and maternal effects of the SNPs. The
- phenotype file is h2_quad_0.5.ped.
+variance is explained by the combined direct, paternal and maternal effects of the SNPs. The phenotype file is h2_quad_0.5.ped.
 
 To simulate missing genotypes of parents/siblings, type the following command:
 
@@ -71,7 +70,6 @@ To estimate effects for the families without genotyped parents, type:
 
     ``python ../bin/pGWAS.py sim_reduced.bed sib_impute.hdf5 sim_fams.ped h2_quad_0.5.ped pGWAS``
 
-The '--no_sib' option stops the script from fitting indirect effects from siblings (the default behaviour).
 
 Now we have estimated effects from the five different subsets of data (both parents missing, no missing parents with sibs, no missing parents without sibs, one missing parent with sibs, one parent missing without sibs) . To meta-analyse the effects
 
@@ -83,6 +81,6 @@ This should print estimates of the bias of the effect estimates, with output som
 
     ``[1] "bias for sib effects: -0.012 (0.0426 S.E.)"``
 
-If everything has worked, the bias should not be statistically significant from zero (with high probability).
+If everything has worked, the bias should not be statistically significantly different from zero (with high probability).
 
 The meta-analysis estimates along with their standard errors are output in h2_quad_0.5.estimates.hdf5.

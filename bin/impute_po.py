@@ -48,18 +48,6 @@ def test_impute(n,f):
     imputed = impute(fam[2],fam[0],f)
     return np.array([imputed,fam[1]])
 
-# nrep = 10**6
-# imputed = np.zeros((nrep,2))
-# for i in xrange(0,nrep):
-#  imputed[i,:] = test_impute(2,0.5)
-#
-# imps = np.unique(imputed[:, 0])
-# imp_means = np.zeros((imps.shape[0]))
-# for i in range(0, imps.shape[0]):
-#     imp_means[i] = np.mean(imputed[imputed[:, 0] == imps[i], 1])
-#
-# imps - imp_means
-
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
@@ -106,6 +94,7 @@ if __name__ == '__main__':
                                            genotyped[mother_genotyped,2]))))
 
     # Read genotypes
+    print('Reading genotypes')
     gts = gts_f[index_vector, :].read().val
     pos = gts_f.pos[:, 2]
     sid = gts_f.sid
@@ -133,6 +122,7 @@ if __name__ == '__main__':
     freqs = ma.mean(gts,axis=0)/2.0
 
     father_genotyped = np.zeros((ped.shape[0]),dtype=bool)
+    print('Imputing parental genotypes for '+str(fams.shape[0])+' families')
     for f in range(0,fams.shape[0]):
         fam = fams[f]
         pfam = ped[ped[:,0]==fam,:]

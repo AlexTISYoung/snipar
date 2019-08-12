@@ -165,6 +165,7 @@ for f in ped_fams:
 sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 
 # Read sibling genotypes
+print('Reading genotypes')
 gts = gts_f[sibship_indices,:].read().val
 pos = gts_f.pos[:,2]
 sid = gts_f.sid
@@ -181,6 +182,7 @@ for i in xrange(0,gts_ids.shape[0]):
 freqs = ma.mean(gts,axis=0)/2.0
 
 nfam = len(sibships)
+print('Imputing parental genotypes for '+str(nfam)+' families')
 fams = np.sort(np.array(sibships.keys()))
 # Impute parental genotypes
 imputed_par_gts = np.zeros((nfam,gts.shape[1]),dtype=np.float32)
@@ -228,7 +230,7 @@ for i in range(0,nfam):
         else:
             imputed_par_gts[i, j] = impute_gt(sib_gts[:, j],ibd_i[:,j], freqs[j])
     if np.mod(i, 1000) == 0:
-        print(i)
+        print('Done '+str(i)+' families')
 
 par_gt_f = h5py.File(args.out+'.hdf5','w')
 par_gt_f.create_dataset('imputed_par_gts',imputed_par_gts.shape,dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
