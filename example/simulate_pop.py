@@ -91,7 +91,7 @@ for i in range(0,nfam):
     ped[i * fp + fsize + 1, 3] = str(i) + '_' + 'MM'
 
 ## Write pedigree file
-ped = np.hstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20'),ped))
+ped = np.vstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20'),ped))
 np.savetxt(outprefix+'_fams.ped',ped,fmt='%s')
 
 # Save in HDF5 file
