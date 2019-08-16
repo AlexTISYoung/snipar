@@ -1,7 +1,7 @@
 #!/well/kong/users/wiw765/anaconda2/bin/python
 import numpy as np
 import numpy.ma as ma
-from pysnptools.snpreader import Bed, Pheno
+from pysnptools.snpreader import Bed
 import h5py, argparse, code
 
 def impute(g,pg,f):
@@ -54,6 +54,10 @@ if __name__ == '__main__':
     parser.add_argument('gts',type=str,help='Path to bed file with parent and offspring genotypes')
     parser.add_argument('ped',type=str,help='Path to pedigree file')
     parser.add_argument('out',type=str,help='Prefix of HDF5 output file with imputed parental genotypes')
+    parser.add_argument('--start',type=int,help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
+                        default=0)
+    parser.add_argument('--end',type=int,help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
+                        default = None)
     args=parser.parse_args()
 
     ####################### Read in data #########################
@@ -95,9 +99,16 @@ if __name__ == '__main__':
 
     # Read genotypes
     print('Reading genotypes')
-    gts = gts_f[index_vector, :].read().val
-    pos = gts_f.pos[:, 2]
-    sid = gts_f.sid
+    if args.end is not None:
+        gts = gts_f[:, args.start:args.end].read().val
+        gts = gts_f[index_vector, :]
+        pos = gts_f.pos[args.start:args.end, 2]
+        sid = gts_f.sid[args.start:args.end]
+    else:
+        gts = gts_f[index_vector, :].read().val
+        pos = gts_f.pos[:, 2]
+        sid = gts_f.sid
+
     gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
 
     # rebuild ID dictionary

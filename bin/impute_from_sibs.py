@@ -10,6 +10,12 @@ parser.add_argument('ibd',type=str,help='IBD file in 23andme format')
 parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
 parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
 parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
+parser.add_argument('--start', type=int,
+                    help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
+                    default=0)
+parser.add_argument('--end', type=int,
+                    help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
+                    default=None)
 args=parser.parse_args()
 chr=args.chr
 
@@ -166,9 +172,16 @@ sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 
 # Read sibling genotypes
 print('Reading genotypes')
-gts = gts_f[sibship_indices,:].read().val
-pos = gts_f.pos[:,2]
-sid = gts_f.sid
+if args.end is not None:
+    gts = gts_f[:, args.start:args.end].read().val
+    gts = gts_f[sibship_indices, :]
+    pos = gts_f.pos[args.start:args.end, 2]
+    sid = gts_f.sid[args.start:args.end]
+else:
+    gts = gts_f[sibship_indices, :].read().val
+    pos = gts_f.pos[:, 2]
+    sid = gts_f.sid
+
 gts = ma.array(gts,mask=np.isnan(gts),dtype=int)
 
 # rebuild ID dictionary
