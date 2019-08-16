@@ -174,7 +174,7 @@ sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 print('Reading genotypes')
 if args.end is not None:
     gts = gts_f[:, args.start:args.end].read().val
-    gts = gts_f[sibship_indices, :]
+    gts = gts[sibship_indices, :]
     pos = gts_f.pos[args.start:args.end, 2]
     sid = gts_f.sid[args.start:args.end]
 else:
