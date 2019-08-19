@@ -4,7 +4,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import zscore
 from sibreg import sibreg
-import h5py, argparse
+import h5py, argparse, code
 
 def read_covariates(covar_file,ids_to_match,missing):
 ## Read a covariate file and reorder to match ids_to_match ##
@@ -118,6 +118,23 @@ if __name__ == '__main__':
     for i in xrange(0, ped.shape[0]):
         sib_fam_dict[ped[i, 1]] = ped[i, 0]
 
+    ### Read imputed parental genotypes ###
+    print('Reading imputed parental genotype file')
+    pargts_f = h5py.File(args.pargts, 'r')
+    # get families
+    par_fams = np.array(pargts_f['families'])
+    # build family dictionary
+    par_fam_dict = {}
+    for i in range(0, par_fams.shape[0]):
+        par_fam_dict[par_fams[i]] = i
+    pargts = np.array(pargts_f['imputed_par_gts'])
+    par_sid = np.array(pargts_f['sid'])
+    par_sid_dict = {}
+    for i in range(0, par_sid.shape[0]):
+        par_sid_dict[par_sid[i]] = i
+
+    pargts_f.close()
+
     ### Read sibling genotypes ###
     #### Load genotypes
     gts_f = Bed(args.sibgts)
@@ -126,6 +143,11 @@ if __name__ == '__main__':
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
+    sid = gts_f.sid
+    sid_length = sid.shape[0]
+    sid_dict = {}
+    for i in range(0, sid.shape[0]):
+        sid_dict[sid[i]] = i
 
     ### Identify siblings without genotyped parents
     # Remove individuals with genotyped parents
@@ -154,14 +176,28 @@ if __name__ == '__main__':
 
     sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 
+    ### Match SIDs of sibling and par gts ###
+    in_par_sid = np.zeros((sid.shape[0]), dtype=bool)
+    par_sid_indices = []
+    for s in range(0, sid.shape[0]):
+        sid_s = sid[s]
+        if sid_s in par_sid_dict:
+            in_par_sid[s] = True
+            par_sid_indices.append(par_sid_dict[sid_s])
+    sid = sid[in_par_sid]
+    pargts = pargts[:,par_sid_indices]
+    par_sid = par_sid[par_sid_indices]
+
     # Read sibling genotypes
-    gts = gts_f[sibship_indices, :].read().val
-    pos = gts_f.pos[:, 2]
-    sid = gts_f.sid
-    sid_dict = {}
-    for i in range(0, sid.shape[0]):
-        sid_dict[sid[i]] = i
-    gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+    if (np.sum(in_par_sid)*gts_ids.shape[0])<(sibship_indices.shape[0]*sid_length):
+        gts = gts_f[:, in_par_sid].read().val
+        gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+        gts = gts[sibship_indices,:]
+    else:
+        gts = gts_f[sibship_indices, :].read().val
+        gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+        gts = gts[:, in_par_sid]
+    pos = gts_f.pos[in_par_sid, 2]
 
     # rebuild ID dictionary
     gts_ids = gts_ids[sibship_indices, :]
@@ -169,40 +205,6 @@ if __name__ == '__main__':
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
-
-    ### Read imputed parental genotypes ###
-    print('Reading imputed parental genotype file')
-    pargts_f = h5py.File(args.pargts, 'r')
-    # get families
-    par_fams = np.array(pargts_f['families'])
-    # build family dictionary
-    par_fam_dict = {}
-    for i in range(0, par_fams.shape[0]):
-        par_fam_dict[par_fams[i]] = i
-    pargts = np.array(pargts_f['imputed_par_gts'])
-    par_sid = np.array(pargts_f['sid'])
-    par_sid_dict = {}
-    for i in range(0, par_sid.shape[0]):
-        par_sid_dict[par_sid[i]] = i
-
-    pargts_f.close()
-
-    ### Match SIDs of sibling and par gts ###
-    in_sib_sid = np.zeros((par_sid.shape[0]), dtype=bool)
-    sib_sid_indices = []
-    for s in range(0, par_sid.shape[0]):
-        sid_s = par_sid[s]
-        if sid_s in sid_dict:
-            in_sib_sid[s] = True
-            sib_sid_indices.append(sid_dict[sid_s])
-    if np.sum(in_sib_sid) > 0:
-        pargts = pargts[:, in_sib_sid]
-        par_sid = par_sid[in_sib_sid]
-        gts = gts[:, sib_sid_indices]
-        print(str(gts.shape[1]) + ' variants in common between parental and sibling genotypes')
-    else:
-        raise (ValueError('No variants in common between sibling and parental genotypes'))
-    sid = sid[sib_sid_indices]
 
     ### Construct genetic covariate matrix
     print('Forming family-wise genotype matrix')
