@@ -63,8 +63,8 @@ class model(object):
             MLE of alpha
 
         """
-        X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]))
-        X_T_y = np.zeros((self.X.shape[1]))
+        X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
+        X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
 
         for label in self.y_lab.iterkeys():
             sigma_u = sigma2/tau
