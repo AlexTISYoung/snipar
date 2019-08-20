@@ -128,14 +128,15 @@ if __name__ == '__main__':
     father_genotyped = np.array(pargts_f['father_genotyped'])
     pargts_f.close()
 
-    ### Read genotypes ###
-    #### Load genotypes
+    ### Read genotype file ###
     gts_f = Bed(args.gts)
     gts_ids = gts_f.iid
     # Build dict
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
+    sid = gts_f.sid
+    sid_length = sid.shape[0]
 
     genotype_indices = []
     remove = []
@@ -158,11 +159,29 @@ if __name__ == '__main__':
     # check for individuals with genotyped siblings
     genotype_indices = np.sort(np.unique(np.array(genotype_indices)))
 
+    ### Match SIDs of sibling and par gts ###
+    in_par_sid = np.zeros((sid.shape[0]),dtype=bool)
+    par_sid_indices = []
+    for s in range(0,sid.shape[0]):
+        sid_s = sid[s]
+        if sid_s in par_sid_dict:
+            in_par_sid[s] = True
+            par_sid_indices.append(par_sid_dict[sid_s])
+    sid = sid[in_par_sid]
+    pargts = pargts[:,par_sid_indices]
+    par_sid = par_sid[par_sid_indices]
+
     # Read genotypes
-    gts = gts_f[genotype_indices, :].read().val
-    pos = gts_f.pos[:, 2]
-    sid = gts_f.sid
-    gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+    # Read sibling genotypes
+    if (np.sum(in_par_sid)*gts_ids.shape[0])<(genotype_indices.shape[0]*sid_length):
+        gts = gts_f[:, in_par_sid].read().val
+        gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+        gts = gts[genotype_indices,:]
+    else:
+        gts = gts_f[genotype_indices, :].read().val
+        gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
+        gts = gts[:, in_par_sid]
+    pos = gts_f.pos[in_par_sid, 2]
 
     # rebuild ID dictionary
     gts_ids = gts_ids[genotype_indices,:]
@@ -197,24 +216,6 @@ if __name__ == '__main__':
             par_ped = par_ped[has_sibs,:]
             pargts = pargts[has_sibs,:]
             father_genotyped = father_genotyped[has_sibs]
-
-
-    ### Match SIDs of sibling and par gts ###
-    in_gts_sid = np.zeros((par_sid.shape[0]),dtype=bool)
-    gts_sid_indices = []
-    for s in range(0,par_sid.shape[0]):
-        sid_s = par_sid[s]
-        if sid_s in par_sid_dict:
-            in_gts_sid[s] = True
-            gts_sid_indices.append(par_sid_dict[sid_s])
-    if np.sum(in_gts_sid)>0:
-        pargts = pargts[:,in_gts_sid]
-        par_sid = par_sid[in_gts_sid]
-        gts = gts[:,gts_sid_indices]
-        print(str(gts.shape[1])+' variants in common between parental and sibling genotypes')
-    else:
-        raise(ValueError('No variants in common between sibling and parental genotypes'))
-    sid = sid[gts_sid_indices]
 
 ### Construct genetic covariate matrix
     # Find parent-offspring pairs with genotype data and phenotyped offspring

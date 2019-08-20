@@ -135,7 +135,7 @@ if __name__ == '__main__':
 
     pargts_f.close()
 
-    ### Read sibling genotypes ###
+    ### Read sibling genotype file ###
     #### Load genotypes
     gts_f = Bed(args.sibgts)
     gts_ids = gts_f.iid
