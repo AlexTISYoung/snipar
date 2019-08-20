@@ -308,7 +308,7 @@ if __name__ == '__main__':
             not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
-            X_l = np.ones((n_l, X_length), dtype=np.float32)
+            X_l = np.ones((n_l, X_length), dtype=np.float64)
             X_l[:, 0:n_X] = X[not_nans, :]
             X_l[:, n_X:X_length] = G[not_nans, :, loc]
             model_l = sibreg.model(y[not_nans], X_l, fam_labels[not_nans])
