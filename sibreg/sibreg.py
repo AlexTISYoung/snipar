@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+from scipy.linalg import sqrtm
 
 class model(object):
     """Define a linear model with within-class correlations.
@@ -195,7 +196,6 @@ class model(object):
     def set_alpha(self,alpha):
         self.alpha = alpha
 
-
 def lik_and_grad(pars,*args):
     # Wrapper for function to pass to L-BFGS-B
     y, X, labels = args
@@ -224,8 +224,11 @@ def simulate(n,alpha,sigma2,tau):
         linear model with repeated observations
     """
     c = alpha.shape[0]
-    X = np.random.randn((n * c)).reshape((n, c))
-    labels = np.random.choice(n,n)
+    #X = np.random.randn((n * c)).reshape((n, c))
+    X_cov = np.ones((c,c))
+    np.fill_diagonal(X_cov,1.2)
+    X = np.random.multivariate_normal(np.zeros((c)),X_cov,n).reshape((n, c))
+    labels = np.random.choice(n/10,n)
     random_effects = np.sqrt(sigma2/tau)*np.random.randn(n)
     y = X.dot(alpha)+random_effects[labels-1]+np.random.randn(n)*np.sqrt(sigma2)
     return model(y,X,labels)
