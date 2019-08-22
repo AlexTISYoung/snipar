@@ -162,9 +162,7 @@ for i in xrange(0,gts_ids.shape[0]):
     id_dict[gts_ids[i,1]] = i
 
 # Calculate allele frequencies
-#freqs = ma.mean(gts,axis=0)/2.0
-freqs = np.zeros((gts.shape[1]))
-freqs[:] = 0.5
+freqs = ma.mean(gts,axis=0)/2.0
 
 nfam = len(sibships)
 fams = np.sort(np.array(sibships.keys()))
