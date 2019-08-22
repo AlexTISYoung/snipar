@@ -228,7 +228,7 @@ if __name__ == '__main__':
             sibs_i = sibships[fam_i]
             sibs_i = np.delete(sibs_i, np.where(sibs_i == gts_ids[i, 1])[0][0])
             sibs_i = np.array([id_dict[x] for x in sibs_i])
-            G[i, 1, :] = ma.sum(gts[sibs_i, :], axis=0)
+            G[i, 1, :] = ma.mean(gts[sibs_i, :], axis=0)
         # Get imputed parental genotype
         G[i, gsize - 1, :] = pargts[par_fam_dict[fam_i], :]
         G.mask[i, gsize - 1, :] = np.isnan(pargts[par_fam_dict[fam_i], :])
