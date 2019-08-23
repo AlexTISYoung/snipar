@@ -276,4 +276,5 @@ if __name__ == '__main__':
     outfile['sigma2'] = np.array(null_optim['sigma2'])
     outfile['tau'] = np.array(null_optim['tau'])
     outfile['N_L'] = N_L
+    outfile['freqs'] = freqs
     outfile.close()

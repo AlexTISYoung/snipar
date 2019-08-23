@@ -340,4 +340,5 @@ if __name__ == '__main__':
     outfile['tau'] = null_optim['tau']
     outfile['N_L'] = N_L
     outfile['father_genotyped'] = father_genotyped
+    outfile['freqs'] = freqs
     outfile.close()
