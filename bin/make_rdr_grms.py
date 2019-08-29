@@ -16,7 +16,7 @@ args = parser.parse_args()
 
 ### Read pedigree file ###
 ### Load pedigree
-ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
+ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
 #ped = np.loadtxt('sim_fams.ped', dtype='S20', skiprows=1)
 
 ### Create family dictionary
@@ -194,6 +194,7 @@ del R_par
 print('Computing parent-offspring relatedness matrix')
 R_o_par = G[:,0,:].dot(G[:,1,:].T)
 R_o_par = (R_o_par + R_o_par.T)/(G.shape[2]*np.sqrt(2))
+#R_o_par = R_o_par/np.mean(np.diag(R_o_par))
 
 R_o_par = R_o_par[np.tril_indices(R_o_par.shape[0])]
 R_o_par = R_o_par.reshape((1,R_o_par.shape[0]))
