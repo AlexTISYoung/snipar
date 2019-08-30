@@ -1,5 +1,6 @@
 import h5py, argparse
 import numpy as np
+import numpy.ma as ma
 from pysnptools.snpreader import Bed
 
 parser=argparse.ArgumentParser()
@@ -9,7 +10,8 @@ parser.add_argument('imp_par', type=str, help='Path to HDF5 file with imputed pa
 parser.add_argument('imp_sib', type=str, help='Path to HDF5 file with imputed parental genotypes from siblings without genotyped parents')
 parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)',default=0.01)
-parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
+parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=1)
+parser.add_argument('--hdf5_out',action='store_true',default=False)
 args=parser.parse_args()
 
 args = parser.parse_args()
@@ -17,18 +19,8 @@ args = parser.parse_args()
 ### Read pedigree file ###
 ### Load pedigree
 ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
+ped = ped[0:10000,:]
 #ped = np.loadtxt('sim_fams.ped', dtype='S20', skiprows=1)
-
-### Create family dictionary
-fams = {}
-fam_ids = np.unique(ped[:, 0])
-for f in fam_ids:
-    fams[f] = tuple(ped[ped[:, 0] == f, 1])
-# reverse lookup dict
-sib_fam_dict = {}
-for i in xrange(0, ped.shape[0]):
-    sib_fam_dict[ped[i, 1]] = ped[i, 0]
-
 
 gts_f = Bed(args.gts)
 #gts_f = Bed('sim_reduced.bed')
@@ -39,7 +31,6 @@ for i in range(0,gts_ids.shape[0]):
     id_dict[gts_ids[i,1]] =i
 
 # Identify individuals by number of parents genotyped
-
 # Find indices
 genotype_indices = []
 bpg_ped_indices = []
@@ -91,7 +82,21 @@ genotype_indices = np.unique(np.array(genotype_indices))
 
 # Read genotypes
 gts = gts_f[genotype_indices,:].read().val
-gts = np.array(gts)
+gts = gts[:,0:1000]
+gts = ma.array(gts, mask=np.isnan(gts), dtype=np.float32)
+
+# Calculate missingness and frequency
+freqs = ma.mean(gts, axis=0) / 2.0
+missingness = 100.0*ma.mean(gts.mask, axis=0)
+pass_filters = np.logical_and(freqs<(1-args.min_maf),np.logical_and(freqs>args.min_maf,missingness<args.max_missing))
+gts = gts[:,pass_filters]
+freqs = freqs[pass_filters]
+snp_ses = np.sqrt(2*freqs*(1-freqs))
+m = np.array(np.logical_not(gts.mask),dtype=np.int8)
+
+# Mean impute missing genotypes
+for j in range(0,gts.shape[1]):
+    gts[gts.mask[:,j],j] = 2*freqs[j]
 
 # Rebuild ID dict
 gts_ids = gts_ids[genotype_indices, :]
@@ -105,6 +110,12 @@ imp_par = h5py.File(args.imp_par,'r')
 #imp_par = h5py.File('impute_po.hdf5','r')
 imp_par_ped = np.array(imp_par['ped'])
 imp_par_gts = np.array(imp_par['imputed_par_gts'])
+imp_par_gts = imp_par_gts[:,0:1000]
+imp_par_gts = imp_par_gts[:,pass_filters]
+imp_par_gts = ma.array(imp_par_gts,mask=np.isnan(imp_par_gts))
+# Mean impute missing genotypes
+for j in range(0,gts.shape[1]):
+    imp_par_gts[imp_par_gts.mask[:,j],j] = 2*freqs[j]
 imp_par_dict = {}
 for i in range(0,imp_par_ped.shape[0]):
     imp_par_dict[imp_par_ped[i,1]] = i
@@ -114,6 +125,8 @@ imp_sib = h5py.File(args.imp_sib,'r')
 #imp_sib = h5py.File('impute_from_sibs.hdf5','r')
 imp_sib_fams = np.array(imp_sib['families'])
 imp_sib_gts = np.array(imp_sib['imputed_par_gts'])
+imp_sib_gts = imp_sib_gts[:,0:1000]
+imp_sib_gts = imp_sib_gts[:,pass_filters]
 imp_sib_dict = {}
 for i in range(0,imp_sib_fams.shape[0]):
     imp_sib_dict[imp_sib_fams[i]] = i
@@ -176,32 +189,47 @@ G[:,0,:] = (G[:,0,:]-np.mean(G[:,0,:],axis=0))/np.std(G[:,0,:],axis=0)
 G[:,1,:] = (G[:,1,:]-np.mean(G[:,1,:],axis=0))/np.std(G[:,1,:],axis=0)
 R = G[:,0,:].dot(G[:,0,:].T)/G.shape[2]
 
-R = R[np.tril_indices(R.shape[0])]
-R = R.reshape((1,R.shape[0]))
-R.tofile(args.outprefix+'R.grm.bin')
-#R.tofile('R.grm.bin')
+if args.hdf5_out:
+    h5out = h5py.File(args.outprefix,'w')
+    h5out.create_dataset('R', R.shape, dtype='f', chunks=True, compression='gzip',
+                            compression_opts=9)
+    h5out['R'][:] = R
+    h5out['N'] = G.shape[2]
+else:
+    R = R[np.tril_indices(R.shape[0])]
+    R = R.reshape((1,R.shape[0]))
+    R.tofile(args.outprefix+'R.grm.bin')
+    #R.tofile('R.grm.bin')
 del R
 
 print('Computing parental relatedness matrix')
 R_par = G[:,1,:].dot(G[:,1,:].T)/G.shape[2]
-
-R_par = R_par[np.tril_indices(R_par.shape[0])]
-R_par = R_par.reshape((1,R_par.shape[0]))
-R_par.tofile(args.outprefix+'R_par.grm.bin')
-#R_par.tofile('R_par.grm.bin')
+if args.hdf5_out:
+    h5out.create_dataset('R_par', R_par.shape, dtype='f', chunks=True, compression='gzip',
+                         compression_opts=9)
+    h5out['R_par'][:] = R_par
+else:
+    R_par = R_par[np.tril_indices(R_par.shape[0])]
+    R_par = R_par.reshape((1,R_par.shape[0]))
+    R_par.tofile(args.outprefix+'R_par.grm.bin')
+    #R_par.tofile('R_par.grm.bin')
 del R_par
 
 print('Computing parent-offspring relatedness matrix')
 R_o_par = G[:,0,:].dot(G[:,1,:].T)
 R_o_par = (R_o_par + R_o_par.T)/(G.shape[2]*np.sqrt(2))
 #R_o_par = R_o_par/np.mean(np.diag(R_o_par))
-
-R_o_par = R_o_par[np.tril_indices(R_o_par.shape[0])]
-R_o_par = R_o_par.reshape((1,R_o_par.shape[0]))
-R_o_par.tofile(args.outprefix+'R_o_par.grm.bin')
-#R_o_par.tofile('R_o_par.grm.bin')
+if args.hdf5_out:
+    h5out.create_dataset('R_o_par', R_o_par.shape, dtype='f', chunks=True, compression='gzip',
+                         compression_opts=9)
+    h5out['R_o_par'][:] = R_o_par
+else:
+    R_o_par = R_o_par[np.tril_indices(R_o_par.shape[0])]
+    R_o_par = R_o_par.reshape((1,R_o_par.shape[0]))
+    R_o_par.tofile(args.outprefix+'R_o_par.grm.bin')
+    #R_o_par.tofile('R_o_par.grm.bin')
 del R_o_par
 
-np.savetxt('R.grm.id',ped_out,fmt='%s')
-np.savetxt('R_par.grm.id',ped_out,fmt='%s')
-np.savetxt('R_o_par.grm.id',ped_out,fmt='%s')
+np.savetxt(args.outprefix+'R.grm.id',ped_out,fmt='%s')
+np.savetxt(args.outprefix+'R_par.grm.id',ped_out,fmt='%s')
+np.savetxt(args.outprefix+'R_o_par.grm.id',ped_out,fmt='%s')
