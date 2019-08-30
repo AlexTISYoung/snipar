@@ -169,6 +169,10 @@ for fam in sibship_fams:
     ped_out[G_start:G_end,1] = sibs
     G_start = G_end
 
+del gts
+del imp_par_gts
+del imp_sib_gts
+
 if np.sum(all_information)<N:
     print('Removing '+str(N-np.sum(all_information))+' individuals with incomplete imputed parental genotypes')
     G = G[all_information,:,:]
