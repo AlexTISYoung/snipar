@@ -229,7 +229,10 @@ else:
     R_o_par.tofile(args.outprefix+'R_o_par.grm.bin')
     #R_o_par.tofile('R_o_par.grm.bin')
 del R_o_par
-
-np.savetxt(args.outprefix+'R.grm.id',ped_out,fmt='%s')
-np.savetxt(args.outprefix+'R_par.grm.id',ped_out,fmt='%s')
-np.savetxt(args.outprefix+'R_o_par.grm.id',ped_out,fmt='%s')
+# Save pedigree
+if h5out:
+    h5out['ped'] = ped_out
+else:
+    np.savetxt(args.outprefix+'R.grm.id',ped_out,fmt='%s')
+    np.savetxt(args.outprefix+'R_par.grm.id',ped_out,fmt='%s')
+    np.savetxt(args.outprefix+'R_o_par.grm.id',ped_out,fmt='%s')
