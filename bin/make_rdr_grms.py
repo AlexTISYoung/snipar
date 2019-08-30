@@ -230,7 +230,7 @@ else:
     #R_o_par.tofile('R_o_par.grm.bin')
 del R_o_par
 # Save pedigree
-if h5out:
+if args.hdf5_out:
     h5out['ped'] = ped_out
 else:
     np.savetxt(args.outprefix+'R.grm.id',ped_out,fmt='%s')
