@@ -19,7 +19,6 @@ args = parser.parse_args()
 ### Read pedigree file ###
 ### Load pedigree
 ped = np.loadtxt(args.ped, dtype='S20', skiprows=1)
-ped = ped[0:10000,:]
 #ped = np.loadtxt('sim_fams.ped', dtype='S20', skiprows=1)
 
 gts_f = Bed(args.gts)
@@ -82,7 +81,6 @@ genotype_indices = np.unique(np.array(genotype_indices))
 
 # Read genotypes
 gts = gts_f[genotype_indices,:].read().val
-gts = gts[:,0:1000]
 gts = ma.array(gts, mask=np.isnan(gts), dtype=np.float32)
 
 # Calculate missingness and frequency
@@ -110,7 +108,6 @@ imp_par = h5py.File(args.imp_par,'r')
 #imp_par = h5py.File('impute_po.hdf5','r')
 imp_par_ped = np.array(imp_par['ped'])
 imp_par_gts = np.array(imp_par['imputed_par_gts'])
-imp_par_gts = imp_par_gts[:,0:1000]
 imp_par_gts = imp_par_gts[:,pass_filters]
 imp_par_gts = ma.array(imp_par_gts,mask=np.isnan(imp_par_gts))
 # Mean impute missing genotypes
@@ -125,7 +122,6 @@ imp_sib = h5py.File(args.imp_sib,'r')
 #imp_sib = h5py.File('impute_from_sibs.hdf5','r')
 imp_sib_fams = np.array(imp_sib['families'])
 imp_sib_gts = np.array(imp_sib['imputed_par_gts'])
-imp_sib_gts = imp_sib_gts[:,0:1000]
 imp_sib_gts = imp_sib_gts[:,pass_filters]
 imp_sib_dict = {}
 for i in range(0,imp_sib_fams.shape[0]):
