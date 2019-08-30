@@ -190,7 +190,7 @@ G[:,1,:] = (G[:,1,:]-np.mean(G[:,1,:],axis=0))/np.std(G[:,1,:],axis=0)
 R = G[:,0,:].dot(G[:,0,:].T)/G.shape[2]
 
 if args.hdf5_out:
-    h5out = h5py.File(args.outprefix,'w')
+    h5out = h5py.File(args.outprefix+'grms.hdf5','w')
     h5out.create_dataset('R', R.shape, dtype='f', chunks=True, compression='gzip',
                             compression_opts=9)
     h5out['R'][:] = R
