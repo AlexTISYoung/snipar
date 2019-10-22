@@ -6,10 +6,11 @@ from pysnptools.snpreader import Bed
 
 parser = argparse.ArgumentParser()
 parser.add_argument('chr',type=int,help='Which chromosome (integer)')
-parser.add_argument('ibd',type=str,help='IBD file in 23andme format')
+parser.add_argument('ibd',type=str,help='IBD file')
 parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
 parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
 parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
+parser.add_argument('--king',action='store_true',default=False,help='IBD segments file in KING format (default 23andme)')
 parser.add_argument('--start', type=int,
                     help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
                     default=0)
@@ -115,10 +116,16 @@ for i in xrange(0,ped.shape[0]):
 ibd = np.loadtxt(args.ibd,dtype='S20',skiprows=1)
 #ibd = np.loadtxt('23andme/ibd_chr_22.txt',dtype='S20',skiprows=1)
 # filter by chromosome
-ibd=ibd[ibd[:,2]==str(chr),:]
+if args.king:
+    ibd = ibd[ibd[:, 5] == str(chr), :]
+else:
+    ibd=ibd[ibd[:,2]==str(chr),:]
 ## split columns
 # sibpairs
-ibd_sibs = ibd[:,0:2]
+if args.king:
+    ibd_sibs = ibd[:,[1,3]]
+else:
+    ibd_sibs = ibd[:,0:2]
 # map to families
 ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:,0]]),
                                  np.array([x in sib_fam_dict for x in ibd_sibs[:,1]]))
@@ -127,11 +134,27 @@ ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
 ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
 
 # start and end
-ibd_lims = np.array(ibd[:,np.array([3,6])],dtype=int)
+if args.king:
+    bim = args.genotypes.split('.')[0]+'.bim'
+    bim = np.loadtxt(bim,dtype='S20')
+    # Map SNP IDs to positions
+    pos_dict = {}
+    for i in range(0,bim.shape[0]):
+        pos_dict[bim[i,1]] = int(bim[i,3])
+    # Get start and end positions of IBD segments
+    ibd_lims = np.zeros((ibd.shape[0],2),dtype=int)
+    for i in range(0,ibd.shape[0]):
+        ibd_lims[i,0] = pos_dict[ibd[i,8]]
+        ibd_lims[i,1] = pos_dict[ibd[i,9]]
+else:
+    ibd_lims = np.array(ibd[:,np.array([3,6])],dtype=int)
 
 # IBD_2
 ibd_2 = np.zeros((ibd.shape[0]),dtype=bool)
-ibd_2[ibd[:,4]=='True'] = True
+if args.king:
+    ibd_2[ibd[:,4]=='IBD2'] = True
+else:
+    ibd_2[ibd[:,4]=='True'] = True
 # delete
 del ibd
 

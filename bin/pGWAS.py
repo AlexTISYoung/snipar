@@ -4,7 +4,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.stats import zscore
 from sibreg import sibreg
-import h5py, argparse, code
+import h5py, argparse
 
 def read_covariates(covar_file,ids_to_match,missing):
 ## Read a covariate file and reorder to match ids_to_match ##
