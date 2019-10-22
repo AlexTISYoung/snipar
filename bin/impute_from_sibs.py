@@ -123,7 +123,7 @@ else:
 ## split columns
 # sibpairs
 if args.king:
-    ibd_sibs = ibd[:,[1,3]]
+    ibd_sibs = ibd[:,np.array([1,3])]
 else:
     ibd_sibs = ibd[:,0:2]
 # map to families
