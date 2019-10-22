@@ -115,9 +115,12 @@ for i in xrange(0,ped.shape[0]):
 ### Load IBD
 ibd = np.loadtxt(args.ibd,dtype='S20',skiprows=1)
 #ibd = np.loadtxt('23andme/ibd_chr_22.txt',dtype='S20',skiprows=1)
-# filter by chromosome
+# filter by chromosome and by matching family IDs
 if args.king:
+    # match chromosome
     ibd = ibd[ibd[:, 5] == str(chr), :]
+    # match family
+    ibd = ibd[ibd[:,0]==ibd[:,2],:]
 else:
     ibd=ibd[ibd[:,2]==str(chr),:]
 ## split columns
@@ -131,7 +134,6 @@ ibd_sibs_in_ped = np.logical_and(np.array([x in sib_fam_dict for x in ibd_sibs[:
                                  np.array([x in sib_fam_dict for x in ibd_sibs[:,1]]))
 ibd = ibd[ibd_sibs_in_ped,:]
 ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
-ibd_fams = np.array([sib_fam_dict[x] for x in ibd_sibs[:,0]])
 
 # start and end
 if args.king:
@@ -237,7 +239,8 @@ for i in range(0,nfam):
     sib_gts = gts[sib_indices, :]
     # Find IBD segments
     ibd_i = np.zeros((npair_i, gts.shape[1]), dtype=np.int8)
-    ibd_segs_i = ibd_fams==fams[i]
+    ibd_segs_i = np.logical_and(np.array([x in sibs_i for x in ibd_sibs[:,0]]),
+                                np.array([x in sibs_i for x in ibd_sibs[:,1]]))
     nsegs_i = np.sum(ibd_segs_i)
     # Set IBD 1 and 2 segments
     if nsegs_i > 0:
