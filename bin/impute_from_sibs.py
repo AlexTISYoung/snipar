@@ -115,12 +115,10 @@ for i in xrange(0,ped.shape[0]):
 ### Load IBD
 ibd = np.loadtxt(args.ibd,dtype='S20',skiprows=1)
 #ibd = np.loadtxt('23andme/ibd_chr_22.txt',dtype='S20',skiprows=1)
-# filter by chromosome and by matching family IDs
+# filter by chromosome
 if args.king:
     # match chromosome
     ibd = ibd[ibd[:, 5] == str(chr), :]
-    # match family
-    ibd = ibd[ibd[:,0]==ibd[:,2],:]
 else:
     ibd=ibd[ibd[:,2]==str(chr),:]
 ## split columns
