@@ -11,6 +11,7 @@ parser.add_argument('genotypes',type=str,help='Genotypes in .bed format')
 parser.add_argument('ped',type=str,help='Pedigree file with siblings sharing family ID')
 parser.add_argument('out',type=str,help='Prefix of hdf5 output of imputed parental genotypes')
 parser.add_argument('--king',action='store_true',default=False,help='IBD segments file in KING format (default 23andme)')
+parser.add_argument('--bim',type=str,default = None, help='Bim file giving positions of SNPs in KING IBD file if different from Bim file of genotypes')
 parser.add_argument('--start', type=int,
                     help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
                     default=0)
@@ -135,8 +136,11 @@ ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
 
 # start and end
 if args.king:
-    bim = args.genotypes.split('.')[0]+'.bim'
-    bim = np.loadtxt(bim,dtype='S20')
+    if args.bim is None:
+        bim_file = args.genotypes.split('.')[0]+'.bim'
+    else:
+        bim_file = args.bim
+    bim = np.loadtxt(bim_file,dtype='S20')
     # Map SNP IDs to positions
     pos_dict = {}
     for i in range(0,bim.shape[0]):
