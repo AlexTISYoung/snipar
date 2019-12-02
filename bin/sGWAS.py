@@ -41,7 +41,6 @@ def read_covariates(covar_file,ids_to_match,missing):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
-    parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
     parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
