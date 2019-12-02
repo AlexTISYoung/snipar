@@ -167,6 +167,8 @@ if __name__ == '__main__':
         if sid_s in par_sid_dict:
             in_par_sid[s] = True
             par_sid_indices.append(par_sid_dict[sid_s])
+    # Remove duplicates
+    sid_count = np.unique(sid, return_counts=True)
     sid = sid[in_par_sid]
     pargts = pargts[:,par_sid_indices]
     par_sid = par_sid[par_sid_indices]
