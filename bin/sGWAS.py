@@ -186,7 +186,7 @@ if __name__ == '__main__':
         # Get family mean
         G[i, 1, :] = ma.mean(gts[sibs_i, :], axis=0)
         # Get deviation from family mean
-        G[i,0,:] = (gts[i,:]-G[i, 1, :])/2.0
+        G[i,0,:] = gts[i,:]-G[i, 1, :]
         # Get phenotype
         if gts_ids[i, 1] in pheno_id_dict:
             pindex = pheno_id_dict[gts_ids[i, 1]]
