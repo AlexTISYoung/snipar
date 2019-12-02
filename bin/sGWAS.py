@@ -176,6 +176,7 @@ if __name__ == '__main__':
     X_new = np.zeros((sibship_indices.shape[0], X.shape[1]))
     X_new[:] = np.nan
     fam_labels = np.zeros((sibship_indices.shape[0]), dtype='S20')
+    freqs = ma.mean(gts, axis=0) / 2.0
     G[:,0,:] = gts
     for i in xrange(0, sibship_indices.shape[0]):
         fam_i = sib_fam_dict[gts_ids[i, 1]]
@@ -254,7 +255,6 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     print('Fitting models for genome-wide SNPs')
     # Optimize model for SNP
-    freqs = ma.mean(G[:,0,:],axis=0)/2.0
     missingness = ma.mean(G.mask[:,0,:],axis=0)
     N_L = np.zeros((G.shape[2]), dtype=int)
     for loc in xrange(0,G.shape[2]):
