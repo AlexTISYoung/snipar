@@ -58,7 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
     parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
-    parser.add_argument('--no_sib',action='store_true',default=False,help='Do not fit indirect genetic effects from sibs')
     parser.add_argument('--fit_VC', action='store_true', default=False,
                         help='Fit the variance components for each SNP (default is to use null model MLE)')
     args=parser.parse_args()
@@ -245,10 +244,7 @@ if __name__ == '__main__':
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = sid
-    if args.no_sib:
-        X_length = n_X + 2
-    else:
-        X_length = n_X + 3
+    X_length = n_X + 2
     outfile.create_dataset('xtx',(G.shape[2],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('xty', (G.shape[2], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
