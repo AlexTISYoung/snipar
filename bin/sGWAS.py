@@ -177,6 +177,7 @@ if __name__ == '__main__':
     X_new = np.zeros((sibship_indices.shape[0], X.shape[1]))
     X_new[:] = np.nan
     fam_labels = np.zeros((sibship_indices.shape[0]), dtype='S20')
+    G[:,0,:] = gts
     for i in xrange(0, sibship_indices.shape[0]):
         fam_i = sib_fam_dict[gts_ids[i, 1]]
         fam_labels[i] = fam_i
@@ -184,14 +185,15 @@ if __name__ == '__main__':
         sibs_i = sibships[fam_i]
         sibs_i = np.array([id_dict[x] for x in sibs_i])
         # Get family mean
-        G[i, 1, :] = ma.mean(gts[sibs_i, :], axis=0)
-        # Get deviation from family mean
-        G[i,0,:] = gts[i,:]-G[i, 1, :]
+        G[i, 1, :] = np.mean(gts[sibs_i, :], axis=0)
         # Get phenotype
         if gts_ids[i, 1] in pheno_id_dict:
             pindex = pheno_id_dict[gts_ids[i, 1]]
             y_new[i] = y[pindex]
             X_new[i, :] = X[pindex, :]
+
+    # Set deviation from family mean
+    G[:,0,:] = G[:,0,:] - G[:,1,:]
 
     del gts
     y = y_new
