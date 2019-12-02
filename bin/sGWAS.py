@@ -60,6 +60,12 @@ if __name__ == '__main__':
     parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--fit_VC', action='store_true', default=False,
                         help='Fit the variance components for each SNP (default is to use null model MLE)')
+    parser.add_argument('--start', type=int,
+                        help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
+                        default=0)
+    parser.add_argument('--end', type=int,
+                        help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
+                        default=None)
     args=parser.parse_args()
 
     ####################### Read in data #########################
@@ -124,8 +130,7 @@ if __name__ == '__main__':
     id_dict = {}
     for i in xrange(0, gts_ids.shape[0]):
         id_dict[gts_ids[i, 1]] = i
-    sid = gts_f.sid
-    sid_length = sid.shape[0]
+
 
     ### Identify siblings without genotyped parents
     # Remove individuals with genotyped parents
@@ -155,7 +160,17 @@ if __name__ == '__main__':
     sibship_indices = np.sort(np.unique(np.array(sibship_indices)))
 
     # Read sibling genotypes
-    gts = gts_f[sibship_indices, :].read().val
+    print('Reading genotypes')
+    if args.end is not None:
+        gts = gts_f[:, args.start:args.end].read().val
+        gts = gts[sibship_indices, :]
+        pos = gts_f.pos[args.start:args.end, 2]
+        sid = gts_f.sid[args.start:args.end]
+    else:
+        gts = gts_f[sibship_indices, :].read().val
+        pos = gts_f.pos[:, 2]
+        sid = gts_f.sid
+
     gts = ma.array(gts, mask=np.isnan(gts), dtype=int)
 
     # rebuild ID dictionary
