@@ -137,7 +137,7 @@ ibd_sibs = ibd_sibs[ibd_sibs_in_ped,:]
 # start and end
 if args.king:
     if args.bim is None:
-        bim_file = args.genotypes.split('.')[0]+'.bim'
+        bim_file = args.genotypes.split('.bed')[0]+'.bim'
     else:
         bim_file = args.bim
     bim = np.loadtxt(bim_file,dtype='S20')
