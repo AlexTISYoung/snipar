@@ -6,6 +6,7 @@ import argparse#, h5py
 import logging
 from pysnptools.snpreader import Bed
 import json
+import time
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
 parser = argparse.ArgumentParser()
 parser.add_argument('chr',type=int,help='Which chromosome (integer)')
@@ -153,6 +154,9 @@ def impute(sibships, iid_to_bed_index, gts, ibd, pos):
 
 #TODO add quality control steps
 sibships, iid_to_bed_index, gts, ibd, pos = prepare_data(args)
+start_time = time.time()
 imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos)
+end_time = time.time()
+logging.info("imputation time: "+str(end_time-start_time))
 with open(args.out, "w") as f:
     json.dump(imputed_par_gts , f)
