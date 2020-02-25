@@ -1,0 +1,5 @@
+from distutils.core import setup
+from Cython.Build import cythonize
+
+setup(name='sib imputation',
+      ext_modules=cythonize("bin/cython_impute_from_sibs.pyx", annotate = True, language='c++'))
