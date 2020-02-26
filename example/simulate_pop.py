@@ -1,5 +1,5 @@
 import numpy as np
-import h5py, argparse
+import h5py, argparse, gzip
 
 def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
@@ -93,6 +93,7 @@ for i in range(0,nfam):
 ## Write pedigree file
 np.savetxt(outprefix+'_fams.ped',ped,fmt='%s')
 
+ibd = ibd[:,0,:]
 # Save in HDF5 file
 hf = h5py.File(outprefix+'.hdf5','w')
 hf['sib_gts'] = sib_gts
@@ -102,6 +103,38 @@ hf['mother_gts'] = mother_gts
 hf['ibd_fams'] = np.array([x for x in range(0,nfam)])
 hf['ped'] = ped
 hf.close()
+
+# Convert IBD to KING format
+king_out = gzip.open(args.outprefix+'.segments.gz','wb')
+king_out.write('FID1\tID1\tFID2\tID2\tIBDType\tChr\tStartMB\tStopMB\tStartSNP\tStopSNP\tN_SNP\tLength\n')
+
+for i in range(0,nfam):
+    start_snps = []
+    end_snps = []
+    ibd_type = []
+    init_ibd = ibd[i,0]
+    if init_ibd>0:
+        start_snps.append('rs'+str(0))
+        ibd_type.append(ibd[i,0])
+    for j in range(0,ibd.shape[1]):
+        if not ibd[i,j]==init_ibd:
+            if init_ibd>0:
+                end_snps.append('rs'+str(j-1))
+            init_ibd = ibd[i,j]
+            if init_ibd>0:
+                start_snps.append('rs'+str(j))
+                ibd_type.append(ibd[i,j])
+    if init_ibd>0:
+        end_snps.append('rs'+str(j))
+    # Write to file
+    nseg = len(start_snps)
+    if nseg>0:
+        for s in range(0,nseg-1):
+            king_out.write(str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+'\t1\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0')
+            if i<(nfam-1) or s<(nseg-1):
+                king_out.write('\n')
+king_out.close()
+
 
 ## Write full PED file
 pout = open(outprefix+'.ped','w')
