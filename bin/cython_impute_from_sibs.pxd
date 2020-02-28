@@ -15,7 +15,7 @@ cdef float impute_snp(int snp,
                       cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
                       cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
                       float f,
-                      cnp.ndarray[cnp.int_t, ndim=2] bed,
+                      cnp.ndarray[cnp.float_t, ndim=2] bed,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2)
