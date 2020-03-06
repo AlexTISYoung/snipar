@@ -14,18 +14,20 @@ cimport numpy as cnp
 from libcpp.vector cimport vector
 import cython
 from libc.math cimport isnan
+import h5py
+from datetime import datetime
 
 cdef float nan_float = np.nan
 def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, end=None, bim_address = None):
     logging.info("initializing data")
     logging.info("loading and filtering pedigree file ...")
     #keeping individuals with no parents
-    ped = pd.read_csv(ped_address, sep = " ")
+    ped = pd.read_csv(ped_address, sep = " ").astype(str)
     #TODO find parentless people smartly
     # ped["has_father"] = ~ ped["FATHER_ID"].str.endswith("_P")
     # ped["has_mother"] = ~ ped["MOTHER_ID"].str.endswith("_M")
-    ped["has_father"] = ~ped["FATHER_ID"].isin(ped["IID"])
-    ped["has_mother"] = ~ped["MOTHER_ID"].isin(ped["IID"])
+    ped["has_father"] = ped["FATHER_ID"].isin(ped["IID"])
+    ped["has_mother"] = ped["MOTHER_ID"].isin(ped["IID"])
     ped = ped[~(ped["has_mother"] | ped["has_father"])]
     #TODO handle sibs with one parent
     ped_ids =  set(ped["IID"].tolist())
@@ -180,7 +182,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, output_address = None):
     logging.info("imputing data ...")
     #converting python obejcts to c
     #sibships
@@ -209,12 +211,17 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos):
     cdef cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1 = np.zeros([max_ibd_pairs, 2], dtype=np.int)
     cdef cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2 = np.zeros([max_ibd_pairs, 2], dtype=np.int)
     
-    cdef int i, j, loc, ibd_type, sib1_index, sib2_index
+    cdef int i, j, loc, ibd_type, sib1_index, sib2_index, progress
     cdef cstring sib1_id, sib2_id
     cdef cnp.ndarray[cnp.int_t, ndim=1] sibs_index = np.zeros(max_sibs).astype(int)
     cdef cnp.ndarray[cnp.double_t, ndim=2] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
-
-    for index in range(number_of_fams):        
+    progress = -1
+    for index in range(number_of_fams):
+        if (index*100)//number_of_fams > progress:
+            progress = (index*100)//number_of_fams
+            now = datetime.now()
+            current_time = now.strftime("%H:%M:%S")
+            print("["+ current_time +"] imputation progress:"+str(progress)+"% ["+ ("_"*(progress//2)) + ((50-progress//2-1)*"=") +"]")
         for i in range(sib_count[index]):
             sibs_index[i] = c_iid_to_bed_index[fams[index][i]]        
         for snp in range(number_of_snps):
@@ -260,9 +267,14 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos):
                     
             imputed_par_gts[index][snp] = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
 
+    logging.info("Writing the results as a hdf5 file to "+output_address)
+    if output_address is not None:
+        with h5py.File(output_address,'w') as f:
+            imputed_par_gts = imputed_par_gts
+            f.create_dataset('gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
+            f['fids'] = sibships["FID"].values.tolist()
+
     return sibships["FID"].values.tolist(), imputed_par_gts
-
-
 
 # python bin/impute_from_sibs_setup.py build_ext --inplace; mv cython_impute_from_sibs.so bin/; python bin/impute_runner.py --king --bim test_data/filtered_ukb_chr22.bim --start 100 --end 200 22 test_data/IBD.segments.gz test_data/filtered_ukb_chr22 test_data/pedigree test_data/parent_imputed_chr22
 # python bin/impute_from_sibs_setup.py build_ext --inplace; python bin/impute_runner.py --bim test_data/filtered_ukb_chr22.bim --start 100 --end 200 22 test_data/IBD.segments.gz test_data/filtered_ukb_chr22 test_data/pedigree test_data/parent_imputed_chr22

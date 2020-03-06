@@ -41,7 +41,7 @@ class TestSibImpute(unittest.TestCase):
         self.assertEqual(the_dict, result, msg="dict translation is not working")
 
     def test_impute_snp(self):
-        bed = np.array([[0],[1],[2]])
+        bed = np.array([[0.],[1.],[2.]])
         snp_ibd0 = np.ones((10,2)).astype(int)
         snp_ibd1 = np.ones((10,2)).astype(int)
         snp_ibd2 = np.ones((10,2)).astype(int)
@@ -62,7 +62,7 @@ class TestSibImpute(unittest.TestCase):
                     result = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, count+1, 1)
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
-                    self.assertAlmostEqual(result, expected_results[sibsum], 3, msg = "problem with type1"+str((result, expected_results[sibsum]))+str((i,j))+ str(sibsum))
+                    self.assertAlmostEqual(result, expected_results[int(sibsum)], 3, msg = "problem with type1"+str((result, expected_results[int(sibsum)]))+str((i,j))+ str(sibsum))
 
         for i in range(3):
             for j in range(3):
