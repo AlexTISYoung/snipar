@@ -177,6 +177,7 @@ cdef int get_IBD_type(cstring id1,
     for index in range(segments.size()//3):
         if segments[3*index] <= loc <= segments[3*index+1]:
             result = segments[3*index+2]
+            break
 
     return result
 
@@ -267,8 +268,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, output_address = None):
                     
             imputed_par_gts[index][snp] = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
 
-    logging.info("Writing the results as a hdf5 file to "+output_address)
     if output_address is not None:
+        logging.info("Writing the results as a hdf5 file to "+output_address)
         with h5py.File(output_address,'w') as f:
             imputed_par_gts = imputed_par_gts
             f.create_dataset('gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
