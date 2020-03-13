@@ -1,4 +1,5 @@
-from setuptools import setup
+from setuptools import setup, find_packages
+from Cython.Build import cythonize
 
 setup(name='sibreg',
       version='1.2.0a1',
@@ -28,13 +29,16 @@ setup(name='sibreg',
             'Programming Language :: Python :: 2.7',
       ],
       keywords='statistics genetics',
-      packages=['sibreg'],
+      packages=find_packages(),
       install_requires=[
             'numpy',
             'scipy',
-            'pysnptools'
+            'pysnptools',
+            'panda',
+            'cython'
         ],
       extras_require={
             'test': ['numdifftools'],
       },
-      zip_safe=False)
+      zip_safe=False,
+      ext_modules=cythonize("bin/cython_impute_from_sibs.pyx", annotate = True, language='c++'))

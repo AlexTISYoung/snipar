@@ -5,7 +5,6 @@ import argparse
 import h5py
 import random
 import pandas as pd
-import json 
 
 random.seed(1567924)
 class Person:

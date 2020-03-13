@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import logging
 from pysnptools.snpreader import Bed
-import json
 import time
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
