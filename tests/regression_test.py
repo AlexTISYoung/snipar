@@ -5,7 +5,6 @@ from pysnptools.snpreader import Bed
 import os
 import numpy as np
 import logging
-import h5py
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
 logging.root.setLevel(logging.NOTSET)
 # python example/simulate_pop.py 1000 0.05 40000 0 0 0 "test_data/generated"
@@ -51,3 +50,6 @@ coef = covs[0,1]/covs[1,1]
 residual_var = np.var(expected_genotypes - coef*imputed_genotypes)
 s2 = residual_var/(1000*covs[1,1])
 z = (1-coef)/np.sqrt(s2)
+
+
+#TODO handle file addresses in config
