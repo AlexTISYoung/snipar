@@ -2,15 +2,15 @@ import h5py
 import numpy as np
 import pandas as pd
 from pysnptools.snpreader import Bed
+#testing the imputation result for whole genome
 chromosomes = list(range(22,23))
-
 chromosomes_expected_genes = []
 chromosomes_imputed_genes = []
-
+#TODO handle parent imputed name
 for chromosome in chromosomes:
     with h5py.File('test_data/parent_imputed_chr'+str(chromosome),'r') as f:
-        gts = np.array(f["gts"])
-        fids = np.array(f["fids"])
+        gts = np.array(f["imputed_par_gts"])
+        fids = np.array(f["families"])
     expected = Bed("../UKBioRDE_revision/data/tmp/filtered_ukb_chr"+str(chromosome)+".bed")
     expected_gts = expected.read().val
     expected_ids = expected.iid
