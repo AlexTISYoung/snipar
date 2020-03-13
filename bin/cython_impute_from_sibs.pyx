@@ -75,7 +75,7 @@ def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, e
         sid = gts_f.sid
     iid_to_bed_index = {i:index for index, i in enumerate(gts_ids[:,1])}
     logging.info("initializing data done ...")
-    return sibships, iid_to_bed_index, gts, ibd, pos
+    return sibships, iid_to_bed_index, gts, ibd, pos, sid
 
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
@@ -183,7 +183,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos, output_address = None):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, sid, output_address = None):
     logging.info("imputing data ...")
     #converting python obejcts to c
     #sibships
@@ -272,8 +272,10 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, output_address = None):
         logging.info("Writing the results as a hdf5 file to "+output_address)
         with h5py.File(output_address,'w') as f:
             imputed_par_gts = imputed_par_gts
-            f.create_dataset('gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
-            f['fids'] = sibships["FID"].values.tolist()
+            f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
+            f['families'] = sibships["FID"].values.tolist()
+            f['pos'] = pos
+            f['sid'] = sid
 
     return sibships["FID"].values.tolist(), imputed_par_gts
 
