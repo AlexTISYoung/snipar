@@ -1,6 +1,8 @@
-from setuptools import setup, find_packages
-from Cython.Build import cythonize
-
+from setuptools import setup, find_packages, Extension
+from setuptools import dist
+dist.Distribution().fetch_build_eggs(['Cython', 'numpy'])
+import numpy
+#from Cython.Build import cythonize
 setup(name='sibreg',
       version='1.2.0a1',
       description='Functions for performing robust GWAS using sibpairs in a random effects model',
@@ -9,7 +11,7 @@ setup(name='sibreg',
       author='Alexander I. Young',
       author_email='alextisyoung@gmail.com',
       license='MIT',
-      scripts=['bin/sGWAS.py'],
+      scripts=['sibreg/bin/sGWAS.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
@@ -30,18 +32,19 @@ setup(name='sibreg',
       ],
       keywords='statistics genetics',
       packages=['sibreg'],
+      setup_requires=['numpy==1.7.1', 'Cython==0.19'],
       install_requires=[
-            'numpy',
-            'scipy',
-            'pysnptools',
-            'panda',
-            'cython'
+            'numpy==1.16.6',
+            'scipy==1.2.3',
+            'pysnptools==0.4.11',
+            'pandas==0.24.2',
+            'Cython==0.29.15'
         ],
       extras_require={
             'test': ['numdifftools'],
       },
       zip_safe=False,
-      ext_modules=[cythonize("sibreg/bin/impute_from_sibs.pyx", language='c++'),
-                   cythonize("tests/test_impute_from_sibs.pyx", language='c++')
+      ext_modules=[Extension("impute_from_sibs", ["sibreg/bin/impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++'), #include_dirs=[numpy.get_include()]linclude_dirs=[numpy.get_include()]l
+                   Extension("test_impute_from_sibs" , ["tests/test_impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++')
                   ]
 )
