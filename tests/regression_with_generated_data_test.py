@@ -13,16 +13,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(modu
 logging.root.setLevel(logging.NOTSET)
 class TestGenerated(unittest.TestCase):
 	def test_generate_and_regress(self):
+		#requies plink
+		#TODO add plink to the package requirments
+		#TODO test on windows
 		number_of_snps = 1000
 		min_f = 0.05
 		number_of_families = 100
-		# python example/simulate_pop.py 1000 0.05 40000 0 0 0 "test_data/generated"
+		#generating population
 		os.system('python example/simulate_pop.py ' + str(number_of_snps) + ' ' + str(min_f) + ' ' + str(number_of_families) + ' 0 0 0 "test_data/generated"')
-		# echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat test_data/generated_fams.ped)" > test_data/generated_fams.ped
+		# Adding header to the pedigree file
 		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat test_data/generated_fams.ped)" > test_data/generated_fams.ped')
-		# plink1 --file test_data/generated --make-bed --out test_data/generated
+		#convert the generated data to a bed file
 		os.system('plink1 --file test_data/generated --make-bed --out test_data/generated')
-
 
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("test_data/generated.ped", sep = " ", header = None, names = columns)
@@ -36,9 +38,9 @@ class TestGenerated(unittest.TestCase):
 		with open("test_data/generated_sibs.txt", "w") as f:
 			for i, j in sibs[["FID", "IID"]].values.tolist():
 				f.write(str(i) + " " + str(j) + "\n")
-		# plink1 --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs
+		#writing sibs only
 		os.system('plink1 --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
-		# plink1 --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents
+		#writing parents only
 		os.system('plink1 --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
 		sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data("test_data/generated_sibs.ped",
 																"test_data/generated_sibs",
@@ -50,7 +52,9 @@ class TestGenerated(unittest.TestCase):
 		expected_parents = Bed("test_data/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid
-		expected_parents_sum = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]] + expected_parents_gts[[not bool(i%2) for i in range(2*number_of_families)]]
+		parent1 = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]]
+		parent2 = expected_parents_gts[[not bool(i%2) for i in range(2*number_of_families)]]
+		expected_parents_sum = parent1+parent2							   
 		expected_parents_sum = expected_parents_sum[[int(t) for t in imputed_fids],:]
 		expected_genotypes = expected_parents_sum.reshape((1,-1))
 		imputed_genotypes = imputed_par_gts.reshape((1,-1))
