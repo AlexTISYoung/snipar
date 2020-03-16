@@ -138,6 +138,10 @@ def create_pedigree(king_address, agesex_address):
     return data
     
 def add_control(pedigree):
+    #For each family that has two or more siblings and both parents,
+    # creates a new family with all the sibling and no parents.
+    #fid of this family is "_"+original_fid
+    #IIDs are the same in both families.
     pedigree["has_mother"] = ~ pedigree["MOTHER_ID"].str.endswith("_M")
     pedigree["has_father"] = ~ pedigree["FATHER_ID"].str.endswith("_P")
     has_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
@@ -176,6 +180,8 @@ parser.add_argument('--agesex',type=str,default = None, help='Address of the age
 
 args=parser.parse_args()
 pedigree_address = args.pedigree
+#fids starting with _ are reserved for control
+#Families should not have grandparents
 if not args.pedigree:
     logging.info("creating pedigree ...")
     pedigree_address = "test_data/__tmp_pedigree"
