@@ -22,9 +22,6 @@ def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, e
     logging.info("loading and filtering pedigree file ...")
     #keeping individuals with no parents
     ped = pd.read_csv(ped_address, sep = " ").astype(str)
-    #TODO find parentless people smartly
-    # ped["has_father"] = ~ ped["FATHER_ID"].str.endswith("_P")
-    # ped["has_mother"] = ~ ped["MOTHER_ID"].str.endswith("_M")
     ped["has_father"] = ped["FATHER_ID"].isin(ped["IID"])
     ped["has_mother"] = ped["MOTHER_ID"].isin(ped["IID"])
     ped = ped[~(ped["has_mother"] | ped["has_father"])]
@@ -40,7 +37,7 @@ def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, e
     else:
         bim_file = bim_address
     bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
-    #tODO what if people are related but do not have ibd on chrom
+    #TODO what if people are related but do not have ibd on chrom
     logging.info("loading and transforming ibd file ...")
     ibd = pd.read_csv(ibd_address, sep = "\t").astype(str)
     #Adding location of start and end of each 
@@ -50,7 +47,6 @@ def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, e
     ibd= ibd.merge(temp, on="StartSNP")
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
     ibd = ibd.merge(temp, on="StopSNP")
-    # ibd['segment'] = ibd[['StartSNPLoc', 'StopSNPLoc', "IBDType"]].apply(list, axis=1)
     ibd['segment'] = ibd[['StartSNPLoc', 'StopSNPLoc', "IBDType"]].values.tolist()
     def create_seg_list(x):
         elements = list(x)
@@ -59,7 +55,6 @@ def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, e
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    #TODO orders
     logging.info("loading bed file ...")
     gts_f = Bed(genotypes_address+".bed")
     ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1]]
@@ -89,8 +84,7 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
         map_element = (map_key, map_val)
         c_dict.insert(map_element)
     return c_dict
-
-# #TODO use scipy interface
+#TODO use scipy interface
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -104,16 +98,13 @@ cdef float impute_snp(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2):
-    #TODO check division by two
-    #check for NANs
     cdef float result = nan_float
-
-    #TODO throw exceptions instead
-    #TODO what happens with nan
     cdef float additive
     cdef float sibsum = 0
     cdef int sib1, sib2, pair_index
     if len_snp_ibd0 > 0:
+        #if there is any ibd state0 we have observed all of the parents' genotypes,
+        #therefore we can discard other ibd statuses
         result = 0        
         for pair_index in range(len_snp_ibd0):
             sib1 = snp_ibd0[pair_index, 0]
@@ -122,6 +113,7 @@ cdef float impute_snp(int snp,
         result = result/len_snp_ibd0
 
     elif len_snp_ibd1 > 0:
+        #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
         for pair_index in range(len_snp_ibd1):
             sib1 = snp_ibd1[pair_index, 0]
@@ -142,6 +134,7 @@ cdef float impute_snp(int snp,
         result = result/len_snp_ibd1
     
     elif len_snp_ibd2 > 0:
+        #As ibd2 simillar to having one individual, we divide the sum of the pair by two
         result = 0
         for pair_index in range(len_snp_ibd2):
             sib1 = snp_ibd2[pair_index, 0]
@@ -155,7 +148,7 @@ cdef int get_IBD_type(cstring id1,
                       cstring id2,
                       int loc,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict):
-    # todo use get
+    # TODO use get
     #the value for ibd_dict is like this: [start1, end1, ibd_type1, start2, end2, ibd_type2,...]
     cdef int result = 0
     cdef int index
@@ -240,7 +233,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, sid, output_address = Non
                     ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
                     if sib1_gene_isnan  and sib2_gene_isnan:
                         continue
-
+                    #if one sib is nan, create a ibd2 pair consisting of the other sib
                     elif not sib1_gene_isnan  and sib2_gene_isnan:
                         snp_ibd2[len_snp_ibd2,0] = sib1_index
                         snp_ibd2[len_snp_ibd2,1] = sib1_index
@@ -277,6 +270,3 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, sid, output_address = Non
             f['sid'] = sid
 
     return sibships["FID"].values.tolist(), imputed_par_gts
-
-# python bin/impute_from_sibs_setup.py build_ext --inplace; mv cython_impute_from_sibs.so bin/; python bin/impute_runner.py --king --bim test_data/filtered_ukb_chr22.bim --start 100 --end 200 22 test_data/IBD.segments.gz test_data/filtered_ukb_chr22 test_data/pedigree test_data/parent_imputed_chr22
-# python bin/impute_from_sibs_setup.py build_ext --inplace; python bin/impute_runner.py --bim test_data/filtered_ukb_chr22.bim --start 100 --end 200 22 test_data/IBD.segments.gz test_data/filtered_ukb_chr22 test_data/pedigree test_data/parent_imputed_chr22
