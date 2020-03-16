@@ -41,6 +41,7 @@ setup(name='sibreg',
             'test': ['numdifftools'],
       },
       zip_safe=False,
-      ext_modules=[cythonize("bin/impute_from_sibs.pyx", language='c++')),
+      ext_modules=[cythonize("bin/impute_from_sibs.pyx", language='c++'),
                    cythonize("tests/test_impute_from_sibs.pyx", language='c++')
                   ]
+)
