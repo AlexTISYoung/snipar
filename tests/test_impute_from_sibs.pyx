@@ -1,7 +1,8 @@
-from bin.cython_impute_from_sibs cimport *
-from bin.cython_impute_from_sibs import *
-
+import sys
+from sibreg.bin.impute_from_sibs import *
+from sibreg.bin.impute_from_sibs cimport *
 import unittest
+
 class TestSibImpute(unittest.TestCase):
     def test_get_IBD_type(self):
         #check whats the condition of start and end

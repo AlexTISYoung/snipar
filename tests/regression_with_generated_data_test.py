@@ -1,4 +1,5 @@
-from bin.cython_impute_from_sibs import impute, prepare_data
+import sys
+from sibreg.bin.impute_from_sibs import impute, prepare_data	
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed

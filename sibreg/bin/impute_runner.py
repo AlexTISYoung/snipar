@@ -1,5 +1,5 @@
 import logging
-from cython_impute_from_sibs import *
+from impute_from_sibs import *
 import time
 import argparse
 import h5py

@@ -29,7 +29,7 @@ setup(name='sibreg',
             'Programming Language :: Python :: 2.7',
       ],
       keywords='statistics genetics',
-      packages=find_packages(),
+      packages=['sibreg'],
       install_requires=[
             'numpy',
             'scipy',
@@ -41,4 +41,6 @@ setup(name='sibreg',
             'test': ['numdifftools'],
       },
       zip_safe=False,
-      ext_modules=cythonize("bin/cython_impute_from_sibs.pyx", annotate = True, language='c++'))
+      ext_modules=[cythonize("bin/impute_from_sibs.pyx", language='c++')),
+                   cythonize("tests/test_impute_from_sibs.pyx", language='c++')
+                  ]
