@@ -31,7 +31,7 @@ setup(name='sibreg',
             'Programming Language :: Python :: 2.7',
       ],
       keywords='statistics genetics',
-      packages=['sibreg'],
+      packages=['sibreg', 'sibreg.bin'],
       setup_requires=['numpy==1.7.1', 'Cython==0.19'],
       install_requires=[
             'numpy==1.16.6',
@@ -44,7 +44,7 @@ setup(name='sibreg',
             'test': ['numdifftools'],
       },
       zip_safe=False,
-      ext_modules=[Extension("impute_from_sibs", ["sibreg/bin/impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++'), #include_dirs=[numpy.get_include()]linclude_dirs=[numpy.get_include()]l
-                   Extension("test_impute_from_sibs" , ["tests/test_impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++')
+      ext_modules=[Extension("sibreg.bin.impute_from_sibs", ["sibreg/bin/impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++'),
+                   Extension("test.test_impute_from_sibs" , ["tests/test_impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++')
                   ]
 )
