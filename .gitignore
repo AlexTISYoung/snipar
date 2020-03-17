@@ -1,0 +1,14 @@
+test_data
+test_data/*
+*.cpp
+*.pyc
+*.so
+*.c
+*.html
+*.log
+*/build/*
+dist/*
+build/*
+.vscode/*
+screenlog*
+.eggs/*
