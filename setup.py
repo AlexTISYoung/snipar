@@ -43,8 +43,8 @@ setup(name='sibreg',
       extras_require={
             'test': ['numdifftools'],
       },
+      test_suite="tests",
       zip_safe=False,
       ext_modules=[Extension("sibreg.bin.impute_from_sibs", ["sibreg/bin/impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++'),
-                   Extension("test.test_impute_from_sibs" , ["tests/test_impute_from_sibs.pyx"], include_dirs=[numpy.get_include()], language='c++')
                   ]
 )
