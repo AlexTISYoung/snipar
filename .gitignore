@@ -12,3 +12,4 @@ build/*
 .vscode/*
 screenlog*
 .eggs/*
+sibreg.egg-info/*
