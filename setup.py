@@ -32,7 +32,7 @@ setup(name='sibreg',
       ],
       keywords='statistics genetics',
       packages=['sibreg', 'sibreg.bin'],
-      setup_requires=['numpy==1.7.1', 'Cython==0.19'],
+      setup_requires=['numpy==1.16.6', 'Cython==0.29.15'],
       install_requires=[
             'numpy==1.16.6',
             'scipy==1.2.3',
