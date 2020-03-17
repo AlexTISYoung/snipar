@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages, Extension
 from setuptools import dist
-dist.Distribution().fetch_build_eggs(['Cython', 'numpy'])
+dist.Distribution().fetch_build_eggs(['numpy==1.16.6', 'Cython==0.29.15'])
 import numpy
 #from Cython.Build import cythonize
 setup(name='sibreg',
