@@ -31,9 +31,6 @@ def create_pedigree(king_address, agesex_address):
     agesex["FID"] = agesex["FID"].astype(str)
     sex = {row["IID"]:row["sex"] for index, row in agesex.iterrows()}
     age = {row["IID"]:row["age"] for index, row in agesex.iterrows()}
-    print(agesex[agesex["IID"] == '1000472'])
-    print(age['1000472'])
-    print(age['1000472'])
     #Entails all individuals, key is id and value is the person with that id
     people = {}
     #lists relatives of a person, key is id and value is relatives of the person with that id
