@@ -31,7 +31,7 @@ class TestGenerated(unittest.TestCase):
 		# Adding header to the pedigree file
 		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat test_data/generated_fams.ped)" > test_data/generated_fams.ped')
 		#convert the generated data to a bed file
-		os.system('../plink/plink --noweb --file test_data/generated --make-bed --out test_data/generated')
+		os.system('plink/plink --noweb --file test_data/generated --make-bed --out test_data/generated')
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("test_data/generated.ped", sep = " ", header = None, names = columns)
 		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
@@ -46,9 +46,9 @@ class TestGenerated(unittest.TestCase):
 				f.write(str(i) + " " + str(j) + "\n")
 		#writing sibs only
 		#TODO handle plink path
-		os.system('../plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
+		os.system('plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
 		#writing parents only
-		os.system('../plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
+		os.system('plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
 		sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data("test_data/generated_sibs.ped",
 																"test_data/generated_sibs",
 																"test_data/generated.segments.gz",
