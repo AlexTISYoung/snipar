@@ -19,13 +19,19 @@ class TestGenerated(unittest.TestCase):
 		number_of_snps = 1000
 		min_f = 0.05
 		number_of_families = 100
+		filename = "test_data/generated"
+		if not os.path.exists(os.path.dirname(filename)):
+			try:
+				os.makedirs(os.path.dirname(filename))
+			except OSError as exc: # Guard against race condition
+				if exc.errno != errno.EEXIST:
+					raise
 		#generating population
 		os.system('python example/simulate_pop.py ' + str(number_of_snps) + ' ' + str(min_f) + ' ' + str(number_of_families) + ' 0 0 0 "test_data/generated"')
 		# Adding header to the pedigree file
 		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat test_data/generated_fams.ped)" > test_data/generated_fams.ped')
 		#convert the generated data to a bed file
-		os.system('plink1 --file test_data/generated --make-bed --out test_data/generated')
-
+		os.system('../plink/plink --noweb --file test_data/generated --make-bed --out test_data/generated')
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("test_data/generated.ped", sep = " ", header = None, names = columns)
 		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
@@ -39,9 +45,10 @@ class TestGenerated(unittest.TestCase):
 			for i, j in sibs[["FID", "IID"]].values.tolist():
 				f.write(str(i) + " " + str(j) + "\n")
 		#writing sibs only
-		os.system('plink1 --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
+		#TODO handle plink path
+		os.system('../plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
 		#writing parents only
-		os.system('plink1 --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
+		os.system('../plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
 		sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data("test_data/generated_sibs.ped",
 																"test_data/generated_sibs",
 																"test_data/generated.segments.gz",

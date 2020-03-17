@@ -1,3 +1,4 @@
+# distutils: language=c++
 import sys
 from sibreg.bin.impute_from_sibs import *
 from sibreg.bin.impute_from_sibs cimport *
@@ -72,9 +73,3 @@ class TestSibImpute(unittest.TestCase):
                     result = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, 0, count+1)
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
                     self.assertAlmostEqual(result, sibsum/2. + 2*f, 3, msg = "problem with type2")
-
-
-# python tests/test_impute_from_sibs_setup.py build_ext --inplace
-# python tests/test_impute_from_sibs_setup.py build_ext --inplace; python "tests/test_runner.py" 
-
-
