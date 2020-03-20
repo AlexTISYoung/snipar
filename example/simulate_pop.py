@@ -85,10 +85,10 @@ for i in range(0,nfam):
         ped[i * fp + j, 3] = str(i) + '_' + 'M'
     ped[i * fp + j+1, 1] = str(i) + '_' + 'P'
     ped[i * fp + j+2, 1] = str(i) + '_' + 'M'
-    ped[i * fp + fsize, 2] = str(i) + '_' + 'PP'
-    ped[i * fp + fsize, 3] = str(i) + '_' + 'PM'
-    ped[i * fp + fsize + 1, 2] = str(i) + '_' + 'MP'
-    ped[i * fp + fsize + 1, 3] = str(i) + '_' + 'MM'
+    ped[i * fp + fsize, 2] = str(i) + '_' + 'P_P'
+    ped[i * fp + fsize, 3] = str(i) + '_' + 'P_M'
+    ped[i * fp + fsize + 1, 2] = str(i) + '_' + 'M_P'
+    ped[i * fp + fsize + 1, 3] = str(i) + '_' + 'M_M'
 
 ## Write pedigree file
 np.savetxt(outprefix+'_fams.ped',ped,fmt='%s')
