@@ -5,6 +5,7 @@ import argparse
 import h5py
 import random
 import pandas as pd
+import os
 
 random.seed(1567924)
 class Person:
@@ -139,8 +140,8 @@ def add_control(pedigree):
     # creates a new family with all the sibling and no parents.
     #fid of this family is "_"+original_fid
     #IIDs are the same in both families.
-    pedigree["has_mother"] = ~ pedigree["MOTHER_ID"].str.endswith("_M")
-    pedigree["has_father"] = ~ pedigree["FATHER_ID"].str.endswith("_P")
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     has_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
     count_of_sibs_in_fam = has_parents.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).count().reset_index()
     FIDs_with_multiple_sibs = count_of_sibs_in_fam[count_of_sibs_in_fam["IID"] > 1][["FID"]]
@@ -167,7 +168,7 @@ parser.add_argument('--bim',type=str,default = None, help='Bim file giving posit
 parser.add_argument('--out_prefix',type=str,default = None, help="Writes the result of imputation for chromosome i to outprefix{i}")
 parser.add_argument('--start', type=int,
                     help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
-                    default=0)
+                    default=None)
 parser.add_argument('--end', type=int,
                     help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
                     default=None)
@@ -188,12 +189,16 @@ if args.c:
     logging.info("Adding control to the pedigree ...")
     pedigree = pd.read_csv(pedigree_address, sep = " ").astype(str)
     pedigree = add_control(pedigree)
+    dirname, filename = os.path.split(pedigree_address)
+    pedigree_address = os.path.join(dirname, "__controlled"+filename)
     pedigree.to_csv(pedigree_address, sep = " ", index = False)
 
 consumed_time = 0
 for chromosome in range(args.from_chr, args.to_chr):
     print(chromosome, " is chromosome")
     sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data(pedigree_address, args.genotypes_prefix+str(chromosome), args.ibd, chromosome, args.start, args.end, args.bim)
+    gts = gts.astype(float)
+    pos = pos.astype(int)
     start_time = time.time()
     if args.out_prefix is None:
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, "test_data/parent_imputed_chr"+str(chromosome))
