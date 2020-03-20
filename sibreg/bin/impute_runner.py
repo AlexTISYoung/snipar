@@ -40,7 +40,7 @@ def create_pedigree(king_address, agesex_address):
     sibs = {}
     #MZs that should be removed
     dropouts = []
-    fid_counter = 1
+    fid_counter = 0
     #adds and element to dict[index], dict[dict[index][0]] ...
     for index, row in kinship.iterrows():
         p1 = people.get(row["ID1"])
@@ -76,13 +76,13 @@ def create_pedigree(king_address, agesex_address):
         
         if p2.fid is None and p1.fid is None:
             p1.fid = fid_counter
-            p2.fid = fid_counter
-            fid_counter += 1
+            p2.fid = fid_counter            
             #not neccessary
             for p in families[p1]:
                 p.fid = fid_counter
             for p in families[p2]:
                 p.fid = fid_counter
+            fid_counter += 1
 
         #sets default parent id
         if p1.mid is None:
@@ -157,54 +157,55 @@ def add_control(pedigree):
 
 
 #does the imputation and writes the results
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-parser = argparse.ArgumentParser()
-parser.add_argument('-c', action='store_true')
-parser.add_argument('from_chr',type=int,help='Which chromosome (<=)')
-parser.add_argument('to_chr',type=int,help='Which chromosome (<)')
-parser.add_argument('ibd',type=str,help='IBD file')
-parser.add_argument('genotypes_prefix',type=str,help='prefix of genotypes in .bed format')
-parser.add_argument('--bim',type=str,default = None, help='Bim file giving positions of SNPs in KING IBD file if different from Bim file of genotypes')
-parser.add_argument('--out_prefix',type=str,default = None, help="Writes the result of imputation for chromosome i to outprefix{i}")
-parser.add_argument('--start', type=int,
-                    help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
-                    default=None)
-parser.add_argument('--end', type=int,
-                    help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
-                    default=None)
-parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
-parser.add_argument('--king',type=str,default = None, help='Address of the king file')
-parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', action='store_true')
+    parser.add_argument('from_chr',type=int,help='Which chromosome (<=)')
+    parser.add_argument('to_chr',type=int,help='Which chromosome (<)')
+    parser.add_argument('ibd',type=str,help='IBD file')
+    parser.add_argument('genotypes_prefix',type=str,help='prefix of genotypes in .bed format')
+    parser.add_argument('--bim',type=str,default = None, help='Bim file giving positions of SNPs in KING IBD file if different from Bim file of genotypes')
+    parser.add_argument('--out_prefix',type=str,default = None, help="Writes the result of imputation for chromosome i to outprefix{i}")
+    parser.add_argument('--start', type=int,
+                        help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
+                        default=None)
+    parser.add_argument('--end', type=int,
+                        help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
+                        default=None)
+    parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
+    parser.add_argument('--king',type=str,default = None, help='Address of the king file')
+    parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
 
-args=parser.parse_args()
-pedigree_address = args.pedigree
-#fids starting with _ are reserved for control
-#Families should not have grandparents
-if not args.pedigree:
-    logging.info("creating pedigree ...")
-    pedigree_address = "test_data/__tmp_pedigree"
-    pedigree = create_pedigree(args.king, args.agesex)
-    pedigree.to_csv(pedigree_address, sep = " ", index = False)
-if args.c:
-    logging.info("Adding control to the pedigree ...")
-    pedigree = pd.read_csv(pedigree_address, sep = " ").astype(str)
-    pedigree = add_control(pedigree)
-    dirname, filename = os.path.split(pedigree_address)
-    pedigree_address = os.path.join(dirname, "__controlled"+filename)
-    pedigree.to_csv(pedigree_address, sep = " ", index = False)
+    args=parser.parse_args()
+    pedigree_address = args.pedigree
+    #fids starting with _ are reserved for control
+    #Families should not have grandparents
+    if not args.pedigree:
+        logging.info("creating pedigree ...")
+        pedigree_address = "test_data/__tmp_pedigree"
+        pedigree = create_pedigree(args.king, args.agesex)
+        pedigree.to_csv(pedigree_address, sep = " ", index = False)
+    if args.c:
+        logging.info("Adding control to the pedigree ...")
+        pedigree = pd.read_csv(pedigree_address, sep = " ").astype(str)
+        pedigree = add_control(pedigree)
+        dirname, filename = os.path.split(pedigree_address)
+        pedigree_address = os.path.join(dirname, "__controlled"+filename)
+        pedigree.to_csv(pedigree_address, sep = " ", index = False)
 
-consumed_time = 0
-for chromosome in range(args.from_chr, args.to_chr):
-    print(chromosome, " is chromosome")
-    sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data(pedigree_address, args.genotypes_prefix+str(chromosome), args.ibd, chromosome, args.start, args.end, args.bim)
-    gts = gts.astype(float)
-    pos = pos.astype(int)
-    start_time = time.time()
-    if args.out_prefix is None:
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, "test_data/parent_imputed_chr"+str(chromosome))
-    else:
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, args.out_prefix+str(chromosome))
-    end_time = time.time()
-    consumed_time += (end_time-start_time)
+    consumed_time = 0
+    for chromosome in range(args.from_chr, args.to_chr):
+        print(chromosome, " is chromosome")
+        sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data(pedigree_address, args.genotypes_prefix+str(chromosome), args.ibd, chromosome, args.start, args.end, args.bim)
+        gts = gts.astype(float)
+        pos = pos.astype(int)
+        start_time = time.time()
+        if args.out_prefix is None:
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, "test_data/parent_imputed_chr"+str(chromosome))
+        else:
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, args.out_prefix+str(chromosome))
+        end_time = time.time()
+        consumed_time += (end_time-start_time)
 
-logging.info("imputation time: "+str(consumed_time))
+    logging.info("imputation time: "+str(consumed_time))
