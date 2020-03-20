@@ -19,30 +19,29 @@ def imputation_test(chromosomes,
         expected = Bed(expected_prefix+str(chromosome)+".bed")
         expected_gts = expected.read().val
         expected_ids = expected.iid
-        iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,0])}
-        ped = pd.read_csv(pedigree_address, sep = " ")
+        iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,1])}
+        ped = pd.read_csv(pedigree_address, sep = " ").astype(str)
         #fids of control families start with _
-        index_of_control_families_in_imputation = [index for index,fid in enumerate(fids) if fid.startswith("_")] 
+        index_of_families_in_imputation = {fid[1:]:index for index,fid in enumerate(fids)}
         control_families = [fid[1:] for fid in set(ped["FID"].values.tolist()) if fid.startswith("_")]
         #for each family select id of the parents
         parents_of_control_families = ped.groupby("FID").agg({
-                                    'FATHER_ID':lambda x: ([a for a in list(x) if not a.endswith("_P")]+[None])[0],
-                                    'MOTHER_ID':lambda x: ([a for a in list(x) if not a.endswith("_M")]+[None])[0],
+                                    'FATHER_ID':lambda x: ([a for a in list(x) if a in ped["IID"].tolist()]+[None])[0],
+                                    'MOTHER_ID':lambda x: ([a for a in list(x) if a in ped["IID"].tolist()]+[None])[0],
                                     }).loc[control_families]
         mother_indexes = [iid_to_bed_index[parents_of_control_families.loc[i]["MOTHER_ID"]] for i in control_families]
         father_indexes = [iid_to_bed_index[parents_of_control_families.loc[i]["FATHER_ID"]] for i in control_families]
         expected_parent_gts = expected_gts[mother_indexes,:]+expected_gts[father_indexes,:]
         expected_genes = expected_parent_gts.reshape((1,-1))
+        index_of_control_families_in_imputation = [index_of_families_in_imputation[i] for i in control_families]
         imputed_genes = gts[index_of_control_families_in_imputation,:].reshape((1,-1))
         mask = ~(np.isnan(expected_genes) | np.isnan(imputed_genes))
         expected_genes = expected_genes[mask]
         imputed_genes = imputed_genes[mask]
         chromosomes_expected_genes.append(expected_genes)
         chromosomes_imputed_genes.append(imputed_genes)
-
     whole_expected_genes = np.concatenate(chromosomes_expected_genes)
     whole_imputed_genes = np.concatenate(chromosomes_imputed_genes)
-
     covs = np.cov(whole_expected_genes, whole_imputed_genes)
     coef = covs[0,1]/covs[1,1]
     residual_var = np.var(whole_expected_genes - coef*whole_imputed_genes)
