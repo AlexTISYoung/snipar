@@ -5,6 +5,7 @@ from test_generated import *
 from test_sibreg import *
 from test_impute_from_sibs import *
 from test_commandline import *
+from test_pedigree_creation import *
 
 if __name__ == '__main__':
     unittest.main()
