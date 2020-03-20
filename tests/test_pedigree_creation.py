@@ -42,3 +42,19 @@ class TestPedigree(unittest.TestCase):
         expected_graph = create_graph_from_pedigree(expected)
         equality = nx.is_isomorphic(result_graph, expected_graph, node_match)
         self.assertTrue(equality)
+    
+    def test_add_control(self):
+        pedigree = pd.read_csv("test_data/sample.ped", sep = " ").sort_values(by=['FID', "IID"]).astype(str)
+        controlled_pedigree = add_control(pedigree).astype(str)
+        controlled_fams = [fid[1:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
+        has_father = pedigree["FATHER_ID"].isin(pedigree["IID"])
+        has_mother = pedigree["MOTHER_ID"].isin(pedigree["IID"])
+        sibs = pedigree[has_father & has_mother].groupby(["FID", "FATHER_ID", "MOTHER_ID"]).agg({"IID":lambda x:len(list(x))})
+        sibs = sibs.groupby("FID").agg({"IID":max}).reset_index()
+        expected_controlls = sibs[sibs["IID"]>1]["FID"].values.reshape((1,-1)).tolist()[0]
+        self.assertEqual(set(controlled_fams), set(expected_controlls))
+        controlled_pedigree = controlled_pedigree[controlled_pedigree["FID"].str.startswith("_")]
+        controlled_pedigree["FID"] = controlled_pedigree["FID"].str[1:]
+        merged = pd.merge(pedigree, controlled_pedigree, on=["FID", "IID"])
+        self.assertEqual(merged.shape[0], controlled_pedigree.shape[0])
+            
