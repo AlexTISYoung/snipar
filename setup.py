@@ -38,6 +38,7 @@ setup(name='sibreg',
             'scipy==1.2.3',
             'pysnptools==0.4.11',
             'pandas==0.24.2',
+            'networkx==2.2',
             'Cython==0.29.15'
         ],
       extras_require={
