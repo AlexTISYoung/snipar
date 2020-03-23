@@ -3,7 +3,6 @@
 import numpy as np
 import pandas as pd
 import logging
-from pysnptools.snpreader import Bed
 import time
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
@@ -18,60 +17,7 @@ import h5py
 from datetime import datetime
 
 cdef float nan_float = np.nan
-def prepare_data(ped_address, genotypes_address, ibd_address, chr, start=None, end=None, bim_address = None):
-    logging.info("initializing data")
-    logging.info("loading and filtering pedigree file ...")
-    #keeping individuals with no parents
-    ped = pd.read_csv(ped_address, sep = " ").astype(str)
-    ped["has_father"] = ped["FATHER_ID"].isin(ped["IID"])
-    ped["has_mother"] = ped["MOTHER_ID"].isin(ped["IID"])
-    ped = ped[~(ped["has_mother"] | ped["has_father"])]
-    #TODO handle sibs with one parent
-    ped_ids =  set(ped["IID"].tolist())
-    #finding siblings in each family
-    sibships = ped.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).agg({'IID':lambda x: list(x)}).reset_index()
-    sibships["sib_count"] = sibships["IID"].apply(len)
-    sibships = sibships[sibships["sib_count"]>1]
-    logging.info("loading bim file ...")
-    if bim_address is None:
-        bim_file = genotypes_address+'.bim'
-    else:
-        bim_file = bim_address
-    bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
-    #TODO what if people are related but do not have ibd on chrom
-    logging.info("loading and transforming ibd file ...")
-    ibd = pd.read_csv(ibd_address, sep = "\t").astype(str)
-    #Adding location of start and end of each 
-    ibd = ibd[ibd["Chr"] == str(chr)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-    ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
-    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
-    ibd= ibd.merge(temp, on="StartSNP")
-    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
-    ibd = ibd.merge(temp, on="StopSNP")
-    ibd['segment'] = ibd[['StartSNPLoc', 'StopSNPLoc', "IBDType"]].values.tolist()
-    def create_seg_list(x):
-        elements = list(x)
-        result = []
-        for el in elements:
-            result = result+el
-        return result
-    ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("loading bed file ...")
-    gts_f = Bed(genotypes_address+".bed")
-    ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1]]
-    gts_ids = gts_f.iid[ids_in_ped]
-    if end is not None:        
-        gts = gts_f[ids_in_ped , start:end].read().val.astype(float)
-        pos = gts_f.pos[start:end, 2]
-        sid = gts_f.sid[start:end]
-    else:
-        gts = gts_f[ [(id in ped_ids) for id in gts_f.iid[:,1]], :].read().val.astype(float)
-        pos = gts_f.pos[:, 2]
-        sid = gts_f.sid
-    iid_to_bed_index = {i:index for index, i in enumerate(gts_ids[:,1])}
-    logging.info("initializing data done ...")
-    return sibships, iid_to_bed_index, gts, ibd, pos, sid
-
+#TODO move readind IBD and pedigree to outside prepare_data
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     #Converts a dictionary of (str, str)->int[] to cmap[cpair[cstring, cstring], vector[int]]
@@ -176,7 +122,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos, sid, output_address = None):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_address = None):
     logging.info("imputing data ...")
     #converting python obejcts to c
     #sibships
@@ -267,7 +213,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, sid, output_address = Non
             imputed_par_gts = imputed_par_gts
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = sibships["FID"].values.tolist()
-            f['pos'] = pos
-            f['sid'] = sid
+            for key, value in hdf5_output_dict.items():
+                f[key] = value
 
     return sibships["FID"].values.tolist(), imputed_par_gts
