@@ -1,5 +1,6 @@
 import sys
-from sibreg.bin.impute_from_sibs import impute, prepare_data	
+from sibreg.bin.impute_from_sibs import impute
+from sibreg.bin.preprocess_data import prepare_data
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
@@ -50,7 +51,6 @@ class TestGenerated(unittest.TestCase):
 		os.system('plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
 		#writing parents only
 		os.system('plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
-		print(ped)
 		ibd = pd.read_csv("test_data/generated.segments.gz", sep = "\t")
 		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
 																"test_data/generated_sibs",
@@ -58,7 +58,6 @@ class TestGenerated(unittest.TestCase):
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
-		print(sibships)
 		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict)
 		expected_parents = Bed("test_data/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
