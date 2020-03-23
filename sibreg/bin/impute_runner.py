@@ -33,18 +33,16 @@ if __name__ == "__main__":
     parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
 
     args=parser.parse_args()
-    pedigree_address = args.pedigree
     #fids starting with _ are reserved for control
     #Families should not have grandparents
     if not args.pedigree:
         logging.info("creating pedigree ...")
-        pedigree_address = "test_data/__tmp_pedigree"
         pedigree = create_pedigree(args.king, args.agesex)
     else:
-        pedigree = pd.read_csv(pedigree_address, sep = " ")
+        pedigree = pd.read_csv(argparse.pedigree, sep = " ")
+
     if args.c:
         logging.info("Adding control to the pedigree ...")
-        pedigree = pd.read_csv(pedigree_address, sep = " ").astype(str)
         pedigree = add_control(pedigree)
         dirname, filename = os.path.split(pedigree_address)
         pedigree_address = os.path.join(dirname, "__controlled"+filename)
