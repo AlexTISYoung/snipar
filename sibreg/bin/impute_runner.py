@@ -186,6 +186,8 @@ if __name__ == "__main__":
         pedigree_address = "test_data/__tmp_pedigree"
         pedigree = create_pedigree(args.king, args.agesex)
         pedigree.to_csv(pedigree_address, sep = " ", index = False)
+    else:
+        pedigree = pd.read_csv(pedigree_address, sep = " ")
     if args.c:
         logging.info("Adding control to the pedigree ...")
         pedigree = pd.read_csv(pedigree_address, sep = " ").astype(str)
@@ -197,14 +199,14 @@ if __name__ == "__main__":
     consumed_time = 0
     for chromosome in range(args.from_chr, args.to_chr):
         print(chromosome, " is chromosome")
-        sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data(pedigree_address, args.genotypes_prefix+str(chromosome), args.ibd, chromosome, args.start, args.end, args.bim)
+        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), args.ibd, chromosome, args.start, args.end, args.bim)
         gts = gts.astype(float)
         pos = pos.astype(int)
         start_time = time.time()
         if args.out_prefix is None:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, "test_data/parent_imputed_chr"+str(chromosome))
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, "test_data/parent_imputed_chr"+str(chromosome))
         else:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid, args.out_prefix+str(chromosome))
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, args.out_prefix+str(chromosome))
         end_time = time.time()
         consumed_time += (end_time-start_time)
 

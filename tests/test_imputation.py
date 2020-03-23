@@ -7,7 +7,6 @@ from scipy.stats import norm
 def imputation_test(chromosomes,
                    imputed_prefix = 'test_data/parent_imputed_chr',
                    expected_prefix = "../UKBioRDE_revision/data/tmp/filtered_ukb_chr",
-                   pedigree_address = "../UKBioRDE_revision/data/tmp/pedigree"
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"
     chromosomes_expected_genes = []
@@ -16,11 +15,12 @@ def imputation_test(chromosomes,
         with h5py.File(imputed_prefix+str(chromosome),'r') as f:
             gts = np.array(f["imputed_par_gts"])
             fids = np.array(f["families"])
+            ped_array = np.array(f["pedigree"])
+            ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
         expected = Bed(expected_prefix+str(chromosome)+".bed")
         expected_gts = expected.read().val
         expected_ids = expected.iid
         iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,1])}
-        ped = pd.read_csv(pedigree_address, sep = " ").astype(str)
         #fids of control families start with _
         index_of_families_in_imputation = {fid[1:]:index for index,fid in enumerate(fids)}
         control_families = [fid[1:] for fid in set(ped["FID"].values.tolist()) if fid.startswith("_")]

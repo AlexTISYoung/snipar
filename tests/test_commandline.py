@@ -33,7 +33,6 @@ class TestCommanline(unittest.TestCase):
         coef, z, p_value = imputation_test([1],
                 imputed_prefix = "test_sample_imputed",
                 expected_prefix = "test_data/sample",
-                pedigree_address = "test_data/__controlledsample.ped"
                 )
         self.assertGreaterEqual(p_value, self.p_value_threshold)
 
@@ -69,7 +68,6 @@ class TestCommanline(unittest.TestCase):
         coef, z, p_value = imputation_test([1],
                 imputed_prefix = "test_sample_imputed",
                 expected_prefix = "test_data/sample",
-                pedigree_address = "test_data/__controlled__tmp_pedigree"
                 )
         self.assertGreaterEqual(p_value, self.p_value_threshold)
 

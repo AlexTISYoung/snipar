@@ -11,6 +11,7 @@ from scipy.stats import norm
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
 logging.root.setLevel(logging.NOTSET)
+#TODO use already generated data
 class TestGenerated(unittest.TestCase):
 	def test_generate_and_regress(self):
 		#requies plink
@@ -49,13 +50,15 @@ class TestGenerated(unittest.TestCase):
 		os.system('plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
 		#writing parents only
 		os.system('plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
-		sibships, iid_to_bed_index, gts, ibd, pos, sid = prepare_data("test_data/generated_sibs.ped",
+		print(ped)
+		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
 																"test_data/generated_sibs",
 																"test_data/generated.segments.gz",
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
-		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, sid)
+		print(sibships)
+		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict)
 		expected_parents = Bed("test_data/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid
