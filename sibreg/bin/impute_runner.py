@@ -40,7 +40,6 @@ if __name__ == "__main__":
         logging.info("creating pedigree ...")
         pedigree_address = "test_data/__tmp_pedigree"
         pedigree = create_pedigree(args.king, args.agesex)
-        pedigree.to_csv(pedigree_address, sep = " ", index = False)
     else:
         pedigree = pd.read_csv(pedigree_address, sep = " ")
     if args.c:
@@ -49,7 +48,6 @@ if __name__ == "__main__":
         pedigree = add_control(pedigree)
         dirname, filename = os.path.split(pedigree_address)
         pedigree_address = os.path.join(dirname, "__controlled"+filename)
-        pedigree.to_csv(pedigree_address, sep = " ", index = False)
 
     consumed_time = 0
     ibd = pd.read_csv(args.ibd, sep = "\t")
