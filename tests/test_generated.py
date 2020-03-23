@@ -51,9 +51,10 @@ class TestGenerated(unittest.TestCase):
 		#writing parents only
 		os.system('plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
 		print(ped)
+		ibd = pd.read_csv("test_data/generated.segments.gz", sep = "\t")
 		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
 																"test_data/generated_sibs",
-																"test_data/generated.segments.gz",
+																ibd,
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
