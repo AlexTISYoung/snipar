@@ -331,6 +331,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             imputed_par_gts = imputed_par_gts
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = sibships["FID"].values.tolist()
+            f['pos'] = pos
             for key, value in hdf5_output_dict.items():
                 f[key] = value
 
