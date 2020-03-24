@@ -1,3 +1,8 @@
+"""Setup for just compiling the cython code
+
+Just run "python sibreg/bin/impute_from_sibs.py build_ext --inplace"
+"""
+
 from distutils.core import setup
 from Cython.Build import cythonize
 import numpy

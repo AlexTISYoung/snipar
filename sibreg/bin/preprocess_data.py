@@ -1,8 +1,34 @@
+"""Contains functions for preprocessing data
+
+Classes
+-------
+    Person
+
+Functions
+----------
+    recurcive_append
+    create_pedigree
+    add_control
+    prepare_data
+"""
 import logging
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
 class Person:
+    """Just a simple data structure representing individuals
+
+    Parameters
+    ----------
+    id : str
+        IID of the individual.
+    fid : str
+        FID of the individual.
+    pid : str
+        IID of the father of that individual.
+    mid : str
+        IID of the mother of that individual.
+    """
     def __init__(self, id, fid=None, pid=None, mid=None):
         self.id = id
         self.fid = fid
@@ -10,6 +36,19 @@ class Person:
         self.mid = mid
 
 def recurcive_append(dictionary, index, element):
+    """Adds an element to value of all the keys that can be reached from index with using get recursively. 
+
+    Parameters
+    ----------
+        dictionary : dict
+            A dictionary of objects to list
+
+        index
+            The start point
+
+        element
+            What should be added to values        
+    """
     queue = {index}
     seen_so_far = set()
     while queue:
@@ -20,6 +59,29 @@ def recurcive_append(dictionary, index, element):
         queue = queue.difference(seen_so_far)
 
 def create_pedigree(king_address, agesex_address):
+    """Creates pedigree table from agesex file and kinship file in KING format.
+    
+    Parameters
+    ----------
+        king_address : str
+            Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+            Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
+            The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
+            This file is used in creating a pedigree file and can be generated using KING.
+            As fids starting with '_' are reserved for control there should be no fids starting with '_'.
+
+        agesex_address : str
+            Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
+            Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
+            Age column is used for distinguishing between parent and child in a parent-offspring relationship inferred from the kinship file.
+            ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
+    
+    Returns
+    -------
+    pd.DataFrame:
+        A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
+    """
+
     kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
     agesex = pd.read_csv(agesex_address, sep = " ")
     agesex["IID"] = agesex["IID"].astype(str)
@@ -130,10 +192,23 @@ def create_pedigree(king_address, agesex_address):
     return data
     
 def add_control(pedigree):
-    #For each family that has two or more siblings and both parents,
-    # creates a new family with all the sibling and no parents.
-    #fid of this family is "_"+original_fid
-    #IIDs are the same in both families.
+    """Adds control families to the pedigree table for testing.
+
+    For each family that has two or more siblings and both parents, creates a new family with all the sibling and no parents.
+    fid of this family is "_"+original_fid. IIDs are the same in both families.
+
+    Parameters
+    ----------
+    pedigree : pd.DataFrame
+        A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
+        fids starting with "_" are reserved for control.
+    
+    Returns
+    pd.DataFrame
+        A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
+        For each family with both parents and more than one offspring, it has a control family(fids for control families start with '_')
+    """
+
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     has_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
@@ -150,6 +225,44 @@ def add_control(pedigree):
 
 
 def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bim_address = None):
+    """Processes the required data for the imputation and returns it.
+    
+    pedigree : pd.DataFrame 
+        The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
+    
+    genotypes_address : str
+        Address of the bed file (does not inlude '.bed').
+    
+    ibd : pd.DataFrame
+        A pandas dataframe containing IBD statuses for all SNPs.
+        This It has these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
+        Each line states an IBD segment between a pair on individuals. This can be generated using King software.
+
+    chr : int
+        Number of the chromosome that's going to imputed.
+
+    start : int, optional
+        This function can be used for preparing a slice of a chromosome. This is the location of the start of the slice.
+
+    end : int, optional
+        This function can be used for preparing a slice of a chromosome. This is the location of the end of the slice.
+
+    bim_address : str, optional
+        Address of the bim file if it's different from the address of the bed file. Does not include '.bim'.
+
+    Returns
+    -------
+    tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
+        Returns the data required for the imputation. This data is a tuple of multiple objects.
+            sibships: A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID'] where IID columns is a list of the IIDs of individuals in that family.
+                It only contains families with more than one child.
+            iid_to_bed_index: A str->int dictionary mapping IIDs of people to their location in bed file.
+            gts: Numpy array containing the genotype data from the bed file.
+            ibd: A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
+                Each segment consists of a start, an end, and an IBD status. The segment list is flattened meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
+            pos: A numpy array with the position of each SNP in the order of appearance in gts.
+            hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
+    """
     logging.info("initializing data")
     logging.info("loading and filtering pedigree file ...")
     #keeping individuals with no parents
