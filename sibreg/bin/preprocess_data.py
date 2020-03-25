@@ -316,5 +316,6 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     logging.info("initializing data done ...")
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     pedigree_output = pedigree_output.astype('S')
+    pedigree_output = np.array(pedigree_output,dtype='S')
     hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
     return sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict
