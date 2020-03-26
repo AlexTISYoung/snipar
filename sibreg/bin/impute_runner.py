@@ -103,10 +103,10 @@ if __name__ == "__main__":
         pedigree = add_control(pedigree)
 
     consumed_time = 0
-    ibd = pd.read_csv(args.ibd, sep = "\t")
+    ibd_pd = pd.read_csv(args.ibd, sep = "\t")
     for chromosome in range(args.from_chr, args.to_chr):
         print(chromosome, " is chromosome")
-        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd, chromosome, args.start, args.end, args.bim)
+        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd_pd, chromosome, args.start, args.end, args.bim)
         gts = gts.astype(float)
         pos = pos.astype(int)
         start_time = time.time()
