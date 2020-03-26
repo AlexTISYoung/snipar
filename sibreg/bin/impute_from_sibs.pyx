@@ -330,8 +330,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
         with h5py.File(output_address,'w') as f:
             imputed_par_gts = imputed_par_gts
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
-            f['families'] = sibships["FID"].values.tolist()
+            f['families'] = np.array(sibships["FID"].values, dtype='S')
             f['pos'] = pos
-            f["sid"] = hdf5_output_dict["sid"]
+            f["sid"] = np.array(hdf5_output_dict["sid"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
     return sibships["FID"].values.tolist(), imputed_par_gts
