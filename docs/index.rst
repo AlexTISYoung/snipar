@@ -12,7 +12,10 @@ Welcome to sibreg's documentation!
    
    tutorial
    guide
-
+   impute_runner
+   impute_po
+   pGWAS
+   poGWAS
 
 Indices and tables
 ==================

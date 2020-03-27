@@ -3,21 +3,18 @@ Guide
 
 **Introduction**
 
-sibreg is a python library for performing robust GWAS using nuclear family data with a random effects
-model for within family phenotypic correlations
+sibreg is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
+and for performing robust GWAS using the resulting imputed parental genotypes
 
-sibreg also contains scripts for imputing missing parental genotypes from sibling pairs (provided IBD sharing information)
-and from parent-offspring pairs (with one missing parent)
-
-In the sibreg/bin subdirectory, there are two scripts for
+In the sibreg/sibreg/bin subdirectory, there are two scripts for
 imputing missing parental genotypes:
 
 
---'impute_from_sibs.py'(:doc:`impute_from_sibs`)
+--'impute_runner.py'(:doc:`impute_runner`)
     imputes the expected sum of maternal and paternal genotypes given genotype data on the sibling
     offspring of the parents and IBD sharing between the sibling offspring
 
---'impute_po.py'(:doc:`impute_po`)
+--'impute_po.py'(:doc:`sibreg.bin.impute_runner`)
     imputes the expected genotype of the missing parent given one parent and a number of sibling offspring
     of the parent and the missing parent
 
