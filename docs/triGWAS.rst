@@ -1,9 +1,7 @@
-Documentation for pGWAS.py script
+Documentation for triGWAS.py script
 ====================================
 
-
-This script uses genotypes of siblings and parental genotypes imputed from sibling genotypes to estimate direct genetic effects, indirect genetic effects from siblings,
-and indirect genetic effects from parents effects/confounding effects.
+This script uses observed genotypes of individuals and their mothers and fathers to estimate direct and indirect genetic effects/confounding effects.
 
 The script fits models for all SNPs in common between the sibling and parental genotypes passing MAF and missingness thresholds.
 
@@ -14,10 +12,10 @@ Siblings should have the same family id (FID), FATHER_ID, and MOTHER_ID in the p
 The script outputs a .hdf5 file with variance parameter estimates and estimates of the X^T X ('xtx') and X^T Y ('xty') matrices for each SNP as a multidimensional array,
 the first index of which gives the SNP, whose corresponding ID is in the 'sid' vector. The 'N_L' vector contains the sample size for each SNP (after removal of missing genotypes).
 The rows/columns of the X^T X and the columns of the X^T Y matrices correspond to: intercept, direct effect,
-sibling effect (if fitted), average parental effect/confounding effect. The .hdf5 file also contains the estimated variance
+paternal effect, maternal effect. The .hdf5 file also contains the estimated variance
 parameters: sigma2, the residual variance estimate; and tau, the estimated ratio between the within-family variance and the residual variance.
 
-The covariate file format is the same as the phenotype file format. The first
+The covariate file format is the same as the phenotype file format.  The first
 column is family ID, and the second column is individual ID; subsequent columns are phenotype or covariate
 observations.
 
@@ -28,13 +26,10 @@ outprefix.null_mean_effects.txt. --no_covariate_estimates suppresses this output
 
 Required arguments:
 
-**sibgts**
-    path to .bed file with genotypes of siblings
+**gts**
+    path to .bed file with genotypes of siblings observed parents
 
-**pargts**
-    path to hdf5 file with imputed parental genotypes
-
-**sibped**
+**ped**
     path to pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
 
 **phenofile**
@@ -45,8 +40,8 @@ Required arguments:
 
 Options:
 
---covar
-   Location of covariate file (default no mean covariates)
+--mean_covar
+   Location of mean covariate file (default no mean covariates)
 
 --fit_covariates
    Fit covariates for each locus. Default is to fit covariates for the null model and project out the covariates'

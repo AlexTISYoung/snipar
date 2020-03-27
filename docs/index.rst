@@ -16,6 +16,8 @@ Welcome to sibreg's documentation!
    impute_po
    pGWAS
    poGWAS
+   triGWAS
+   sibreg.bin
 
 Indices and tables
 ==================
