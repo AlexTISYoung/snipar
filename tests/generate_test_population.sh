@@ -30,3 +30,6 @@ agesex.to_csv("test_data/sample.agesex", sep = " ", index = False)
 mv test_data/t__t.segments.gz test_data/sample.segments.gz
 plink/plink --file test_data/t__t --make-bed --out test_data/t__t
 plink/plink --bfile test_data/t__t --remove test_data/t__t_remove.txt --make-bed --out test_data/sample1
+cp test_data/sample1.bed test_data/sample2.bed 
+cp test_data/sample1.bim test_data/sample2.bim 
+cp test_data/sample1.fam test_data/sample2.fam
