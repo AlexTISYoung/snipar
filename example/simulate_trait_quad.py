@@ -29,6 +29,7 @@ gts = np.array(gts)
 
 # Find parents
 ped = np.loadtxt(args.ped, dtype='S20')
+ped = ped[1:ped.shape[0],:]
 
 fams = np.unique(ped[:,0])
 

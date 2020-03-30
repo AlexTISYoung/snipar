@@ -34,7 +34,10 @@ There are three scripts for performing GWAS depending on the number of missing p
 --'triGWAS.py'(:doc:`triGWAS`)
     Performs GWAS using observed sibling genotypes and observed maternal and paternal genotypes
 
-All of the above scripts require provision of a pedigree file. The pedigree file is a plain text file
+All of the above scripts require either provision of a pedigree file or the script will construct a pedigree for you if you
+provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information.
+
+The pedigree file is a plain text file
 with header and columns: FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
 
 Note that individuals are assumed to have unique individual IDS (IID).
@@ -64,6 +67,9 @@ Packages:
 - numpy
 - scipy
 - pysnptools
+- pandas
+- networkx
+- Cython
 
 We highly recommend using a python distribution such as Anaconda (https://store.continuum.io/cshop/anaconda/).
 This will come with both numpy and scipy installed and can include an MKL-compiled distribution
@@ -72,18 +78,14 @@ for optimal speed.
 To install from source, clone the git repository, and in the directory
 containing the sibreg source code, at the shell type
 
-    'sudo python setupy.py install'
-
-or, on the windows command prompt, type
-
-    'python setup.py install'
+    'python setupy.py install'
 
 **Running tests**
 
-To check that the code is working properly and computing likelihoods and gradients accurately, you can
-run tests. In the sibreg/tests subdirectory, type
+To check that the code is working properly, you should
+run tests. To run the tests, in the main sibreg directory enter the command:
 
-    ``python test.py``
+    ``python setup.py tests``
 
 The output should say
 

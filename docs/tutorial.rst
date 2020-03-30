@@ -29,7 +29,7 @@ variance is explained by the combined direct, paternal and maternal effects of t
 
 To simulate missing genotypes of parents/siblings, type the following command:
 
-    ``plink --bfile sim --remove sim_remove.txt --make-bed --out sim_reduced``
+    ``plink --bfile sim --remove sim_remove.txt --make-bed --out sim_reduced_1``
 
 This removes the genotypes of both parents for 2,000 families, the genotype of one parent
 for 2,000 other families, and randomly removes siblings with probability 0.5 from
@@ -39,15 +39,15 @@ We note that the following commands can take some time to run (10s of minutes de
 
 To impute the missing parental genotypes for the families with one parent genotyped, type:
 
-    ``python ../bin/impute_po.py sim_reduced.bed sim_fams.ped po_impute``
+    ``python ../sibreg/bin/impute_po.py sim_reduced_1.bed sim_fams.ped po_impute``
 
 The imputed parental genotypes are in po_impute.hdf5.
 
 To impute the sum of the missing parents' genotypes for the families without genotyped parents, type:
 
-    ``python ../bin/impute_from_sibs_hdf5.py sim.hdf5 sim_reduced.bed sim_fams.ped sib_impute``
+    ``python ../sibreg/bin/impute_runner.py 1 2 sim.segments.gz sim_reduced_ --pedigree sim_fams.ped --out_prefix sib_impute``
 
-The imputed parental genotypes are in sib_impute.hdf5.
+The imputed parental genotypes are in a HDF5 file sib_impute.
 
 To estimate effects for the families with both parents genotyped and without genotyped siblings, type:
 

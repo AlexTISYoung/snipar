@@ -1,8 +1,14 @@
 """Runs the sib-regression for the specified source and writes the result in an HDF5 file.
 
-This scripts uses genotype bed files and KING IBD output with a form of pedigree file and imputes the sum of parents for families with more than one sibling and no parents.
-From options --pedigree and --agesex,--king one should be given to this script because the script needs the pedigree file
-and if it's not present, it has to construct one.
+This script performs imputation of missing parental genotypes for families with at least two siblings and no genotyped parents. It takes as input the genotypes
+ of the siblings in a .bed file and the IBD segments output by KING (with --ibdsegs option). To specify the siblings, one can either provide a pedigree file (--pedigree option) or
+ the relatedness inference output from KING with the --related --degree 1 options along with age and sex information.
+
+The pedigree file is a plain text file with header and columns: FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
+Note that individuals are assumed to have unique individual IDS (IID). Siblings are identified through individuals that have the same FID and the same FATHER_ID and MOTHER_ID.
+
+Use the --king option to provide the KING relatedness inference output (usually has suffix .kin0) and the --agesex option to provide the age & sex information. The script
+constructs a pedigree from this information and outputs it in the HDF5 output.
 
 Args:
     -c : optional
