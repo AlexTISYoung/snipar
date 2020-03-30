@@ -87,13 +87,6 @@ run tests. To run the tests, in the main sibreg directory enter the command:
 
     ``python setup.py tests``
 
-The output should say
-
-    ``Ran 4 tests in...``
-
-    ``OK``
-
-
 
 
 
