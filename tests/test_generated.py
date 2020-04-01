@@ -21,7 +21,7 @@ class TestGenerated(unittest.TestCase):
 		number_of_snps = 1000
 		min_f = 0.05
 		number_of_families = 100
-		filename = "test_data/generated"
+		filename = "outputs/tmp/generated"
 		if not os.path.exists(os.path.dirname(filename)):
 			try:
 				os.makedirs(os.path.dirname(filename))
@@ -29,37 +29,37 @@ class TestGenerated(unittest.TestCase):
 				if exc.errno != errno.EEXIST:
 					raise
 		#generating population
-		os.system('python example/simulate_pop.py ' + str(number_of_snps) + ' ' + str(min_f) + ' ' + str(number_of_families) + ' 0 0 0 "test_data/generated"')
+		os.system('python example/simulate_pop.py ' + str(number_of_snps) + ' ' + str(min_f) + ' ' + str(number_of_families) + ' 0 0 0 "outputs/tmp/generated"')
 		# Adding header to the pedigree file
-		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat test_data/generated_fams.ped)" > test_data/generated_fams.ped')
+		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat outputs/tmp/generated_fams.ped)" > outputs/tmp/generated_fams.ped')
 		#convert the generated data to a bed file
-		os.system('plink/plink --noweb --file test_data/generated --make-bed --out test_data/generated')
+		os.system('plink/plink --noweb --file outputs/tmp/generated --make-bed --out outputs/tmp/generated')
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
-		ped = pd.read_csv("test_data/generated.ped", sep = " ", header = None, names = columns)
+		ped = pd.read_csv("outputs/tmp/generated.ped", sep = " ", header = None, names = columns)
 		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
 		fathers = ped["IID"].str.endswith("_P")
 		mothers = ped["IID"].str.endswith("_M")
 		parents = ped[mothers | fathers]
 		sibs = ped[(~mothers) & (~fathers)]
-		sibs.to_csv("test_data/generated_sibs.ped", sep = " ")
-		parents.to_csv("test_data/generated_parents.ped", sep = " ")
-		with open("test_data/generated_sibs.txt", "w") as f:
+		sibs.to_csv("outputs/tmp/generated_sibs.ped", sep = " ")
+		parents.to_csv("outputs/tmp/generated_parents.ped", sep = " ")
+		with open("outputs/tmp/generated_sibs.txt", "w") as f:
 			for i, j in sibs[["FID", "IID"]].values.tolist():
 				f.write(str(i) + " " + str(j) + "\n")
 		#writing sibs only
 		#TODO handle plink path
-		os.system('plink/plink --noweb --bfile test_data/generated --keep test_data/generated_sibs.txt --make-bed --out test_data/generated_sibs')
+		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_sibs.txt --make-bed --out outputs/tmp/generated_sibs')
 		#writing parents only
-		os.system('plink/plink --noweb --bfile test_data/generated --remove test_data/generated_sibs.txt --make-bed --out test_data/generated_parents')
-		ibd = pd.read_csv("test_data/generated.segments.gz", sep = "\t")
+		os.system('plink/plink --noweb --bfile outputs/tmp/generated --remove outputs/tmp/generated_sibs.txt --make-bed --out outputs/tmp/generated_parents')
+		ibd = pd.read_csv("outputs/tmp/generated.segments.gz", sep = "\t")
 		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
-																"test_data/generated_sibs",
+																"outputs/tmp/generated_sibs",
 																ibd,
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
 		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict)
-		expected_parents = Bed("test_data/generated_parents.bed")
+		expected_parents = Bed("outputs/tmp/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid
 		parent1 = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]]

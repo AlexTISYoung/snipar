@@ -1,7 +1,7 @@
-python example/simulate_pop.py 1000 0.05 450 350 50 0 "test_data/t__t"
+python example/simulate_pop.py 1000 0.05 450 350 50 0 "outputs/tmp/t__t"
 python -c 'import pandas as pd;
-ped = pd.read_csv("test_data/t__t_fams.ped", names = ["FID", "IID", "FATHER_ID", "MOTHER_ID"], sep = " ");
-remove = pd.read_csv("test_data/t__t_remove.txt", sep = " ", names = ["counter", "id"]);
+ped = pd.read_csv("outputs/tmp/t__t_fams.ped", names = ["FID", "IID", "FATHER_ID", "MOTHER_ID"], sep = " ");
+remove = pd.read_csv("outputs/tmp/t__t_remove.txt", sep = " ", names = ["counter", "id"]);
 ped = ped[~ped["IID"].isin(remove["id"])];
 ped.to_csv("test_data/sample.ped", index = False, sep = " ")
 sibships = ped.groupby(["FID","FATHER_ID", "MOTHER_ID"]).agg({"IID":list}).reset_index()
@@ -27,9 +27,9 @@ agesex["age"] = 10
 agesex.loc[agesex["is_father"]|agesex["is_mother"],"age"] = 100
 agesex.to_csv("test_data/sample.agesex", sep = " ", index = False)
 '
-mv test_data/t__t.segments.gz test_data/sample.segments.gz
-plink/plink --file test_data/t__t --make-bed --out test_data/t__t
-plink/plink --bfile test_data/t__t --remove test_data/t__t_remove.txt --make-bed --out test_data/sample1
+mv outputs/tmp/t__t.segments.gz test_data/sample.segments.gz
+plink/plink --file outputs/tmp/t__t --make-bed --out outputs/tmp/t__t
+plink/plink --bfile outputs/tmp/t__t --remove outputs/tmp/t__t_remove.txt --make-bed --out test_data/sample1
 cp test_data/sample1.bed test_data/sample2.bed 
 cp test_data/sample1.bim test_data/sample2.bim 
 cp test_data/sample1.fam test_data/sample2.fam
