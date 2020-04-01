@@ -11,4 +11,3 @@ build/*
 screenlog*
 .eggs/*
 sibreg.egg-info/*
-outputs/*
