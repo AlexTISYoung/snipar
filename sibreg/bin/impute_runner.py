@@ -4,58 +4,57 @@ This scripts uses genotype bed files and KING IBD output with a form of pedigree
 From options --pedigree and --agesex,--king one should be given to this script because the script needs the pedigree file
 and if it's not present, it has to construct one.
 
-Parameters
-----------
--c : optional
-    Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
-    These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
+Args:
+    -c : optional
+        Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
+        These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
-from_chr : int
-    Does the imputation for chromosomes with chromosome number bigger than or equal to this.
+    from_chr : int
+        Does the imputation for chromosomes with chromosome number bigger than or equal to this.
 
-to_chr : int
-    Does the imputation for chromosomes with chromosome number less than this.
+    to_chr : int
+        Does the imputation for chromosomes with chromosome number less than this.
 
-IBD : str
-        Address of a file containing IBD statuses for all SNPs.
-    This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
-    Each line states an IBD segment between a pair on individuals. This can be generated using King software
+    IBD : str
+            Address of a file containing IBD statuses for all SNPs.
+        This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
+        Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
-genotypes_prefix : str
-    Prefix for the address of genotype bed files. Address of the bed file for chromosome i would be genotypes_prefix{i}.
+    genotypes_prefix : str
+        Prefix for the address of genotype bed files. Address of the bed file for chromosome i would be genotypes_prefix{i}.
 
-bim : str
-    Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
+    bim : str
+        Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
 
---out_prefix: str, optional
-    The script writes the result of imputation for chromosome i to outprefix{i}. the default value for out_prefix is 'parent_imputed_chr'.
+    --out_prefix: str, optional
+        The script writes the result of imputation for chromosome i to outprefix{i}. the default value for out_prefix is 'parent_imputed_chr'.
 
---start: int, optional
-    The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
+    --start: int, optional
+        The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
 
---end: int, optional
-    The script can do the imputation on a slice of each chromosome. This is the end of that slice(it is inclusive).
+    --end: int, optional
+        The script can do the imputation on a slice of each chromosome. This is the end of that slice(it is inclusive).
 
---pedigree : string, optional
-    Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'.
+    --pedigree : string, optional
+        Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'.
 
---king : string, optional
-    Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
-    Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
-    The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
-    This file is used in creating a pedigree file and can be generated using KING.
+    --king : string, optional
+        Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+        Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
+        The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
+        This file is used in creating a pedigree file and can be generated using KING.
 
---agesex : string, optional
-    Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
-    Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
-    Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
-    ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
+    --agesex : string, optional
+        Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
+        Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
+        Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
+        ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
 
-Results
--------
-HDF5 files
-    For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
-    of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'sid', 'pedigree' and, 'families' respectively.
+Results:
+    HDF5 files
+        For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
+        of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'sid', 'pedigree' and, 'families' respectively.
+        
 """
 
 import logging
@@ -104,10 +103,10 @@ if __name__ == "__main__":
         pedigree = add_control(pedigree)
 
     consumed_time = 0
-    ibd = pd.read_csv(args.ibd, sep = "\t")
+    ibd_pd = pd.read_csv(args.ibd, sep = "\t")
     for chromosome in range(args.from_chr, args.to_chr):
         print(chromosome, " is chromosome")
-        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd, chromosome, args.start, args.end, args.bim)
+        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd_pd, chromosome, args.start, args.end, args.bim)
         gts = gts.astype(float)
         pos = pos.astype(int)
         start_time = time.time()

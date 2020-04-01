@@ -5,18 +5,16 @@ from scipy.linalg import sqrtm
 class model(object):
     """Define a linear model with within-class correlations.
 
-    Parameters
-    ----------
-    y : :class:`~numpy:numpy.array`
-        1D array of phenotype observations
-    X : :class:`~numpy:numpy.array`
-        Design matrix for the fixed mean effects.
-    labels : :class:`~numpy:numpy.array`
-        1D array of sample labels
+    Args:
+        y : :class:`~numpy:numpy.array`
+            1D array of phenotype observations
+        X : :class:`~numpy:numpy.array`
+            Design matrix for the fixed mean effects.
+        labels : :class:`~numpy:numpy.array`
+            1D array of sample labels
 
-    Returns
-    -------
-    model : :class:`sibreg.model`
+    Returns:
+        model : :class:`sibreg.model`
 
     """
     def __init__(self,y,X,labels):
@@ -51,17 +49,15 @@ class model(object):
         """
         Compute the MLE of alpha given variance parameters
 
-        Parameters
-        ----------
-        sigma2 : :class:`float`
-            variance of model residuals
-        tau : :class:`float`
-            ratio of variance of model residuals to variance explained by mean differences between classes
+        Args:
+            sigma2 : :class:`float`
+                variance of model residuals
+            tau : :class:`float`
+                ratio of variance of model residuals to variance explained by mean differences between classes
 
-        Returns
-        -------
-        alpha : :class:`~numpy:numpy.array`
-            MLE of alpha
+        Returns:
+            alpha : :class:`~numpy:numpy.array`
+                MLE of alpha
 
         """
         X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
@@ -93,17 +89,15 @@ class model(object):
         """
         Compute the loss function, which is -2 times the likelihood along with its gradient
 
-        Parameters
-        ----------
-        sigma2 : :class:`float`
-            variance of model residuals
-        tau : :class:`float`
-            ratio of variance of model residuals to variance explained by mean differences between classes
+        Args:
+            sigma2 : :class:`float`
+                variance of model residuals
+            tau : :class:`float`
+                ratio of variance of model residuals to variance explained by mean differences between classes
 
-        Returns
-        -------
-        L, grad : :class:`float`
-            loss function and gradient, divided by sample size
+        Returns:
+            L, grad : :class:`float`
+                loss function and gradient, divided by sample size
 
         """
         ## Likelihood
@@ -139,19 +133,18 @@ class model(object):
         """
         Find the parameters that minimise the loss function for a given regularisation parameter
 
-        Parameters
-        ----------
-        init_param : :class:`array`
-            initial values for residual variance (sigma^2_epsilon) followed by ratio
-            of residual variance to within-class variance (tau)
+        Args:
+            init_param : :class:`array`
+                initial values for residual variance (sigma^2_epsilon) followed by ratio
+                of residual variance to within-class variance (tau)
 
-        Returns
-        -------
-        optim : :class:`dict`
-            dictionary with keys: 'success', whether optimisation was successful (bool);
-            'warnflag', output of L-BFGS-B algorithm giving warnings; 'sigma2', MLE of
-            residual variance; 'tau', MLE of ratio of residual variance to within-class variance;
-            'likelihood', maximum of likelihood.
+        Returns:
+            optim : :class:`dict`
+                dictionary with keys: 'success', whether optimisation was successful (bool);
+                'warnflag', output of L-BFGS-B algorithm giving warnings; 'sigma2', MLE of
+                residual variance; 'tau', MLE of ratio of residual variance to within-class variance;
+                'likelihood', maximum of likelihood.
+
         """
         # Paramtere boundaries
         parbounds=[(0.00001, None),(0.00001, None)]
@@ -178,15 +171,14 @@ class model(object):
         """
         Predict new observations based on model regression coefficients
 
-        Parameters
-        ----------
-        X : :class:`array`
-            matrix of covariates to predict from
+        Args:
+            X : :class:`array`
+                matrix of covariates to predict from
 
-        Returns
-        -------
-        y : :class:`array`
-            predicted values
+        Returns:
+            y : :class:`array`
+                predicted values
+                
         """
         if hasattr(self,'alpha'):
             return X.dot(self.alpha)
@@ -206,22 +198,20 @@ def simulate(n,alpha,sigma2,tau):
     """Simulate from a linear model with correlated observations within-class. The mean for each class
      is drawn from a normal distribution.
 
-    Parameters
-    ----------
+    Args:
+        n : :class:`int`
+            sample size
+        alpha : :class:`~numpy:numpy.array`
+            value of regression coefficeints
+        sigma2 : :class:`float`
+            variance of residuals
+        tau : :class:`float`
+            ratio of variance of residuals to variance of distribution of between individual means
 
-    n : :class:`int`
-        sample size
-    alpha : :class:`~numpy:numpy.array`
-        value of regression coefficeints
-    sigma2 : :class:`float`
-        variance of residuals
-    tau : :class:`float`
-        ratio of variance of residuals to variance of distribution of between individual means
-
-    Returns
-    -------
-    model : :class:`regrnd.model`
-        linear model with repeated observations
+    Returns:
+        model : :class:`regrnd.model`
+            linear model with repeated observations
+            
     """
     c = alpha.shape[0]
     #X = np.random.randn((n * c)).reshape((n, c))
