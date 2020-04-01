@@ -10,14 +10,26 @@ cdef int get_IBD_type(cstring id1,
                       int loc,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict)
 
-cdef float impute_snp(int snp, 
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
-                      float f,
-                      cnp.ndarray[cnp.float_t, ndim=2] bed,
-                      int len_snp_ibd0,
-                      int len_snp_ibd1,
-                      int len_snp_ibd2)
+cdef float impute_snp_from_offsprings(int snp, 
+                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
+                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
+                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                                  float f,
+                                  cnp.ndarray[cnp.float_t, ndim=2] bed,
+                                  int len_snp_ibd0,
+                                  int len_snp_ibd1,
+                                  int len_snp_ibd2)
+
+
+cdef float impute_snp_from_parent_offsprings(int snp,
+                                            int parent,
+                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
+                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
+                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                                            float f,
+                                            cnp.ndarray[cnp.float_t, ndim=2] bed,
+                                            int len_snp_ibd0,
+                                            int len_snp_ibd1,
+                                            int len_snp_ibd2)
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)

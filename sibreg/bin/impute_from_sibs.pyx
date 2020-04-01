@@ -3,7 +3,7 @@
 Functions
 ----------
     dict_to_cmap
-    impute_snp
+    impute_snp_from_offsprings
     get_IBD_type
     impute
 """
@@ -53,7 +53,7 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef float impute_snp(int snp, 
+cdef float impute_snp_from_offsprings(int snp, 
                       cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
                       cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
                       cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
@@ -143,7 +143,141 @@ cdef float impute_snp(int snp,
         result = result/len_snp_ibd2
 
     return result
-        
+
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
+cdef float impute_snp_from_parent_offsprings(int snp,
+                      int parent,
+                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
+                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
+                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                      float f,
+                      cnp.ndarray[cnp.float_t, ndim=2] bed,
+                      int len_snp_ibd0,
+                      int len_snp_ibd1,
+                      int len_snp_ibd2):
+    """Imputes the parent sum for a single SNP and returns the imputed value
+
+    Args:
+        snp : int
+            The SNP index
+
+        snp_ibd0 : cnp.ndarray[cnp.int_t, ndim=2]
+            List of sib pairs that are ibd0 in this SNP. It is assumed that there are len_snp_ibd0 sib pairs is this list.
+
+        snp_ibd1 : cnp.ndarray[cnp.int_t, ndim=2]
+            List of sib pairs that are ibd1 in this SNP. It is assumed that there are len_snp_ibd1 sib pairs is this list
+
+        snp_ibd2 : cnp.ndarray[cnp.int_t, ndim=2]
+            List of sib pairs that are ibd2 in this SNP. It is assumed that there are len_snp_ibd2 sib pairs is this list
+
+        f : float
+            Minimum allele frequency for the SNP.
+
+        bed : cnp.ndarray[cnp.float_t, ndim=2]
+            A two-dimensional array containing genotypes for all individuals and SNPs.
+
+        len_snp_ibd0 : int
+            The number of sibling pairs in snp_ibd0.
+
+        len_snp_ibd1 : int
+            The number of sibling pairs in snp_ibd1.
+
+        len_snp_ibd2 : int
+            The number of sibling pairs in snp_ibd2.
+
+    Returns:
+        float
+            Imputed parent sum. NAN if all the children are NAN in this SNP.
+
+    """
+
+    cdef float result = nan_float
+    cdef float additive, gs1, gs2
+    cdef float sibsum = 0
+    cdef int sib1, sib2, pair_index
+    cdef float gp = bed[parent, snp]
+    if len_snp_ibd0 > 0:
+        #if there is any ibd state0 we have observed all of the parents' genotypes,
+        #therefore we can discard other ibd statuses
+        result = 0        
+        for pair_index in range(len_snp_ibd0):
+            sib1 = snp_ibd0[pair_index, 0]
+            sib2 = snp_ibd0[pair_index, 1]
+            result += (bed[sib1, snp]+bed[sib2, snp])
+        result = result/len_snp_ibd0 - parent
+
+    elif len_snp_ibd1 > 0:
+        #Because ibd2 is similar to having just one individual, we can discard ibd2s
+        result = 0
+        for pair_index in range(len_snp_ibd1):
+            sib1 = snp_ibd1[pair_index, 0]
+            sib2 = snp_ibd1[pair_index, 1]
+            gs1 = bed[sib1, snp]
+            gs2 = bed[sib2, snp]
+            additive = 0
+            if gp == 0 and (gs1 == 0 and gs2 == 0):
+                additive = f*(1-f)/((1-f)**2 + f*(1-f))
+            
+            elif gp == 0 and ((gs1 == 0 and gs2 == 1) or (gs1 == 1 and gs2 == 0)):
+                additive = 1
+
+            elif gp == 1 and ((gs1 == 0 and gs2 == 1) or (gs1 == 1 and gs2 == 0)):
+                additive = f*(1-f)/(0.5*(1-f)**2 + f*(1-f))
+
+            elif gp == 1 and ((gs1 == 1 and gs2 == 2) or (gs1 == 2 and gs2 == 1)):
+                additive = f*(1-f)/(f*(1-f) + 0.5*f**2) + f**2/(f*(1-f) + 0.5*f**2)
+
+            elif gp == 1 and (gs1 == 2 and gs2 == 2):
+                additive = 2
+            
+            elif gp == 2 and ((gs1 == 1 and gs2 == 2) or (gs1 == 2 and gs2 == 1)):
+                additive = 1
+
+            elif gp == 2 and (gs1 == 2 and gs2 == 2):
+                additive = 0.5*f*(1-f)/(0.5*f*(1-f) + f**2) + 2*f**2/(0.5*f*(1-f) + f**2)
+
+            result += additive
+        result = result/len_snp_ibd1
+    
+    elif len_snp_ibd2 > 0:
+        #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
+        #TODO handle the case of only ibd2s with different genorypes
+        result = 0
+        for pair_index in range(len_snp_ibd2):
+            sib1 = snp_ibd2[pair_index, 0]
+            sib2 = snp_ibd2[pair_index, 1]
+            gs1 = bed[sib1, snp]
+            gs2 = bed[sib2, snp]
+            additive = 0    
+            if gs1 == gs2:
+                if gp == 0 and gs1 == 0:
+                    additive = f*(1-f)/((1-f)**2 + f*(1-f))
+
+                elif gp == 0 and gs1 == 1:
+                    additive = (f*(1-f) + 2*(f**2))/(f*(1-f) + f**2)
+
+                elif gp == 1 and gs1 == 0:
+                    additive = 0.5*f*(1-f)/(0.5*f*(1-f) + 0.5*(1-f)**2)
+
+                elif gp == 1 and gs1 == 1:
+                    additive = (f*(1-f) + f**2)/(0.5*(1-f)**2 + f*(1-f) + 0.5*f**2)
+
+                elif gp == 1 and gs1 == 2:
+                    additive = (0.5*f*(1-f) + f**2)/(0.5*f*(1-f) + 0.5*f**2)
+
+                elif gp == 2 and gs1 == 1:
+                    additive = f*(1-f)/((1-f)**2 + f*(1-f))
+
+                elif gp == 2 and gs1 == 2:
+                    additive = (f*(1-f) + 2*f**2)/(f*(1-f) + f**2)
+            result += additive
+        result = result/len_snp_ibd2
+
+    return result
+
+
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
                       int loc,
@@ -243,10 +377,17 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)/2
     cdef int number_of_fams = sibships.shape[0]
     cdef cnp.ndarray[cnp.double_t, ndim=1]freqs = np.nanmean(gts,axis=0)/2.0
+    sibships["parent"] = sibships["FATHER_ID"]
+    sibships["parent"][sibships["has_father"]] = sibships["FATHER_ID"][sibships["has_father"]]
+    sibships["parent"][sibships["has_mother"]] = sibships["MOTHER_ID"][sibships["has_mother"]]
+    cdef vector[vector[cstring]] parents
     cdef vector[vector[cstring]] fams
     for fam in range(number_of_fams):
         fams.push_back(sibships["IID"].iloc[fam])
-    cdef cnp.ndarray[cnp.int_t, ndim=1] sib_count = sibships["sib_count"].values    
+        parents.push_back(sibships["parent"].iloc[fam])
+
+    cdef cnp.ndarray[cnp.int_t, ndim=1] sib_count = sibships["sib_count"].values
+    cdef cnp.ndarray[cnp.uint8_t, ndim=1] single_parent = sibships["singe_parent"].astype('uint8').values    
     #iid_to_bed_index
     cdef cmap[cstring, int] c_iid_to_bed_index = iid_to_bed_index
     #gts
@@ -282,43 +423,54 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             len_snp_ibd1 = 0
             len_snp_ibd2 = 0
             loc = c_pos[snp]
-            for i in range(1, sib_count[index]):
-                for j in range(i):
-                    sib1_index = sibs_index[i]
-                    sib2_index = sibs_index[j]
-                    sib1_id = fams[index][i]
-                    sib2_id = fams[index][j]
-                    sib1_gene_isnan = isnan(c_gts[sib1_index, snp])
-                    sib2_gene_isnan = isnan(c_gts[sib2_index, snp])
-                    ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
-                    if sib1_gene_isnan  and sib2_gene_isnan:
-                        continue
-                    #if one sib is nan, create a ibd2 pair consisting of the other sib
-                    elif not sib1_gene_isnan  and sib2_gene_isnan:
-                        snp_ibd2[len_snp_ibd2,0] = sib1_index
-                        snp_ibd2[len_snp_ibd2,1] = sib1_index
-                        len_snp_ibd2 += 1
-
-                    elif sib1_gene_isnan  and not sib2_gene_isnan:
-                        snp_ibd2[len_snp_ibd2,0] = sib2_index
-                        snp_ibd2[len_snp_ibd2,1] = sib2_index
-                        len_snp_ibd2 += 1
-
-                    elif not sib1_gene_isnan and not sib2_gene_isnan:
-                        if ibd_type == 2:
+            if sib_count[index] > 1:
+            #sibcount should be positive
+                for i in range(1, sib_count[index]):
+                    for j in range(i):
+                        sib1_index = sibs_index[i]
+                        sib2_index = sibs_index[j]
+                        sib1_id = fams[index][i]
+                        sib2_id = fams[index][j]
+                        sib1_gene_isnan = isnan(c_gts[sib1_index, snp])
+                        sib2_gene_isnan = isnan(c_gts[sib2_index, snp])
+                        ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
+                        if sib1_gene_isnan  and sib2_gene_isnan:
+                            continue
+                        #if one sib is nan, create a ibd2 pair consisting of the other sib
+                        elif not sib1_gene_isnan  and sib2_gene_isnan:
                             snp_ibd2[len_snp_ibd2,0] = sib1_index
+                            snp_ibd2[len_snp_ibd2,1] = sib1_index
+                            len_snp_ibd2 += 1
+
+                        elif sib1_gene_isnan  and not sib2_gene_isnan:
+                            snp_ibd2[len_snp_ibd2,0] = sib2_index
                             snp_ibd2[len_snp_ibd2,1] = sib2_index
                             len_snp_ibd2 += 1
-                        if ibd_type == 1:
-                            snp_ibd1[len_snp_ibd1,0] = sib1_index
-                            snp_ibd1[len_snp_ibd1,1] = sib2_index
-                            len_snp_ibd1 += 1
-                        if ibd_type == 0:
-                            snp_ibd0[len_snp_ibd0,0] = sib1_index
-                            snp_ibd0[len_snp_ibd0,1] = sib2_index
-                            len_snp_ibd0 += 1
-                    
-            imputed_par_gts[index][snp] = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
+
+                        elif not sib1_gene_isnan and not sib2_gene_isnan:
+                            if ibd_type == 2:
+                                snp_ibd2[len_snp_ibd2,0] = sib1_index
+                                snp_ibd2[len_snp_ibd2,1] = sib2_index
+                                len_snp_ibd2 += 1
+                            if ibd_type == 1:
+                                snp_ibd1[len_snp_ibd1,0] = sib1_index
+                                snp_ibd1[len_snp_ibd1,1] = sib2_index
+                                len_snp_ibd1 += 1
+                            if ibd_type == 0:
+                                snp_ibd0[len_snp_ibd0,0] = sib1_index
+                                snp_ibd0[len_snp_ibd0,1] = sib2_index
+                                len_snp_ibd0 += 1
+            else :
+                sib1_index = sibs_index[0]
+                if isnan(c_gts[sib1_index, snp]):
+                    snp_ibd2[len_snp_ibd2,0] = sib1_index
+                    snp_ibd2[len_snp_ibd2,1] = sib1_index
+                    len_snp_ibd2 += 1
+
+            if single_parent[index]:
+                imputed_par_gts[index][snp] = impute_snp_from_parent_offsprings(snp, iid_to_bed_index[parents[index]], snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
+            else:
+                imputed_par_gts[index][snp] = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
 
     if output_address is not None:
         logging.info("Writing the results as a hdf5 file to "+output_address)
@@ -326,6 +478,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             imputed_par_gts = imputed_par_gts
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')
+            f['single_parent'] = sibships["single_parent"].values
             f['pos'] = pos
             f["sid"] = np.array(hdf5_output_dict["sid"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')

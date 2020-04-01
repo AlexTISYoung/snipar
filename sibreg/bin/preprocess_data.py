@@ -265,13 +265,14 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     pedigree = pedigree.astype(str)
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
-    no_parent_pedigree = pedigree[~(pedigree["has_mother"] | pedigree["has_father"])]
+    no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     #TODO handle sibs with one parent
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
     sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).agg({'IID':lambda x: list(x)}).reset_index()
     sibships["sib_count"] = sibships["IID"].apply(len)
-    sibships = sibships[sibships["sib_count"]>1]
+    sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
+    sibships = sibships[sibships["sib_count"]>1 | sibships["single_parent"]]
     logging.info("loading bim file ...")
     if bim_address is None:
         bim_file = genotypes_address+'.bim'
