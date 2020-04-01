@@ -5,7 +5,7 @@ from pysnptools.snpreader import Bed
 from scipy.stats import norm
 #testing the imputation result for whole genome
 def imputation_test(chromosomes,
-                   imputed_prefix = 'test_data/parent_imputed_chr',
+                   imputed_prefix = 'outputs/parent_imputed_chr',
                    expected_prefix = "../UKBioRDE_revision/data/tmp/filtered_ukb_chr",
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"

@@ -111,7 +111,7 @@ if __name__ == "__main__":
         pos = pos.astype(int)
         start_time = time.time()
         if args.out_prefix is None:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, "test_data/parent_imputed_chr"+str(chromosome))
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, "outputs/parent_imputed_chr"+str(chromosome))
         else:
             imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, args.out_prefix+str(chromosome))
         end_time = time.time()

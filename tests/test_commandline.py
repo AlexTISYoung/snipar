@@ -13,7 +13,7 @@ class TestCommanline(unittest.TestCase):
                    "test_data/sample.segments.gz",
                    "test_data/sample",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "test_sample_imputed",
+                   "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
     
@@ -27,11 +27,11 @@ class TestCommanline(unittest.TestCase):
                    "test_data/sample.segments.gz",
                    "test_data/sample",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "test_sample_imputed",
+                   "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1],
-                imputed_prefix = "test_sample_imputed",
+                imputed_prefix = "outputs/tmp/test_sample_imputed",
                 expected_prefix = "test_data/sample",
                 )
         self.assertGreaterEqual(p_value, self.p_value_threshold)
@@ -46,7 +46,7 @@ class TestCommanline(unittest.TestCase):
                    "test_data/sample",
                    "--king", "test_data/sample.king",
                    "--agesex", "test_data/sample.agesex",
-                   "--out_prefix", "test_sample_imputed",
+                   "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
 
@@ -62,11 +62,11 @@ class TestCommanline(unittest.TestCase):
                    "test_data/sample",
                    "--king", "test_data/sample.king",
                    "--agesex", "test_data/sample.agesex",
-                   "--out_prefix", "test_sample_imputed",
+                   "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1],
-                imputed_prefix = "test_sample_imputed",
+                imputed_prefix = "outputs/tmp/test_sample_imputed",
                 expected_prefix = "test_data/sample",
                 )
         self.assertGreaterEqual(p_value, self.p_value_threshold)
