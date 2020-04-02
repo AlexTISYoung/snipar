@@ -37,20 +37,26 @@ class TestGenerated(unittest.TestCase):
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("outputs/tmp/generated.ped", sep = " ", header = None, names = columns)
 		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
-		fathers = ped["IID"].str.endswith("_P")
-		mothers = ped["IID"].str.endswith("_M")
-		parents = ped[mothers | fathers]
-		sibs = ped[(~mothers) & (~fathers)]
+		only_remove_father_ids = [str(i)+"_P" for i in range(number_of_families/4)]
+		only_remove_mother_ids = [str(i)+"_M" for i in range(number_of_families/4, number_of_families/2)]
+		remove_both_parents_ids = [str(i)+"_M" for i in range(number_of_families/2, number_of_families)] + [str(i)+"_P" for i in range(number_of_families/2, number_of_families)]
+		parents = ped[ped["IID"].str.endswith("_P") | ped["IID"].str.endswith("_M")]
+		sibs = ped[~ped["IID"].isin(only_remove_father_ids+only_remove_mother_ids+remove_both_parents_ids)]
 		sibs.to_csv("outputs/tmp/generated_sibs.ped", sep = " ")
 		parents.to_csv("outputs/tmp/generated_parents.ped", sep = " ")
 		with open("outputs/tmp/generated_sibs.txt", "w") as f:
 			for i, j in sibs[["FID", "IID"]].values.tolist():
 				f.write(str(i) + " " + str(j) + "\n")
+		
+		with open("outputs/tmp/generated_parents.txt", "w") as f:
+			for i, j in ped[["FID", "IID"]].values.tolist():
+				if j.endswith("_P") or j.endswith("_M"):
+					f.write(str(i) + " " + str(j) + "\n")
 		#writing sibs only
 		#TODO handle plink path
 		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_sibs.txt --make-bed --out outputs/tmp/generated_sibs')
 		#writing parents only
-		os.system('plink/plink --noweb --bfile outputs/tmp/generated --remove outputs/tmp/generated_sibs.txt --make-bed --out outputs/tmp/generated_parents')
+		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_parents.txt --make-bed --out outputs/tmp/generated_parents')
 		ibd = pd.read_csv("outputs/tmp/generated.segments.gz", sep = "\t")
 		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
 																"outputs/tmp/generated_sibs",
@@ -62,11 +68,18 @@ class TestGenerated(unittest.TestCase):
 		expected_parents = Bed("outputs/tmp/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid
-		parent1 = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]]
-		parent2 = expected_parents_gts[[not bool(i%2) for i in range(2*number_of_families)]]
-		expected_parents_sum = parent1+parent2							   
-		expected_parents_sum = expected_parents_sum[[int(t) for t in imputed_fids],:]
-		expected_genotypes = expected_parents_sum.reshape((1,-1))
+		father = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]]
+		father = father[[int(t) for t in imputed_fids],:]
+		mother = expected_parents_gts[[not bool(i%2) for i in range(2*number_of_families)]]
+		mother = mother[[int(t) for t in imputed_fids],:]		
+		expected_parents = np.zeros(imputed_par_gts.shape)
+		no_parent = ~sibships["has_father"] & ~sibships["has_mother"]
+		only_mother = ~sibships["has_father"] & sibships["has_mother"]
+		only_father = ~sibships["has_mother"] & sibships["has_father"]
+		expected_parents[no_parent] = (mother[no_parent] + father[no_parent])/2
+		expected_parents[only_mother] = mother[only_mother]
+		expected_parents[only_father] = father[only_father]
+		expected_genotypes = expected_parents.reshape((1,-1))
 		imputed_genotypes = imputed_par_gts.reshape((1,-1))
 		covs = np.cov(expected_genotypes, imputed_genotypes)
 		coef = covs[0,1]/covs[1,1]

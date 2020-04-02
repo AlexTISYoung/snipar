@@ -250,8 +250,8 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     Returns:
         tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
             Returns the data required for the imputation. This data is a tuple of multiple objects.
-                sibships: A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID'] where IID columns is a list of the IIDs of individuals in that family.
-                    It only contains families with more than one child.
+                sibships: A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
+                    It only contains families that have more than one child or only one parent.
                 iid_to_bed_index: A str->int dictionary mapping IIDs of people to their location in bed file.
                 gts: Numpy array containing the genotype data from the bed file.
                 ibd: A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
@@ -269,7 +269,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     #TODO handle sibs with one parent
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
-    sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).agg({'IID':lambda x: list(x)}).reset_index()
+    sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]).agg({'IID':lambda x: list(x)}).reset_index()
     sibships["sib_count"] = sibships["IID"].apply(len)
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[sibships["sib_count"]>1 | sibships["single_parent"]]
