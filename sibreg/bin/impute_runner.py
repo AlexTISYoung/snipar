@@ -59,7 +59,7 @@ Args:
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
-        of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'sid', 'pedigree' and, 'families' respectively.
+        of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'sid', 'pedigree' and, 'families', 'parental_status' respectively.
         
 """
 
