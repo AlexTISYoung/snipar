@@ -42,7 +42,7 @@ class TestSibImpute(unittest.TestCase):
         result = dict_to_cmap(the_dict)
         self.assertEqual(the_dict, result, msg="dict translation is not working")
 
-    def test_impute_snp(self):
+    def test_impute_snp_from_offsprings(self):
         bed = np.array([[0.],[1.],[2.]])
         snp_ibd0 = np.ones((10,2)).astype(int)
         snp_ibd1 = np.ones((10,2)).astype(int)
@@ -53,23 +53,104 @@ class TestSibImpute(unittest.TestCase):
             for j in range(3):
                 for count in range(10):
                     snp_ibd0[count] = [i, j]
-                    result = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, count+1, 1, 1)
+                    result = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, count+1, 1, 1)
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
-                    self.assertAlmostEqual(result, sibsum, 3, msg = "problem with type0")
+                    self.assertAlmostEqual(result, sibsum/2, 4, msg = "problem with type0")
 
         for i in range(3):
             for j in range(3):
                 for count in range(10):
                     snp_ibd1[count] = [i, j]
-                    result = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, count+1, 1)
+                    result = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, count+1, 1)
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
-                    self.assertAlmostEqual(result, expected_results[int(sibsum)], 3, msg = "problem with type1"+str((result, expected_results[int(sibsum)]))+str((i,j))+ str(sibsum))
+                    self.assertAlmostEqual(result, expected_results[int(sibsum)]/2, 4, msg = "problem with type1"+str((result, expected_results[int(sibsum)]))+str((i,j))+ str(sibsum))
 
         for i in range(3):
             for j in range(3):
                 for count in range(10):
                     snp_ibd2[count] = [i, j]
-                    result = impute_snp(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, 0, count+1)
+                    result = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, 0, count+1)
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
-                    self.assertAlmostEqual(result, sibsum/2. + 2*f, 3, msg = "problem with type2")
+                    self.assertAlmostEqual(result, (sibsum/2. + 2*f)/2, 4, msg = "problem with type2")
+
+    def test_impute_snp_from_parent_offsprings(self):
+        bed = np.array([[0.],[1.],[2.]])
+        snp_ibd0 = np.ones((10,2)).astype(int)
+        snp_ibd1 = np.ones((10,2)).astype(int)
+        snp_ibd2 = np.ones((10,2)).astype(int)
+        snp = 0
+        f = 0.1
+                  
+        #first key is parent, second is sibs
+        expected_result_IBD1 = [
+            {
+                (0,0) : 0.05263157894736842,
+                (0,1) : 1,
+                (1,1) : 1.1818181818181819,
+            },
+            {
+                (0,0):0,
+                (0,1):0.18181818181818182,
+                (1,1):0.024390243902439022,
+                (1,2):1.0526315789473684,
+                (2,2):2,
+
+            },
+            {
+                (1,1):0.05263157894736841,
+                (1,2):1,
+                (2,2):1.1818181818181819,
+            },
+        ]
+
+        expected_result_IBD2 = [
+            {
+                0:0.1,
+                1:1.1,
+            },
+            {
+                0:0.1,
+                1:0.21978021978021975,
+                2:1.1,
+            },
+            {
+                1:0.9,
+                2:1.1,
+            },
+            
+        ]
+
+        for i in range(3):
+            for j in range(i,3):
+                for count in range(10):
+                    for par in range(3):
+                        if par == 2 and (i == 0 or j == 0):
+                            continue                        
+                        if par == 0 and (i == 2 or j == 2):
+                            continue
+                        snp_ibd0[count] = [i, j]
+                        result = impute_snp_from_parent_offsprings(snp, par, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, count+1, 1, 1)
+                        sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
+                        expected = sibsum - par
+                        self.assertAlmostEqual(result, expected, 4, msg = "problem with type0, with parent = "+str(par)+", and sibs = "+str([i,j]) + " result, expected = "+str((result, expected)))
+
+        for i in range(3):
+            for j in range(i, 3):
+                for count in range(10):
+                    for par in range(3):
+                        snp_ibd1[count] = [i, j]
+                        result = impute_snp_from_parent_offsprings(snp, par, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, count+1, 1)
+                        expected = expected_result_IBD1[par].get((i, j), None)
+                        if expected is not None:
+                            self.assertAlmostEqual(result, expected, 4, msg = "problem with type1, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected,result = "+str((expected, result)))
+
+        for i in range(3):
+            for count in range(10):
+                for par in range(3):
+                    snp_ibd2[count] = [i, j]
+                    result = impute_snp_from_parent_offsprings(snp, par, snp_ibd0, snp_ibd1, snp_ibd2, f, bed, 0, count+1, 1)
+                    expected = expected_result_IBD2[par].get((i, j), None)
+                    if expected is not None:
+                        self.assertAlmostEqual(result, expected, 4, msg = "problem with type2, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected,result = "+str((expected, result)))
+    
