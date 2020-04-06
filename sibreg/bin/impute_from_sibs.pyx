@@ -4,6 +4,7 @@ Functions
 ----------
     dict_to_cmap
     impute_snp_from_offsprings
+    impute_snp_from_parent_offsprings
     get_IBD_type
     impute
 """
@@ -203,6 +204,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
+        #TODO check validity (sum >= gp)
         result = 0        
         for pair_index in range(len_snp_ibd0):
             sib1 = snp_ibd0[pair_index, 0]
@@ -221,7 +223,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             gs2 = bed[sib2, snp]
             additive = 0
             if gp == 0 and (gs1 == 0 and gs2 == 0):
-                additive = f*(1-f)/((1-f)**2 + f*(1-f))
+                additive = 0.5*f*(1-f)/((1-f)**2 + 0.5*f*(1-f))
                 counter +=1
             
             elif gp == 0 and ((gs1 == 0 and gs2 == 1) or (gs1 == 1 and gs2 == 0)):
@@ -269,6 +271,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             result = result/counter
         else:            
             result = nan_float
+    
     
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
