@@ -14,7 +14,7 @@ def imputation_test(chromosomes,
     chromosomes_imputed_genes_o = []
     chromosomes_imputed_genes_pm = []
     for chromosome in chromosomes:
-        with h5py.File(imputed_prefix+str(chromosome),'r') as f:
+        with h5py.File(imputed_prefix+str(chromosome)+".hdf5",'r') as f:
             gts = np.array(f["imputed_par_gts"])
             fids = np.array(f["families"])
             parental_status = np.array(f["parental_status"])
