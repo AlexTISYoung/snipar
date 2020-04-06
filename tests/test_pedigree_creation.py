@@ -46,15 +46,18 @@ class TestPedigree(unittest.TestCase):
     def test_add_control(self):
         pedigree = pd.read_csv("test_data/sample.ped", sep = " ").sort_values(by=['FID', "IID"]).astype(str)
         controlled_pedigree = add_control(pedigree).astype(str)
-        controlled_fams = [fid[1:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
+        controlled_pedigree.to_csv("ASDF", index = False)
+        controlled_fams = [fid[3:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
         has_father = pedigree["FATHER_ID"].isin(pedigree["IID"])
         has_mother = pedigree["MOTHER_ID"].isin(pedigree["IID"])
         sibs = pedigree[has_father & has_mother].groupby(["FID", "FATHER_ID", "MOTHER_ID"]).agg({"IID":lambda x:len(list(x))})
         sibs = sibs.groupby("FID").agg({"IID":max}).reset_index()
-        expected_controlls = sibs[sibs["IID"]>1]["FID"].values.reshape((1,-1)).tolist()[0]
+        no_parent_control = sibs[sibs["IID"]>1]["FID"].values.tolist()
+        one_parent_control = pedigree[pedigree["has_father"] & pedigree["has_mother"]]["FID"].values.tolist()
+        expected_controlls = no_parent_control + one_parent_control
         self.assertEqual(set(controlled_fams), set(expected_controlls))
         controlled_pedigree = controlled_pedigree[controlled_pedigree["FID"].str.startswith("_")]
-        controlled_pedigree["FID"] = controlled_pedigree["FID"].str[1:]
+        controlled_pedigree["FID"] = controlled_pedigree["FID"].str[3:]
         merged = pd.merge(pedigree, controlled_pedigree, on=["FID", "IID"])
         self.assertEqual(merged.shape[0], controlled_pedigree.shape[0])
             

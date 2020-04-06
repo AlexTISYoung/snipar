@@ -1,15 +1,15 @@
 PLINK v1.90b6.16 64-bit (19 Feb 2020)
 Options in effect:
-  --bfile test_data/t__t
+  --bfile outputs/tmp/t__t
   --make-bed
   --out test_data/sample1
-  --remove test_data/t__t_remove.txt
+  --remove outputs/tmp/t__t_remove.txt
 
 Hostname: genetics3
 Working directory: /disk/genetics4/ukb/moeen/sibreg
-Start time: Fri Mar 20 14:40:48 2020
+Start time: Mon Apr  6 14:39:27 2020
 
-Random number seed: 1584729648
+Random number seed: 1586198367
 1031774 MB RAM detected; reserving 515887 MB for main workspace.
 1000 variants loaded from .bim file.
 1800 people (1800 males, 0 females) loaded from .fam.
@@ -22,4 +22,4 @@ Note: No phenotypes present.
 --make-bed to test_data/sample1.bed + test_data/sample1.bim +
 test_data/sample1.fam ... done.
 
-End time: Fri Mar 20 14:40:48 2020
+End time: Mon Apr  6 14:39:27 2020

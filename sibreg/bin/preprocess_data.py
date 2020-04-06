@@ -184,7 +184,7 @@ def create_pedigree(king_address, agesex_address):
     for excess in dropouts:
         people.pop(excess)
     data = [(p.fid, p.id, p.pid, p.mid) for p in people.values()]
-    data = pd.DataFrame(data, columns = ['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID'])
+    data = pd.DataFrame(data, columns = ['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']).astype(str)
     return data
     
 def add_control(pedigree):
@@ -207,15 +207,23 @@ def add_control(pedigree):
 
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
-    has_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
-    count_of_sibs_in_fam = has_parents.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).count().reset_index()
+    families_with_both_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
+    count_of_sibs_in_fam = families_with_both_parents.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).count().reset_index()
     FIDs_with_multiple_sibs = count_of_sibs_in_fam[count_of_sibs_in_fam["IID"] > 1][["FID"]]
-    families_with_multiple_sibs = pedigree.merge(FIDs_with_multiple_sibs, on = "FID")
-    families_with_multiple_sibs = families_with_multiple_sibs[(families_with_multiple_sibs["has_father"]) & (families_with_multiple_sibs["has_father"])]
-    families_with_multiple_sibs["FID"] = "_" + families_with_multiple_sibs["FID"].astype(str)
-    families_with_multiple_sibs["MOTHER_ID"] = "_" + families_with_multiple_sibs["FID"].astype(str) + "_M"
-    families_with_multiple_sibs["FATHER_ID"] = "_" + families_with_multiple_sibs["FID"].astype(str) + "_P"
-    pedigree = pedigree.append(families_with_multiple_sibs)
+    families_with_multiple_sibs = families_with_both_parents.merge(FIDs_with_multiple_sibs, on = "FID")
+
+    families_with_multiple_sibs["FID"] = "_o_" + families_with_multiple_sibs["FID"].astype(str)
+    families_with_multiple_sibs["MOTHER_ID"] = families_with_multiple_sibs["FID"].astype(str) + "_M"
+    families_with_multiple_sibs["FATHER_ID"] = families_with_multiple_sibs["FID"].astype(str) + "_P"
+
+    keep_mother = families_with_both_parents.copy()
+    keep_mother["FID"] = "_m_" + keep_mother["FID"].astype(str)
+    keep_mother["FATHER_ID"] = keep_mother["FID"].astype(str) + "_P"
+
+    keep_father = families_with_both_parents.copy()
+    keep_father["FID"] = "_p_" + keep_father["FID"].astype(str)
+    keep_father["MOTHER_ID"] = keep_father["FID"].astype(str) + "_M"
+    pedigree = pedigree.append(families_with_multiple_sibs).append(keep_father).append(keep_mother)
     pedigree = pedigree[['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']]
     return pedigree
 
@@ -270,9 +278,11 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
     sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]).agg({'IID':lambda x: list(x)}).reset_index()
+
     sibships["sib_count"] = sibships["IID"].apply(len)
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
-    sibships = sibships[sibships["sib_count"]>1 | sibships["single_parent"]]
+    sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
+    fids = set([i for i in sibships["FID"].values.tolist() if i.startswith("_")])
     logging.info("loading bim file ...")
     if bim_address is None:
         bim_file = genotypes_address+'.bim'
