@@ -190,8 +190,8 @@ def create_pedigree(king_address, agesex_address):
 def add_control(pedigree):
     """Adds control families to the pedigree table for testing.
 
-    For each family that has two or more siblings and both parents, creates a new family with all the sibling and no parents.
-    fid of this family is "_"+original_fid. IIDs are the same in both families.
+    For each family that has two or more siblings and both parents, creates a 3 new familes, one has no parents, one with no mother and one with no father.
+    gFID of these families are x+original_fid where x is "_o_", "_p_", "_m_" for these cases: no parent, only has father, only has mother. IIDs are the same in both families.
 
     Args:
         pedigree : pd.DataFrame
