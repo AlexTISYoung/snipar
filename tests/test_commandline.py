@@ -30,7 +30,7 @@ class TestCommanline(unittest.TestCase):
                    "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
-        coef, z, p_value = imputation_test([1],
+        coef, z, p_value = imputation_test([1, 2],
                 imputed_prefix = "outputs/tmp/test_sample_imputed",
                 expected_prefix = "test_data/sample",
                 )
@@ -65,9 +65,10 @@ class TestCommanline(unittest.TestCase):
                    "--out_prefix", "outputs/tmp/test_sample_imputed",
                    ]
         subprocess.check_call(command)
-        coef, z, p_value = imputation_test([1],
+        coef, z, p_value = imputation_test([1, 2],
                 imputed_prefix = "outputs/tmp/test_sample_imputed",
                 expected_prefix = "test_data/sample",
                 )
-        self.assertGreaterEqual(p_value, self.p_value_threshold)
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
