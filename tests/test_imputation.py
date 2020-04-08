@@ -7,6 +7,8 @@ from scipy.stats import norm
 def imputation_test(chromosomes,
                    imputed_prefix = 'outputs/parent_imputed_chr',
                    expected_prefix = "../UKBioRDE_revision/data/tmp/filtered_ukb_chr",
+                   start = None,
+                   end = None
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"
     chromosomes_expected_genes_o = []
@@ -21,7 +23,10 @@ def imputation_test(chromosomes,
             ped_array = np.array(f["pedigree"])
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
         expected = Bed(expected_prefix+str(chromosome)+".bed")
-        expected_gts = expected.read().val
+        if start is not None and end is not None:
+            expected_gts = expected[:, start:end].read().val
+        else:
+            expected_gts = expected.read().val
         expected_ids = expected.iid
         iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,1])}
         #fids of control families start with _
