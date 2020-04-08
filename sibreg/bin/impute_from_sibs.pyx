@@ -496,7 +496,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
                                 len_snp_ibd0 += 1
             else :
                 sib1_index = sibs_index[0]
-                if isnan(c_gts[sib1_index, snp]):
+                if not isnan(c_gts[sib1_index, snp]):
                     snp_ibd2[len_snp_ibd2,0] = sib1_index
                     snp_ibd2[len_snp_ibd2,1] = sib1_index
                     len_snp_ibd2 += 1
