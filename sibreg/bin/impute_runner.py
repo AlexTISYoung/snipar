@@ -103,13 +103,18 @@ if __name__ == "__main__":
         pedigree = create_pedigree(args.king, args.agesex)
     else:
         pedigree = pd.read_csv(args.pedigree, sep = " ")
+    logging.info("pedigree loaded.")
 
     if args.c:
         logging.info("Adding control to the pedigree ...")
         pedigree = add_control(pedigree)
+        logging.info("Control Added.")
+    
 
     consumed_time = 0
+    logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(args.ibd, sep = "\t")
+    logging.info("ibd loaded.")
     for chromosome in range(args.from_chr, args.to_chr):
         print(chromosome, " is chromosome")
         sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd_pd, chromosome, args.start, args.end, args.bim)
