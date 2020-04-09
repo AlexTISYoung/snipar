@@ -7,8 +7,7 @@ on:
   push:
     branches: 
     - master
-    - refactor_sib_imp
-    - refactor_PO 
+    - python3 
   pull_request:
     branches: [ master ]
 
