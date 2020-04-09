@@ -28,7 +28,7 @@ class model(object):
         # Label mapping
         self.label_counts = dict()
         self.label_indices = dict()
-        for l in xrange(0,labels.shape[0]):
+        for l in range(0,labels.shape[0]):
             if labels[l] not in self.label_counts:
                 self.label_counts[labels[l]]=1
                 self.label_indices[labels[l]] = [l]
@@ -37,7 +37,7 @@ class model(object):
                 self.label_indices[labels[l]].append(l)
         self.y_lab = dict()
         self.X_lab = dict()
-        for label in self.label_indices.iterkeys():
+        for label in self.label_indices.keys():
             self.y_lab[label]=y[self.label_indices[label]]
             self.X_lab[label]=X[self.label_indices[label],:]
         self.n_labels = len(self.y_lab.keys())
@@ -63,7 +63,7 @@ class model(object):
         X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
         X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
 
-        for label in self.y_lab.iterkeys():
+        for label in self.y_lab.keys():
             sigma_u = sigma2/tau
             Sigma_lab = sigma_u*np.ones((self.label_counts[label],self.label_counts[label]))
             np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
@@ -113,7 +113,7 @@ class model(object):
         ## Gradient with respect to tau
         grad_tau = 0
 
-        for label in self.y_lab.iterkeys():
+        for label in self.y_lab.keys():
             resid_label=resid[self.label_indices[label]]
             resid_sum = np.sum(resid_label)
             resid_square_sum = np.square(resid_sum)
@@ -218,7 +218,7 @@ def simulate(n,alpha,sigma2,tau):
     X_cov = np.ones((c,c))
     np.fill_diagonal(X_cov,1.2)
     X = np.random.multivariate_normal(np.zeros((c)),X_cov,n).reshape((n, c))
-    labels = np.random.choice(n/10,n)
-    random_effects = np.sqrt(sigma2/tau)*np.random.randn(n)
+    labels = np.random.choice(n//10,n)
+    random_effects = np.sqrt(sigma2//tau)*np.random.randn(n)
     y = X.dot(alpha)+random_effects[labels-1]+np.random.randn(n)*np.sqrt(sigma2)
     return model(y,X,labels)

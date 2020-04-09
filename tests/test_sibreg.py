@@ -7,10 +7,10 @@ def random_design(labels):
     unique_labels = np.unique(labels)
     n_labels = unique_labels.shape[0]
     label_dict = {}
-    for i in xrange(0,n_labels):
+    for i in range(0,n_labels):
         label_dict[unique_labels[i]] = i
     Z = np.zeros((labels.shape[0],n_labels))
-    for i in xrange(0,labels.shape[0]):
+    for i in range(0,labels.shape[0]):
         Z[i,label_dict[labels[i]]]=1
     return Z
 
@@ -42,7 +42,7 @@ class test_regrnd_functions(unittest.TestCase):
         sigma2 = float(1)
         sigmau = float(5.5)
         n = 10 ** 2
-        for i in xrange(0, 100):
+        for i in range(0, 100):
             alpha = np.random.randn((2))
             tau = sigma2 / sigmau
             m = sibreg.simulate(n, alpha, sigma2, tau)
@@ -57,7 +57,7 @@ class test_regrnd_functions(unittest.TestCase):
         sigma2 = float(1)
         sigmau = float(5.5)
         n = 10 ** 2
-        for i in xrange(0,100):
+        for i in range(0,100):
             alpha=np.random.randn((2))
             tau = sigma2/sigmau
             m = sibreg.simulate(n,alpha,sigma2,tau)
@@ -73,7 +73,7 @@ class test_regrnd_functions(unittest.TestCase):
         c = 2
         sigma2 = float(1)
         sigmau = float(10)
-        for i in xrange(0, 100):
+        for i in range(0, 100):
             alpha = np.random.randn((c))
             tau = sigma2 / sigmau
             m = sibreg.simulate(n, alpha, sigma2, tau)
@@ -92,7 +92,7 @@ class test_regrnd_functions(unittest.TestCase):
         c = 2
         sigma2 = float(10)
         sigmau = float(100)
-        for i in xrange(0, 100):
+        for i in range(0, 100):
             alpha = np.random.randn((c))
             tau = sigma2 / sigmau
             m = sibreg.simulate(n, alpha, sigma2, tau)
