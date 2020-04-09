@@ -29,6 +29,18 @@ from datetime import datetime
 cdef float nan_float = np.nan
 #TODO move readind IBD and pedigree to outside prepare_data
 
+cdef is_possible_child(int child, int parent):
+    if (parent == 2) and (child > 0):
+        return True
+
+    if parent == 1:
+        return True
+    
+    if (parent == 0) and (child < 2):
+        return True
+
+    return False
+
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     """ Converts a (str,str)->list[int] to cmap[cpair[cstring, cstring], vector[int]]
 
@@ -196,7 +208,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     """
 
     cdef float result = nan_float
-    cdef float additive, gs1, gs2
+    cdef float additive
+    cdef float gs1, gs2
     cdef float sibsum = 0
     cdef int sib1, sib2, pair_index, counter
     cdef float gp = bed[parent, snp]
@@ -205,22 +218,40 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
         #TODO check validity (sum >= gp)
-        result = 0        
+        result = 0
+        counter = 0
         for pair_index in range(len_snp_ibd0):
             sib1 = snp_ibd0[pair_index, 0]
+            gs1 = bed[sib1, snp]
+
             sib2 = snp_ibd0[pair_index, 1]
-            result += (bed[sib1, snp]+bed[sib2, snp])
-        result = result/len_snp_ibd0 - gp
+            gs2 = bed[sib2, snp]
+
+            if not is_possible_child(<int> gs1, <int> gp) or not is_possible_child(<int> gs2, <int> gp):
+                continue
+
+            result += (gs1 + gs2)
+            counter += 1
+
+        if counter > 0:
+            result = result/counter - gp
+        else:
+            result = nan_float
 
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
         counter = 0
+
         for pair_index in range(len_snp_ibd1):
             sib1 = snp_ibd1[pair_index, 0]
             sib2 = snp_ibd1[pair_index, 1]
             gs1 = bed[sib1, snp]
             gs2 = bed[sib2, snp]
+
+            if not is_possible_child(<int> gs1, <int> gp) or not is_possible_child(<int> gs2, <int> gp):
+                continue
+            
             additive = 0
             if gp == 0 and (gs1 == 0 and gs2 == 0):
                 additive = 0.5*f*(1-f)/((1-f)**2 + 0.5*f*(1-f))
@@ -265,6 +296,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             elif gp == 2 and (gs1 == 2 and gs2 == 2):
                 additive = 0.5*f*(1-f)/(0.5*f*(1-f) + f**2) + 2*f**2/(0.5*f*(1-f) + f**2)
                 counter +=1
+
             result += additive
 
         if counter > 0 :
@@ -277,38 +309,54 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
         #TODO handle the case of only ibd2s with different genorypes
         result = 0
+        counter = 0
         for pair_index in range(len_snp_ibd2):
             sib1 = snp_ibd2[pair_index, 0]
             sib2 = snp_ibd2[pair_index, 1]
             gs1 = bed[sib1, snp]
             gs2 = bed[sib2, snp]
+
+            if not is_possible_child(<int> gs1, <int> gp) or not is_possible_child(<int> gs2, <int> gp):
+                continue
+
             additive = 0    
             if gs1 == gs2:
                 if gp == 0 and gs1 == 0:
                     additive = f*(1-f)/((1-f)**2 + f*(1-f))
+                    counter += 1
 
                 elif gp == 0 and gs1 == 1:
                     additive = (f*(1-f) + 2*(f**2))/(f*(1-f) + f**2)
+                    counter += 1
 
                 elif gp == 1 and gs1 == 0:
                     additive = 0.5*f*(1-f)/(0.5*f*(1-f) + 0.5*(1-f)**2)
+                    counter += 1
 
                 elif gp == 1 and gs1 == 1:
                     additive = (f*(1-f) + f**2)/(0.5*(1-f)**2 + f*(1-f) + 0.5*f**2)
+                    counter += 1
 
                 elif gp == 1 and gs1 == 2:
                     additive = (0.5*f*(1-f) + f**2)/(0.5*f*(1-f) + 0.5*f**2)
+                    counter += 1
 
                 elif gp == 2 and gs1 == 1:
                     additive = f*(1-f)/((1-f)**2 + f*(1-f))
+                    counter += 1
 
                 elif gp == 2 and gs1 == 2:
                     additive = (f*(1-f) + 2*f**2)/(f*(1-f) + f**2)
+                    counter += 1
+
             result += additive
-        result = result/len_snp_ibd2
+            
+        if counter > 0:
+            result = result/counter
+        else:
+            result = nan_float
 
-    return result
-
+    return result    
 
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
