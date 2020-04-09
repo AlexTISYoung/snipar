@@ -10,19 +10,19 @@ class TestSibImpute(unittest.TestCase):
         ibd1 = (10, 20)
         ibd2 = (30, 40)
         ibd_dict = {
-            ("jack", "jim"):[ibd1[0], ibd1[1], 1, ibd2[0], ibd2[1], 2],
+            (b"jack", b"jim"):[ibd1[0], ibd1[1], 1, ibd2[0], ibd2[1], 2],
         }
 
-        inferred_ibd0 = get_IBD_type("jack", "another thing", 1, ibd_dict)
+        inferred_ibd0 = get_IBD_type(b"jack", b"another thing", 1, ibd_dict)
         self.assertEqual(inferred_ibd0, 0, msg="error when ids are not in the dict")
-        inferred_ibd0 = get_IBD_type("another thing", "jack", 1, ibd_dict)
+        inferred_ibd0 = get_IBD_type(b"another thing", b"jack", 1, ibd_dict)
         self.assertEqual(inferred_ibd0, 0, msg="error when ids are not in the dict")
-        inferred_ibd0 = get_IBD_type("another thing", "another thing", 1, ibd_dict)
+        inferred_ibd0 = get_IBD_type(b"another thing", b"another thing", 1, ibd_dict)
         self.assertEqual(inferred_ibd0, 0, msg="error when ids are not in the dict")
 
         for i in range(50):
-            inferred_ibd1 = get_IBD_type("jack", "jim", i, ibd_dict)
-            inferred_ibd2 = get_IBD_type("jim", "jack", i, ibd_dict)
+            inferred_ibd1 = get_IBD_type(b"jack", b"jim", i, ibd_dict)
+            inferred_ibd2 = get_IBD_type(b"jim", b"jack", i, ibd_dict)
             self.assertEqual(inferred_ibd1, inferred_ibd2, msg="different id order changes the result")
 
             if ibd2[0] <= i <= ibd2[1]:
@@ -39,8 +39,14 @@ class TestSibImpute(unittest.TestCase):
             ("E","F"):[1,2,3,4],
             ("G","H"):[1,2,3,4],
         }
+        expected_result = {
+            (b"A",b"B"):[1,2,3,4],
+            (b"C",b"D"):[1,2,3,4],
+            (b"E",b"F"):[1,2,3,4],
+            (b"G",b"H"):[1,2,3,4],
+        }
         result = dict_to_cmap(the_dict)
-        self.assertEqual(the_dict, result, msg="dict translation is not working")
+        self.assertEqual(expected_result, result, msg="dict translation is not working")
 
     def test_impute_snp_from_offsprings(self):
         bed = np.array([[0.],[1.],[2.]])

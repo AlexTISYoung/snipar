@@ -59,7 +59,9 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     cdef cpair[cpair[cstring,cstring], vector[int]] map_element
     cdef cmap[cpair[cstring, cstring], vector[int]] c_dict
     for key,val in the_dict.items():
-        map_key = key
+        map_key.first = key[0].encode('ASCII')
+        map_key.second = key[1].encode('ASCII')
+        # map_key = key
         map_val = val
         map_element = (map_key, map_val)
         c_dict.insert(map_element)
