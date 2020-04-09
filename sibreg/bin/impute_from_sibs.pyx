@@ -2,6 +2,7 @@
 
 Functions
 ----------
+    is_possible_child
     dict_to_cmap
     impute_snp_from_offsprings
     impute_snp_from_parent_offsprings
@@ -30,6 +31,8 @@ cdef float nan_float = np.nan
 #TODO move readind IBD and pedigree to outside prepare_data
 
 cdef is_possible_child(int child, int parent):
+    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
+    """
     if (parent == 2) and (child > 0):
         return True
 
@@ -171,6 +174,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd1,
                       int len_snp_ibd2):
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value
+    
+    If returns Nan if there are no sibling pairs that can be children of the existing parent.
 
     Args:
         snp : int
