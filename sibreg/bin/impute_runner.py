@@ -64,14 +64,14 @@ Results:
 """
 
 import logging
-from impute_from_sibs import *
+from .impute_from_sibs import *
 import time
 import argparse
 import h5py
 import random
 import pandas as pd
 import os
-from preprocess_data import *
+from .preprocess_data import *
 random.seed(1567924)
 
 #does the imputation and writes the results
