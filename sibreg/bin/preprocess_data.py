@@ -230,6 +230,8 @@ def add_control(pedigree):
 
 def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bim_address = None):
     """Processes the required data for the imputation and returns it.
+
+    Outputs for used for the imputation have ascii bytes instead of strings.
     
     Args:
         pedigree : pd.DataFrame 
@@ -270,10 +272,10 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     logging.info("initializing data")
     logging.info("loading and filtering pedigree file ...")
     #keeping individuals with no parents
-    pedigree = pedigree.astype(str)
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
+    no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
     #TODO handle sibs with one parent
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
@@ -282,7 +284,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     sibships["sib_count"] = sibships["IID"].apply(len)
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
-    fids = set([i for i in sibships["FID"].values.tolist() if i.startswith("_")])
+    fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
     logging.info("loading bim file ...")
     if bim_address is None:
         bim_file = genotypes_address+'.bim'
@@ -309,7 +311,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
     logging.info("loading bed file ...")
     gts_f = Bed(genotypes_address+".bed")
-    ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1]]
+    ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
     gts_ids = gts_f.iid[ids_in_ped]
     if end is not None:        
         gts = gts_f[ids_in_ped , start:end].read().val.astype(float)
@@ -319,10 +321,9 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
         gts = gts_f[ [(id in ped_ids) for id in gts_f.iid[:,1]], :].read().val.astype(float)
         pos = gts_f.pos[:, 2]
         sid = gts_f.sid
-    iid_to_bed_index = {i:index for index, i in enumerate(gts_ids[:,1])}
+    iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     logging.info("initializing data done ...")
+    pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
-    pedigree_output = pedigree_output.astype('S')
-    pedigree_output = np.array(pedigree_output,dtype='S')
     hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
     return sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict

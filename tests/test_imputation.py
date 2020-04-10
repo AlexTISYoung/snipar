@@ -18,9 +18,9 @@ def imputation_test(chromosomes,
     for chromosome in chromosomes:
         with h5py.File(imputed_prefix+str(chromosome)+".hdf5",'r') as f:
             gts = np.array(f["imputed_par_gts"])
-            fids = np.array(f["families"])
+            fids = np.array(f["families"]).astype(str)
             parental_status = np.array(f["parental_status"])
-            ped_array = np.array(f["pedigree"])
+            ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
         expected = Bed(expected_prefix+str(chromosome)+".bed")
         if start is not None and end is not None:

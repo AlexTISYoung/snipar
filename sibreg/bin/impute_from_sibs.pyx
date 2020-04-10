@@ -422,6 +422,8 @@ cdef int get_IBD_type(cstring id1,
 def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_address = None):
     """Does the parent sum imputation for families in sibships and all the SNPs in gts and returns the results.
 
+    Inputs and outputs of this function are ascii bytes instead of strings
+
     Args:
         sibships : pandas.Dataframe
             A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID'] where IID columns is a list of the IIDs of individuals in that family.
