@@ -1,6 +1,6 @@
 import unittest
 import subprocess
-from test_imputation import imputation_test
+from .test_imputation import imputation_test
 
 class TestCommanline(unittest.TestCase):
     p_value_threshold = 0.01
