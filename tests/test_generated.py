@@ -37,9 +37,9 @@ class TestGenerated(unittest.TestCase):
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("outputs/tmp/generated.ped", sep = " ", header = None, names = columns)
 		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
-		only_remove_father_ids = [str(i)+"_P" for i in range(number_of_families/4)]
-		only_remove_mother_ids = [str(i)+"_M" for i in range(number_of_families/4, number_of_families/2)]
-		remove_both_parents_ids = [str(i)+"_M" for i in range(number_of_families/2, number_of_families)] + [str(i)+"_P" for i in range(number_of_families/2, number_of_families)]
+		only_remove_father_ids = [str(i)+"_P" for i in range(number_of_families//4)]
+		only_remove_mother_ids = [str(i)+"_M" for i in range(number_of_families//4, number_of_families//2)]
+		remove_both_parents_ids = [str(i)+"_M" for i in range(number_of_families//2, number_of_families)] + [str(i)+"_P" for i in range(number_of_families//2, number_of_families)]
 		parents = ped[ped["IID"].str.endswith("_P") | ped["IID"].str.endswith("_M")]
 		sibs = ped[~ped["IID"].isin(only_remove_father_ids+only_remove_mother_ids+remove_both_parents_ids)]
 		sibs.to_csv("outputs/tmp/generated_sibs.ped", sep = " ")
