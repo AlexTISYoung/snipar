@@ -8,7 +8,7 @@ def simulate_ind(nsnp,f):
 def simulate_sibs(father,mother,n = 2):
     meioses = [[np.array(np.random.binomial(1, 0.5, father.shape[0])),np.array(np.random.binomial(1, 0.5, father.shape[0]))]
                 for x in range(0,n)]
-    ibd = np.zeros((n*(n-1)/2,father.shape[0]),dtype=np.int8)
+    ibd = np.zeros((n*(n-1)//2,father.shape[0]),dtype=np.int8)
     pcount = 0
     for i in range(1,n):
         for j in range(0,i):
@@ -60,7 +60,7 @@ fsize = args.fsize
 
 father_gts = np.zeros((nfam,nsnp),dtype=np.int8)
 mother_gts = np.zeros((nfam,nsnp),dtype=np.int8)
-ibd = np.zeros((nfam,fsize*(fsize-1)/2,nsnp),dtype=np.int8)
+ibd = np.zeros((nfam,fsize*(fsize-1)//2,nsnp),dtype=np.int8)
 sib_gts = np.zeros((nfam,fsize,nsnp),dtype=np.int8)
 
 for i in range(0,nfam):
