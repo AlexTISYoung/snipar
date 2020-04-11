@@ -318,7 +318,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
         pos = gts_f.pos[start:end, 2]
         sid = gts_f.sid[start:end]
     else:
-        gts = gts_f[ [(id in ped_ids) for id in gts_f.iid[:,1]], :].read().val.astype(float)
+        gts = gts_f[ids_in_ped, :].read().val.astype(float)
         pos = gts_f.pos[:, 2]
         sid = gts_f.sid
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
