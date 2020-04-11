@@ -30,3 +30,6 @@ jobs:
     - name: Testing
       run: |
         python setup.py pytest
+    - name: Unittest
+      run: |
+        python -m unittest tests
