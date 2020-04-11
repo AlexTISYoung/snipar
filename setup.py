@@ -32,7 +32,7 @@ setup(name='sibreg',
       ],
       keywords='statistics genetics',
       packages=['sibreg', 'sibreg.bin'],
-      setup_requires=['numpy==1.16.6', 'Cython==0.29.15'],
+      setup_requires=['pytest-runner', 'numpy==1.16.6', 'Cython==0.29.15'],
       install_requires=[
             'numpy==1.16.6',
             'scipy==1.2.3',
@@ -41,6 +41,7 @@ setup(name='sibreg',
             'networkx==2.2',
             'Cython==0.29.15'
         ],
+      tests_require=['pytest'],
       extras_require={
             'test': ['numdifftools'],
       },
