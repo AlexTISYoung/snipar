@@ -62,10 +62,9 @@ Results:
         of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'sid', 'pedigree' and, 'families', 'parental_status' respectively.
         
 """
-
 import logging
-from preprocess_data import *
-from impute_from_sibs import *
+from sibreg.bin.preprocess_data import *
+from sibreg.bin.impute_from_sibs import *
 import time
 import argparse
 import h5py
