@@ -564,7 +564,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
                 imputed_par_gts[index][snp] = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
 
     if output_address is not None:
-        logging.info("Writing the results as a hdf5 file to "+output_address)
+        logging.info("Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')
