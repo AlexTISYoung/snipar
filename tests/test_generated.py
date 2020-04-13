@@ -36,7 +36,7 @@ class TestGenerated(unittest.TestCase):
 		os.system('plink/plink --noweb --file outputs/tmp/generated --make-bed --out outputs/tmp/generated')
 		columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "phenotype"] + ["genotype_"+str(i) for i in range(number_of_snps)]
 		ped = pd.read_csv("outputs/tmp/generated.ped", sep = " ", header = None, names = columns)
-		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
+		ped = ped[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
 		only_remove_father_ids = [str(i)+"_P" for i in range(number_of_families//4)]
 		only_remove_mother_ids = [str(i)+"_M" for i in range(number_of_families//4, number_of_families//2)]
 		remove_both_parents_ids = [str(i)+"_M" for i in range(number_of_families//2, number_of_families)] + [str(i)+"_P" for i in range(number_of_families//2, number_of_families)]

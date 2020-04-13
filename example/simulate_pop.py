@@ -74,7 +74,7 @@ for i in range(0,nfam):
 
 # Make pedigree file
 fp = fsize+2
-ped = np.zeros((nfam*fp,4),dtype='S20')
+ped = np.zeros((nfam*fp,4),dtype="U20")
 for i in range(0,nfam):
     # Fam ID
     ped[i*fp:((i+1)*fp),0] = str(i)
@@ -89,7 +89,6 @@ for i in range(0,nfam):
     ped[i * fp + fsize, 3] = str(i) + '_' + 'P_M'
     ped[i * fp + fsize + 1, 2] = str(i) + '_' + 'M_P'
     ped[i * fp + fsize + 1, 3] = str(i) + '_' + 'M_M'
-
 ped_out = np.vstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20').reshape((1,4)),ped))
 ## Write pedigree file
 np.savetxt(outprefix+'_fams.ped',ped_out,fmt='%s')
@@ -102,12 +101,12 @@ hf['ibd'] = ibd
 hf['father_gts'] = father_gts
 hf['mother_gts'] = mother_gts
 hf['ibd_fams'] = np.array([x for x in range(0,nfam)])
-hf['ped'] = ped
+hf['ped'] = ped.astype("S")
 hf.close()
 
 # Convert IBD to KING format
 king_out = gzip.open(args.outprefix+'.segments.gz','wb')
-king_out.write('FID1\tID1\tFID2\tID2\tIBDType\tChr\tStartMB\tStopMB\tStartSNP\tStopSNP\tN_SNP\tLength\n')
+king_out.write(b'FID1\tID1\tFID2\tID2\tIBDType\tChr\tStartMB\tStopMB\tStartSNP\tStopSNP\tN_SNP\tLength\n')
 
 for i in range(0,nfam):
     start_snps = []
@@ -131,9 +130,10 @@ for i in range(0,nfam):
     nseg = len(start_snps)
     if nseg>0:
         for s in range(0,nseg-1):
-            king_out.write(str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+'\t1\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0')
+            t = str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+'\t1\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0'
+            king_out.write(t.encode("ascii"))
             if i<(nfam-1) or s<(nseg-1):
-                king_out.write('\n')
+                king_out.write(b'\n')
 king_out.close()
 
 
@@ -180,7 +180,7 @@ for i in range(n_sib_only+n_one_parent,nfam):
 remove.close()
 
 ## Make MAP file
-mout = file(outprefix+'.map','w')
+mout = open(outprefix+'.map','w')
 for i in range(0,sib_gts.shape[2]):
     mout.write('1 rs'+str(i)+' '+str(i/float(100))+' '+str(i)+'\n')
 
