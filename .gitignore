@@ -12,3 +12,4 @@ screenlog*
 .eggs/*
 sibreg.egg-info/*
 **/.nfs*
+env/*
