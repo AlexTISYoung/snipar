@@ -240,6 +240,7 @@ if __name__ == '__main__':
     xtx[:] = np.nan
     xty = np.zeros((sid.shape[0],X_length),dtype=np.float32)
     xty[:] = np.nan
+    pc_done = 0
     for loc in range(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
@@ -250,6 +251,10 @@ if __name__ == '__main__':
             alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=False, xtx_out= True)
             xtx[loc,:,:] = alpha_l[0]
             xty[loc,:] = alpha_l[1]
+        pc_done_new = round(100*loc/G.shape[2])
+        if pc_done_new>pc_done:
+            pc_done = pc_done_new
+            print('Done '+str(pc_done)+'% of SNPs')
     print('Writing output')
     outfile['xtx'][:] = xtx
     outfile['xty'][:] = xty
