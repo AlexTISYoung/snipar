@@ -19,6 +19,12 @@ def convert_str_array(x):
     x_out = np.array([y.decode('UTF-8') for y in x])
     return x_out.reshape(x_shape)
 
+def encode_str_array(x):
+    x_shape = x.shape
+    x = x.flatten()
+    x_out = np.array([y.encode('ascii') for y in x])
+    return x_out.reshape(x_shape)
+
 def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
     # Whether mother and father have observed/imputed genotypes
     par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
@@ -96,8 +102,6 @@ def fit_null_model(y,X,fam_labels,tau_init):
     sigma_2_init = np.var(y)*tau_init/(1+tau_init)
     null_model = sibreg.model(y, X, fam_labels)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
-    print('Family variance estimate: '+str(round(null_optim['sigma2']/null_optim['tau'],4)))
-    print('Residual variance estimate: ' + str(round(null_optim['sigma2'],4)))
     null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
     # Return values
     return null_optim['sigma2'], null_optim['tau'], null_alpha
@@ -220,7 +224,7 @@ if __name__ == '__main__':
     print('Fitting models for genome-wide SNPs')
     ## Output file
     outfile = h5py.File(args.outprefix+'.hdf5','w')
-    outfile['sid'] = sid
+    outfile['sid'] = encode_str_array(sid)
     X_length = 4
     N_L = np.zeros((G.shape[2]), dtype=int)
     outfile.create_dataset('xtx',(N_L,X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
@@ -241,7 +245,7 @@ if __name__ == '__main__':
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
             missingness = 1-n_l/N
-            if (100 * missingness[loc]) < args.max_missing:
+            if (100 * missingness) < args.max_missing:
                 model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans])
                 alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=True, xtx_out= True)
                 xtx[loc,:,:] = alpha_l[0]
