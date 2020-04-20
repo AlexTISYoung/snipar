@@ -226,17 +226,17 @@ if __name__ == '__main__':
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
     X_length = 4
-    N_L = np.zeros((G.shape[2]), dtype=int)
-    outfile.create_dataset('xtx',(N_L,X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (N_L, X_length), dtype='f', chunks=True, compression='gzip',
+    N_L = np.zeros((sid.shape[0]), dtype=int)
+    outfile.create_dataset('xtx',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('xty', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
 
     ############### Loop through loci and fit models ######################
     # Optimize model for SNP
     freqs = ma.mean(G[:,0,:],axis=0)/2.0
-    xtx = np.zeros((N_L,X_length,X_length),dtype=np.float32)
+    xtx = np.zeros((sid.shape[0],X_length,X_length),dtype=np.float32)
     xtx[:] = np.nan
-    xty = np.zeros((N_L,X_length),dtype=np.float32)
+    xty = np.zeros((sid.shape[0],X_length),dtype=np.float32)
     xty[:] = np.nan
     for loc in range(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf):
@@ -244,7 +244,7 @@ if __name__ == '__main__':
             not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
-            missingness = 1-n_l/N
+            missingness = 1-float(n_l)/float(G.shape[0])
             if (100 * missingness) < args.max_missing:
                 model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans])
                 alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=True, xtx_out= True)
