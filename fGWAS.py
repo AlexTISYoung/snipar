@@ -195,7 +195,8 @@ if __name__ == '__main__':
         ValueError('No SNPs in common between imputed and observed genotypes')
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')
-    imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices,in_obs_sid])
+    imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices,:])
+    imp_gts = imp_gts[:,in_obs_sid]
     fams = fams[imp_indices]
     # Read observed genotypes
     print('Reading observed genotypes')
