@@ -241,7 +241,7 @@ if __name__ == '__main__':
     for loc in range(0,G.shape[2]):
         if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf):
             # Find NAs
-            not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
+            not_nans = np.sum(np.isnan(G[:, :, loc]), axis=1) == 0
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
             missingness = 1-float(n_l)/float(G.shape[0])
