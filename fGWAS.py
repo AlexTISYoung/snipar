@@ -21,7 +21,8 @@ def convert_str_array(x):
 
 def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
     # Whether mother and father have observed/imputed genotypes
-    par_status = np.zeros((pheno_ids.shape[0],2),dtype='S')
+    par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
+    par_status[:] = -1
     # Indices of obsered/imputed genotypes in relevant arrays
     gt_indices = np.zeros((pheno_ids.shape[0],3),dtype=int)
     gt_indices[:] = -1
@@ -44,25 +45,23 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
             # Check for observed father
             if ped_i[2] in gts_id_dict:
                 gt_indices[i,1] = gts_id_dict[ped_i[2]]
-                par_status[i,0] = 'obs'
+                par_status[i,0] = 0
             # Check for observed mother
             if ped_i[3] in gts_id_dict:
                 gt_indices[i, 2] = gts_id_dict[ped_i[3]]
-                par_status[i,1] = 'obs'
+                par_status[i,1] = 0
             # If parent not observed, look for imputation
             if ped_i[0] in fam_dict:
                 imp_index = fam_dict[ped_i[0]]
                 # Check if this is imputation of father, or mother, or both
                 if ped_i[4] == 'False':
                     gt_indices[i,1] = imp_index
-                    par_status[i,0] = 'imp'
+                    par_status[i,0] = 1
                 if ped_i[5] == 'False':
                     gt_indices[i, 2] = imp_index
-                    par_status[i, 1] = 'imp'
+                    par_status[i, 1] = 1
 
     return par_status, gt_indices, fam_labels
-
-
 
 def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     if np.min(gt_indices)<0:
@@ -73,16 +72,16 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
         # Observed proband genotype
         G[i,1,:] = gts[gt_indices[i,0],:]
         # Paternal genotype
-        if par_status[i,0] == 'obs':
+        if par_status[i,0] == 0:
             G[i,2,:] = gts[gt_indices[i,1],:]
-        elif par_status[i,0] == 'imp':
+        elif par_status[i,0] == 1:
             G[i,2,:] = imp_gts[gt_indices[i,1],:]
         else:
             ValueError('Paternal genotype neither imputed nor observed')
         # Maternal genotype
-        if par_status[i, 1] == 'obs':
+        if par_status[i, 1] == 0:
             G[i, 3, :] = gts[gt_indices[i, 2], :]
-        elif par_status[i, 0] == 'imp':
+        elif par_status[i, 0] == 1:
             G[i, 3, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Paternal genotype neither imputed nor observed')
@@ -175,11 +174,11 @@ if __name__ == '__main__':
     par_status = par_status[none_missing,:]
     ## Read genotypes
     observed_indices = np.sort(np.unique(np.hstack((gt_indices[:,0],
-                                  gt_indices[par_status[:,0]=='obs',1],
-                                  gt_indices[par_status[:,1]=='obs',2]))))
+                                  gt_indices[par_status[:,0]==0,1],
+                                  gt_indices[par_status[:,1]==0,2]))))
     # Get imputed indices
-    imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:,0]=='imp',1],
-                                  gt_indices[par_status[:,1]=='imp',2]))))
+    imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:,0]==1,1],
+                                  gt_indices[par_status[:,1]==1,2]))))
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed
     imp_sid = convert_str_array(np.array(par_gts_f['sid']))
