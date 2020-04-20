@@ -213,7 +213,7 @@ if __name__ == '__main__':
         ValueError('No family label from pedigree for some individuals')
     #### Fit models ####
     print('Fitting null model')
-    sigma2, tau, null_alpha = fit_null_model(y,np.ones((y.shape[0],1)),fam_labels)
+    sigma2, tau, null_alpha = fit_null_model(y,np.ones((y.shape[0],1)),fam_labels, args.tau_init)
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
     ## locus specific models ##
