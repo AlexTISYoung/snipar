@@ -42,9 +42,9 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('sibgts',type=str,help='Path to bed file with sibling genotypes')
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
-    parser.add_argument('sibped',type=str,help='Path to pedigree file with siblings sharing a family ID and non-siblings not')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
+    parser.add_argument('--sibped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--covar',type=str,help='Location of covariate file (default None)',
                         default=None)
     parser.add_argument('--fit_covariates',action='store_true',
@@ -106,7 +106,13 @@ if __name__ == '__main__':
 
     ### Read pedigree file ###
     ### Load pedigree
-    ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
+    print('Reading imputed parental genotype file')
+    pargts_f = h5py.File(args.pargts, 'r')
+    if args.sibped is not None:
+        ped = np.loadtxt(args.sibped, dtype='S20', skiprows=1)
+    else:
+        ped = np.array(pargts_f['pedigree'],dtype='S20')
+        ped = ped[1:ped.shape[0],:]
 
     ### Create family dictionary
     fams = {}
@@ -119,8 +125,6 @@ if __name__ == '__main__':
         sib_fam_dict[ped[i, 1]] = ped[i, 0]
 
     ### Read imputed parental genotypes ###
-    print('Reading imputed parental genotype file')
-    pargts_f = h5py.File(args.pargts, 'r')
     # get families
     par_fams = np.array(pargts_f['families'])
     # build family dictionary
