@@ -91,8 +91,6 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
             G[i, 3, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Paternal genotype neither imputed nor observed')
-    # Mean normalise
-    G[:,1:4] = G[:,1:4] - np.mean(G[:,1:4],axis=0)
     # Add column of 1s
     G[:,0] = 1
     return G
@@ -211,6 +209,9 @@ if __name__ == '__main__':
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     G = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+    del gts
+    del imp_gts
+    G = ma.array(G,mask=np.isnan(G))
     # Check for empty fam labels
     no_fam = np.array([len(x)==0 for x in fam_labels])
     if np.sum(no_fam)>0:
@@ -233,23 +234,22 @@ if __name__ == '__main__':
 
     ############### Loop through loci and fit models ######################
     # Optimize model for SNP
-    freqs = ma.mean(G[:,0,:],axis=0)/2.0
+    freqs = ma.mean(G[:,1,:],axis=0)/2.0
+    missingness = ma.mean(G.mask[:, 0, :], axis=0)
     xtx = np.zeros((sid.shape[0],X_length,X_length),dtype=np.float32)
     xtx[:] = np.nan
     xty = np.zeros((sid.shape[0],X_length),dtype=np.float32)
     xty[:] = np.nan
     for loc in range(0,G.shape[2]):
-        if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf):
+        if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
             # Find NAs
-            not_nans = np.sum(np.isnan(G[:, :, loc]), axis=1) == 0
+            not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
-            missingness = 1-float(n_l)/float(G.shape[0])
-            if (100 * missingness) < args.max_missing:
-                model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans])
-                alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=True, xtx_out= True)
-                xtx[loc,:,:] = alpha_l[0]
-                xty[loc,:] = alpha_l[1]
+            model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans])
+            alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=False, xtx_out= True)
+            xtx[loc,:,:] = alpha_l[0]
+            xty[loc,:] = alpha_l[1]
     print('Writing output')
     outfile['xtx'][:] = xtx
     outfile['xty'][:] = xty
