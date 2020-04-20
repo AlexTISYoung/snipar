@@ -465,7 +465,6 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             
     """
     cdef int number_of_threads = 1
-    print("threads", threads)
     if threads is not None:
         number_of_threads = threads
     logging.info("imputing data ...")
@@ -508,6 +507,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
     progress = -1
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
+    logging.info("using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
     #     # if (index*100)//number_of_fams > progress:
     #     #     progress = (index*100)//number_of_fams
