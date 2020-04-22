@@ -126,8 +126,10 @@ if __name__ == "__main__":
         start_time = time.time()
         address = args.out_prefix
         if address is None:
-            address = "outputs/parent_imputed_chr"+str(chromosome)
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, address, threads=args.threads)
+            file_address = "outputs/parent_imputed_chr"+str(chromosome)
+        else:
+            file_address = address+str(chromosome)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, file_address, threads=args.threads)
         end_time = time.time()
         consumed_time += (end_time-start_time)
     logging.info("imputation time: "+str(consumed_time))
