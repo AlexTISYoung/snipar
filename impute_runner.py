@@ -96,7 +96,7 @@ if __name__ == "__main__":
     parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
     parser.add_argument('--king',type=str,default = None, help='Address of the king file')
     parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
-    parser.add_argument('--cores', type=int, default=1, help='Number of the cores to be used')
+    parser.add_argument('--threads', type=int, default=1, help='Number of the cores to be used')
 
     args=parser.parse_args()
     #fids starting with _ are reserved for control
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         address = args.out_prefix
         if address is None:
             address = "outputs/parent_imputed_chr"+str(chromosome)
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, address, threads=args.cores)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, address, threads=args.threads)
         end_time = time.time()
         consumed_time += (end_time-start_time)
     logging.info("imputation time: "+str(consumed_time))
