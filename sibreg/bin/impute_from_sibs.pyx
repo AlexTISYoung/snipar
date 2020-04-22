@@ -458,6 +458,9 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
                     Its columns are has_father, has_mother, single_parent respectively.
+        
+        threads : int, optional
+            Specifies the Number of threads to be used. If None there will be only one thread.
 
     Returns:
         tuple(list, numpy.array)
@@ -585,6 +588,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             else:
                 imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp, snp_ibd0[this_thread,:,:], snp_ibd1[this_thread,:,:], snp_ibd2[this_thread,:,:], freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
             snp = snp+1
+
     if output_address is not None:
         logging.info("Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:

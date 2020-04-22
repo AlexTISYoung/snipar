@@ -56,6 +56,9 @@ Args:
         Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
         ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
 
+    --threads : int, optional
+        Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
