@@ -13,6 +13,7 @@ Just run "python sibreg/bin/impute_from_sibs.py build_ext --inplace"
 
 from setuptools import Extension, setup
 from Cython.Build import cythonize
+import numpy
 
 ext_modules = [
     Extension(
@@ -27,4 +28,6 @@ ext_modules = [
 setup(
     name='sib imputation',
     ext_modules=cythonize(ext_modules),
+    include_dirs=[numpy.get_include()]
+
 )
