@@ -119,7 +119,7 @@ if __name__ == "__main__":
     ibd_pd = pd.read_csv(args.ibd, sep = "\t")
     logging.info("ibd loaded.")
     for chromosome in range(args.from_chr, args.to_chr):
-        print(chromosome, " is chromosome")
+        logging.info(chromosome, " is chromosome")
         sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd_pd, chromosome, args.start, args.end, args.bim)
         gts = gts.astype(float)
         pos = pos.astype(int)
