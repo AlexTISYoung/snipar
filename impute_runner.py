@@ -26,8 +26,8 @@ Args:
         This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
         Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
-    genotypes_prefix : str
-        Prefix for the address of genotype bed files. Address of the bed file for chromosome i would be genotypes_prefix{i}.
+    genotypes_address : str
+        Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.
 
     bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument('from_chr',type=int,help='Which chromosome (<=)')
     parser.add_argument('to_chr',type=int,help='Which chromosome (<)')
     parser.add_argument('ibd',type=str,help='IBD file')
-    parser.add_argument('genotypes_prefix',type=str,help='prefix of genotypes in .bed format')
+    parser.add_argument('genotypes_address',type=str,help='address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.')
     parser.add_argument('--bim',type=str,default = None, help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
     parser.add_argument('--out_prefix',type=str,default = "parent_imputed_chr", help="Writes the result of imputation for chromosome i to outprefix{i}")
     parser.add_argument('--start', type=int,
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     logging.info("ibd loaded.")
     for chromosome in range(args.from_chr, args.to_chr):
         logging.info(str(chromosome) + " is chromosome")
-        bed_address = args.genotypes_prefix
+        bed_address = args.genotypes_address
         if "~" in bed_address:
             bed_address = bed_address.replace("~", str(chromosome))
         sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, bed_address, ibd_pd, chromosome, args.start, args.end, args.bim)
