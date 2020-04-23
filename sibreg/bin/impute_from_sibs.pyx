@@ -19,7 +19,6 @@ from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
 from libcpp.pair cimport pair as cpair
 from cpython cimport array
-import array
 cimport numpy as cnp
 from libcpp.vector cimport vector
 import cython
