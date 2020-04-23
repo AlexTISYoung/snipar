@@ -9,6 +9,7 @@ import numpy as np
 import logging
 import unittest
 from scipy.stats import norm
+import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
 logging.root.setLevel(logging.NOTSET)
@@ -28,9 +29,11 @@ class TestGenerated(unittest.TestCase):
 			except OSError as exc: # Guard against race condition
 				if exc.errno != errno.EEXIST:
 					raise
+		start = 0
+		interval = 0
 		#generating population
 		os.system('python example/simulate_pop.py ' + str(number_of_snps) + ' ' + str(min_f) + ' ' + str(number_of_families) + ' 0 0 0 "outputs/tmp/generated"')
-		# Adding header to the pedigree file
+		# Adding header to the ped.igree file
 		os.system('echo -e "FID IID FATHER_ID MOTHER_ID\n$(cat outputs/tmp/generated_fams.ped)" > outputs/tmp/generated_fams.ped')
 		#convert the generated data to a bed file
 		os.system('plink/plink --noweb --file outputs/tmp/generated --make-bed --out outputs/tmp/generated')
@@ -64,7 +67,7 @@ class TestGenerated(unittest.TestCase):
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
-		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict)
+		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, threads = 2)
 		expected_parents = Bed("outputs/tmp/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid

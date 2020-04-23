@@ -56,6 +56,9 @@ Args:
         Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
         ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
 
+    --threads : int, optional
+        Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
@@ -93,6 +96,7 @@ if __name__ == "__main__":
     parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
     parser.add_argument('--king',type=str,default = None, help='Address of the king file')
     parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
+    parser.add_argument('--threads', type=int, default=1, help='Number of the cores to be used')
 
     args=parser.parse_args()
     #fids starting with _ are reserved for control
@@ -120,11 +124,12 @@ if __name__ == "__main__":
         gts = gts.astype(float)
         pos = pos.astype(int)
         start_time = time.time()
-        if args.out_prefix is None:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, "outputs/parent_imputed_chr"+str(chromosome))
+        address = args.out_prefix
+        if address is None:
+            file_address = "outputs/parent_imputed_chr"+str(chromosome)
         else:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, args.out_prefix+str(chromosome))
+            file_address = address+str(chromosome)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, file_address, threads=args.threads)
         end_time = time.time()
         consumed_time += (end_time-start_time)
-
     logging.info("imputation time: "+str(consumed_time))
