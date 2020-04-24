@@ -46,7 +46,6 @@ parser.add_argument('n_sib_only',type=int,help='Number of families to observe si
 parser.add_argument('n_one_parent',type=int,help='Number of families to observe only one genotyped parent')
 parser.add_argument('p_sib_missing',type=float,help='Probability that one sibling is missing')
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
-parser.add_argument('--fsize',type=int,help='Number of children in each family (default 2)',default=2)
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -56,7 +55,7 @@ outprefix = args.outprefix
 n_sib_only = args.n_sib_only
 n_one_parent = args.n_one_parent
 p_sib_missing = args.p_sib_missing
-fsize = args.fsize
+fsize = 2
 
 father_gts = np.zeros((nfam,nsnp),dtype=np.int8)
 mother_gts = np.zeros((nfam,nsnp),dtype=np.int8)
@@ -89,20 +88,42 @@ for i in range(0,nfam):
     ped[i * fp + fsize, 3] = str(i) + '_' + 'P_M'
     ped[i * fp + fsize + 1, 2] = str(i) + '_' + 'M_P'
     ped[i * fp + fsize + 1, 3] = str(i) + '_' + 'M_M'
+
 ped_out = np.vstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20').reshape((1,4)),ped))
 ## Write pedigree file
 np.savetxt(outprefix+'_fams.ped',ped_out,fmt='%s')
 
+# Write relationships and age sex king output
+age_sex_out = open(args.outprefix+'.agesex','w')
+age_sex_out.write('FID IID age sex\n')
+for i in range(0, nfam):
+    # Write king.kin0
+    kin_out.write(str(i)+'\t'+str(i)+'_0'+'\t'+str(i)+'\t'+str(i)+'_1'+'\t0\t0\t0\t0\t0\t0\t0\t0\t0\tFS\n')
+    kin_out.write(
+        str(i) + '\t' + str(i) + '_0' + '\t' + str(i) + '\t' + str(i) + '_P' + '\t0\t0\t0\t0\t0\t0\t0\t0\t0\tPO\n')
+    kin_out.write(
+        str(i) + '\t' + str(i) + '_0' + '\t' + str(i) + '\t' + str(i) + '_M' + '\t0\t0\t0\t0\t0\t0\t0\t0\t0\tPO\n')
+    kin_out.write(
+        str(i) + '\t' + str(i) + '_1' + '\t' + str(i) + '\t' + str(i) + '_P' + '\t0\t0\t0\t0\t0\t0\t0\t0\t0\tPO\n')
+    if i == nfam-1:
+        kin_out.write(
+            str(i) + '\t' + str(i) + '_1' + '\t' + str(i) + '\t' + str(i) + '_M' + '\t0\t0\t0\t0\t0\t0\t0\t0\t0\tPO')
+    else:
+        kin_out.write(
+            str(i) + '\t' + str(i) + '_1' + '\t' + str(i) + '\t' + str(i) + '_M' + '\t0\t0\t0\t0\t0\t0\t0\t0\t0\tPO\n')
+    # Write age_sex
+    age_sex_out.write(str(i)+' '+str(i) + '_0 20 M\n')
+    age_sex_out.write(str(i) + ' ' + str(i) + '_1 20 F\n')
+    age_sex_out.write(str(i) + ' ' + str(i) + '_M 40 F\n')
+    if i == nfam-1:
+        age_sex_out.write(str(i) + ' ' + str(i) + '_P 40\tM')
+    else:
+        age_sex_out.write(str(i) + ' ' + str(i) + '_P 40 M\n')
+
+age_sex_out.close()
+kin_out.close()
+
 ibd = ibd[:,0,:]
-# Save in HDF5 file
-hf = h5py.File(outprefix+'.hdf5','w')
-hf['sib_gts'] = sib_gts
-hf['ibd'] = ibd
-hf['father_gts'] = father_gts
-hf['mother_gts'] = mother_gts
-hf['ibd_fams'] = np.array([x for x in range(0,nfam)])
-hf['ped'] = ped.astype("S")
-hf.close()
 
 # Convert IBD to KING format
 king_out = gzip.open(args.outprefix+'.segments.gz','wb')
@@ -136,7 +157,6 @@ for i in range(0,nfam):
                 king_out.write(b'\n')
 king_out.close()
 
-
 ## Write full PED file
 pout = open(outprefix+'.ped','w')
 for i in range(0,nfam):
@@ -149,6 +169,8 @@ pout.close()
 
 # Write list of individuals to remove
 remove = open(outprefix+'_remove.txt','w')
+kin_out = open(args.outprefix+'.king.kin0','w')
+kin_out.write('FID1\tID1\tFID2\tID2\tN_SNP\tHetHet\tIBS0\tHetConc\tHomIBS0\tKinship\tIBD1Seg\tIBD2Seg\tPropIBD\tInfType\n')
 for i in range(0,n_sib_only):
     # Remove parents
     remove.write(ped[fp * i + fsize, 0]+' '+ped[fp * i + fsize, 1]+'\n')

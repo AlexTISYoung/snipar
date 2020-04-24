@@ -3,18 +3,10 @@ library(rhdf5)
 args = commandArgs(trailingOnly = T)
 
 sib_file = args[1]
-#sib_file = 'pGWAS.hdf5'
-po_file_no_sib = args[2]
-#po_file_no_sib = 'poGWAS_no_sib.hdf5'
-po_file_sib = args[3]
-#po_file_sib = 'poGWAS_sib.hdf5'
-bpg_file_no_sib = args[4]
-#bpg_file_no_sib = 'triGWAS_no_sib.hdf5'
-bpg_file_sib = args[5]
-#bpg_file_sib = 'triGWAS_sib.hdf5'
-effect_file = args[6]
-#effect_file = 'h2_quad_0.5.effects.txt'
-out = args[7]
+#sib_file = 'h2_quad_0.8.hdf5'
+effect_file = args[2]
+#effect_file = 'h2_quad_0.8.effects.txt'
+out = args[3]
 #out = 'h2_trio_0.5.meta.hdf5'
 
 if (is.null(args[8])){

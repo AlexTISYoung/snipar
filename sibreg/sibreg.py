@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
-from scipy.linalg import sqrtm
 
 class model(object):
     """Define a linear model with within-class correlations.
@@ -17,14 +16,17 @@ class model(object):
         model : :class:`sibreg.model`
 
     """
-    def __init__(self,y,X,labels):
+    def __init__(self,y,X,labels, add_intercept = False):
         if y.shape[0] == X.shape[0] and X.shape[0] == labels.shape[0]:
             pass
         else:
             raise(ValueError('inconsistent sample sizes of response, covariates, and labels'))
         # Get sample size
         self.n = X.shape[0]
-        self.X=X
+        if add_intercept:
+            self.X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
+        else:
+            self.X=X
         # Label mapping
         self.label_counts = dict()
         self.label_indices = dict()

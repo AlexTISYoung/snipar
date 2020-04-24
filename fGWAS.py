@@ -3,7 +3,7 @@ import numpy as np
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from sibreg import sibreg
-import h5py, argparse
+import h5py, argparse, code
 
 def make_id_dict(x,col=0):
     if len(x.shape)>1:
@@ -73,26 +73,24 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
-    G = np.zeros((N,4,gts.shape[1]),np.float32)
+    G = np.zeros((N,3,gts.shape[1]),np.float32)
     for i in range(0,N):
         # Observed proband genotype
-        G[i,1,:] = gts[gt_indices[i,0],:]
+        G[i,0,:] = gts[gt_indices[i,0],:]
         # Paternal genotype
         if par_status[i,0] == 0:
-            G[i,2,:] = gts[gt_indices[i,1],:]
+            G[i,1,:] = gts[gt_indices[i,1],:]
         elif par_status[i,0] == 1:
-            G[i,2,:] = imp_gts[gt_indices[i,1],:]
+            G[i,1,:] = imp_gts[gt_indices[i,1],:]
         else:
             ValueError('Paternal genotype neither imputed nor observed')
         # Maternal genotype
         if par_status[i, 1] == 0:
-            G[i, 3, :] = gts[gt_indices[i, 2], :]
-        elif par_status[i, 0] == 1:
-            G[i, 3, :] = imp_gts[gt_indices[i, 2], :]
+            G[i, 2, :] = gts[gt_indices[i, 2], :]
+        elif par_status[i, 1] == 1:
+            G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
         else:
-            ValueError('Paternal genotype neither imputed nor observed')
-    # Add column of 1s
-    G[:,0] = 1
+            ValueError('Maternal genotype neither imputed nor observed')
     return G
 
 def fit_null_model(y,X,fam_labels,tau_init):
@@ -129,7 +127,7 @@ if __name__ == '__main__':
     pheno = Pheno(args.phenofile, missing=args.missing_char).read()
     # pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
     y = np.array(pheno.val)
-    pheno_ids = np.array(pheno.iid)
+    pheno_ids = np.array(pheno.iid)[:,1]
     if y.ndim == 1:
         pass
     elif y.ndim == 2:
@@ -140,7 +138,7 @@ if __name__ == '__main__':
     y_not_nan = np.logical_not(np.isnan(y))
     if np.sum(y_not_nan) < y.shape[0]:
         y = y[y_not_nan]
-        pheno_ids = pheno_ids[y_not_nan, 1]
+        pheno_ids = pheno_ids[y_not_nan]
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
 
     ####### Find parental status #######
@@ -235,7 +233,7 @@ if __name__ == '__main__':
     ############### Loop through loci and fit models ######################
     # Optimize model for SNP
     freqs = ma.mean(G[:,1,:],axis=0)/2.0
-    missingness = ma.mean(G.mask[:, 0, :], axis=0)
+    missingness = ma.mean(G.mask[:, 1, :], axis=0)
     xtx = np.zeros((sid.shape[0],X_length,X_length),dtype=np.float32)
     xtx[:] = np.nan
     xty = np.zeros((sid.shape[0],X_length),dtype=np.float32)
@@ -247,7 +245,7 @@ if __name__ == '__main__':
             not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
             n_l = np.sum(not_nans)
             N_L[loc] = n_l
-            model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans])
+            model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans], add_intercept= True)
             alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=False, xtx_out= True)
             xtx[loc,:,:] = alpha_l[0]
             xty[loc,:] = alpha_l[1]

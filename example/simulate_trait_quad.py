@@ -2,6 +2,12 @@ import numpy as np
 import argparse
 from pysnptools.snpreader import Bed
 
+def convert_str_array(x):
+    x_shape = x.shape
+    x = x.flatten()
+    x_out = np.array([y.decode('UTF-8') for y in x])
+    return x_out.reshape(x_shape)
+
 parser = argparse.ArgumentParser()
 parser.add_argument('gts', type=str, help='Path to bed file with sibling genotypes')
 parser.add_argument('ped', type=str, help='Path to pedigree file')
@@ -28,7 +34,7 @@ gts = gts_f.read().val
 gts = np.array(gts)
 
 # Find parents
-ped = np.loadtxt(args.ped, dtype='S20')
+ped = convert_str_array(np.loadtxt(args.ped,dtype='S'))
 ped = ped[1:ped.shape[0],:]
 
 fams = np.unique(ped[:,0])
