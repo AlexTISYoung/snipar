@@ -48,7 +48,6 @@ class TestCommanline(unittest.TestCase):
                    ]
         subprocess.check_call(command)
 
-    # TODO handle nothing to impute errors
     def test_impute_runner_with_king_control(self):
         command = ["python",
                    "impute_runner.py",

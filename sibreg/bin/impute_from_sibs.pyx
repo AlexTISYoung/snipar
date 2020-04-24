@@ -461,6 +461,10 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
             
     """
+    if sibships.empty:
+        logging.warning("Error: No families to be imputed")
+        return [], np.array()
+
     cdef int number_of_threads = 1
     if threads is not None:
         number_of_threads = threads
