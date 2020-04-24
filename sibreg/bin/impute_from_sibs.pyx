@@ -28,7 +28,6 @@ from datetime import datetime
 from cython.parallel import prange
 cimport openmp
 cdef float nan_float = np.nan
-#TODO move readind IBD and pedigree to outside prepare_data
 
 cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
@@ -53,7 +52,6 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     Returns:
         cmap[cpair[cstring, cstring], vector[int]]
     """
-    #Converts a dictionary of (str, str)->int[] to cmap[cpair[cstring, cstring], vector[int]]
     cdef cpair[cstring,cstring] map_key
     cdef vector[int] map_val
     cdef cpair[cpair[cstring,cstring], vector[int]] map_element
@@ -61,12 +59,10 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     for key,val in the_dict.items():
         map_key.first = key[0].encode('ASCII')
         map_key.second = key[1].encode('ASCII')
-        # map_key = key
         map_val = val
         map_element = (map_key, map_val)
         c_dict.insert(map_element)
     return c_dict
-#TODO use scipy interface
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
@@ -98,7 +94,7 @@ cdef float impute_snp_from_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.float_t, ndim=2]
+        bed : cnp.ndarray[cnp.double_t, ndim=2]
             A two-dimensional array containing genotypes for all individuals and SNPs.
 
         len_snp_ibd0 : int
@@ -197,7 +193,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.float_t, ndim=2]
+        bed : cnp.ndarray[cnp.double_t, ndim=2]
             A two-dimensional array containing genotypes for all individuals and SNPs.
 
         len_snp_ibd0 : int
@@ -225,7 +221,6 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
-        #TODO check validity (sum >= gp)
         result = 0
         counter = 0
         for pair_index in range(len_snp_ibd0):
@@ -594,19 +589,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')
             f['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
-            #TODO find a better format
             f['pos'] = pos
             f["sid"] = np.array(hdf5_output_dict["sid"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)
-
-def test(number_of_threads):
-    cdef int i
-    cdef int n = 10000
-    cdef int sum = 0
-    cdef int m = number_of_threads
-
-    for i in prange(n, nogil=True, num_threads = m):
-        sum += i
-
-    print(sum)

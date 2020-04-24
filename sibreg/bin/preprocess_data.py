@@ -256,7 +256,6 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
-    #TODO handle sibs with one parent
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
     sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]).agg({'IID':lambda x: list(x)}).reset_index()

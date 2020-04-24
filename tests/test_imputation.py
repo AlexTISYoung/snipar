@@ -51,8 +51,6 @@ def imputation_test(chromosomes,
         mask_o = ~(np.isnan(expected_genes_o) | np.isnan(imputed_genes_o))
         expected_genes_o = expected_genes_o[mask_o]
         imputed_genes_o = imputed_genes_o[mask_o]
-        #TODO figure out whats going on with the swap
-        # imputed_genes_o, expected_genes_o = expected_genes_o, imputed_genes_o
         control_p = list({row["FID"][3:] for index, row in ped.iterrows() if row["FID"].startswith("_p_")})
         control_m = list({row["FID"][3:] for index, row in ped.iterrows() if row["FID"].startswith("_m_")})
         control_pm_families = control_p + control_m

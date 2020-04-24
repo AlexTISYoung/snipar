@@ -13,12 +13,9 @@ import time
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
 logging.root.setLevel(logging.NOTSET)
-#TODO use already generated data
 class TestGenerated(unittest.TestCase):
 	def test_generate_and_regress(self):
 		#requies plink
-		#TODO add plink to the package requirments
-		#TODO test on windows
 		number_of_snps = 1000
 		min_f = 0.05
 		number_of_families = 100
@@ -56,7 +53,6 @@ class TestGenerated(unittest.TestCase):
 				if j.endswith("_P") or j.endswith("_M"):
 					f.write(str(i) + " " + str(j) + "\n")
 		#writing sibs only
-		#TODO handle plink path
 		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_sibs.txt --make-bed --out outputs/tmp/generated_sibs')
 		#writing parents only
 		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_parents.txt --make-bed --out outputs/tmp/generated_parents')
