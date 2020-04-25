@@ -197,4 +197,4 @@ if __name__ == "__main__":
     pool = Pool(args.processes)
     logging.info("staring process pool")
     consumed_time = pool.map(run_imputation, inputs)
-        logging.info("imputation time: "+str(np.sum(consumed_time)))
+    logging.info("imputation time: "+str(np.sum(consumed_time)))
