@@ -63,7 +63,7 @@ class TestGenerated(unittest.TestCase):
 																1)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
-		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, threads = 2)
+		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, 1, threads = 2)
 		expected_parents = Bed("outputs/tmp/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid

@@ -416,7 +416,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_address = None, threads = None):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None):
     """Does the parent sum imputation for families in sibships and all the SNPs in gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -442,6 +442,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
         hdf5_output_dict : dict
             Other key values to be added to the HDF5 output
 
+        chromosome: int
+            Number of the chromosome that's going to be imputed. Only used for logging purposes.
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
             The following table explains the keys and their corresponding values within this file.
@@ -461,14 +463,15 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
             
     """
+    logging.warning("with chromosome " + str(chromosome)+": " + "imputing ...")
     if sibships.empty:
-        logging.warning("Error: No families to be imputed")
+        logging.warning("with chromosome " + str(chromosome)+": " + "Error: No families to be imputed")
         return [], np.array()
 
     cdef int number_of_threads = 1
     if threads is not None:
         number_of_threads = threads
-    logging.info("imputing data ...")
+    logging.info("with chromosome " + str(chromosome)+": " + "imputing data ...")
     #converting python obejcts to c
     #sibships
     cdef int max_sibs = np.max(sibships["sib_count"])
@@ -508,7 +511,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
     progress = -1
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
-    logging.info("using "+str(threads)+" threads")
+    logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
     #     # if (index*100)//number_of_fams > progress:
     #     #     progress = (index*100)//number_of_fams
@@ -586,9 +589,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
             else:
                 imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp, snp_ibd0[this_thread,:,:], snp_ibd1[this_thread,:,:], snp_ibd2[this_thread,:,:], freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
             snp = snp+1
-
     if output_address is not None:
-        logging.info("Writing the results as a hdf5 file to "+output_address + ".hdf5")
+        logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')

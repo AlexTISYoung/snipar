@@ -249,8 +249,8 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
                 pos: A numpy array with the position of each SNP in the order of appearance in gts.
                 hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
     """
-    logging.info("initializing data")
-    logging.info("loading and filtering pedigree file ...")
+    logging.info("with chromosome " + str(chr)+": " + "initializing data")
+    logging.info("with chromosome " + str(chr)+": " + "loading and filtering pedigree file ...")
     #keeping individuals with no parents
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
@@ -264,14 +264,14 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("loading bim file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading bim file ...")
     if bim_address is None:
         bim_file = genotypes_address+'.bim'
     else:
         bim_file = bim_address
     bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
     #TODO what if people are related but do not have ibd on chrom
-    logging.info("loading and transforming ibd file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading and transforming ibd file ...")
     ibd = ibd.astype(str)
     #Adding location of start and end of each 
     ibd = ibd[ibd["Chr"] == str(chr)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
@@ -288,7 +288,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("loading bed file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading bed file ...")
     gts_f = Bed(genotypes_address+".bed")
     ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
     gts_ids = gts_f.iid[ids_in_ped]
@@ -301,7 +301,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
         pos = gts_f.pos[:, 2]
         sid = gts_f.sid
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    logging.info("initializing data done ...")
+    logging.info("with chromosome " + str(chr)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
