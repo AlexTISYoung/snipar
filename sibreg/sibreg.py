@@ -25,6 +25,8 @@ class model(object):
         self.n = X.shape[0]
         if add_intercept:
             X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
+        if X.ndim == 1:
+            X = X.reshape((X.shape[0],1))
         self.X = X
         # Label mapping
         self.label_counts = dict()

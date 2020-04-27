@@ -502,14 +502,19 @@ if __name__ == '__main__':
         y = y[in_pgs]
         pheno_ids = pheno_ids[in_pgs]
         gt_indices = np.array([pg.id_dict[x] for x in pheno_ids])
+        # Estimate full model
         alpha_imp = get_alpha_mle(y, pg.gts[gt_indices,:], pg.fams[gt_indices], add_intercept = True)
+        # Estimate proband only model
+        alpha_proband = get_alpha_mle(y, pg.gts[gt_indices, 0], pg.fams[gt_indices], add_intercept=True)
         # Get print out for fixed mean effects
-        alpha_out = np.zeros((3, 2))
-        alpha_out[:, 0] = alpha_imp[0][1:4]
-        alpha_out[:, 1] = np.sqrt(np.diag(alpha_imp[1])[1:4])
+        alpha_out = np.zeros((4, 2))
+        alpha_out[0:3, 0] = alpha_imp[0][1:4]
+        alpha_out[0:3, 1] = np.sqrt(np.diag(alpha_imp[1])[1:4])
+        alpha_out[3,0] = alpha_proband[0][1]
+        alpha_out[3,1] = np.sqrt(np.diag(alpha_proband[1])[1])
         print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
         np.savetxt(args.outprefix + '.pgs_effects.txt',
-                   np.hstack((np.array(['proband','paternal','maternal']).reshape((3, 1)), np.array(alpha_out, dtype='S20'))),
+                   np.hstack((np.array(['proband','paternal','maternal','associative']).reshape((4, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:4,1:4])
