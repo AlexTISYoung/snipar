@@ -335,6 +335,7 @@ def fit_null_model(y,X,fam_labels,tau_init):
 
 
 def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
+    # Initialise var pars
     sigma_2_init = np.var(y) / 2.0
     model = sibreg.model(y, pgs, fam_labels, add_intercept = add_intercept)
     optim = model.optimize_model(np.array([sigma_2_init,1]))
