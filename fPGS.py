@@ -120,7 +120,7 @@ class pgs(object):
         else:
             raise ValueError('All inputs must have the same dimension')
 
-    def compute(self,garray):
+    def compute(self,garray, cols = None):
         if type(garray) == gtarray:
             garray.fill_NAs()
         else:
@@ -160,7 +160,7 @@ class pgs(object):
                 pgs_val[:,i] = garray.gts[:,i,in_pgs_snps].dot(weights_compute)
 
 
-        return gtarray(pgs_val, garray.ids, np.array(['proband','paternal','maternal']), fams = garray.fams)
+        return gtarray(pgs_val, garray.ids, sid = cols, fams = garray.fams)
 
 def make_id_dict(x,col=0):
     if len(x.shape)>1:
@@ -378,9 +378,13 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     del imp_gts
     return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels)
 
-def compute_pgs(par_gts_f,gts_f,pgs):
-    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids)
-    return pgs.compute(G)
+def compute_pgs(par_gts_f,gts_f,pgs, sib = False):
+    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib)
+    if sib:
+        cols = np.array(['proband','sibling','paternal','maternal'])
+    else:
+        cols = np.array(['proband','paternal','maternal'])
+    return pgs.compute(G,cols)
 
 def fit_null_model(y,X,fam_labels,tau_init):
     # Optimize null model
@@ -447,10 +451,10 @@ if __name__ == '__main__':
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
-        pg = compute_pgs(pargts_list[0],gts_list[0],p)
+        pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
-            pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p))
+            pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p, sib = args.fit_sib))
         # Normalise PGS
         pg.mean_normalise()
         pg.scale()
@@ -461,7 +465,7 @@ if __name__ == '__main__':
         pgs_out = h5py.File(args.outprefix+'.pgs.hdf5','w')
         pgs_out['pgs'] = pg.gts
         pgs_out['ids'] = encode_str_array(pg.ids)
-        pgs_out['cols'] = encode_str_array(np.array(['proband','paternal','maternal']))
+        pgs_out['cols'] = encode_str_array(pg.sid)
         pgs_out['fams'] = encode_str_array(pg.fams)
         pgs_out.close()
     elif args.pgs is not None:
@@ -507,14 +511,15 @@ if __name__ == '__main__':
         # Estimate proband only model
         alpha_proband = get_alpha_mle(y, pg.gts[gt_indices, 0], pg.fams[gt_indices], add_intercept=True)
         # Get print out for fixed mean effects
-        alpha_out = np.zeros((4, 2))
-        alpha_out[0:3, 0] = alpha_imp[0][1:4]
-        alpha_out[0:3, 1] = np.sqrt(np.diag(alpha_imp[1])[1:4])
-        alpha_out[3,0] = alpha_proband[0][1]
-        alpha_out[3,1] = np.sqrt(np.diag(alpha_proband[1])[1])
+        alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
+        alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]
+        alpha_out[0:pg.sid.shape[0], 1] = np.sqrt(np.diag(alpha_imp[1])[1:(1+pg.sid.shape[0])])
+        alpha_out[pg.sid.shape[0],0] = alpha_proband[0][1]
+        alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
         print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
+        outcols = np.hstack((pg.sid,np.array(['associative']))).reshape((pg.sid.shape[0]+1,1))
         np.savetxt(args.outprefix + '.pgs_effects.txt',
-                   np.hstack((np.array(['proband','paternal','maternal','associative']).reshape((4, 1)), np.array(alpha_out, dtype='S20'))),
+                   np.hstack((outcols, np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
-        np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:4,1:4])
+        np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
