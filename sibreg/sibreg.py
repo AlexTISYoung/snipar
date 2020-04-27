@@ -24,9 +24,8 @@ class model(object):
         # Get sample size
         self.n = X.shape[0]
         if add_intercept:
-            self.X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
-        else:
-            self.X=X
+            X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
+        self.X = X
         # Label mapping
         self.label_counts = dict()
         self.label_indices = dict()
