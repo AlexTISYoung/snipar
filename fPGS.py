@@ -60,6 +60,13 @@ class gtarray(object):
                     self.gts[:, i, :] = self.gts[:, i, :] - ma.mean(self.gts[:, i, :], axis=0)
             self.mean_normalised = True
 
+    def scale(self):
+        if self.gts.ndim == 2:
+            self.gts = self.gts/ma.std(self.gts, axis=0)
+        elif self.gts.ndim == 3:
+            for i in range(0, self.gts.shape[1]):
+                self.gts[:, i, :] = self.gts[:, i, :]/ma.std(self.gts[:, i, :], axis=0)
+
     def fill_NAs(self):
         if not self.mean_normalised:
             self.mean_normalise()
@@ -181,6 +188,43 @@ def encode_str_array(x):
     x_out = np.array([y.encode('ascii') for y in x])
     return x_out.reshape(x_shape)
 
+def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
+    # Find genotyped sibships of size > 1
+    ped_dict = make_id_dict(ped, 1)
+    gts_fams = np.array([ped[ped_dict[x], 0] for x in gts_ids])
+    fams, counts = np.unique(gts_fams, return_counts=True)
+    sibships = set(fams[counts > 1])
+    # Find individuals with genotyped siblings
+    ids_fams = np.array([ped[ped_dict[x], 0] for x in ids])
+    ids_with_sibs = np.array([x in sibships for x in ids_fams])
+    ids = ids[ids_with_sibs]
+    ids_fams = ids_fams[ids_with_sibs]
+    if return_ids_only:
+        return ids
+    else:
+        return ids, ids_fams, gts_fams
+
+def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
+    ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
+    fams, counts = np.unique(ids_fams, return_counts = True)
+    fams_dict = make_id_dict(fams)
+    # Compute sums of genotypes in each family
+    fam_sums = np.zeros((fams.shape[0],gts.shape[1]),dtype=gts.dtype)
+    for i in range(0,fams.shape[0]):
+        fam_sums[i,:] = np.sum(gts[np.where(gts_fams==fams[i])[0],:],axis=0)
+    # Place in vector corresponding to IDs
+    gts_id_dict = make_id_dict(gts_ids)
+    G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
+    for i in range(0,ids.shape[0]):
+        G_sib[i,:] = fam_sums[fams_dict[ids_fams[i]],:]
+        n_i = counts[i]
+        if remove_proband:
+            G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
+            n_i = n_i-1
+        G_sib[i,:] = G_sib[i,:]/float(n_i)
+    return gtarray(G_sib,ids)
+
+
 def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
     # Whether mother and father have observed/imputed genotypes
     par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
@@ -243,7 +287,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids):
+def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     ####### Find parental status #######
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
@@ -262,10 +306,17 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids):
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
+    if ids is None:
+        ids = gts_ids
+
+    # Find mean of siblings
+    if sib:
+        ids = find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = True)
+        print('Found '+str(ids.shape[0])+' individuals with genotyped siblings')
 
     ### Find parental status
     print('Checking for observed/imputed parental genotypes')
-    par_status, gt_indices, fam_labels = find_par_gts(gts_ids,ped,fams,gts_id_dict)
+    par_status, gt_indices, fam_labels = find_par_gts(ids,ped,fams,gts_id_dict)
     # Find which individuals can be used
     none_missing = np.min(par_status, axis=1)
     none_missing = none_missing >= 0
@@ -277,7 +328,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids):
     # Take those that can be used
     gt_indices = gt_indices[none_missing,:]
     par_status = par_status[none_missing,:]
-    ids = gts_ids[none_missing]
+    ids = ids[none_missing]
     ## Read genotypes
     observed_indices = np.sort(np.unique(np.hstack((gt_indices[:,0],
                                   gt_indices[par_status[:,0]==0,1],
@@ -302,6 +353,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids):
     alleles = alleles[obs_sid_index,:]
     if np.sum(in_obs_sid) == 0:
         raise ValueError('No SNPs in common between imputed, observed, and PGS')
+
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')
     imp_gts = np.array(par_gts_f['imputed_par_gts'][:,in_obs_sid])
@@ -310,12 +362,18 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids):
     # Read observed genotypes
     print('Reading observed genotypes')
     gts = gts_f[observed_indices, obs_sid_index].read().val
-    gts_id_dict = make_id_dict(gts_f.iid[observed_indices,1])
+    gts_ids = gts_f.iid[observed_indices,1]
+    gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
-    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+    if sib:
+        G = np.zeros((ids.shape[0],4,gts.shape[1]),dtype = np.float32)
+        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+        G[:,1,:] = get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
+    else:
+        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices)
     del gts
     del imp_gts
     return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels)
@@ -393,6 +451,9 @@ if __name__ == '__main__':
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
             pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p))
+        # Normalise PGS
+        pg.mean_normalise()
+        pg.scale()
         print('PGS computed')
 
         ####### Write PGS to file ########
@@ -412,6 +473,9 @@ if __name__ == '__main__':
                      convert_str_array(np.array(pgs_f['ids'])),
                      sid = convert_str_array(np.array(pgs_f['cols'])),
                      fams = convert_str_array(np.array(pgs_f['fams'])))
+        print('Normalising PGS')
+        pg.mean_normalise()
+        pg.scale()
         pgs_f.close()
     else:
         raise ValueError('Weights or PGS must be provided')
@@ -443,7 +507,9 @@ if __name__ == '__main__':
         alpha_out = np.zeros((3, 2))
         alpha_out[:, 0] = alpha_imp[0][1:4]
         alpha_out[:, 1] = np.sqrt(np.diag(alpha_imp[1])[1:4])
-        np.savetxt(args.outprefix + '.imp.pgs_effects.txt',
+        print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
+        np.savetxt(args.outprefix + '.pgs_effects.txt',
                    np.hstack((np.array(['proband','paternal','maternal']).reshape((3, 1)), np.array(alpha_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
-        np.savetxt(args.outprefix + '.imp.pgs_vcov.txt', alpha_imp[1])
+        print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
+        np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:4,1:4])
