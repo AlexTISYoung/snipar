@@ -23,16 +23,17 @@ class gtarray(object):
             self.id_dict = make_id_dict(ids, col = id_index)
         else:
             raise ValueError('Shape of genotypes and ids does not match')
-        if sid.shape[0] == garray.shape[1]:
-            self.snp_index = 1
-            self.sid = sid
-            self.sid_dict = make_id_dict(sid)
-        elif sid.shape[0] == garray.shape[2]:
-            self.snp_index = 2
-            self.sid = sid
-            self.sid_dict = make_id_dict(sid)
-        else:
-            raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
+        if sid is not None:
+            if sid.shape[0] == garray.shape[1]:
+                self.snp_index = 1
+                self.sid = sid
+                self.sid_dict = make_id_dict(sid)
+            elif sid.shape[0] == garray.shape[2]:
+                self.snp_index = 2
+                self.sid = sid
+                self.sid_dict = make_id_dict(sid)
+            else:
+                raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
         if alleles is not None:
             if alleles.shape[0] == sid.shape[0]:
                 self.alleles = alleles
@@ -159,7 +160,6 @@ class pgs(object):
             for i in range(0,garray.gts.shape[1]):
                 pgs_val[:,i] = garray.gts[:,i,in_pgs_snps].dot(weights_compute)
 
-
         return gtarray(pgs_val, garray.ids, sid = cols, fams = garray.fams)
 
 def make_id_dict(x,col=0):
@@ -191,10 +191,13 @@ def encode_str_array(x):
 def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
     # Find genotyped sibships of size > 1
     ped_dict = make_id_dict(ped, 1)
-    gts_fams = np.array([ped[ped_dict[x], 0] for x in gts_ids])
+    ids_in_ped = np.array([x in ped_dict for x in gts_ids])
+    gts_fams = np.array([ped[ped_dict[x], 0] for x in gts_ids[ids_in_ped]])
     fams, counts = np.unique(gts_fams, return_counts=True)
     sibships = set(fams[counts > 1])
     # Find individuals with genotyped siblings
+    ids_in_ped = np.array([x in ped_dict for x in ids])
+    ids = ids[ids_in_ped]
     ids_fams = np.array([ped[ped_dict[x], 0] for x in ids])
     ids_with_sibs = np.array([x in sibships for x in ids_fams])
     ids = ids[ids_with_sibs]
@@ -206,18 +209,21 @@ def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
 
 def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
-    fams, counts = np.unique(ids_fams, return_counts = True)
+    fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
     # Compute sums of genotypes in each family
     fam_sums = np.zeros((fams.shape[0],gts.shape[1]),dtype=gts.dtype)
+    fam_counts = np.zeros((fams.shape[0]),dtype=int)
     for i in range(0,fams.shape[0]):
-        fam_sums[i,:] = np.sum(gts[np.where(gts_fams==fams[i])[0],:],axis=0)
+        fam_indices = np.where(gts_fams==fams[i])[0]
+        fam_sums[i,:] = np.sum(gts[fam_indices,:],axis=0)
+        fam_counts[i] = fam_indices.shape[0]
     # Place in vector corresponding to IDs
     gts_id_dict = make_id_dict(gts_ids)
     G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
     for i in range(0,ids.shape[0]):
         G_sib[i,:] = fam_sums[fams_dict[ids_fams[i]],:]
-        n_i = counts[i]
+        n_i = fam_counts[fams_dict[ids_fams[i]]]
         if remove_proband:
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
@@ -418,6 +424,7 @@ if __name__ == '__main__':
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
+    parser.add_argument('--sibdiff',action='store_true',default = False,help='Fit sibling difference in PGS model')
     parser.add_argument('--sibped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
@@ -506,7 +513,7 @@ if __name__ == '__main__':
         y = y[in_pgs]
         pheno_ids = pheno_ids[in_pgs]
         gt_indices = np.array([pg.id_dict[x] for x in pheno_ids])
-        # Estimate full model
+        print('Final sample size: '+str(gt_indices.shape[0]))
         alpha_imp = get_alpha_mle(y, pg.gts[gt_indices,:], pg.fams[gt_indices], add_intercept = True)
         # Estimate proband only model
         alpha_proband = get_alpha_mle(y, pg.gts[gt_indices, 0], pg.fams[gt_indices], add_intercept=True)
@@ -523,3 +530,18 @@ if __name__ == '__main__':
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+
+        if args.sibdiff:
+            ped = np.zeros((pg.fams.shape[0],2),dtype=pg.fams.dtype)
+            ped[:,0] = pg.fams
+            ped[:,1] = pg.ids
+            G_sdiff = np.zeros((pg.gts.shape[0],2))
+            G_sdiff[:,0] = pg.gts[:,0]
+            G_sdiff[:,1] = get_fam_means(pg.ids, ped, pg.gts[:,0], pg.ids, remove_proband=False)
+            alpha_sdiff = get_alpha_mle(y, G_sdiff[gt_indices,:], pg.fams[gt_indices], add_intercept=True)
+            alpha_sdiff_out  = np.zeros((2,2))
+            alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
+            alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
+            np.savetxt(args.outprefix + '.pgs_effects.txt',
+                       np.hstack((np.array(['direct','between-family']), np.array(alpha_sdiff_out, dtype='S20'))),
+                       delimiter='\t', fmt='%s')
