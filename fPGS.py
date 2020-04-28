@@ -464,7 +464,8 @@ if __name__ == '__main__':
             pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p, sib = args.fit_sib))
         # Normalise PGS
         pg.mean_normalise()
-        pg.scale()
+        # Rescale by observed proband PGS
+        pg.gts = pg.gts/np.std(pg.gts[:,0])
         print('PGS computed')
 
         ####### Write PGS to file ########
@@ -486,7 +487,7 @@ if __name__ == '__main__':
                      fams = convert_str_array(np.array(pgs_f['fams'])))
         print('Normalising PGS')
         pg.mean_normalise()
-        pg.scale()
+        pg.gts = pg.gts/np.std(pg.gts[:,0])
         pgs_f.close()
     else:
         raise ValueError('Weights or PGS must be provided')
@@ -496,7 +497,7 @@ if __name__ == '__main__':
         pheno = Pheno(args.phenofile, missing=args.missing_char).read()
         # pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
         y = np.array(pheno.val)
-        pheno_ids = np.array(pheno.iid)
+        pheno_ids = np.array(pheno.iid)[:,1]
         if y.ndim == 1:
             pass
         elif y.ndim == 2:
@@ -507,7 +508,7 @@ if __name__ == '__main__':
         y_not_nan = np.logical_not(np.isnan(y))
         if np.sum(y_not_nan) < y.shape[0]:
             y = y[y_not_nan]
-            pheno_ids = pheno_ids[y_not_nan, 1]
+            pheno_ids = pheno_ids[y_not_nan]
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
         in_pgs = np.array([x in pg.id_dict for x in pheno_ids])
         y = y[in_pgs]
