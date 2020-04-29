@@ -14,7 +14,6 @@ Functions
 import numpy as np
 import pandas as pd
 import logging
-import time
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
 from libcpp.pair cimport pair as cpair
@@ -27,7 +26,40 @@ import h5py
 from datetime import datetime
 from cython.parallel import prange
 cimport openmp
+from libc.stdio cimport printf
+from libc.time cimport time, ctime, time_t
 cdef float nan_float = np.nan
+
+cdef extern from * nogil:
+    r"""
+    #include <omp.h>
+    #include <stdio.h>  
+    static omp_lock_t cnt_lock;
+    static int cnt = 0;
+    void reset(){
+        omp_init_lock(&cnt_lock);
+        cnt = 0;
+    }
+    void destroy(){
+        omp_destroy_lock(&cnt_lock);
+    }   
+    void report(int mod, int chromosome, int total){
+        time_t now;
+        char* text;
+        omp_set_lock(&cnt_lock);
+        cnt++;
+        if(cnt%mod == 0){
+            now = time(NULL);
+            text = ctime(&now);
+            text[strlen(text)-1] = 0;
+            printf("%s INFO impute with chromosome %d: progress is %d%\n", text, chromosome, (100*cnt)/total);
+        }
+        omp_unset_lock(&cnt_lock);
+    }
+    """
+    void reset()
+    void destroy()
+    void report(int mod, int pre_message_info, int total)
 
 cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
@@ -509,16 +541,13 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
     cdef cstring sib1_id, sib2_id
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
-    progress = -1
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
+    cdef int chromosome_c = chromosome
+    cdef int mod = (number_of_fams+1)//100
+    reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
-    #     # if (index*100)//number_of_fams > progress:
-    #     #     progress = (index*100)//number_of_fams
-    #     #     now = datetime.now()
-    #     #     current_time = now.strftime("%H:%M:%S")
-    #     #     print("["+ current_time +"] imputation progress:"+str(progress)+"% ["+ ("_"*(progress//2)) + ((50-progress//2-1)*"=") +"]")
-        
+        report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
             sibs_index[this_thread, i] = c_iid_to_bed_index[fams[index][i]]        
@@ -589,6 +618,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
             else:
                 imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp, snp_ibd0[this_thread,:,:], snp_ibd1[this_thread,:,:], snp_ibd2[this_thread,:,:], freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
             snp = snp+1
+    destroy()
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
