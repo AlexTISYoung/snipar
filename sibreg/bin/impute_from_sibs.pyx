@@ -17,13 +17,11 @@ import logging
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
 from libcpp.pair cimport pair as cpair
-from cpython cimport array
 cimport numpy as cnp
 from libcpp.vector cimport vector
 import cython
 from libc.math cimport isnan
 import h5py
-from datetime import datetime
 from cython.parallel import prange
 cimport openmp
 from libc.stdio cimport printf
