@@ -71,6 +71,17 @@ if __name__ == '__main__':
     ped = ped[np.logical_not(controls),:]
     ped_dict = make_id_dict(ped,1)
 
+    # Estimate associative effect
+    in_pg = np.array([x in pg.id_dict for x in pheno_ids])
+    pg_indices = np.array([pg.id_dict[x] for x in pheno_ids[in_pg]])
+    pg_in_ped = np.array([x in ped_dict for x in pg.ids])
+    pg.fams[pg_in_ped] = np.array([ped[ped_dict[x],0] for x in pg.ids[pg_in_ped]])
+    pg_model = model(y[in_pg], pg.gts[pg_indices,0], pg.fams[pg_in_ped], add_intercept=True)
+    sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
+    pg_optim = pg_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
+    pg_alpha = pg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
+    print('Associative effect estimate: '+str(pg_alpha[0][1])+ ' (S.E. '+str(np.sqrt(pg_alpha[1][1,1]))+')')
+
     if args.trios:
         print('Analysing individuals with both parents genotyped')
         par_status, gt_indices, fam_labels = find_par_gts(pg.ids, ped, pg.id_dict)
