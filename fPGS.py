@@ -86,20 +86,23 @@ if __name__ == '__main__':
             pg.gts = pg.gts/np.std(pg.gts[:,0])
             pgs_f.close()
         except:
-            f = open(args.pgs,'r')
+            f = open(args.pgs, 'r')
             cols = f.readline()
-            if cols.split('\t').shape[0] > cols.split(' ').shape[0]:
-                cols = cols.split('\t')
+            if len(cols.split('\t')) > len(cols.split(' ')):
+                cols = np.array(cols.split('\t'))
+                delim = '\t'
             else:
-                cols = cols.split(' ')
-            if cols[0:2] == np.array(['FID','IID']):
+                cols = np.array(cols.split(' '))
+                delim = ' '
+            if cols[0] == 'FID' and cols[1] == 'IID':
                 pass
             else:
                 raise ValueError('First two columns of PGS must be FID, IID')
             f.close()
-            ids = np.loadtxt(args.pgs,dtype='U',usecols = (0,1),skiprows = 1)
-            pgs_vals = np.loadtxt(args.pgs,usecols = tuple([x for x in range(2,cols.shape[0]-1)]))
-            pg = gtarray(pgs_vals,ids[:,1],sid = cols[2:cols.shape[0]],fams = ids[:,0])
+            ids = np.loadtxt(args.pgs, dtype='U', usecols=(0, 1), delimiter=delim, skiprows=1)
+            pgs_vals = np.loadtxt(args.pgs, usecols=tuple([x for x in range(2, cols.shape[0])]), delimiter=delim,
+                                  skiprows=1)
+            pg = gtarray(pgs_vals.reshape((pgs_vals.shape[0], 1)), ids[:, 1], sid=cols[2:cols.shape[0]], fams=ids[:, 0])
         else:
             raise ValueError('Unsupported PGS file')
     else:
