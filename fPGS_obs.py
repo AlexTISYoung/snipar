@@ -76,7 +76,7 @@ if __name__ == '__main__':
     pg_indices = np.array([pg.id_dict[x] for x in pheno_ids[in_pg]])
     pg_in_ped = np.array([x in ped_dict for x in pg.ids])
     pg.fams[pg_in_ped] = np.array([ped[ped_dict[x],0] for x in pg.ids[pg_in_ped]])
-    pg_model = model(y[in_pg], pg.gts[pg_indices,0], pg.fams[pg_in_ped], add_intercept=True)
+    pg_model = model(y[in_pg], pg.gts[pg_indices,0], pg.fams[pg_indices], add_intercept=True)
     sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
     pg_optim = pg_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     pg_alpha = pg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
