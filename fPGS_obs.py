@@ -116,7 +116,7 @@ if __name__ == '__main__':
                 raise ValueError('No sibships without both parents genotyped')
             else:
                 print('Removing '+str(n_overlap)+' with both parents genotyped from sib difference analysis')
-                fam_means = gtarray(fam_means.gts[np.logical_not(in_bpg),:],fam_means,ids[np.logical_not(in_bpg)])
+                fam_means = gtarray(fam_means.gts[np.logical_not(in_bpg),:],fam_means.ids[np.logical_not(in_bpg)])
         print('Found '+str(fam_means.ids.shape[0])+' individuals with genotyped siblings')
         G = np.zeros((fam_means.gts.shape[0],2),dtype = np.float32)
         pg_indices = np.array([pg.id_dict[x] for x in fam_means.ids])
@@ -134,6 +134,6 @@ if __name__ == '__main__':
         alpha_sdiff_out = np.zeros((2, 2))
         alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
         alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
-        np.savetxt(args.outprefix + '.pgs_effects.txt',
+        np.savetxt(args.outprefix + '.sibdiff.pgs_effects.txt',
                    np.hstack((np.array(['direct', 'between-family']).reshape((2,1)), np.array(alpha_sdiff_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
