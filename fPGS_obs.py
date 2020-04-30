@@ -108,19 +108,29 @@ if __name__ == '__main__':
     if args.sibdiff:
         print('Analysing with sibling difference method')
         fam_means = get_fam_means(pg.ids, ped, pg.gts, pg.ids, remove_proband=False)
+        # Remove overlap with trios
+        if args.trios:
+            in_bpg = np.array([x in bpg_id_dict for x in fam_means.ids])
+            n_overlap = np.sum(in_bpg)
+            if n_overlap == fam_means.ids.shape[0]:
+                raise ValueError('No sibships without both parents genotyped')
+            else:
+                print('Removing '+str(n_overlap)+' with both parents genotyped from sib difference analysis')
+                fam_means = gtarray(fam_means.gts[np.logical_not(in_bpg),:],fam_means,ids[np.logical_not(in_bpg)])
         print('Found '+str(fam_means.ids.shape[0])+' individuals with genotyped siblings')
         G = np.zeros((fam_means.gts.shape[0],2),dtype = np.float32)
         pg_indices = np.array([pg.id_dict[x] for x in fam_means.ids])
         G[:,0] = pg.gts[pg_indices,0]
+        scale_factor = np.std(G[:,0])
         G[:,1] = fam_means.gts[:,0]
         G[:,0] = G[:,0] - G[:,1]
+        G = G/scale_factor
         fam_labels = np.array([ped[ped_dict[x],0] for x in fam_means.ids])
         # Match with phenotype 
         in_fam_means = np.array([x in fam_means.id_dict for x in pheno_ids])
         fam_means_indices = np.array([fam_means.id_dict[x] for x in pheno_ids[in_fam_means]])
         print('Estimating model using sibling differences')
         alpha_sdiff = get_alpha_mle(y[in_fam_means], G[fam_means_indices, :], fam_labels[fam_means_indices], add_intercept=True)
-        code.interact(local=locals())
         alpha_sdiff_out = np.zeros((2, 2))
         alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
         alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
