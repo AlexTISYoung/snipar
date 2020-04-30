@@ -43,7 +43,7 @@ if __name__ == '__main__':
     pg = gtarray(pgs_vals.reshape((pgs_vals.shape[0],1)), ids[:, 1], sid=cols[2:cols.shape[0]], fams=ids[:, 0])
     print('Normalising PGS to have mean zero and variance 1')
     pg.mean_normalise()
-    pg.scale()    
+    pg.scale()
 
     # Read phenotype
     print('Reading '+str(args.phenofile))
@@ -88,7 +88,6 @@ if __name__ == '__main__':
         G[:, 0] = pg.gts[gt_indices[:, 0], 0]
         G[:, 1] = pg.gts[gt_indices[:, 1], 0]
         G[:, 2] = pg.gts[gt_indices[:, 2], 0]
-        G = G / np.std(G, axis=0)
         # Estimate
         bpg_id_dict = make_id_dict(bpg_ids)
         in_bpg = np.array([x in bpg_id_dict for x in pheno_ids])
@@ -115,16 +114,14 @@ if __name__ == '__main__':
             if n_overlap == fam_means.ids.shape[0]:
                 raise ValueError('No sibships without both parents genotyped')
             else:
-                print('Removing '+str(n_overlap)+' with both parents genotyped from sib difference analysis')
+                print('Removing '+str(n_overlap)+' individuals with both parents genotyped from sib difference analysis')
                 fam_means = gtarray(fam_means.gts[np.logical_not(in_bpg),:],fam_means.ids[np.logical_not(in_bpg)])
         print('Found '+str(fam_means.ids.shape[0])+' individuals with genotyped siblings')
         G = np.zeros((fam_means.gts.shape[0],2),dtype = np.float32)
         pg_indices = np.array([pg.id_dict[x] for x in fam_means.ids])
         G[:,0] = pg.gts[pg_indices,0]
-        scale_factor = np.std(G[:,0])
         G[:,1] = fam_means.gts[:,0]
         G[:,0] = G[:,0] - G[:,1]
-        G = G/scale_factor
         fam_labels = np.array([ped[ped_dict[x],0] for x in fam_means.ids])
         # Match with phenotype 
         in_fam_means = np.array([x in fam_means.id_dict for x in pheno_ids])
