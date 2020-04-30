@@ -9,6 +9,7 @@ if __name__ == '__main__':
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('ped',type=str,help='Location of pedigree file with FID giving sibships')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
+    parser.add_argument('--scale_phen',action='store_true',help='Scale phenotype to have variance 1',default=False)
     parser.add_argument('--sibdiff',action='store_true',default = False,help='Fit sibling difference in PGS model')
     parser.add_argument('--trios',action = 'store_true',default = False,help='Fit model with individuals with both parents genotyped')
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -62,6 +63,9 @@ if __name__ == '__main__':
     if np.sum(y_not_nan) < y.shape[0]:
         y = y[y_not_nan]
         pheno_ids = pheno_ids[y_not_nan]
+    y = y-np.mean(y)
+    if args.scale_phen:
+        y = y/np.std(y)
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
 
     # Read pedigree
