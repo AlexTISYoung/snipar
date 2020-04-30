@@ -104,7 +104,8 @@ if __name__ == '__main__':
         in_bpg = np.array([x in bpg_id_dict for x in pheno_ids])
         bpg_indices = np.array([bpg_id_dict[x] for x in pheno_ids[in_bpg]])
         print('Estimate model for individuals with both parents genotyped')
-        alpha_bpg = get_alpha_mle(y[in_bpg], G[bpg_indices, :], fam_labels[bpg_indices], add_intercept=True)
+        bpg_model = model(y[in_bpg], G[bpg_indices, :], fam_labels[bpg_indices], add_intercept=True)
+        alpha_bpg = bpg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
         outcols = np.array(['proband', 'paternal', 'maternal']).reshape((3,1))
         # Save output
         alpha_bpg_out = np.zeros((3, 2))
@@ -138,7 +139,8 @@ if __name__ == '__main__':
         in_fam_means = np.array([x in fam_means.id_dict for x in pheno_ids])
         fam_means_indices = np.array([fam_means.id_dict[x] for x in pheno_ids[in_fam_means]])
         print('Estimating model using sibling differences')
-        alpha_sdiff = get_alpha_mle(y[in_fam_means], G[fam_means_indices, :], fam_labels[fam_means_indices], add_intercept=True)
+        sdiff_model = model(y[in_fam_means], G[fam_means_indices, :], fam_labels[fam_means_indices], add_intercept=True)
+        alpha_sdiff = sdiff_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
         alpha_sdiff_out = np.zeros((2, 2))
         alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
         alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
