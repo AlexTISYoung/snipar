@@ -72,6 +72,7 @@ if __name__ == '__main__':
     ped_dict = make_id_dict(ped,1)
 
     # Estimate associative effect
+    print('Estimating associative effect')
     in_pg = np.array([x in pg.id_dict for x in pheno_ids])
     pg_indices = np.array([pg.id_dict[x] for x in pheno_ids[in_pg]])
     pg_in_ped = np.array([x in ped_dict for x in pg.ids])
@@ -79,8 +80,10 @@ if __name__ == '__main__':
     pg_model = model(y[in_pg], pg.gts[pg_indices,0], pg.fams[pg_indices], add_intercept=True)
     sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
     pg_optim = pg_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
-    pg_alpha = pg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
-    print('Associative effect estimate: '+str(pg_alpha[0][1])+ ' (S.E. '+str(np.sqrt(pg_alpha[1][1,1]))+')')
+    pg_alpha = pg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'],compute_cov = True)
+    sibcor = 1/(1+pg_optim['tau'])
+    print('Sibling correlation estimate: '+str(round(sibcor,4)))
+    print('Associative effect: '+str(round(pg_alpha[0][1],6))+ ' (S.E. '+str(round(np.sqrt(pg_alpha[1][1,1]),7))+')')
 
     if args.trios:
         print('Analysing individuals with both parents genotyped')
@@ -105,7 +108,7 @@ if __name__ == '__main__':
         bpg_indices = np.array([bpg_id_dict[x] for x in pheno_ids[in_bpg]])
         print('Estimate model for individuals with both parents genotyped')
         bpg_model = model(y[in_bpg], G[bpg_indices, :], fam_labels[bpg_indices], add_intercept=True)
-        alpha_bpg = bpg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
+        alpha_bpg = bpg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'],compute_cov = True)
         outcols = np.array(['proband', 'paternal', 'maternal']).reshape((3,1))
         # Save output
         alpha_bpg_out = np.zeros((3, 2))
@@ -140,7 +143,7 @@ if __name__ == '__main__':
         fam_means_indices = np.array([fam_means.id_dict[x] for x in pheno_ids[in_fam_means]])
         print('Estimating model using sibling differences')
         sdiff_model = model(y[in_fam_means], G[fam_means_indices, :], fam_labels[fam_means_indices], add_intercept=True)
-        alpha_sdiff = sdiff_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'])
+        alpha_sdiff = sdiff_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'],compute_cov = True)
         alpha_sdiff_out = np.zeros((2, 2))
         alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
         alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
