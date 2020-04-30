@@ -423,8 +423,9 @@ def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
     # Find genotyped sibships of size > 1
     ped_dict = make_id_dict(ped, 1)
     ids_in_ped = np.array([x in ped_dict for x in gts_ids])
-    gts_fams = np.array([ped[ped_dict[x], 0] for x in gts_ids[ids_in_ped]])
-    fams, counts = np.unique(gts_fams, return_counts=True)
+    gts_fams = np.zeros((gts_ids.shape[0]),dtype=gts_ids.dtype)
+    gts_fams[ids_in_ped] = np.array([ped[ped_dict[x], 0] for x in gts_ids[ids_in_ped]])
+    fams, counts = np.unique(gts_fams[ids_in_ped], return_counts=True)
     sibships = set(fams[counts > 1])
     # Find individuals with genotyped siblings
     ids_in_ped = np.array([x in ped_dict for x in ids])
@@ -450,11 +451,13 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
         fam_sums[i,:] = np.sum(gts[fam_indices,:],axis=0)
         fam_counts[i] = fam_indices.shape[0]
     # Place in vector corresponding to IDs
-    gts_id_dict = make_id_dict(gts_ids)
+    if remove_proband:
+        gts_id_dict = make_id_dict(gts_ids)
     G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
     for i in range(0,ids.shape[0]):
-        G_sib[i,:] = fam_sums[fams_dict[ids_fams[i]],:]
-        n_i = fam_counts[fams_dict[ids_fams[i]]]
+        fam_index = fams_dict[ids_fams[i]]
+        G_sib[i,:] = fam_sums[fam_index,:]
+        n_i = fam_counts[fam_index]
         if remove_proband:
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
