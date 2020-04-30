@@ -15,6 +15,7 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
+    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
     args=parser.parse_args()
 
     if args.trios or args.sibdiff:
@@ -26,18 +27,23 @@ if __name__ == '__main__':
     print('Reading '+str(args.pgs))
     f = open(args.pgs, 'r')
     cols = f.readline()
-    if cols.split('\t').shape[0] > cols.split(' ').shape[0]:
-        cols = cols.split('\t')
+    if len(cols.split('\t')) > len(cols.split(' ')):
+        cols = np.array(cols.split('\t'))
+        delim = '\t'
     else:
-        cols = cols.split(' ')
-    if cols[0:2] == np.array(['FID', 'IID']):
+        cols = np.array(cols.split(' '))
+        delim = ' '
+    if cols[0] == 'FID' and cols[1]== 'IID':
         pass
     else:
         raise ValueError('First two columns of PGS must be FID, IID')
     f.close()
-    ids = np.loadtxt(args.pgs, dtype='U', usecols=(1,), skiprows=1)
-    pgs_vals = np.loadtxt(args.pgs, usecols=tuple([x for x in range(2, cols.shape[0] - 1)]))
-    pg = gtarray(pgs_vals, ids[:, 1], sid=cols[2:cols.shape[0]], fams=ids[:, 0])
+    ids = np.loadtxt(args.pgs, dtype='U', usecols=(0,1), delimiter=delim, skiprows=1)
+    pgs_vals = np.loadtxt(args.pgs, usecols=tuple([x for x in range(2, cols.shape[0])]),delimiter=delim, skiprows=1)
+    pg = gtarray(pgs_vals.reshape((pgs_vals.shape[0],1)), ids[:, 1], sid=cols[2:cols.shape[0]], fams=ids[:, 0])
+    print('Normalising PGS to have mean zero and variance 1')
+    pg.mean_normalise()
+    pg.scale()    
 
     # Read phenotype
     print('Reading '+str(args.phenofile))
@@ -61,6 +67,8 @@ if __name__ == '__main__':
     # Read pedigree
     print('Reading '+str(args.ped))
     ped = np.loadtxt(args.ped,dtype='U')
+    controls = np.array([x[0]=='_' for x in ped[:,0]])
+    ped = ped[np.logical_not(controls),:]
     ped_dict = make_id_dict(ped,1)
 
     if args.trios:
@@ -87,7 +95,7 @@ if __name__ == '__main__':
         bpg_indices = np.array([bpg_id_dict[x] for x in pheno_ids[in_bpg]])
         print('Estimate model for individuals with both parents genotyped')
         alpha_bpg = get_alpha_mle(y[in_bpg], G[bpg_indices, :], fam_labels[bpg_indices], add_intercept=True)
-        outcols = np.array(['proband', 'paternal', 'maternal'])
+        outcols = np.array(['proband', 'paternal', 'maternal']).reshape((3,1))
         # Save output
         alpha_bpg_out = np.zeros((3, 2))
         alpha_bpg_out[:, 0] = alpha_bpg[0][1:4]
@@ -95,27 +103,27 @@ if __name__ == '__main__':
         np.savetxt(args.outprefix + '.bpg.pgs_effects.txt',
                    np.hstack((outcols, np.array(alpha_bpg_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
-        np.savetxt(args.outprefix + '.bpg.pgs_vcov.txt', alpha_bpg_out[1][1:4, 1:4])
+        np.savetxt(args.outprefix + '.bpg.pgs_vcov.txt', alpha_bpg[1][1:4, 1:4])
 
     if args.sibdiff:
         print('Analysing with sibling difference method')
-        ped = np.zeros((pg.fams.shape[0], 2), dtype=pg.fams.dtype)
-        ped[:, 0] = pg.fams
-        ped[:, 1] = pg.ids
-        G_sdiff = np.zeros((pg.gts.shape[0], 2))
-        G_sdiff[:, 0] = pg.gts[:, 0]
-        G_sdiff[:, 1] = get_fam_means(pg.ids, ped, pg.gts[:, 0], pg.ids, remove_proband=False)
-        not_bpg = np.ones((G_sdiff.shape[0]), dtype=bool)
-        if args.trios:
-            print('Checking for overlap with individuals with both parents genotyped')
-            not_bpg = np.array([x not in set(bpg_ids) for x in pg.ids])
-            if np.sum(not_bpg) == 0:
-                raise ValueError('No individuals')
-
-        alpha_sdiff = get_alpha_mle(y, G_sdiff[gt_indices, :], pg.fams[gt_indices], add_intercept=True)
+        fam_means = get_fam_means(pg.ids, ped, pg.gts, pg.ids, remove_proband=False)
+        print('Found '+str(fam_means.ids.shape[0])+' individuals with genotyped siblings')
+        G = np.zeros((fam_means.gts.shape[0],2),dtype = np.float32)
+        pg_indices = np.array([pg.id_dict[x] for x in fam_means.ids])
+        G[:,0] = pg.gts[pg_indices,0]
+        G[:,1] = fam_means.gts[:,0]
+        G[:,0] = G[:,0] - G[:,1]
+        fam_labels = np.array([ped[ped_dict[x],0] for x in fam_means.ids])
+        # Match with phenotype 
+        in_fam_means = np.array([x in fam_means.id_dict for x in pheno_ids])
+        fam_means_indices = np.array([fam_means.id_dict[x] for x in pheno_ids[in_fam_means]])
+        print('Estimating model using sibling differences')
+        alpha_sdiff = get_alpha_mle(y[in_fam_means], G[fam_means_indices, :], fam_labels[fam_means_indices], add_intercept=True)
+        code.interact(local=locals())
         alpha_sdiff_out = np.zeros((2, 2))
         alpha_sdiff_out[:, 0] = alpha_sdiff[0][1:3]
         alpha_sdiff_out[:, 1] = np.sqrt(np.diag(alpha_sdiff[1])[1:3])
         np.savetxt(args.outprefix + '.pgs_effects.txt',
-                   np.hstack((np.array(['direct', 'between-family']), np.array(alpha_sdiff_out, dtype='S20'))),
+                   np.hstack((np.array(['direct', 'between-family']).reshape((2,1)), np.array(alpha_sdiff_out, dtype='S20'))),
                    delimiter='\t', fmt='%s')
