@@ -85,6 +85,8 @@ if __name__ == '__main__':
     sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
     pg_optim = pg_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
     pg_alpha = pg_model.alpha_mle(pg_optim['tau'],pg_optim['sigma2'],compute_cov = True)
+    print('Family variance estimate :'+str(round(pg_optim['sigma2']/pg_optim['tau'],4)))
+    print('Residual variance estimate :' + str(round(pg_optim['sigma2'], 4)))
     sibcor = 1/(1+pg_optim['tau'])
     print('Sibling correlation estimate: '+str(round(sibcor,4)))
     print('Associative effect: '+str(round(pg_alpha[0][1],6))+ ' (S.E. '+str(round(np.sqrt(pg_alpha[1][1,1]),7))+')')
