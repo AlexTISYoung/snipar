@@ -94,7 +94,8 @@ ped_out = np.vstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20')
 np.savetxt(outprefix+'_fams.ped',ped_out,fmt='%s')
 
 # Write relationships and age sex king output
-kin_out = open(args.outprefix+'.kin0','w')
+kin_out = open(args.outprefix+'.king.kin0','w')
+kin_out.write('FID1\tID1\tFID2\tID2\tN_SNP\tHetHet\tIBS0\tHetConc\tHomIBS0\tKinship\tIBD1Seg\tIBD2Seg\tPropIBD\tInfType\n')
 age_sex_out = open(args.outprefix+'.agesex','w')
 age_sex_out.write('FID IID age sex\n')
 for i in range(0, nfam):
@@ -170,8 +171,6 @@ pout.close()
 
 # Write list of individuals to remove
 remove = open(outprefix+'_remove.txt','w')
-kin_out = open(args.outprefix+'.king.kin0','w')
-kin_out.write('FID1\tID1\tFID2\tID2\tN_SNP\tHetHet\tIBS0\tHetConc\tHomIBS0\tKinship\tIBD1Seg\tIBD2Seg\tPropIBD\tInfType\n')
 for i in range(0,n_sib_only):
     # Remove parents
     remove.write(ped[fp * i + fsize, 0]+' '+ped[fp * i + fsize, 1]+'\n')

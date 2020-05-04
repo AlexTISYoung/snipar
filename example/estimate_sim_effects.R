@@ -6,9 +6,9 @@ sib_file = args[1]
 effect_file = args[2]
 out = args[3]
 
-sib_file = 'h2_quad_0.8.hdf5'
-effect_file = 'h2_quad_0.8.effects.txt'
-out = 'h2_quad_0.8.effects.hdf5'
+#sib_file = 'h2_quad_0.8_2.hdf5'
+#effect_file = 'h2_quad_0.8.effects.txt'
+#out = 'h2_quad_0.8.effects_2.hdf5'
 
 ###### Sibs only ######
 print('Reading estimates')

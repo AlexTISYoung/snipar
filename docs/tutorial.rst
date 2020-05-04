@@ -48,7 +48,7 @@ To estimate effects, type:
 
     ``python ../fGWAS.py reduced_chr_1.bed chr_1.hdf5 h2_quad_0.8.ped h2_quad_0.8``
 
-Now we have estimated effects from the five different subsets of data (both parents missing, no missing parents with sibs, no missing parents without sibs, one missing parent with sibs, one parent missing without sibs) . To meta-analyse the effects
+Now we have estimated locus specific summary statistics. To estimate effects and compare to the true effects, run
 
     ``Rscript estimate_and_meta_analyse.R pGWAS.hdf5 poGWAS_no_sib.hdf5 poGWAS_sib.hdf5 triGWAS_no_sib.hdf5 triGWAS_sib.hdf5 h2_quad_0.5.effects.txt h2_quad_0.5.estimates FALSE``
 
