@@ -94,6 +94,7 @@ ped_out = np.vstack((np.array(['FID','IID','FATHER_ID','MOTHER_ID'],dtype='S20')
 np.savetxt(outprefix+'_fams.ped',ped_out,fmt='%s')
 
 # Write relationships and age sex king output
+kin_out = open(args.outprefix+'.kin0','w')
 age_sex_out = open(args.outprefix+'.agesex','w')
 age_sex_out.write('FID IID age sex\n')
 for i in range(0, nfam):
