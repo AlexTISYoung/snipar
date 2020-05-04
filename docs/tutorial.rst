@@ -38,6 +38,10 @@ the families with at least one genotyped parent. The resulting reduced bed file 
 
 We note that the following commands can take some time to run depending on hardware.
 
+python impute_runner.py 1 2 test_data/sample.segments.gz test_data/sample --king test_data/sample.king --agesex test_data/sample.agesex --out_prefix test_data/sample
+
+python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8
+
 To impute the missing parental genotypes, type:
 
     ``python ../impute_runner.py 1 2 chr_1.segments.gz reduced_chr_ --king chr_1.king.kin0 --agesex chr_1.agesex --out_prefix chr_``
