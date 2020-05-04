@@ -1,4 +1,4 @@
-python example/simulate_pop.py 1000 0.05 450 350 50 0 "outputs/tmp/t__t"
+python example/simulate_pop.py 1200 0.5  400 400 0.5 "outputs/tmp/t__t"
 python -c 'import pandas as pd;
 ped = pd.read_csv("outputs/tmp/t__t_fams.ped", sep = " ");
 remove = pd.read_csv("outputs/tmp/t__t_remove.txt", sep = " ", names = ["counter", "id"]);
@@ -35,6 +35,7 @@ print(king_chr12);
 '
 plink/plink --file outputs/tmp/t__t --make-bed --out outputs/tmp/t__t
 plink/plink --bfile outputs/tmp/t__t --remove outputs/tmp/t__t_remove.txt --make-bed --out test_data/sample1
+python example/simulate_trait_quad.py outputs/tmp/t__t.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0.5
 cp test_data/sample1.bed test_data/sample2.bed 
 cp test_data/sample1.bim test_data/sample2.bim 
 cp test_data/sample1.fam test_data/sample2.fam
