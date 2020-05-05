@@ -2,12 +2,16 @@ Tutorial
 ********
 Tutorial on performing robust GWAS using family data
 
+To generate the test data, in the main sibreg directory, run:
+
+    ``bash tests/generate_test_population.sh``
+
 In the test_data/ directory, the file h2_quad_0.8.ped is a simulated trait with direct, paternal, and maternal effects, where 80% of the phenotypic
 variance is explained by the combined direct, paternal and maternal effects of the SNPs; and the
 pairwise correlations between the direct, paternal, and maternal effects is 0.5. The phenotype file is test_data/h2_quad_0.8.ped.
 
-The genotype data has been simulated so that there are 1200 independent families, where 400 have two siblings but no parents genotyped,
-400 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 400 have both parents genotyped and a 50%
+The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
+1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
 chance of having a genotyped sibling.
 
 To impute the missing parental genotypes, run the following command in the main sibreg directory:
@@ -39,12 +43,14 @@ Now we have estimated locus specific summary statistics. To estimate effects and
 
 This should print estimates of the bias of the effect estimates, with output something like this:
 
-    ``[1] "bias for direct effects: -0.021 (0.0626 S.E.)"``
-
-    ``[1] "bias for paterntal effects: -0.012 (0.0826 S.E.)"``
-
-    ``[1] "bias for maternal effects: -0.012 (0.0926 S.E.)"``
+    ``[1] "bias for direct effects: 0.0281 (0.0374 S.E.)"``
+    ``[1] "bias for paternal effects: -0.0376 (0.0524 S.E.)"``
+    ``[1] "bias for maternal effects: 0.0528 (0.05 S.E.)"``
+    ``[1] "Chi-square test p-value: 0.4879"``
 
 If everything has worked, the bias should not be statistically significantly different from zero (with high probability).
 
-The meta-analysis estimates along with their standard errors are output in test_data/h2_quad_0.8.estimates.hdf5.
+The Chi-Square test p-value should also not be statistically significant with high probability. (This tests that the sampling distribution
+of the estimates is correct, as well as the estimates being unbiased.)
+
+The estimates along with their standard errors are output in test_data/h2_quad_0.8.estimates.hdf5.

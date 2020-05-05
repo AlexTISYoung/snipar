@@ -48,3 +48,7 @@ r = lm(beta[,4]~effects[,3])
 s = summary(r)$coefficients
 print(paste('bias for maternal effects: ',
             round(s[2,1]-1,4),' (',round(s[2,2],4),' S.E.)',sep=''))
+
+z = (beta[,-1]-effects)/beta_se[,-1]
+p = 1-pchisq(sum(z^2),dim(z)[1]*dim(z)[2])
+print(paste('Chi-square test p-value: ',round(p,digits=4),sep=''))

@@ -13,10 +13,6 @@ Welcome to sibreg's documentation!
    tutorial
    guide
    impute_runner
-   impute_po
-   pGWAS
-   poGWAS
-   triGWAS
    sibreg.bin
 
 Indices and tables
