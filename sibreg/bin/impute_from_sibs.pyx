@@ -14,23 +14,52 @@ Functions
 import numpy as np
 import pandas as pd
 import logging
-import time
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
 from libcpp.pair cimport pair as cpair
-from cpython cimport array
-import array
 cimport numpy as cnp
 from libcpp.vector cimport vector
 import cython
 from libc.math cimport isnan
 import h5py
-from datetime import datetime
-
+from cython.parallel import prange
+cimport openmp
+from libc.stdio cimport printf
+from libc.time cimport time, ctime, time_t
 cdef float nan_float = np.nan
-#TODO move readind IBD and pedigree to outside prepare_data
 
-cdef is_possible_child(int child, int parent):
+cdef extern from * nogil:
+    r"""
+    #include <omp.h>
+    #include <stdio.h>  
+    static omp_lock_t cnt_lock;
+    static int cnt = 0;
+    void reset(){
+        omp_init_lock(&cnt_lock);
+        cnt = 0;
+    }
+    void destroy(){
+        omp_destroy_lock(&cnt_lock);
+    }   
+    void report(int mod, int chromosome, int total){
+        time_t now;
+        char* text;
+        omp_set_lock(&cnt_lock);
+        cnt++;
+        if(cnt%mod == 0){
+            now = time(NULL);
+            text = ctime(&now);
+            text[strlen(text)-1] = 0;
+            printf("%s INFO impute with chromosome %d: progress is %d%\n", text, chromosome, (100*cnt)/total);
+        }
+        omp_unset_lock(&cnt_lock);
+    }
+    """
+    void reset()
+    void destroy()
+    void report(int mod, int pre_message_info, int total)
+
+cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
     """
     if (parent == 2) and (child > 0):
@@ -53,7 +82,6 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     Returns:
         cmap[cpair[cstring, cstring], vector[int]]
     """
-    #Converts a dictionary of (str, str)->int[] to cmap[cpair[cstring, cstring], vector[int]]
     cdef cpair[cstring,cstring] map_key
     cdef vector[int] map_val
     cdef cpair[cpair[cstring,cstring], vector[int]] map_element
@@ -61,25 +89,23 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
     for key,val in the_dict.items():
         map_key.first = key[0].encode('ASCII')
         map_key.second = key[1].encode('ASCII')
-        # map_key = key
         map_val = val
         map_element = (map_key, map_val)
         c_dict.insert(map_element)
     return c_dict
-#TODO use scipy interface
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
 cdef float impute_snp_from_offsprings(int snp, 
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                      int[:, :] snp_ibd0,
+                      int[:, :] snp_ibd1,
+                      int[:, :] snp_ibd2,
                       float f,
-                      cnp.ndarray[cnp.float_t, ndim=2] bed,
+                      double[:, :] bed,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2):
+                      int len_snp_ibd2) nogil:
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
 
     Args:
@@ -98,7 +124,7 @@ cdef float impute_snp_from_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.float_t, ndim=2]
+        bed : cnp.ndarray[cnp.double_t, ndim=2]
             A two-dimensional array containing genotypes for all individuals and SNPs.
 
         len_snp_ibd0 : int
@@ -150,7 +176,7 @@ cdef float impute_snp_from_offsprings(int snp,
                 additive = 3+f
             result += additive
         result = result/len_snp_ibd1
-    
+
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
         result = 0
@@ -167,14 +193,15 @@ cdef float impute_snp_from_offsprings(int snp,
 @cython.cdivision(True)
 cdef float impute_snp_from_parent_offsprings(int snp,
                       int parent,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
-                      cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                      int[:, :] snp_ibd0,
+                      int[:, :] snp_ibd1,
+                      int[:, :] snp_ibd2,
                       float f,
-                      cnp.ndarray[cnp.float_t, ndim=2] bed,
+                      double[:, :] bed,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2):
+                      int len_snp_ibd2,
+                      ) nogil:
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value
     
     If returns Nan if there are no sibling pairs that can be children of the existing parent.
@@ -196,7 +223,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.float_t, ndim=2]
+        bed : cnp.ndarray[cnp.double_t, ndim=2]
             A two-dimensional array containing genotypes for all individuals and SNPs.
 
         len_snp_ibd0 : int
@@ -224,7 +251,6 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
-        #TODO check validity (sum >= gp)
         result = 0
         counter = 0
         for pair_index in range(len_snp_ibd0):
@@ -368,7 +394,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
                       int loc,
-                      cmap[cpair[cstring, cstring], vector[int]]& ibd_dict):
+                      cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil:
     """Returns the IBD status of individuals with id1 and id2 in the SNP located at loc
 
     Args:
@@ -392,6 +418,7 @@ cdef int get_IBD_type(cstring id1,
             the IBD status of individuals with id1 and id2 in the SNP located at loc
 
     """
+
     # TODO use get
     #the value for ibd_dict is like this: [start1, end1, ibd_type1, start2, end2, ibd_type2,...]
     cdef int result = 0
@@ -419,7 +446,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_address = None):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None):
     """Does the parent sum imputation for families in sibships and all the SNPs in gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -445,6 +472,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
         hdf5_output_dict : dict
             Other key values to be added to the HDF5 output
 
+        chromosome: int
+            Number of the chromosome that's going to be imputed. Only used for logging purposes.
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
             The following table explains the keys and their corresponding values within this file.
@@ -455,17 +484,28 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
                     Its columns are has_father, has_mother, single_parent respectively.
+        
+        threads : int, optional
+            Specifies the Number of threads to be used. If None there will be only one thread.
 
     Returns:
         tuple(list, numpy.array)
             The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
             
     """
-    logging.info("imputing data ...")
+    logging.warning("with chromosome " + str(chromosome)+": " + "imputing ...")
+    if sibships.empty:
+        logging.warning("with chromosome " + str(chromosome)+": " + "Error: No families to be imputed")
+        return [], np.array()
+
+    cdef int number_of_threads = 1
+    if threads is not None:
+        number_of_threads = threads
+    logging.info("with chromosome " + str(chromosome)+": " + "imputing data ...")
     #converting python obejcts to c
     #sibships
     cdef int max_sibs = np.max(sibships["sib_count"])
-    cdef int max_ibd_pairs = max_sibs*(max_sibs-1)/2
+    cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
     cdef int number_of_fams = sibships.shape[0]
     cdef cnp.ndarray[cnp.double_t, ndim=1]freqs = np.nanmean(gts,axis=0)/2.0
     sibships["parent"] = sibships["FATHER_ID"]
@@ -477,12 +517,12 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
         fams.push_back(sibships["IID"].iloc[fam])
         parents.push_back(sibships["parent"].iloc[fam])
 
-    cdef cnp.ndarray[cnp.int_t, ndim=1] sib_count = sibships["sib_count"].values
+    cdef int[:] sib_count = sibships["sib_count"].values.astype("i")
     cdef cnp.ndarray[cnp.uint8_t, ndim=1] single_parent = sibships["single_parent"].astype('uint8').values    
     #iid_to_bed_index
     cdef cmap[cstring, int] c_iid_to_bed_index = iid_to_bed_index
     #gts
-    cdef cnp.ndarray[cnp.float_t, ndim=2] c_gts = gts
+    cdef double[:, :] c_gts = gts
     cdef int number_of_snps = c_gts.shape[1]
     #ibd
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
@@ -492,34 +532,35 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
     cdef int len_snp_ibd0 = 0
     cdef int len_snp_ibd1 = 0
     cdef int len_snp_ibd2 = 0
-    cdef cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0 = np.zeros([max_ibd_pairs, 2], dtype=np.int)
-    cdef cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1 = np.zeros([max_ibd_pairs, 2], dtype=np.int)
-    cdef cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2 = np.zeros([max_ibd_pairs, 2], dtype=np.int)
-    
+    cdef int[:,:,:] snp_ibd0 = np.ones([number_of_threads, max_ibd_pairs, 2], dtype=np.dtype("i"))
+    cdef int[:,:,:] snp_ibd1 = np.ones([number_of_threads, max_ibd_pairs, 2], dtype=np.dtype("i"))
+    cdef int[:,:,:] snp_ibd2 = np.ones([number_of_threads, max_ibd_pairs, 2], dtype=np.dtype("i"))    
     cdef int i, j, loc, ibd_type, sib1_index, sib2_index, progress
     cdef cstring sib1_id, sib2_id
-    cdef cnp.ndarray[cnp.int_t, ndim=1] sibs_index = np.zeros(max_sibs).astype(int)
-    cdef cnp.ndarray[cnp.double_t, ndim=2] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
-    progress = -1
-    for index in range(number_of_fams):
-        if (index*100)//number_of_fams > progress:
-            progress = (index*100)//number_of_fams
-            now = datetime.now()
-            current_time = now.strftime("%H:%M:%S")
-            print("["+ current_time +"] imputation progress:"+str(progress)+"% ["+ ("_"*(progress//2)) + ((50-progress//2-1)*"=") +"]")
+    cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
+    cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
+    cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
+    cdef int chromosome_c = chromosome
+    cdef int mod = (number_of_fams+1)//100
+    reset()
+    logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
+    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+        report(mod, chromosome_c, number_of_fams)
+        this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
-            sibs_index[i] = c_iid_to_bed_index[fams[index][i]]        
-        for snp in range(number_of_snps):
+            sibs_index[this_thread, i] = c_iid_to_bed_index[fams[index][i]]        
+        snp = 0
+        while snp < number_of_snps:
             len_snp_ibd0 = 0
             len_snp_ibd1 = 0
             len_snp_ibd2 = 0
             loc = c_pos[snp]
             if sib_count[index] > 1:
-            #sibcount should be positive
+            #sibcount should be positive 
                 for i in range(1, sib_count[index]):
                     for j in range(i):
-                        sib1_index = sibs_index[i]
-                        sib2_index = sibs_index[j]
+                        sib1_index = sibs_index[this_thread, i]
+                        sib2_index = sibs_index[this_thread, j]
                         sib1_id = fams[index][i]
                         sib2_id = fams[index][j]
                         sib1_gene_isnan = isnan(c_gts[sib1_index, snp])
@@ -529,48 +570,60 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, output_
                             continue
                         #if one sib is nan, create a ibd2 pair consisting of the other sib
                         elif not sib1_gene_isnan  and sib2_gene_isnan:
-                            snp_ibd2[len_snp_ibd2,0] = sib1_index
-                            snp_ibd2[len_snp_ibd2,1] = sib1_index
-                            len_snp_ibd2 += 1
+                            snp_ibd2[this_thread, len_snp_ibd2,0] = sib1_index
+                            snp_ibd2[this_thread, len_snp_ibd2,1] = sib1_index
+                            len_snp_ibd2 = len_snp_ibd2+1
 
                         elif sib1_gene_isnan  and not sib2_gene_isnan:
-                            snp_ibd2[len_snp_ibd2,0] = sib2_index
-                            snp_ibd2[len_snp_ibd2,1] = sib2_index
-                            len_snp_ibd2 += 1
+                            snp_ibd2[this_thread, len_snp_ibd2,0] = sib2_index
+                            snp_ibd2[this_thread, len_snp_ibd2,1] = sib2_index
+                            len_snp_ibd2 = len_snp_ibd2 + 1
 
                         elif not sib1_gene_isnan and not sib2_gene_isnan:
                             if ibd_type == 2:
-                                snp_ibd2[len_snp_ibd2,0] = sib1_index
-                                snp_ibd2[len_snp_ibd2,1] = sib2_index
-                                len_snp_ibd2 += 1
+                                snp_ibd2[this_thread, len_snp_ibd2,0] = sib1_index
+                                snp_ibd2[this_thread, len_snp_ibd2,1] = sib2_index
+                                len_snp_ibd2 = len_snp_ibd2 + 1
                             if ibd_type == 1:
-                                snp_ibd1[len_snp_ibd1,0] = sib1_index
-                                snp_ibd1[len_snp_ibd1,1] = sib2_index
-                                len_snp_ibd1 += 1
+                                snp_ibd1[this_thread, len_snp_ibd1,0] = sib1_index
+                                snp_ibd1[this_thread, len_snp_ibd1,1] = sib2_index
+                                len_snp_ibd1 = len_snp_ibd1 + 1
                             if ibd_type == 0:
-                                snp_ibd0[len_snp_ibd0,0] = sib1_index
-                                snp_ibd0[len_snp_ibd0,1] = sib2_index
-                                len_snp_ibd0 += 1
+                                snp_ibd0[this_thread, len_snp_ibd0,0] = sib1_index
+                                snp_ibd0[this_thread, len_snp_ibd0,1] = sib2_index
+                                len_snp_ibd0 = len_snp_ibd0 + 1
             else :
-                sib1_index = sibs_index[0]
+                sib1_index = sibs_index[this_thread, 0]
                 if not isnan(c_gts[sib1_index, snp]):
-                    snp_ibd2[len_snp_ibd2,0] = sib1_index
-                    snp_ibd2[len_snp_ibd2,1] = sib1_index
-                    len_snp_ibd2 += 1
-
+                    snp_ibd2[this_thread, len_snp_ibd2,0] = sib1_index
+                    snp_ibd2[this_thread, len_snp_ibd2,1] = sib1_index
+                    len_snp_ibd2 = len_snp_ibd2 + 1
+            snp_ibd0[this_thread,:,:]
+            snp_ibd1[this_thread,:,:]
+            snp_ibd2[this_thread,:,:]
             if single_parent[index]:
-                imputed_par_gts[index][snp] = impute_snp_from_parent_offsprings(snp, iid_to_bed_index[parents[index]], snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
+                imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
+                                                                                c_iid_to_bed_index[parents[index]],
+                                                                                snp_ibd0[this_thread,:,:],
+                                                                                snp_ibd1[this_thread,:,:],
+                                                                                snp_ibd2[this_thread,:,:],
+                                                                                freqs[snp],
+                                                                                c_gts,
+                                                                                len_snp_ibd0,
+                                                                                len_snp_ibd1,
+                                                                                len_snp_ibd2
+                                                                                )
             else:
-                imputed_par_gts[index][snp] = impute_snp_from_offsprings(snp, snp_ibd0, snp_ibd1, snp_ibd2, freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
-
+                imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp, snp_ibd0[this_thread,:,:], snp_ibd1[this_thread,:,:], snp_ibd2[this_thread,:,:], freqs[snp], c_gts, len_snp_ibd0, len_snp_ibd1, len_snp_ibd2)
+            snp = snp+1
+    destroy()
     if output_address is not None:
-        logging.info("Writing the results as a hdf5 file to "+output_address + ".hdf5")
+        logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
             f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')
             f['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
-            #TODO find a better format
             f['pos'] = pos
             f["sid"] = np.array(hdf5_output_dict["sid"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
-    return sibships["FID"].values.tolist(), imputed_par_gts
+    return sibships["FID"].values.tolist(), np.array(imputed_par_gts)

@@ -8,28 +8,31 @@ from libcpp.vector cimport vector
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
                       int loc,
-                      cmap[cpair[cstring, cstring], vector[int]]& ibd_dict)
+                      cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil
 
 cdef float impute_snp_from_offsprings(int snp, 
-                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
-                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
-                                  cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
-                                  float f,
-                                  cnp.ndarray[cnp.float_t, ndim=2] bed,
-                                  int len_snp_ibd0,
-                                  int len_snp_ibd1,
-                                  int len_snp_ibd2)
+                                    int[:, :] snp_ibd0,
+                                    int[:, :] snp_ibd1,
+                                    int[:, :] snp_ibd2,
+                                    float f,
+                                    double[:, :] bed,
+                                    int len_snp_ibd0,
+                                    int len_snp_ibd1,
+                                    int len_snp_ibd2) nogil
 
 
 cdef float impute_snp_from_parent_offsprings(int snp,
                                             int parent,
-                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd0,
-                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd1,
-                                            cnp.ndarray[cnp.int_t, ndim=2] snp_ibd2,
+                                            int[:, :] snp_ibd0,
+                                            int[:, :] snp_ibd1,
+                                            int[:, :] snp_ibd2,
                                             float f,
-                                            cnp.ndarray[cnp.float_t, ndim=2] bed,
+                                            double[:, :] bed,
                                             int len_snp_ibd0,
                                             int len_snp_ibd1,
-                                            int len_snp_ibd2)
+                                            int len_snp_ibd2,
+                                            ) nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
+
+cdef char is_possible_child(int child, int parent) nogil

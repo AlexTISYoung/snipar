@@ -26,8 +26,8 @@ Args:
         This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
         Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
-    genotypes_prefix : str
-        Prefix for the address of genotype bed files. Address of the bed file for chromosome i would be genotypes_prefix{i}.
+    genotypes_address : str
+        Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.
 
     bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
@@ -56,6 +56,12 @@ Args:
         Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
         ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
 
+    --threads : int, optional
+        Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+
+    --processes: int, optional
+        Number of processes for imputation chromosomes. Each chromosome is done on one process.
+
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
@@ -71,7 +77,68 @@ import h5py
 import random
 import pandas as pd
 import os
+from multiprocessing import Pool
 random.seed(1567924)
+
+def run_imputation(data):
+    """Runs the imputation and returns the consumed time
+    Args:
+        data : dict
+            a dictionary with these keys and values:
+            Keys:
+                pedigree: pd.Dataframe
+                    The standard pedigree table
+
+                bed_address: str
+                    Address of bed file(s) with ~ wild card in place of chromosome number
+
+                ibd_pd: pd.Dataframe
+                    IBD segments table in King format. Only needs to contain information about this chromosome
+
+                chromosome: int
+                    The chromosome that is going to be imputed
+
+                out_prefix: str
+                    The address to write the result of imputation on. For chromosome i it is out_prefix{i}. The default value for out_prefix is 'parent_imputed_chr'
+
+                start: int, optional
+                    This function can do the imputation on a slice of each chromosome. If specified, his is the start of that slice(it is inclusive).
+
+                end: int, optional
+                    This function can do the imputation on a slice of each chromosome. If specified, his is the end of that slice(it is inclusive).
+                    
+                bim: str, optional
+                    Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes.
+
+                threads: int, optional
+                    Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+    Returns:
+        float
+            time consumed byt the imputation.
+    """
+    pedigree = data["pedigree"]
+    bed_address = data["bed_address"]
+    ibd_pd = data["ibd_pd"]
+    chromosome = data["chromosome"]
+    out_prefix = data["out_prefix"]
+    start = data.get("start")
+    end = data.get("end")
+    bim = data.get("bim")
+    threads = data.get("threads")
+    logging.info("processing chromosome "+str(chromosome))
+    if "~" in bed_address:
+        bed_address = bed_address.replace("~", str(chromosome))
+    sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, bed_address, ibd_pd, chromosome, start, end, bim)
+    gts = gts.astype(float)
+    pos = pos.astype(int)
+    start_time = time.time()
+    if out_prefix is None:
+        file_address = "outputs/parent_imputed_chr"+str(chromosome)
+    else:
+        file_address = out_prefix+str(chromosome)
+    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, chromosome, file_address, threads = threads)
+    end_time = time.time()
+    return (end_time-start_time)
 
 #does the imputation and writes the results
 if __name__ == "__main__":
@@ -81,7 +148,7 @@ if __name__ == "__main__":
     parser.add_argument('from_chr',type=int,help='Which chromosome (<=)')
     parser.add_argument('to_chr',type=int,help='Which chromosome (<)')
     parser.add_argument('ibd',type=str,help='IBD file')
-    parser.add_argument('genotypes_prefix',type=str,help='prefix of genotypes in .bed format')
+    parser.add_argument('genotypes_address',type=str,help='address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.')
     parser.add_argument('--bim',type=str,default = None, help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
     parser.add_argument('--out_prefix',type=str,default = "parent_imputed_chr", help="Writes the result of imputation for chromosome i to outprefix{i}")
     parser.add_argument('--start', type=int,
@@ -93,6 +160,8 @@ if __name__ == "__main__":
     parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
     parser.add_argument('--king',type=str,default = None, help='Address of the king file')
     parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
+    parser.add_argument('--threads', type=int, default=1, help='Number of the cores to be used')
+    parser.add_argument('--processes', type=int, default=1, help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
 
     args=parser.parse_args()
     #fids starting with _ are reserved for control
@@ -109,22 +178,23 @@ if __name__ == "__main__":
         pedigree = add_control(pedigree)
         logging.info("Control Added.")
     
-
-    consumed_time = 0
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(args.ibd, sep = "\t")
     logging.info("ibd loaded.")
-    for chromosome in range(args.from_chr, args.to_chr):
-        print(chromosome, " is chromosome")
-        sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, args.genotypes_prefix+str(chromosome), ibd_pd, chromosome, args.start, args.end, args.bim)
-        gts = gts.astype(float)
-        pos = pos.astype(int)
-        start_time = time.time()
-        if args.out_prefix is None:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, "outputs/parent_imputed_chr"+str(chromosome))
-        else:
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, args.out_prefix+str(chromosome))
-        end_time = time.time()
-        consumed_time += (end_time-start_time)
 
-    logging.info("imputation time: "+str(consumed_time))
+    inputs = [{"pedigree": pedigree,
+               "bed_address": args.genotypes_address,
+               "ibd_pd": ibd_pd[ibd_pd["Chr"] == chromosome],
+               "chromosome": chromosome,
+               "out_prefix":args.out_prefix,
+               "start": args.start,
+               "end": args.end,
+               "bim": args.bim,
+               "threads": args.threads
+                }
+               for chromosome in range(args.from_chr, args.to_chr)]
+            
+    pool = Pool(args.processes)
+    logging.info("staring process pool")
+    consumed_time = pool.map(run_imputation, inputs)
+    logging.info("imputation time: "+str(np.sum(consumed_time)))

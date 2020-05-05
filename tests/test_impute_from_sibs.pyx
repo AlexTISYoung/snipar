@@ -1,7 +1,7 @@
-# distutils: language=c++
 import sys
 from sibreg.bin.impute_from_sibs import *
 from sibreg.bin.impute_from_sibs cimport *
+import numpy as np
 import unittest
 
 class TestSibImpute(unittest.TestCase):
@@ -50,9 +50,9 @@ class TestSibImpute(unittest.TestCase):
 
     def test_impute_snp_from_offsprings(self):
         bed = np.array([[0.],[1.],[2.]])
-        snp_ibd0 = np.ones((10,2)).astype(int)
-        snp_ibd1 = np.ones((10,2)).astype(int)
-        snp_ibd2 = np.ones((10,2)).astype(int)
+        snp_ibd0 = np.ones((10,2)).astype("i")
+        snp_ibd1 = np.ones((10,2)).astype("i")
+        snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
         for i in range(3):
@@ -82,9 +82,9 @@ class TestSibImpute(unittest.TestCase):
 
     def test_impute_snp_from_parent_offsprings(self):
         bed = np.array([[0.],[1.],[2.]])
-        snp_ibd0 = np.ones((10,2)).astype(int)
-        snp_ibd1 = np.ones((10,2)).astype(int)
-        snp_ibd2 = np.ones((10,2)).astype(int)
+        snp_ibd0 = np.ones((10,2)).astype("i")
+        snp_ibd1 = np.ones((10,2)).astype("i")
+        snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
                   

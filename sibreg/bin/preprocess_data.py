@@ -79,111 +79,91 @@ def create_pedigree(king_address, agesex_address):
     """
 
     kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
+    logging.info("loaded kinship file")
     agesex = pd.read_csv(agesex_address, sep = " ")
     agesex["IID"] = agesex["IID"].astype(str)
     agesex["FID"] = agesex["FID"].astype(str)
-    sex = {row["IID"]:row["sex"] for index, row in agesex.iterrows()}
-    age = {row["IID"]:row["age"] for index, row in agesex.iterrows()}
-    #Entails all individuals, key is id and value is the person with that id
+    logging.info("loaded agesex file")
+    agesex = agesex.set_index("IID")
+    logging.info("creating age and sex dictionaries")
+    kinship = pd.merge(kinship, agesex.rename(columns={"sex":"sex1", "age":"age1"}), left_on="ID1", right_index=True)
+    kinship = pd.merge(kinship, agesex.rename(columns={"sex":"sex2", "age":"age2"}), left_on="ID2", right_index=True)
+    logging.info("dictionaries created")
     people = {}
-    #lists relatives of a person, key is id and value is relatives of the person with that id
-    families = {}
-    #lists sibs of a person, key is id and value is sibs of the person with that id
-    sibs = {}
-    #MZs that should be removed
-    dropouts = []
     fid_counter = 0
-    #adds and element to dict[index], dict[dict[index][0]] ...
-    for index, row in kinship.iterrows():
-        p1 = people.get(row["ID1"])
+    dropouts = []
+    kinship_cols = kinship.columns.tolist()
+    index_id1 = kinship_cols.index("ID1")
+    index_id2 = kinship_cols.index("ID2")
+    index_sex1 = kinship_cols.index("sex1")
+    index_sex2 = kinship_cols.index("sex2")
+    index_age1 = kinship_cols.index("age1")
+    index_age2 = kinship_cols.index("age2")
+    index_inftype = kinship_cols.index("InfType")
+    logging.info("creating pedigree objects")
+    pop_size = kinship.values.shape[0]
+    t = kinship.values.tolist()
+    for row in range(pop_size):
+        relation = t[row][index_inftype]
+        id1 = t[row][index_id1]
+        id2 = t[row][index_id2]
+        age1 = t[row][index_age1]
+        age2 = t[row][index_age2]
+        sex1 = t[row][index_sex1]
+        sex2 = t[row][index_sex2]
+        p1 = people.get(id1)
         if p1 is None:
-            p1 = Person(row["ID1"])
-            people[row["ID1"]] = p1
-            families[p1] = set()
-            sibs[p1] = set()
-        p2 = people.get(row["ID2"])
+            p1 = Person(id1)
+            people[id1] = p1
+        
+        p2 = people.get(id2)
         if p2 is None:
-            p2 = Person(row["ID2"])
-            people[row["ID2"]] = p2
-            families[p2] = set()
-            sibs[p2] = set()
-        recurcive_append(families, p1, p2)
-        recurcive_append(families, p2, p1)
-        #As the kinship only has first degree relatives, each row represent a family relation
-        #Therefore they should share the same family id
-        if p1.fid is not None and p2.fid is not None:
-            p1.fid = p2.fid
-            for p in families[p1]:
-                p.fid = p2.fid
+            p2 = Person(id2)
+            people[id2] = p2
 
-        if p1.fid is not None and p2.fid is None:
-            p2.fid = p1.fid
-            for p in families[p2]:
-                p.fid = p1.fid
-
-        if p2.fid is not None and p1.fid is None:
-            p1.fid = p2.fid
-            for p in families[p1]:
-                p.fid = p2.fid
-        
-        if p2.fid is None and p1.fid is None:
-            p1.fid = fid_counter
-            p2.fid = fid_counter            
-            #not neccessary
-            for p in families[p1]:
-                p.fid = fid_counter
-            for p in families[p2]:
-                p.fid = fid_counter
-            fid_counter += 1
-
-        #sets default parent id
-        if p1.mid is None:
-            p1.mid = p1.id + "_M"
-        if p2.mid is None:
-            p2.mid = p2.id + "_M"
-        if p1.pid is None:
-            p1.pid = p1.id + "_P"
-        if p2.pid is None:
-            p2.pid = p2.id + "_P"
-
-        if row["InfType"] == "PO":
-            #After checking sex and age sets the parent
-            if age[p1.id] >  age[p2.id]+12:
-                if sex[p1.id] == "F":
+        if relation == "PO":
+            if age1 >  age2+12:
+                if sex1 == "F":
                     p2.mid = p1.id
-                if sex[p1.id] == "M":
+                if sex1 == "M":
                     p2.pid = p1.id
-                for sib in sibs[p2]:
-                    sib.mid = p2.mid
-                    sib.pid = p2.pid
-            if age[p2.id] >  age[p1.id]+12:
-                if sex[p2.id] == "F":
+
+            if age2 > age1+12:
+                if sex2 == "F":
                     p1.mid = p2.id
-                if sex[p2.id] == "M":
+                if sex2 == "M":
                     p1.pid = p2.id
-                for sib in sibs[p1]:
-                    sib.mid = p1.mid
-                    sib.pid = p1.pid
-        
-        if row["InfType"] == "FS":
-            #since these are full siblings the should share the same parents
-            recurcive_append(sibs, p1, p2)
-            recurcive_append(sibs, p2, p1)
-            p1.mid = p2.mid
-            p1.pid = p2.pid
-            for p in sibs[p1]:
-                p.mid = p2.mid
-                p.pid = p2.pid
+        if relation == "FS":
+            if p1.fid is None and p2.fid is None:
+                p1.fid = str(fid_counter)
+                p2.fid = str(fid_counter)
+                fid_counter += 1
+            
+            if p1.fid is None and p2.fid is not None:
+                p1.fid = p2.fid
 
-        if row["InfType"] == "MZ":
-            #ranodmly removes one of MZs
-            excess = row[random.choice(["ID1", "ID2"])]
-            dropouts.append(excess)
+            if p1.fid is not None and p2.fid is None:
+                p2.fid = p1.fid
 
-    #removes excess from people
     for excess in dropouts:
         people.pop(excess)
-    data = [(p.fid, p.id, p.pid, p.mid) for p in people.values()]
+
+    data = []
+    for p in people.values():
+        if p.fid is None:
+            p.fid = str(fid_counter)
+            fid_counter += 1
+
+        if p.mid is None:
+            #default mother id
+            p.mid = p.fid + "___M"
+
+        if p.pid is None:
+            #default father ir
+            p.pid = p.fid + "___P"
+        
+        data.append((p.fid, p.id, p.pid, p.mid))
+
     data = pd.DataFrame(data, columns = ['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']).astype(str)
     return data
     
@@ -269,14 +249,13 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
                 pos: A numpy array with the position of each SNP in the order of appearance in gts.
                 hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
     """
-    logging.info("initializing data")
-    logging.info("loading and filtering pedigree file ...")
+    logging.info("with chromosome " + str(chr)+": " + "initializing data")
+    logging.info("with chromosome " + str(chr)+": " + "loading and filtering pedigree file ...")
     #keeping individuals with no parents
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
-    #TODO handle sibs with one parent
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
     sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]).agg({'IID':lambda x: list(x)}).reset_index()
@@ -285,14 +264,14 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("loading bim file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading bim file ...")
     if bim_address is None:
         bim_file = genotypes_address+'.bim'
     else:
         bim_file = bim_address
     bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
     #TODO what if people are related but do not have ibd on chrom
-    logging.info("loading and transforming ibd file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading and transforming ibd file ...")
     ibd = ibd.astype(str)
     #Adding location of start and end of each 
     ibd = ibd[ibd["Chr"] == str(chr)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
@@ -309,7 +288,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("loading bed file ...")
+    logging.info("with chromosome " + str(chr)+": " + "loading bed file ...")
     gts_f = Bed(genotypes_address+".bed")
     ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
     gts_ids = gts_f.iid[ids_in_ped]
@@ -322,7 +301,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
         pos = gts_f.pos[:, 2]
         sid = gts_f.sid
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    logging.info("initializing data done ...")
+    logging.info("with chromosome " + str(chr)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
