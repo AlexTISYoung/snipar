@@ -6,9 +6,9 @@ sib_file = args[1]
 effect_file = args[2]
 out = args[3]
 
-#sib_file = 'h2_quad_0.8_2.hdf5'
-#effect_file = 'h2_quad_0.8.effects.txt'
-#out = 'h2_quad_0.8.effects_2.hdf5'
+sib_file = 'test_data/h2_quad_0.8.hdf5'
+effect_file = 'test_data/h2_quad_0.8.effects.txt'
+out = 'test_data/h2_quad_0.8.effects.hdf5'
 
 ###### Sibs only ######
 print('Reading estimates')
@@ -48,8 +48,3 @@ r = lm(beta[,4]~effects[,3])
 s = summary(r)$coefficients
 print(paste('bias for maternal effects: ',
             round(s[2,1]-1,4),' (',round(s[2,2],4),' S.E.)',sep=''))
-
-# Chi-square test
-z = (beta[,-1]-effects)/beta_se[,-1]
-p = 1-pchisq(sum(z^2),dim(z)[1]*dim(z)[2])
-print(paste('Chi-square test p-value: ',round(p,4),sep=''))
