@@ -16,8 +16,6 @@ if __name__ == '__main__':
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
-    parser.add_argument('--sibdiff',action='store_true',default = False,help='Fit sibling difference in PGS model')
-    parser.add_argument('--trios',action = 'store_true',default = False,help='Fit model with individuals with both parents genotyped')
     parser.add_argument('--ped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
@@ -79,8 +77,7 @@ if __name__ == '__main__':
             pg = gtarray(np.array(pgs_f['pgs']),
                          convert_str_array(np.array(pgs_f['ids'])),
                          sid = convert_str_array(np.array(pgs_f['cols'])),
-                         fams = convert_str_array(np.array(pgs_f['fams'])),
-                         par_status = np.array(pgs_f['par_status']))
+                         fams = convert_str_array(np.array(pgs_f['fams'])))
             print('Normalising PGS')
             pg.mean_normalise()
             pg.gts = pg.gts/np.std(pg.gts[:,0])
@@ -147,30 +144,3 @@ if __name__ == '__main__':
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
-
-        if args.trios:
-            print('Analysing individuals with both parents genotyped separately')
-            if pg.par_status is not None:
-                par_status = pg.par_status==0
-                all_obs = np.sum(par_status,axis=1)==2
-                n = np.sum(all_obs)
-                if n == 0:
-                    raise ValueError('No individuals with both parents genotyped')
-                print(str(n)+' individuals with both parents genotyped')
-                bpg_ids = pg.ids[all_obs]
-                bpg_id_dict = make_id_dict(bpg_ids)
-                in_bpg = np.array([x in bpg_id_dict for x in pheno_ids])
-                gt_indices = np.array([bpg_id_dict[x] for x in pheno_ids[in_bpg]])
-                alpha_bpg = get_alpha_mle(y[in_bpg], pg.gts[gt_indices, :], pg.fams[gt_indices], add_intercept=True)
-                outcols = pg.sid
-                # Save output
-                ncol = alpha_bpg[0].shape[0] - 1
-                alpha_bpg_out = np.zeros((ncol, 2))
-                alpha_bpg_out[:, 0] = alpha_bpg[0][1:(ncol + 1)]
-                alpha_bpg_out[:, 1] = np.sqrt(np.diag(alpha_bpg[1])[1:(ncol + 1)])
-                np.savetxt(args.outprefix + '.bpg.pgs_effects.txt',
-                           np.hstack((outcols, np.array(alpha_bpg_out, dtype='S20'))),
-                           delimiter='\t', fmt='%s')
-                np.savetxt(args.outprefix + '.bpg.pgs_vcov.txt', alpha_bpg_out[1][1:(1 + ncol), 1:(1 + ncol)])
-            else:
-                raise ValueError('Pedigree must be specified or available in imputed genotypes HDF5 file')
