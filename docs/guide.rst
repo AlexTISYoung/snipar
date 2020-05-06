@@ -6,15 +6,15 @@ Guide
 sibreg is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
 and for performing robust GWAS using the resulting imputed parental genotypes
 
-In the sibreg/sibreg/bin subdirectory, there is a script for
+In the main sibreg directory, there is a script for
 imputing missing parental genotypes:
 
 --'impute_runner.py'(:doc:`impute_runner`)
-    imputes the expected sum of maternal and paternal genotypes given genotype data on the sibling
-    offspring of the parents and IBD sharing between the sibling offspring
+    imputes the expected genotype of the missing parent(s) given observed sibling genotypes, IBD sharing
+    between siblings, and observed parental genotypes
 
-The script outputs expected genotypes of missing parents, and are used as input for the fGWAS.py
-script that perform GWAS using the missing parental genotypes. See tutorial for an example of use.
+The script outputs expected genotypes of missing parents, which are used as input for the fGWAS.py
+script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use.
 
 All of the above scripts require either provision of a pedigree file or the script will construct a pedigree for you if you
 provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information. Providing
@@ -29,10 +29,10 @@ Siblings are identified through individuals that have the same FID.
 
 We recommend working through the (:doc:`tutorial`) to get an idea of the workflow required for a full analysis.
 
-The core model is the sibreg model (:class:`sibreg.model`), which consists of a linear model for the mean along
+The robust GWAS is performed using the sibreg module (:class:`sibreg.model`), which consists of a linear model for the mean along
 with a vector of class labels that allows for correlations within-class. (The correlations within-class result
 from modelling mean differences between classes as independent, normally distributed random effects.) For
-the GWAS applications, the classes are the families given by the pedigree file.
+the GWAS applications, the classes are the families given by the pedigree file, i.e. the siblings within a family.
 
 The documentation for the sibreg module (:doc:`sibreg`) contains information on how to define a :class:`sibreg.model`,
 how to optimise a :class:`sibreg.model`, how to predict from
@@ -43,7 +43,7 @@ is not necessary for the user to interact directly with the sibreg module.
 
 sibreg has the following dependencies:
 
-python 2.7
+python 3.7
 
 Packages:
 
@@ -54,7 +54,7 @@ Packages:
 - networkx
 - Cython
 
-We highly recommend using a python distribution such as Anaconda (https://store.continuum.io/cshop/anaconda/).
+We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
 This will come with both numpy and scipy installed and can include an MKL-compiled distribution
 for optimal speed.
 
@@ -65,10 +65,10 @@ containing the sibreg source code, at the shell type
 
 **Running tests**
 
-To check that the code is working properly, you should
+To check that the code is working properly and that the C modules have compiled, you should
 run tests. To run the tests, in the main sibreg directory enter the command:
 
-    ``python setup.py tests``
+    ``python setup.py pytest``
 
 
 

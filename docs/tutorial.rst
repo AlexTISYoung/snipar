@@ -22,11 +22,13 @@ python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py 1 2 test_data/sample.segments.gz test_data/sample --king test_data/sample.king --agesex test_data/sample.agesex --out_prefix test_data/sample``
+    ``python impute_runner.py 1 2 test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --out_prefix test_data/sample --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
-and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes.
-The imputed parental genotypes are in a HDF5 file test_data/sample1.hdf5.
+and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
+from the sibling and observed parental genotypes in test_data/sample1.bed. The imputed parental genotypes are in a HDF5 file test_data/sample1.hdf5. The --threads 4 argument
+means the imputation will run on 4 threads. If imputing for more than 1 chromosome, the --processes n argument will use n different processes in parallel, one for
+each chromosome, with the number of threads per process determined by the --threads argument.
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
@@ -34,8 +36,9 @@ To compute summary statistics for direct, paternal, and maternal effects for all
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
-(imputed genotype). This is done using a random effects model that models phenotypic correlations between siblings,
-where sibling relations are inferred from the pedigree stored in the output of the imputation script: test_data/sample1.hdf5.
+(imputed) genotype. This is done using a random effects model that models phenotypic correlations between siblings,
+where sibling relations are inferred from the pedigree stored in the output of the imputation script: test_data/sample1.hdf5. The 'family variance estimate'
+output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance.
 
 Now we have estimated locus specific summary statistics. To estimate effects and compare to the true effects, run
 
