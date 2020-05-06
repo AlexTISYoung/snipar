@@ -73,6 +73,7 @@ if __name__ == '__main__':
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
         try:
+            code.interact(local=locals())
             pgs_f = h5py.File(args.pgs, 'r')
             pg = gtarray(np.array(pgs_f['pgs']),
                          convert_str_array(np.array(pgs_f['ids'])),
