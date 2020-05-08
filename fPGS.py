@@ -15,6 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
+    parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1 in the analysis sample',default=False)
     parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
     parser.add_argument('--ped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
@@ -79,7 +80,6 @@ if __name__ == '__main__':
                      fams=convert_str_array(np.array(pgs_f['fams'])))
         print('Normalising PGS')
         pg.mean_normalise()
-        pg.gts = pg.gts / np.std(pg.gts[:, 0])
         pgs_f.close()
         # try:
         #     code.interact(local=locals())
@@ -138,7 +138,12 @@ if __name__ == '__main__':
         pheno_ids = pheno_ids[in_pgs]
         gt_indices = np.array([pg.id_dict[x] for x in pheno_ids])
         print('Final sample size: '+str(gt_indices.shape[0]))
-        alpha_imp = get_alpha_mle(y, pg.gts[gt_indices,:], pg.fams[gt_indices], add_intercept = True)
+        # Scale
+        if args.scale_phen:
+            y = y/np.std(y)
+        pg.gts = pg.gts / np.std(pg.gts[gt_indices, 0])
+        # Estimate effects
+        alpha_imp = get_alpha_mle(y,pg.gts[gt_indices,:] , pg.fams[gt_indices], add_intercept = True)
         # Estimate proband only model
         alpha_proband = get_alpha_mle(y, pg.gts[gt_indices, 0], pg.fams[gt_indices], add_intercept=True)
         # Get print out for fixed mean effects
