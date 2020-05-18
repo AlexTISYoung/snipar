@@ -16,6 +16,8 @@ Performs robust GWAS using observed and imputed parental genotypes along with ob
 Computes PGS values for probands and parents from SNP weights using observed/imputed parental genotypes; analyse the direct and parental effects
 of the PGS on traits (fPGS.py). 
 
+The fGWAS.py and fPGS.py scripts use a random effects model to model phenotypic correlations between siblings. 
+
 # Documentation
 
 Documentation for the modules and scripts is at: https://sibreg.readthedocs.io/en/master/
