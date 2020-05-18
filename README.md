@@ -8,12 +8,12 @@ and for performing robust GWAS using the resulting imputed parental genotypes
 Impute the expected sum of maternal and paternal genotypes given genotype data on the sibling
     offspring of the parents and IBD sharing between the sibling offspring
 
-Imputes the expected genotype of the missing parent given one parent and a number of sibling offspring (1 or more)
-    of the parent and the missing parent (and their shared IBD segments for 2 or more siblings). 
+Imputes the expected genotype of the missing parent given a parent-offspring pair, or a parent and multiple full sibling
+offspring along with the shared IBD segments of those offspring. 
 
 Performs robust GWAS using observed and imputed parental genotypes along with observed proband genotypes (fGWAS.py script).
 
-Computes PGS values for probands and parents using observed/imputed parental genotypes and analyse the direct and parental effects
+Computes PGS values for probands and parents from SNP weights using observed/imputed parental genotypes; analyse the direct and parental effects
 of the PGS on traits (fPGS.py). 
 
 # Documentation
