@@ -1,63 +1,56 @@
-# sibreg
-sibreg is a python library for performing robust GWAS using nuclear family data with a random effects
-model for within family phenotypic correlations
+# SNIPar
 
-sibreg also contains scripts for imputing missing parental genotypes from sibling pairs (provided IBD sharing information)
-and from parent-offspring pairs (with one missing parent)
+SNIPar is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
+and for performing robust GWAS using the resulting imputed parental genotypes
 
 # Main features:
 
 Impute the expected sum of maternal and paternal genotypes given genotype data on the sibling
     offspring of the parents and IBD sharing between the sibling offspring
 
-Imputes the expected genotype of the missing parent given one parent and a number of sibling offspring
-    of the parent and the missing parent
+Imputes the expected genotype of the missing parent given one parent and a number of sibling offspring (1 or more)
+    of the parent and the missing parent (and their shared IBD segments for 2 or more siblings). 
 
-Performs GWAS using observed sibling genotypes and the missing parental genotypes imputed from
-    the sibling genotypes (produced by 'impute_from_sibs.py')
+Performs robust GWAS using observed and imputed parental genotypes along with observed proband genotypes (fGWAS.py script).
 
-Performs GWAS using observed sibling genotypes, the single observed parental genotype in each family, and the imputed missing parental genotypes
-    (produced by 'impute_po.py')
-
-Performs GWAS using observed sibling genotypes and observed maternal and paternal genotypes
+Computes PGS values for probands and parents using observed/imputed parental genotypes and analyse the direct and parental effects
+of the PGS on traits (fPGS.py). 
 
 # Documentation
 
-Documentation for the modules and scripts is at: https://readthedocs.org/projects/sibreg/latest
+Documentation for the modules and scripts is at: https://sibreg.readthedocs.io/en/master/
 
-# Package Install Instructions
+It is recommended to read the guide: https://sibreg.readthedocs.io/en/master/guide.html
 
-sibreg has the following dependencies:
+And to work through the tutorial: https://sibreg.readthedocs.io/en/master/tutorial.html
 
-python 2.7
+#Package Install Instructions
 
-Packages: 
+SNIPar has the following dependencies:
+
+python 3.7
+
+Packages:
 
 - numpy
 - scipy
 - pysnptools
+- pandas
+- networkx
+- Cython
 
-We highly recommend using a python distribution such as Anaconda (https://store.continuum.io/cshop/anaconda/). 
+We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
 This will come with both numpy and scipy installed and can include an MKL-compiled distribution
-for optimal speed. 
+for optimal speed.
 
 To install from source, clone the git repository, and in the directory
-containing the sibreg source code, at the shell type
+containing the SNIPar source code, at the shell type
 
-    'sudo python setupy.py install'
+    'python setupy.py install'
 
-or, on the windows command prompt, type
+#Running tests
 
-    'python setup.py install' 
-    
-# Running tests
+To check that the code is working properly and that the C modules have compiled, you should
+run tests. To run the tests, in the main SNIPar directory enter the command:
 
-The tests directory contains scripts for testing the computation of 
-the likelihoods, gradients, and maximum likelihood solutions
-To run these tests, a further dependency is required: numdifftools. 
-
-To run the tests, first install sibreg. Change to the tests/ directory and at the shell type
-
-    'python test.py'
-
-Tests should run without any failures.
+    ``python setup.py pytest``

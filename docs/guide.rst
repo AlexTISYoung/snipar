@@ -44,7 +44,7 @@ is not necessary for the user to interact directly with the sibreg module.
 
 ***Package Install Instructions**
 
-sibreg has the following dependencies:
+SNIPar has the following dependencies:
 
 python 3.7
 
@@ -62,14 +62,14 @@ This will come with both numpy and scipy installed and can include an MKL-compil
 for optimal speed.
 
 To install from source, clone the git repository, and in the directory
-containing the sibreg source code, at the shell type
+containing the SNIPar source code, at the shell type
 
     'python setupy.py install'
 
 **Running tests**
 
 To check that the code is working properly and that the C modules have compiled, you should
-run tests. To run the tests, in the main sibreg directory enter the command:
+run tests. To run the tests, in the main SNIPar directory enter the command:
 
     ``python setup.py pytest``
 
