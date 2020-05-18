@@ -24,7 +24,7 @@ It is recommended to read the guide: https://sibreg.readthedocs.io/en/master/gui
 
 And to work through the tutorial: https://sibreg.readthedocs.io/en/master/tutorial.html
 
-#Package Install Instructions
+# Package Install Instructions
 
 SNIPar has the following dependencies:
 
@@ -48,7 +48,7 @@ containing the SNIPar source code, at the shell type
 
     'python setupy.py install'
 
-#Running tests
+# Running tests
 
 To check that the code is working properly and that the C modules have compiled, you should
 run tests. To run the tests, in the main SNIPar directory enter the command:
