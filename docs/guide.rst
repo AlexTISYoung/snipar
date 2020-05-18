@@ -3,10 +3,10 @@ Guide
 
 **Introduction**
 
-sibreg is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
+SNIPar is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
 and for performing robust GWAS using the resulting imputed parental genotypes
 
-In the main sibreg directory, there is a script for
+In the main SNIPar directory, there is a script for
 imputing missing parental genotypes:
 
 --'impute_runner.py'(:doc:`impute_runner`)
@@ -14,7 +14,10 @@ imputing missing parental genotypes:
     between siblings, and observed parental genotypes
 
 The script outputs expected genotypes of missing parents, which are used as input for the fGWAS.py
-script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use.
+script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use. For imputation
+from siblings, the script takes advantage of inferred IBD segments to infer which parental alleles have been
+observed in the siblings. The script takes IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
+format as input.
 
 All of the above scripts require either provision of a pedigree file or the script will construct a pedigree for you if you
 provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information. Providing

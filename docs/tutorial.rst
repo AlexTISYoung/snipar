@@ -2,7 +2,7 @@ Tutorial
 ********
 Tutorial on performing robust GWAS using family data
 
-To generate the test data, in the main sibreg directory, run:
+To generate the test data, in the main SNIPar directory, run:
 
     ``bash tests/generate_test_population.sh``
 
@@ -14,7 +14,7 @@ The genotype data has been simulated so that there are 3000 independent families
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
 chance of having a genotyped sibling.
 
-To impute the missing parental genotypes, run the following command in the main sibreg directory:
+To impute the missing parental genotypes, run the following command in the main SNIPar directory:
 
 python impute_runner.py 1 2 test_data/sample.segments.gz test_data/sample --king test_data/sample.king --agesex test_data/sample.agesex --out_prefix test_data/sample
 
