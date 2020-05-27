@@ -75,7 +75,7 @@ cdef class model:
         cdef float sigma_u = sigma2/tau
         cdef int n_labels = self.n_labels
         cdef np.ndarray[np.float64_t,ndim=2] X = self.X
-        cdef np.ndarray[np.float64_t,ndim=1] X = self.y
+        cdef np.ndarray[np.float64_t,ndim=1] y = self.y
         cdef np.ndarray[np.float64_t,ndim=2] X_lab
         cdef np.ndarray[np.float64_t,ndim=2] X_lab_T
         cdef np.ndarray[np.float64_t,ndim=1] y_lab
