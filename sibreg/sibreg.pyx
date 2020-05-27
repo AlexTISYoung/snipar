@@ -6,6 +6,7 @@ from scipy.optimize import fmin_l_bfgs_b
 import h5py
 import numpy as np
 cimport numpy as np
+cimport cython
 
 cdef class model:
     """Define a linear model with within-class correlations.
