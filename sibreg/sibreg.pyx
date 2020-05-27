@@ -71,7 +71,7 @@ cdef class model:
 
         """
         cdef np.ndarray[np.float64_t,ndim=2] X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
-        cdef np.ndarray[np.float64,ndim=1] X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
+        cdef np.ndarray[np.float64_t,ndim=1] X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
         cdef float sigma_u = sigma2/tau
         cdef int n_labels = self.n_labels
         cdef np.ndarray[np.float64_t,ndim=2] X = self.X
@@ -83,7 +83,7 @@ cdef class model:
         cdef int lower_index
         cdef int upper_index
         cdef int label_size
-        cdef np.ndarray[np.float64,ndim=2] Sigma_lab
+        cdef np.ndarray[np.float64_t,ndim=2] Sigma_lab
 
         for i in range(n_labels):
             lower_index = label_bounds[i]
