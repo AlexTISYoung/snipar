@@ -35,36 +35,27 @@ cdef class model:
             X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
         # Sort by label
         cdef np.ndarray[np.int_t,ndim=1]  label_sort = np.argsort(labels)
-        y = y[label_sort]
-        X = X[label_sort:,]
+        self.y = y[label_sort]
+        self.X = X[label_sort,:]
         labels = labels[label_sort]
+        self.labels = labels
         # Find label bounds
         cdef np.ndarray[np.int_t,ndim=1] label_bounds = np.zeros((n+1),dtype=int)
         cdef int label_count = 1
         cdef char* label = labels[0]
         for i in range(1,n):
-            if not labels[i]==label:
+            if labels[i]==label:
+                pass
+            else:
                 label_bounds[label_count] = i
                 label_count +=1
                 label = labels[i]
         label_bounds[label_count] = n
         label_bounds = label_bounds[0:label_count]
-        # Label mapping
-        self.label_counts = dict()
-        self.label_indices = dict()
-        for l in range(0,labels.shape[0]):
-            if labels[l] not in self.label_counts:
-                self.label_counts[labels[l]]=1
-                self.label_indices[labels[l]] = [l]
-            else:
-                self.label_counts[labels[l]]+=1
-                self.label_indices[labels[l]].append(l)
-        self.n_labels = len(self.y_lab.keys())
-        # response
-        self.y=y
-        self.labels=labels
+        self.label_bounds = label_bounds
+        self.n_labels = label_count
 
-    def alpha_mle(self, tau, sigma2, compute_cov = False, xtx_out = False):
+    def alpha_mle(self, float tau, float sigma2, compute_cov = False, xtx_out = False):
         """
         Compute the MLE of alpha given variance parameters
 
@@ -79,16 +70,33 @@ cdef class model:
                 MLE of alpha
 
         """
-        X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
-        X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
+        cdef np.ndarray[np.float64_t,ndim=2] X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
+        cdef np.ndarray[np.float64,ndim=1] X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
+        cdef float sigma_u = sigma2/tau
+        cdef int n_labels = self.n_labels
+        cdef np.ndarray[np.float64_t,ndim=2] X = self.X
+        cdef np.ndarray[np.float64_t,ndim=1] X = self.y
+        cdef np.ndarray[np.float64_t,ndim=2] X_lab
+        cdef np.ndarray[np.float64_t,ndim=2] X_lab_T
+        cdef np.ndarray[np.float64_t,ndim=1] y_lab
+        cdef np.ndarray[np.int_t,ndim=1] label_bounds = self.label_bounds
+        cdef int lower_index
+        cdef int upper_index
+        cdef int label_size
+        cdef np.ndarray[np.float64,ndim=2] Sigma_lab
 
-        for label in self.y_lab.keys():
-            sigma_u = sigma2/tau
-            Sigma_lab = sigma_u*np.ones((self.label_counts[label],self.label_counts[label]))
+        for i in range(n_labels):
+            lower_index = label_bounds[i]
+            upper_index = label_bounds[i+1]
+            label_size = upper_index-lower_index
+            Sigma_lab = sigma_u*np.ones((label_size,label_size))
             np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
             Sigma_lab_inv = np.linalg.inv(Sigma_lab)
-            X_T_X = X_T_X + np.dot(self.X_lab[label].T,Sigma_lab_inv.dot(self.X_lab[label]))
-            X_T_y = X_T_y + np.dot(self.X_lab[label].T, Sigma_lab_inv.dot(self.y_lab[label]))
+            X_lab = X[lower_index:upper_index,:]
+            X_lab_T = X_lab.T
+            y_lab = y[lower_index:upper_index]
+            X_T_X = X_T_X + np.dot(X_lab_T,Sigma_lab_inv.dot(X_lab))
+            X_T_y = X_T_y + np.dot(X_lab_T, Sigma_lab_inv.dot(y_lab))
 
         if xtx_out:
             return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
