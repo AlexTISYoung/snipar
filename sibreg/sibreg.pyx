@@ -29,19 +29,19 @@ cdef class model:
             raise(ValueError('inconsistent sample sizes of response, covariates, and labels'))
         
         # Get sample size
-        cdef int n = X.shape[0] 
+        cdef int n = X.shape[0]
         self.n = n
         if add_intercept:
             X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
-        # Sort by label 
-        cdef np.ndarray[np.int_t,ndim=1]  label_sort = np.argsort(labels) 
+        # Sort by label
+        cdef np.ndarray[np.int_t,ndim=1]  label_sort = np.argsort(labels)
         y = y[label_sort]
-	X = X[label_sort:,]
+        X = X[label_sort:,]
         labels = labels[label_sort]
         # Find label bounds
         cdef np.ndarray[np.int_t,ndim=1] label_bounds = np.zeros((n+1),dtype=int)
         cdef int label_count = 1
-        cdef char* label = labels[0] 
+        cdef char* label = labels[0]
         for i in range(1,n):
             if not labels[i]==label:
                 label_bounds[label_count] = i

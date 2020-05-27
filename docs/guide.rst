@@ -3,7 +3,7 @@ Guide
 
 **Introduction**
 
-SNIPar is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
+SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
 and for performing robust GWAS using the resulting imputed parental genotypes
 
 In the main SNIPar directory, there is a script for

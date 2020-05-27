@@ -1,6 +1,6 @@
 Tutorial
 ********
-Tutorial on performing robust GWAS using family data
+Tutorial on performing robust GWAS using family data. Before working through the tutorial, please first install the package and run the tests.
 
 To generate the test data, in the main SNIPar directory, run:
 
