@@ -1,5 +1,5 @@
 import numpy as np
-cimport numpy as np
+cimport numpy as cnp
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.optimize import fmin_l_bfgs_b
@@ -22,7 +22,9 @@ cdef class model:
         model : :class:`sibreg.model`
 
     """
-    def __init__(self,np.ndarray[np.float32_t,ndim=1] y,np.ndarray[np.float32_t,ndim=2] X,np.ndarray labels, add_intercept = False):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    def __init__(self,cnp.ndarray[cnp.float32_t,ndim=1] y,cnp.ndarray[cnp.float32_t,ndim=2] X,cnp.ndarray labels, add_intercept = False):
         if y.shape[0] == X.shape[0] and X.shape[0] == labels.shape[0]:
             pass
         else:
@@ -32,15 +34,15 @@ cdef class model:
         cdef int n = X.shape[0]
         self.n = n
         if add_intercept:
-            X = np.hstack((np.ones((self.n,1),dtype=X.dtype),X))
+            X = cnp.hstack((cnp.ones((self.n,1),dtype=X.dtype),X))
         # Sort by label
-        cdef np.ndarray[np.int_t,ndim=1]  label_sort = np.argsort(labels)
+        cdef cnp.ndarray[cnp.int_t,ndim=1]  label_sort = cnp.argsort(labels)
         self.y = y[label_sort]
         self.X = X[label_sort,:]
         labels = labels[label_sort]
         self.labels = labels
         # Find label bounds
-        cdef np.ndarray[np.int_t,ndim=1] label_bounds = np.zeros((n+1),dtype=int)
+        cdef cnp.ndarray[cnp.int_t,ndim=1] label_bounds = cnp.zeros((n+1),dtype=int)
         cdef int label_count = 1
         cdef char* label = labels[0]
         for i in range(1,n):
@@ -55,6 +57,8 @@ cdef class model:
         self.label_bounds = label_bounds
         self.n_labels = label_count
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def alpha_mle(self, float tau, float sigma2, compute_cov = False, xtx_out = False):
         """
         Compute the MLE of alpha given variance parameters
@@ -70,42 +74,42 @@ cdef class model:
                 MLE of alpha
 
         """
-        cdef np.ndarray[np.float64_t,ndim=2] X_T_X = np.zeros((self.X.shape[1],self.X.shape[1]),dtype = np.float64)
-        cdef np.ndarray[np.float64_t,ndim=1] X_T_y = np.zeros((self.X.shape[1]), dtype = np.float64)
+        cdef cnp.ndarray[cnp.float64_t,ndim=2] X_T_X = cnp.zeros((self.X.shape[1],self.X.shape[1]),dtype = cnp.float64)
+        cdef cnp.ndarray[cnp.float64_t,ndim=1] X_T_y = cnp.zeros((self.X.shape[1]), dtype = cnp.float64)
         cdef float sigma_u = sigma2/tau
         cdef int n_labels = self.n_labels
-        cdef np.ndarray[np.float64_t,ndim=2] X = self.X
-        cdef np.ndarray[np.float64_t,ndim=1] y = self.y
-        cdef np.ndarray[np.float64_t,ndim=2] X_lab
-        cdef np.ndarray[np.float64_t,ndim=2] X_lab_T
-        cdef np.ndarray[np.float64_t,ndim=1] y_lab
-        cdef np.ndarray[np.int_t,ndim=1] label_bounds = self.label_bounds
+        cdef cnp.ndarray[cnp.float64_t,ndim=2] X = self.X
+        cdef cnp.ndarray[cnp.float64_t,ndim=1] y = self.y
+        cdef cnp.ndarray[cnp.float64_t,ndim=2] X_lab
+        cdef cnp.ndarray[cnp.float64_t,ndim=2] X_lab_T
+        cdef cnp.ndarray[cnp.float64_t,ndim=1] y_lab
+        cdef cnp.ndarray[cnp.int_t,ndim=1] label_bounds = self.label_bounds
         cdef int lower_index
         cdef int upper_index
         cdef int label_size
-        cdef np.ndarray[np.float64_t,ndim=2] Sigma_lab
+        cdef cnp.ndarray[cnp.float64_t,ndim=2] Sigma_lab
 
         for i in range(n_labels):
             lower_index = label_bounds[i]
             upper_index = label_bounds[i+1]
             label_size = upper_index-lower_index
-            Sigma_lab = sigma_u*np.ones((label_size,label_size))
-            np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
-            Sigma_lab_inv = np.linalg.inv(Sigma_lab)
+            Sigma_lab = sigma_u*cnp.ones((label_size,label_size))
+            cnp.fill_diagonal(Sigma_lab,sigma_u+sigma2)
+            Sigma_lab_inv = cnp.linalg.inv(Sigma_lab)
             X_lab = X[lower_index:upper_index,:]
             X_lab_T = X_lab.T
             y_lab = y[lower_index:upper_index]
-            X_T_X = X_T_X + np.dot(X_lab_T,Sigma_lab_inv.dot(X_lab))
-            X_T_y = X_T_y + np.dot(X_lab_T, Sigma_lab_inv.dot(y_lab))
+            X_T_X = X_T_X + cnp.dot(X_lab_T,Sigma_lab_inv.dot(X_lab))
+            X_T_y = X_T_y + cnp.dot(X_lab_T, Sigma_lab_inv.dot(y_lab))
 
         if xtx_out:
             return [X_T_X,X_T_y.reshape((self.X.shape[1]))]
         else:
-            alpha = np.linalg.solve(X_T_X,X_T_y)
+            alpha = cnp.linalg.solve(X_T_X,X_T_y)
             alpha = alpha.reshape((alpha.shape[0],))
 
             if compute_cov:
-                alpha_cov = np.linalg.inv(X_T_X)
+                alpha_cov = cnp.linalg.inv(X_T_X)
                 return [alpha,alpha_cov]
             else:
                 return alpha
