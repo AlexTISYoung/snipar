@@ -91,6 +91,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
             G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Maternal genotype neither imputed nor observed')
+    G = G.transpose(2,0,1)
     return G
 
 def fit_null_model(y,X,fam_labels,tau_init):
@@ -201,61 +202,78 @@ if __name__ == '__main__':
     # Read observed genotypes
     print('Reading observed genotypes')
     gts = gts_f[observed_indices, obs_sid_index].read().val
+    gts = ma.array(gts,mask=np.isnan(gts))
     gts_id_dict = make_id_dict(gts_ids[observed_indices])
+    # Filter genotypes based on frequency and missingness
+    print('Filtering on frequency and MAF')
+    freqs = ma.mean(gts,axis=0)/2.0
+    missingness = ma.mean(gts.mask,axis=0)
+    freqs_pass = np.logical_and(freqs > args.min_maf,freqs < (1-args.min_maf))
+    print(str(freqs.shape[0]-np.sum(freqs_pass))+' SNPs with MAF<'+str(args.min_maf))
+    missingness_pass = 100*missingness < args.max_missing
+    print(str(freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with missingness >' + str(args.max_missing)+'%')
+    filter_pass = np.logical_and(freqs_pass,missingness_pass)
+    gts = gts[:,filter_pass]
+    imp_gts = imp_gts[:,filter_pass]
+    sid = sid[filter_pass]
+    freqs = freqs[filter_pass]
+    N_L = np.sum(np.logical_not(gts.mask),axis=0)
+    print('After filtering, '+str(np.sum(filter_pass))+' SNPs remain')
     # Find indices in reduced data
     par_status, gt_indices, fam_labels = find_par_gts(pheno_ids, ped, fams, gts_id_dict)
+    # Check for empty fam labels
+    no_fam = np.array([len(x)==0 for x in fam_labels])
+    if np.sum(no_fam)>0:
+        ValueError('No family label from pedigree for some individuals')
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     G = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
     del gts
     del imp_gts
+    # Fill NAs
+    print('Imputing missing genotypes with population frequency')
     G = ma.array(G,mask=np.isnan(G))
-    # Check for empty fam labels
-    no_fam = np.array([len(x)==0 for x in fam_labels])
-    if np.sum(no_fam)>0:
-        ValueError('No family label from pedigree for some individuals')
-    #### Fit models ####
+    for l in range(G.shape[0]):
+        G[l,G[l,:,:].mask] = freqs[l]
+    #### Fit null model ####
     print('Fitting null model')
-    sigma2, tau, null_alpha = fit_null_model(y,np.ones((y.shape[0],1)),fam_labels, args.tau_init)
+    null_model = sibreg.model(y,np.ones((y.shape[0],1)),fam_labels)
+    sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
+    null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
+    sigma2 = null_optim['sigma2']
+    tau = null_optim['tau']
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
-    ## locus specific models ##
-    print('Fitting models for genome-wide SNPs')
+    ##### Transform ######
+    #### Get inverse square root of Sigma ###
+    print('Transforming genotypes and phenotypes')
+    L = null_model.sigma_inv_root(tau,sigma2)
+    #### Transform genotype and phenotype ###
+    for label in L.keys():
+        label_indices = null_model.label_indices[label]
+        y[label_indices] = np.dot(L[label],y)
+        for i in range(3):
+            G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
+    ### Fit models for SNPs ###
+    print('Estimating SNP effects')
+    XTX = np.einsum('...ij,...kj', G, G)
+    XTY = np.einsum('...ij,i',G,y)
+    alpha = np.linalg.solve(XTX,XTY)
+    alpha_cov = np.linalg.inv(XTX)
+    alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     ## Output file
+    print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
     X_length = 4
-    N_L = np.zeros((sid.shape[0]), dtype=int)
-    outfile.create_dataset('xtx',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('xty', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+    outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
+    outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
-
-    ############### Loop through loci and fit models ######################
-    # Optimize model for SNP
-    freqs = ma.mean(G[:,1,:],axis=0)/2.0
-    missingness = ma.mean(G.mask[:, 1, :], axis=0)
-    xtx = np.zeros((sid.shape[0],X_length,X_length),dtype=np.float32)
-    xtx[:] = np.nan
-    xty = np.zeros((sid.shape[0],X_length),dtype=np.float32)
-    xty[:] = np.nan
-    pc_done = 0
-    for loc in range(0,G.shape[2]):
-        if freqs[loc] > args.min_maf and freqs[loc] < (1-args.min_maf) and (100*missingness[loc]) < args.max_missing:
-            # Find NAs
-            not_nans = np.sum(G[:, :, loc].mask, axis=1) == 0
-            n_l = np.sum(not_nans)
-            N_L[loc] = n_l
-            model_l = sibreg.model(y[not_nans], G[not_nans, :, loc], fam_labels[not_nans], add_intercept= True)
-            alpha_l = model_l.alpha_mle(tau, sigma2, compute_cov=False, xtx_out= True)
-            xtx[loc,:,:] = alpha_l[0]
-            xty[loc,:] = alpha_l[1]
-        pc_done_new = round(100*loc/G.shape[2])
-        if pc_done_new>pc_done:
-            pc_done = pc_done_new
-            print('Done '+str(pc_done)+'% of SNPs')
-    print('Writing output')
-    outfile['xtx'][:] = xtx
-    outfile['xty'][:] = xty
+    outfile.create_dataset('estimate_ses', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
+    outfile['estimate'][:] = alpha
+    outfile['estimate_ses'][:] = alpha_ses
+    outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2
     outfile['tau'] = tau
     outfile['N_L'] = N_L

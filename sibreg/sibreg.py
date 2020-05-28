@@ -173,6 +173,19 @@ class model(object):
 
         return optim
 
+    def sigma_inv_root(self,tau,sigma2):
+
+        sigma2_nsqrt = dict()
+
+        for label in self.y_lab.keys():
+            sigma_u = sigma2/tau
+            Sigma_lab = sigma_u*np.ones((self.label_counts[label],self.label_counts[label]))
+            np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
+            sigma2_chol_lab = np.linalg.cholesky(Sigma_lab)
+            sigma2_nsqrt[label] = np.linalg.inv(sigma2_chol_lab)
+
+        return sigma2_nsqrt
+
     def predict(self,X):
         """
         Predict new observations based on model regression coefficients

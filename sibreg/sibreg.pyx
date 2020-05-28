@@ -1,12 +1,12 @@
 import numpy as np
-cimport numpy as cnp
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.optimize import fmin_l_bfgs_b
 import h5py
 import numpy as np
-cimport numpy as np
+cimport numpy as cnp
 cimport cython
+cimport scipy.linalg.cython_lapack
 
 cdef class model:
     """Define a linear model with within-class correlations.
