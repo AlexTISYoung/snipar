@@ -251,7 +251,7 @@ if __name__ == '__main__':
     #### Transform genotype and phenotype ###
     for label in L.keys():
         label_indices = null_model.label_indices[label]
-        y[label_indices] = np.dot(L[label],y)
+        y[label_indices] = np.dot(L[label],y[label_indices])
         for i in range(3):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     ### Fit models for SNPs ###
