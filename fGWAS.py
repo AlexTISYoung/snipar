@@ -261,7 +261,7 @@ if __name__ == '__main__':
     alpha = np.linalg.solve(XTX,XTY)
     alpha_cov = np.linalg.inv(XTX)
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
-    ## Output file
+    ### Output file ###
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
