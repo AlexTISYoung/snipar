@@ -93,7 +93,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
             ValueError('Maternal genotype neither imputed nor observed')
     if mean_normalise:
         for i in range(3):
-            G[:,i,:] = G[:,i,:] - np.mean(G[:,i,:],axis=0)
+            G[:,i,:] = G[:,i,:] - ma.mean(G[:,i,:],axis=0)
     G = G.transpose(2,0,1)
     return G
 
@@ -236,8 +236,7 @@ if __name__ == '__main__':
     # Fill NAs
     print('Imputing missing genotypes with population frequency')
     G = ma.array(G,mask=np.isnan(G))
-    for l in range(G.shape[0]):
-        G[l,G[l,:,:].mask] = freqs[l]
+    G[G.mask] = 0
     #### Fit null model ####
     print('Fitting null model')
     null_model = sibreg.model(y,np.ones((y.shape[0],1)),fam_labels)
