@@ -69,7 +69,7 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
 
     return par_status, gt_indices, fam_labels
 
-def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
+def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
@@ -91,6 +91,9 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
             G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Maternal genotype neither imputed nor observed')
+    if mean_normalise:
+        for i in range(3):
+            G[:,i,:] = G[:,i,:] - np.mean(G[:,i,:],axis=0)
     G = G.transpose(2,0,1)
     return G
 
@@ -255,8 +258,6 @@ if __name__ == '__main__':
         for i in range(3):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     # Mean normalise
-    for i in range(3):
-        G[:,:,i] = G[:,:,i]-np.mean(G[:,:,i],axis=1).reshape((G.shape[0],1))
     y = y-np.mean(y)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
