@@ -69,11 +69,15 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
 
     return par_status, gt_indices, fam_labels
 
-def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
+def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True, add_intercept = True):
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
-    G = np.zeros((N,3,gts.shape[1]),np.float32)
+    if add_intercept:
+        G = np.zeros((N,4,gts.shape[1]),np.float32)
+        G[:,0,:] = 1
+    else:
+        G = np.zeros((N, 3, gts.shape[1]), np.float32)
     for i in range(0,N):
         # Observed proband genotype
         G[i,0,:] = gts[gt_indices[i,0],:]
@@ -92,7 +96,11 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
         else:
             ValueError('Maternal genotype neither imputed nor observed')
     if mean_normalise:
-        for i in range(3):
+        if add_intercept:
+            lower = 1
+        else:
+            lower = 0
+        for i in range(lower,3+lower):
             G[:,i,:] = G[:,i,:] - ma.mean(G[:,i,:],axis=0)
     G = G.transpose(2,0,1)
     return G
@@ -230,14 +238,14 @@ if __name__ == '__main__':
         ValueError('No family label from pedigree for some individuals')
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
-    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise=False)
     del gts
     del imp_gts
     # Fill NAs
     print('Imputing missing genotypes with population frequency')
     G[np.isnan(G)] = 0
     #### Fit null model ####
-    print('Fitting null model')
+    print('Estimating variance components')
     null_model = sibreg.model(y,np.ones((y.shape[0],1)),fam_labels)
     sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
@@ -253,7 +261,7 @@ if __name__ == '__main__':
     for label in L.keys():
         label_indices = null_model.label_indices[label]
         y[label_indices] = np.dot(L[label],y[label_indices])
-        for i in range(3):
+        for i in range(G.shape[2]):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     # Mean normalise
     y = y-np.mean(y)
@@ -268,7 +276,7 @@ if __name__ == '__main__':
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
-    X_length = 3
+    X_length = 4
     outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
