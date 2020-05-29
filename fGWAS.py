@@ -235,8 +235,7 @@ if __name__ == '__main__':
     del imp_gts
     # Fill NAs
     print('Imputing missing genotypes with population frequency')
-    G = ma.array(G,mask=np.isnan(G))
-    G[G.mask] = 0
+    G[np.isnan(G)] = 0
     #### Fit null model ####
     print('Fitting null model')
     null_model = sibreg.model(y,np.ones((y.shape[0],1)),fam_labels)
