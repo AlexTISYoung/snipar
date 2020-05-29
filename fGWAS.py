@@ -259,7 +259,7 @@ if __name__ == '__main__':
     y = y-np.mean(y)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
-    XTX = np.einsum('...ij,..ik', G, G)
+    XTX = np.einsum('...ij,...ik', G, G)
     XTY = np.einsum('...ij,i',G,y)
     alpha = np.linalg.solve(XTX,XTY)
     alpha_cov = np.linalg.inv(XTX)
