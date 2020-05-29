@@ -254,9 +254,13 @@ if __name__ == '__main__':
         y[label_indices] = np.dot(L[label],y[label_indices])
         for i in range(3):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
+    # Mean normalise
+    for i in range(3):
+        G[:,:,i] = np.mean(G[:,:,i],axis=1)
+    y = y-np.mean(y)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
-    XTX = np.einsum('...ij,...kj', G, G)
+    XTX = np.einsum('...ij,..ik', G, G)
     XTY = np.einsum('...ij,i',G,y)
     alpha = np.linalg.solve(XTX,XTY)
     alpha_cov = np.linalg.inv(XTX)
@@ -265,7 +269,7 @@ if __name__ == '__main__':
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
-    X_length = 4
+    X_length = 3
     outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
