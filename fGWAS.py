@@ -256,7 +256,7 @@ if __name__ == '__main__':
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     # Mean normalise
     for i in range(3):
-        G[:,:,i] = np.mean(G[:,:,i],axis=1)
+        G[:,:,i] = G[:,:,i]-np.mean(G[:,:,i],axis=1)
     y = y-np.mean(y)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
