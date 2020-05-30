@@ -69,31 +69,28 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
 
     return par_status, gt_indices, fam_labels
 
-def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
+def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
-    G = np.zeros((N,3,gts.shape[1]),np.float32)
+    G = np.zeros((N,4,gts.shape[1]),np.float32)
     for i in range(0,N):
         # Observed proband genotype
-        G[i,0,:] = gts[gt_indices[i,0],:]
+        G[i,1,:] = gts[gt_indices[i,0],:]
         # Paternal genotype
         if par_status[i,0] == 0:
-            G[i,1,:] = gts[gt_indices[i,1],:]
+            G[i,2,:] = gts[gt_indices[i,1],:]
         elif par_status[i,0] == 1:
-            G[i,1,:] = imp_gts[gt_indices[i,1],:]
+            G[i,2,:] = imp_gts[gt_indices[i,1],:]
         else:
             ValueError('Paternal genotype neither imputed nor observed')
         # Maternal genotype
         if par_status[i, 1] == 0:
-            G[i, 2, :] = gts[gt_indices[i, 2], :]
+            G[i, 3, :] = gts[gt_indices[i, 2], :]
         elif par_status[i, 1] == 1:
-            G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
+            G[i, 3, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Maternal genotype neither imputed nor observed')
-    if mean_normalise:
-        for i in range(3):
-            G[:,i,:] = G[:,i,:] - ma.mean(G[:,i,:],axis=0)
     G = G.transpose(2,0,1)
     return G
 
@@ -253,14 +250,10 @@ if __name__ == '__main__':
     for label in L.keys():
         label_indices = null_model.label_indices[label]
         y[label_indices] = np.dot(L[label],y[label_indices])
-        for i in range(3):
+        for i in range(4):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     # Mean normalise
     y = y-np.mean(y)
-    G = G.transpose((1,2,0))
-    for i in range(3):
-        G[:,i,:] = G[:,i,:]-np.mean(G[:,i,:],axis=0)
-    G = G.transpose((2, 0, 1))
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
     XTX = np.einsum('...ij,...ik', G, G)
@@ -272,7 +265,7 @@ if __name__ == '__main__':
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['sid'] = encode_str_array(sid)
-    X_length = 3
+    X_length = 4
     outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
