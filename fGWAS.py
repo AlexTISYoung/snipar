@@ -3,7 +3,7 @@ import numpy as np
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from sibreg import sibreg
-import h5py, argparse, code
+import h5py, argparse, os, time
 
 def make_id_dict(x,col=0):
     if len(x.shape)>1:
@@ -114,7 +114,6 @@ if __name__ == '__main__':
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
-    parser.add_argument('--sibped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -122,10 +121,13 @@ if __name__ == '__main__':
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)',default=0.01)
     parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
-    parser.add_argument('--append',action='store_true',default=False,help='Append results to existing output file with given outprefix (default overwrites existing')
-    parser.add_argument('--no_covariate_estimates',action='store_true',default=False,help='Suppress output of covariate effect estimates')
     parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
+    parser.add_argument('--threads',type=int,default=None,help='Set number of threads. Default is to use as many as available.')
     args=parser.parse_args()
+
+    os.environ["OMP_NUM_THREADS"] = str(args.threads)  # export OMP_NUM_THREADS=4
+    os.environ["OPENBLAS_NUM_THREADS"] = str(args.threads)   # export OPENBLAS_NUM_THREADS=4
+    os.environ["MKL_NUM_THREADS"] = str(args.threads)   # export MKL_NUM_THREADS=6
 
     ######### Read Phenotype ########
     pheno = Pheno(args.phenofile, missing=args.missing_char).read()
@@ -205,6 +207,7 @@ if __name__ == '__main__':
     # Read observed genotypes
     print('Reading observed genotypes')
     gts = gts_f[observed_indices, obs_sid_index].read().val
+    t1 = time.time()
     gts = ma.array(gts,mask=np.isnan(gts))
     gts_id_dict = make_id_dict(gts_ids[observed_indices])
     # Filter genotypes based on frequency and missingness
@@ -264,6 +267,8 @@ if __name__ == '__main__':
     alpha = np.linalg.solve(XTX,XTY)
     alpha_cov = np.linalg.inv(XTX)
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
+    t2 = time.time()
+    print('Time: '+str(t2-t1)+' seconds')
     ### Output file ###
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
