@@ -32,6 +32,16 @@ king_chr2["Chr"] = 2;
 king_chr12 = pd.concat([king_chr1, king_chr2]);
 king_chr12.to_csv("test_data/sample.segments.gz", sep = "\t", index = False);
 print(king_chr12);
+result = create_pedigree("test_data/sample.king",
+                           "test_data/sample.agesex",
+).sort_values(by=["FID", "IID"])
+selected_people = [str(i*60)+"_0" for i in range(100)] + [str(i*60)+"_1" for i in range(100)] + [str(i*60)+"_P" for i in range(100)] + [str(i*60)+"_M" for i in range(100)]#set(np.array([[row["IID"], row["FATHER_ID"], row["MOTHER_ID"]] for index, row in result.iterrows() if int(row["FID"])%20==0]).reshape((1,-1))[0])
+new_result = result[result["IID"].isin(selected_people)]
+new_result.to_csv("test_data/pedigree_creation_sample.ped", sep = " ", index = False)
+
+king = pd.read_csv("test_data/sample.king", sep = "\t")
+new_king = king[king["ID1"].isin(new_result["IID"]) | king["ID2"].isin(new_result["IID"])]
+new_king.to_csv("test_data/pedigree_creation_sample.king", sep="\t", index=False)
 '
 plink/plink --file outputs/tmp/t__t --make-bed --out outputs/tmp/t__t
 plink/plink --bfile outputs/tmp/t__t --remove outputs/tmp/t__t_remove.txt --make-bed --out test_data/sample1

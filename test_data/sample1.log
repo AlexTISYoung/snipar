@@ -7,19 +7,19 @@ Options in effect:
 
 Hostname: genetics3
 Working directory: /disk/genetics4/ukb/moeen/sibreg
-Start time: Mon Apr  6 14:39:27 2020
+Start time: Fri Jun  5 16:49:18 2020
 
-Random number seed: 1586198367
+Random number seed: 1591390158
 1031774 MB RAM detected; reserving 515887 MB for main workspace.
 1000 variants loaded from .bim file.
-1800 people (1800 males, 0 females) loaded from .fam.
---remove: 1050 people remaining.
+12000 people (12000 males, 0 females) loaded from .fam.
+--remove: 7979 people remaining.
 Using 1 thread (no multithreaded calculations invoked).
-Before main variant filters, 0 founders and 1050 nonfounders present.
+Before main variant filters, 0 founders and 7979 nonfounders present.
 Calculating allele frequencies... done.
-1000 variants and 1050 people pass filters and QC.
+1000 variants and 7979 people pass filters and QC.
 Note: No phenotypes present.
 --make-bed to test_data/sample1.bed + test_data/sample1.bim +
 test_data/sample1.fam ... done.
 
-End time: Mon Apr  6 14:39:27 2020
+End time: Fri Jun  5 16:49:18 2020

@@ -34,12 +34,15 @@ def create_graph_from_pedigree(pedigree):
 
 class TestPedigree(unittest.TestCase):
     def test_create_pedigree(self):
-        result = create_pedigree("test_data/sample.king",
+        result = create_pedigree("test_data/pedigree_creation_sample.king",
                                    "test_data/sample.agesex",
         ).sort_values(by=['FID', "IID"])
-        expected = pd.read_csv("test_data/sample.ped", sep = " ").sort_values(by=['FID', "IID"])
+        expected = pd.read_csv("test_data/pedigree_creation_sample.ped", sep = " ").sort_values(by=['FID', "IID"])
         result_graph = create_graph_from_pedigree(result)
         expected_graph = create_graph_from_pedigree(expected)
+        print("here")
+        print(expected)
+        print(result)
         equality = nx.is_isomorphic(result_graph, expected_graph, node_match)
         self.assertTrue(equality)
     
