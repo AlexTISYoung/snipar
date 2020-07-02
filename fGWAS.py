@@ -1,4 +1,3 @@
-#!/well/kong/users/wiw765/anaconda2/bin/python
 from pysnptools.snpreader import Bed, Pheno
 from sibreg import sibreg
 import h5py, argparse, os, time
@@ -89,6 +88,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
             G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
         else:
             ValueError('Maternal genotype neither imputed nor observed')
+    G = ma.array(G,mask=np.isnan(G))
     if mean_normalise:
         for i in range(3):
             G[:,i,:] = G[:,i,:] - ma.mean(G[:,i,:],axis=0)
