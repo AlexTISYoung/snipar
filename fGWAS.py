@@ -71,23 +71,15 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
     G = np.zeros((N,3,gts.shape[1]),np.float32)
-    for i in range(0,N):
-        # Observed proband genotype
-        G[i,0,:] = gts[gt_indices[i,0],:]
-        # Paternal genotype
-        if par_status[i,0] == 0:
-            G[i,1,:] = gts[gt_indices[i,1],:]
-        elif par_status[i,0] == 1:
-            G[i,1,:] = imp_gts[gt_indices[i,1],:]
-        else:
-            ValueError('Paternal genotype neither imputed nor observed')
-        # Maternal genotype
-        if par_status[i, 1] == 0:
-            G[i, 2, :] = gts[gt_indices[i, 2], :]
-        elif par_status[i, 1] == 1:
-            G[i, 2, :] = imp_gts[gt_indices[i, 2], :]
-        else:
-            ValueError('Maternal genotype neither imputed nor observed')
+    # Proband genotypes
+    G[:,0,:] = gts[gt_indices[:,0],:]
+    # Paternal genotypes
+    G[par_status[:,0]==0,1,:] = gts[gt_indices[par_status[:,0]==0,1],:]
+    G[par_status[:, 0] == 1, 1, :] = imp_gts[gt_indices[par_status[:, 0] == 1, 1], :]
+    # Maternal genotypes
+    G[par_status[:, 1] == 0, 2, :] = gts[gt_indices[par_status[:, 1] == 0, 2], :]
+    G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
+    # NAs and mean normalise
     G = ma.array(G,mask=np.isnan(G))
     if mean_normalise:
         for i in range(3):
@@ -218,7 +210,7 @@ if __name__ == '__main__':
     freqs_pass = np.logical_and(freqs > args.min_maf,freqs < (1-args.min_maf))
     print(str(freqs.shape[0]-np.sum(freqs_pass))+' SNPs with MAF<'+str(args.min_maf))
     missingness_pass = 100*missingness < args.max_missing
-    print(str(freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with missingness >' + str(args.max_missing)+'%')
+    print(str(freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(args.max_missing)+'%')
     filter_pass = np.logical_and(freqs_pass,missingness_pass)
     gts = gts[:,filter_pass]
     imp_gts = imp_gts[:,filter_pass]
