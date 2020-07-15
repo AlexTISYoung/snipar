@@ -446,7 +446,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None):
+def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None, output_compression = None, output_compression_opts = None):
     """Does the parent sum imputation for families in sibships and all the SNPs in gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -474,6 +474,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
 
         chromosome: int
             Number of the chromosome that's going to be imputed. Only used for logging purposes.
+
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
             The following table explains the keys and their corresponding values within this file.
@@ -487,6 +488,12 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
         
         threads : int, optional
             Specifies the Number of threads to be used. If None there will be only one thread.
+
+        output_compression: str
+            Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
+
+        output_compression_opts': int
+            Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information. None means no compression setting.        
 
     Returns:
         tuple(list, numpy.array)
@@ -620,7 +627,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
-            f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9, data = imputed_par_gts)
+            f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
             f['families'] = np.array(sibships["FID"].values, dtype='S')
             f['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
             f['pos'] = pos

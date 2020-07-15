@@ -62,6 +62,12 @@ Args:
     --processes: int, optional
         Number of processes for imputation chromosomes. Each chromosome is done on one process.
 
+    --output_compression: str, optional
+        Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf.
+
+    --output_compression_opts': int, optional
+        Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.
+
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, SNP ids, pedigree table and, family ids
@@ -112,6 +118,12 @@ def run_imputation(data):
 
                 threads: int, optional
                     Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+
+                output_compression: str, optional
+                    Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
+
+                output_compression_opts': int, optional
+                    Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information. None means no compression setting.
     Returns:
         float
             time consumed byt the imputation.
@@ -125,6 +137,8 @@ def run_imputation(data):
     end = data.get("end")
     bim = data.get("bim")
     threads = data.get("threads")
+    output_compression = data.get("output_compression")
+    output_compression_opts = data.get("output_compression_opts")
     logging.info("processing chromosome "+str(chromosome))
     if "~" in bed_address:
         bed_address = bed_address.replace("~", str(chromosome))
@@ -136,7 +150,7 @@ def run_imputation(data):
         file_address = "outputs/parent_imputed_chr"+str(chromosome)
     else:
         file_address = out_prefix+str(chromosome)
-    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, chromosome, file_address, threads = threads)
+    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, chromosome, file_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     end_time = time.time()
     return (end_time-start_time)
 
@@ -162,6 +176,8 @@ if __name__ == "__main__":
     parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
     parser.add_argument('--threads', type=int, default=1, help='Number of the cores to be used')
     parser.add_argument('--processes', type=int, default=1, help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
+    parser.add_argument('--output_compression', type=str, default=None, help='Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf')
+    parser.add_argument('--output_compression_opts', type=int, default=None, help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
 
     args=parser.parse_args()
     #fids starting with _ are reserved for control
@@ -190,7 +206,9 @@ if __name__ == "__main__":
                "start": args.start,
                "end": args.end,
                "bim": args.bim,
-               "threads": args.threads
+               "threads": args.threads,
+               "output_compression":args.output_compression,
+               "output_compression_opts":args.output_compression_opts,
                 }
                for chromosome in range(args.from_chr, args.to_chr)]
             
