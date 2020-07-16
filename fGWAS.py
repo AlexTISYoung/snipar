@@ -111,13 +111,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)',default=0.01)
     parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
-    parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
-    parser.add_argument('--threads',type=int,default=None,help='Set number of threads. Default is to use as many as available.')
     args=parser.parse_args()
-
-    os.environ["OMP_NUM_THREADS"] = str(args.threads)  # export OMP_NUM_THREADS=4
-    os.environ["OPENBLAS_NUM_THREADS"] = str(args.threads)   # export OPENBLAS_NUM_THREADS=4
-    os.environ["MKL_NUM_THREADS"] = str(args.threads)   # export MKL_NUM_THREADS=6
 
     import numpy as np
     import numpy.ma as ma
