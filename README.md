@@ -48,7 +48,7 @@ for optimal speed.
 To install from source, clone the git repository, and in the directory
 containing the SNIPar source code, at the shell type
 
-    'python setupy.py install'
+    'python setup.py install'
 
 # Running tests
 
