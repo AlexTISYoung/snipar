@@ -233,7 +233,7 @@ if __name__ == "__main__":
     else:
         chromosomes = [None]
 
-    if "~" in args.genotypes_address:
+    if "~" in args.genotypes_address or "~" in args.output_address:
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address") 
 
