@@ -9,6 +9,7 @@ on:
     - master
     - python3 
     - sibreg_pyx
+    - update_interface
   pull_request:
     branches: [ master ]
 

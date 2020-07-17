@@ -15,25 +15,26 @@ Args:
         Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
         These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
-    from_chr : int
-        Does the imputation for chromosomes with chromosome number bigger than or equal to this.
-
-    to_chr : int
-        Does the imputation for chromosomes with chromosome number less than this.
-
     IBD : str
             Address of a file containing IBD statuses for all SNPs.
         This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
         Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
     genotypes_address : str
-        Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.
+        Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
 
-    --out_prefix: str, optional
-        The script writes the result of imputation for chromosome i to outprefix{i}. the default value for out_prefix is 'parent_imputed_chr'.
+    --from_chr : int, optional
+        Which chromosome (<=). Should be used with to_chr parameter.
+        
+
+    --to_chr : int, optional
+        Which chromosome (<). Should be used with from_chr parameter.
+
+    --output_address: str, optional
+        The script writes the result of imputation to this path. If it contains '~', result of imputation for chromosome i will be written to a similar path where ~ has been replaced with i. The default value for output_address is 'parent_imputed_chr'.
 
     --start: int, optional
         The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
@@ -96,16 +97,14 @@ def run_imputation(data):
                     The standard pedigree table
 
                 bed_address: str
-                    Address of bed file(s) with ~ wild card in place of chromosome number
+                    Address of the bed file.
 
                 ibd_pd: pd.Dataframe
                     IBD segments table in King format. Only needs to contain information about this chromosome
 
-                chromosome: int
-                    The chromosome that is going to be imputed
+                output_address: str
+                    The address to write the result of imputation on. The default value for output_address is 'parent_imputed_chr'.
 
-                out_prefix: str
-                    The address to write the result of imputation on. For chromosome i it is out_prefix{i}. The default value for out_prefix is 'parent_imputed_chr'
 
                 start: int, optional
                     This function can do the imputation on a slice of each chromosome. If specified, his is the start of that slice(it is inclusive).
@@ -131,26 +130,19 @@ def run_imputation(data):
     pedigree = data["pedigree"]
     bed_address = data["bed_address"]
     ibd_pd = data["ibd_pd"]
-    chromosome = data["chromosome"]
-    out_prefix = data["out_prefix"]
+    output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
     bim = data.get("bim")
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
-    logging.info("processing chromosome "+str(chromosome))
-    if "~" in bed_address:
-        bed_address = bed_address.replace("~", str(chromosome))
-    sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(pedigree, bed_address, ibd_pd, chromosome, start, end, bim)
+    logging.info("processing " + bed_address)
+    sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, bed_address, ibd_pd, start, end, bim)
     gts = gts.astype(float)
     pos = pos.astype(int)
     start_time = time.time()
-    if out_prefix is None:
-        file_address = "outputs/parent_imputed_chr"+str(chromosome)
-    else:
-        file_address = out_prefix+str(chromosome)
-    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, chromosome, file_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     end_time = time.time()
     return (end_time-start_time)
 
@@ -158,26 +150,65 @@ def run_imputation(data):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', action='store_true')
-    parser.add_argument('from_chr',type=int,help='Which chromosome (<=)')
-    parser.add_argument('to_chr',type=int,help='Which chromosome (<)')
-    parser.add_argument('ibd',type=str,help='IBD file')
-    parser.add_argument('genotypes_address',type=str,help='address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome number for the bed file of each chromosome.')
-    parser.add_argument('--bim',type=str,default = None, help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
-    parser.add_argument('--out_prefix',type=str,default = "parent_imputed_chr", help="Writes the result of imputation for chromosome i to outprefix{i}")
-    parser.add_argument('--start', type=int,
-                        help='Start index of SNPs to perform imputation for in genotype file (starting at zero)',
+    parser.add_argument('-c',
+                        action='store_true')    
+    parser.add_argument('ibd',
+                        type=str,
+                        help='IBD file')
+    parser.add_argument('genotypes_address',
+                        type=str,help='Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+    parser.add_argument('--from_chr',
+                        type=int,
+                        default = 1,
+                        help='Which chromosome (<=). Should be used with to_chr parameter.')
+    parser.add_argument('--to_chr',
+                        type=int,
+                        default = 2,
+                        help='Which chromosome (<). Should be used with from_chr parameter.')
+    parser.add_argument('--bim',
+                        type=str,
+                        default = None,
+                        help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
+    parser.add_argument('--output_address',
+                        type=str,
+                        default = "parent_imputed",
+                        help="Writes the result of imputation for chromosome i to outprefix{i}")
+    parser.add_argument('--start',
+                        type=int,
+                        help='Start index of SNPs to perform imputation for in genotype file (starting at zero). Should be used with end parameter.',
                         default=None)
-    parser.add_argument('--end', type=int,
-                        help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1)',
+    parser.add_argument('--end',
+                        type=int,
+                        help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1). Should be used with start parameter.',
                         default=None)
-    parser.add_argument('--pedigree',type=str,default = None, help='Pedigree file with siblings sharing family ID')
-    parser.add_argument('--king',type=str,default = None, help='Address of the king file')
-    parser.add_argument('--agesex',type=str,default = None, help='Address of the agesex file with header "FID IID age sex"')
-    parser.add_argument('--threads', type=int, default=1, help='Number of the cores to be used')
-    parser.add_argument('--processes', type=int, default=1, help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
-    parser.add_argument('--output_compression', type=str, default=None, help='Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf')
-    parser.add_argument('--output_compression_opts', type=int, default=None, help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
+    parser.add_argument('--pedigree',
+                        type=str,
+                        default = None,
+                        help='Pedigree file with siblings sharing family ID')
+    parser.add_argument('--king',
+                        type=str,
+                        default = None,
+                        help='Address of the king file')
+    parser.add_argument('--agesex',
+                        type=str,
+                        default = None,
+                        help='Address of the agesex file with header "FID IID age sex"')
+    parser.add_argument('--threads',
+                        type=int,
+                        default=1, 
+                        help='Number of the cores to be used')
+    parser.add_argument('--processes',
+                        type=int,
+                        default=1,
+                        help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
+    parser.add_argument('--output_compression',
+                        type=str,
+                        default=None,
+                        help='Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf')
+    parser.add_argument('--output_compression_opts',
+                        type=int,
+                        default=None,
+                        help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
 
     args=parser.parse_args()
     #fids starting with _ are reserved for control
@@ -197,20 +228,27 @@ if __name__ == "__main__":
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(args.ibd, sep = "\t")
     logging.info("ibd loaded.")
+    if (args.from_chr is not None) and (args.to_chr is not None):
+        chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
+    else:
+        chromosomes = [None]
+
+    if "~" in args.genotypes_address:
+        if args.to_chr is None or args.from_chr is None:
+            raise Exception("no chromosome range specified for the wildcard ~ in the address") 
 
     inputs = [{"pedigree": pedigree,
-               "bed_address": args.genotypes_address,
-               "ibd_pd": ibd_pd[ibd_pd["Chr"] == chromosome],
-               "chromosome": chromosome,
-               "out_prefix":args.out_prefix,
-               "start": args.start,
-               "end": args.end,
-               "bim": args.bim,
-               "threads": args.threads,
-               "output_compression":args.output_compression,
-               "output_compression_opts":args.output_compression_opts,
+            "bed_address": args.genotypes_address.replace("~", chromosome),
+            "ibd_pd": ibd_pd, #[ibd_pd["Chr"] == chromosome],
+            "output_address":args.output_address.replace("~", chromosome),
+            "start": args.start,
+            "end": args.end,
+            "bim": args.bim,
+            "threads": args.threads,
+            "output_compression":args.output_compression,
+            "output_compression_opts":args.output_compression_opts,
                 }
-               for chromosome in range(args.from_chr, args.to_chr)]
+            for chromosome in chromosomes]
             
     pool = Pool(args.processes)
     logging.info("staring process pool")

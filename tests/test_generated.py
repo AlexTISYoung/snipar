@@ -57,13 +57,12 @@ class TestGenerated(unittest.TestCase):
 		#writing parents only
 		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_parents.txt --make-bed --out outputs/tmp/generated_parents')
 		ibd = pd.read_csv("outputs/tmp/generated.segments.gz", sep = "\t")
-		sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict = prepare_data(sibs,
+		sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(sibs,
 																"outputs/tmp/generated_sibs",
-																ibd,
-																1)
+																ibd)
 		gts = gts.astype(float)
 		pos = pos.astype(int)
-		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, 1, threads = 2)
+		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, str(chromosomes), threads = 2)
 		expected_parents = Bed("outputs/tmp/generated_parents.bed")
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid

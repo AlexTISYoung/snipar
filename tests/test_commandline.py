@@ -7,12 +7,12 @@ class TestCommanline(unittest.TestCase):
     def test_impute_runner_with_pedigree(self):
         command = ["python",
                    "impute_runner.py",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
         subprocess.check_call(command)
     
@@ -20,12 +20,12 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -38,13 +38,13 @@ class TestCommanline(unittest.TestCase):
     def test_impute_runner_with_king(self):
         command = ["python",
                    "impute_runner.py",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--king", "test_data/sample.king",
                    "--agesex", "test_data/sample.agesex",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
         subprocess.check_call(command)
 
@@ -52,13 +52,13 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--king", "test_data/sample.king",
                    "--agesex", "test_data/sample.agesex",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -73,12 +73,12 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    "--threads", "2",
                    ]
         subprocess.check_call(command)
@@ -93,12 +93,12 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "1",
-                   "3",
                    "test_data/sample.segments.gz",
                    "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
                    "--processes", "2",
                    ]
         subprocess.check_call(command)
@@ -113,12 +113,10 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "1",
-                   "2",
                    "test_data/sample.segments.gz",
                    "test_data/sample1",
                    "--pedigree", "test_data/sample.ped",
-                   "--out_prefix", "outputs/tmp/test_sample_imputed",
+                   "--output_address", "outputs/tmp/test_sample_imputed1",
                    "--threads", "2",
                    ]
         subprocess.check_call(command)

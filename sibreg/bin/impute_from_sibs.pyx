@@ -32,6 +32,7 @@ cdef extern from * nogil:
     r"""
     #include <omp.h>
     #include <stdio.h>  
+    #include <string.h>
     static omp_lock_t cnt_lock;
     static int cnt = 0;
     void reset(){
@@ -41,7 +42,7 @@ cdef extern from * nogil:
     void destroy(){
         omp_destroy_lock(&cnt_lock);
     }   
-    void report(int mod, int chromosome, int total){
+    void report(int mod, char* chromosomes, int total){
         time_t now;
         char* text;
         omp_set_lock(&cnt_lock);
@@ -50,14 +51,14 @@ cdef extern from * nogil:
             now = time(NULL);
             text = ctime(&now);
             text[strlen(text)-1] = 0;
-            printf("%s INFO impute with chromosome %d: progress is %d%\n", text, chromosome, (100*cnt)/total);
+            printf("%s INFO impute with chromosome %s: progress is %d%\n", text, chromosomes, (100*cnt)/total);
         }
         omp_unset_lock(&cnt_lock);
     }
     """
     void reset()
     void destroy()
-    void report(int mod, int pre_message_info, int total)
+    void report(int mod, char* pre_message_info, int total)
 
 cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
@@ -472,8 +473,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
         hdf5_output_dict : dict
             Other key values to be added to the HDF5 output
 
-        chromosome: int
-            Number of the chromosome that's going to be imputed. Only used for logging purposes.
+        chromosome: str
+            Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
 
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
@@ -547,7 +548,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
-    cdef int chromosome_c = chromosome
+    byte_chromosome = chromosome.encode("ASCII")
+    cdef char* chromosome_c = byte_chromosome
     cdef int mod = (number_of_fams+1)//100
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
