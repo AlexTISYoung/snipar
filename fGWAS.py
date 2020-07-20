@@ -144,7 +144,9 @@ if __name__ == '__main__':
     ped = ped[1:ped.shape[0],:]
 
     ### Genotype file ###
-    gts_f = Bed(args.gts)
+    gts_f = Bed(args.gts+'.bed',count_A1 = True)
+    bim = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S'))
+    obs_sid = bim[:,np.array([1,4,5])]
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
@@ -175,15 +177,14 @@ if __name__ == '__main__':
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed
     imp_sid = convert_str_array(np.array(par_gts_f['sid']))
-    obs_sid = gts_f.sid
-    obs_sid_dict = make_id_dict(obs_sid)
+    obs_sid_dict = make_id_dict(obs_sid[:,0])
     in_obs_sid = np.zeros((imp_sid.shape[0]),dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]),dtype=int)
     for i in range(0,imp_sid.shape[0]):
         if imp_sid[i] in obs_sid_dict:
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
-    sid = imp_sid[in_obs_sid]
+    sid = obs_sid[obs_sid_index,:]
     if np.sum(in_obs_sid) == 0:
         ValueError('No SNPs in common between imputed and observed genotypes')
     # Read imputed parental genotypes
@@ -208,7 +209,7 @@ if __name__ == '__main__':
     filter_pass = np.logical_and(freqs_pass,missingness_pass)
     gts = gts[:,filter_pass]
     imp_gts = imp_gts[:,filter_pass]
-    sid = sid[filter_pass]
+    sid = sid[filter_pass,:]
     freqs = freqs[filter_pass]
     N_L = np.sum(np.logical_not(gts.mask),axis=0)
     print('After filtering, '+str(np.sum(filter_pass))+' SNPs remain')

@@ -294,7 +294,7 @@ def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_add
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
     logging.info("with chromosomes " + str(chromosomes)+": " + "loading bed file ...")
-    gts_f = Bed(genotypes_address+".bed")
+    gts_f = Bed(genotypes_address+".bed",count_A1 = True)
     ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
     gts_ids = gts_f.iid[ids_in_ped]
     if end is not None:        
