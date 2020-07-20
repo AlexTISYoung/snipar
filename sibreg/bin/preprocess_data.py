@@ -208,7 +208,7 @@ def add_control(pedigree):
     return pedigree
 
 
-def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bim_address = None):
+def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_address = None):
     """Processes the required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -224,9 +224,6 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
             A pandas dataframe containing IBD statuses for all SNPs.
             This It has these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
             Each line states an IBD segment between a pair on individuals. This can be generated using King software.
-
-        chr : int
-            Number of the chromosome that's going to imputed.
 
         start : int, optional
             This function can be used for preparing a slice of a chromosome. This is the location of the start of the slice.
@@ -249,8 +246,15 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
                 pos: A numpy array with the position of each SNP in the order of appearance in gts.
                 hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
     """
-    logging.info("with chromosome " + str(chr)+": " + "initializing data")
-    logging.info("with chromosome " + str(chr)+": " + "loading and filtering pedigree file ...")
+    logging.info("For file "+genotypes_address+": Finding which chromosomes")
+    if bim_address is None:
+        bim_file = genotypes_address+'.bim'
+    else:
+        bim_file = bim_address
+    bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+    chromosomes = bim["Chr"].unique()
+    logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading and filtering pedigree file ...")
     #keeping individuals with no parents
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
@@ -264,17 +268,18 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("with chromosome " + str(chr)+": " + "loading bim file ...")
-    if bim_address is None:
-        bim_file = genotypes_address+'.bim'
-    else:
-        bim_file = bim_address
-    bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")    
     #TODO what if people are related but do not have ibd on chrom
-    logging.info("with chromosome " + str(chr)+": " + "loading and transforming ibd file ...")
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading and transforming ibd file ...")
+    ibd["Chr"] = ibd["Chr"].astype(int)
     ibd = ibd.astype(str)
-    #Adding location of start and end of each 
-    ibd = ibd[ibd["Chr"] == str(chr)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+    #Adding location of start and end of each
+    chromosomes = chromosomes.astype(str)
+    if len(chromosomes)>1:
+        ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+    else:
+        ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+
     ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
     ibd= ibd.merge(temp, on="StartSNP")
@@ -288,7 +293,7 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("with chromosome " + str(chr)+": " + "loading bed file ...")
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bed file ...")
     gts_f = Bed(genotypes_address+".bed")
     ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
     gts_ids = gts_f.iid[ids_in_ped]
@@ -301,8 +306,8 @@ def prepare_data(pedigree, genotypes_address, ibd, chr, start=None, end=None, bi
         pos = gts_f.pos[:, 2]
         sid = gts_f.sid
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    logging.info("with chromosome " + str(chr)+": " + "initializing data done ...")
+    logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
-    return sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict
+    return sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict
