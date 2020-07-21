@@ -63,7 +63,7 @@ class TestGenerated(unittest.TestCase):
 		gts = gts.astype(float)
 		pos = pos.astype(int)
 		imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, str(chromosomes), threads = 2)
-		expected_parents = Bed("outputs/tmp/generated_parents.bed")
+		expected_parents = Bed("outputs/tmp/generated_parents.bed", count_A1 = True)
 		expected_parents_gts = expected_parents.read().val
 		expected_parents_ids = expected_parents.iid
 		father = expected_parents_gts[[bool(i%2) for i in range(2*number_of_families)]]

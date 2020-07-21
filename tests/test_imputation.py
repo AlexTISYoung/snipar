@@ -22,7 +22,7 @@ def imputation_test(chromosomes,
             parental_status = np.array(f["parental_status"])
             ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
-        expected = Bed(expected_prefix+str(chromosome)+".bed")
+        expected = Bed(expected_prefix+str(chromosome)+".bed", count_A1 = True)
         if start is not None and end is not None:
             expected_gts = expected[:, start:end].read().val
         else:

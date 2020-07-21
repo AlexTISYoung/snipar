@@ -1,0 +1,70 @@
+import unittest
+import subprocess
+import pandas as pd
+from sibreg.bin.preprocess_data import create_pedigree, add_control
+import networkx as nx
+
+
+
+def node_match(node1, node2):
+    return node1["observed"] == node2["observed"]
+
+def create_graph_from_pedigree(pedigree):
+    fam_tree = nx.DiGraph()
+    observed = {}
+    for index, row in pedigree.iterrows():
+        iid = row["IID"]
+        father = row["FATHER_ID"]
+        mother = row["MOTHER_ID"]
+        if iid not in fam_tree:
+            fam_tree.add_node(iid)
+        if father not in fam_tree:
+            fam_tree.add_node(iid)
+        if mother not in fam_tree:
+            fam_tree.add_node(iid)
+        observed[iid] = True
+        observed[father] = observed.get(father, False)
+        observed[mother] = observed.get(mother, False)
+        fam_tree.add_edge(mother, iid)
+        fam_tree.add_edge(father, iid)
+    nx.set_node_attributes(fam_tree, observed, 'observed')
+    return fam_tree
+
+
+
+
+import pandas as pd
+from sibreg.bin.preprocess_data import create_pedigree, add_control
+import numpy as np
+import networkx as nx
+#2017_P 2358_P
+result = create_pedigree("test_data/sample.king",
+                           "test_data/sample.agesex",
+).sort_values(by=['FID', "IID"])
+selected_people = [str(i*60)+"_0" for i in range(100)] + [str(i*60)+"_1" for i in range(100)] + [str(i*60)+"_P" for i in range(100)] + [str(i*60)+"_M" for i in range(100)]#set(np.array([[row["IID"], row["FATHER_ID"], row["MOTHER_ID"]] for index, row in result.iterrows() if int(row["FID"])%20==0]).reshape((1,-1))[0])
+new_result = result[result["IID"].isin(selected_people)]
+new_result.to_csv("test_data/pedigree_creation_sample.ped", sep = " ", index = False)
+
+king = pd.read_csv("test_data/sample.king", sep = "\t")
+new_king = king[king["ID1"].isin(new_result["IID"]) | king["ID2"].isin(new_result["IID"])]
+new_king.to_csv("test_data/pedigree_creation_sample.king", sep="\t", index=False)
+
+s1 = set(new_result["IID"].tolist())
+s2 = set(new_king["ID1"].tolist()+new_king["ID2"].tolist())
+
+len(s1), len(s2)
+
+result = create_pedigree("test_data/pedigree_creation_sample.king",
+                           "test_data/sample.agesex",
+).sort_values(by=['FID', "IID"])
+expected = pd.read_csv("test_data/pedigree_creation_sample.ped", sep = " ").sort_values(by=['FID', "IID"])
+result_graph = create_graph_from_pedigree(result)
+expected_graph = create_graph_from_pedigree(expected)
+print("here")
+print(expected)
+print(result)
+equality = nx.is_isomorphic(result_graph, expected_graph, node_match)
+print(equality)
+
+
+
