@@ -22,7 +22,7 @@ python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py 1 2 test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --out_prefix test_data/sample --threads 4``
+    ``python impute_runner.py test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
@@ -32,13 +32,14 @@ each chromosome, with the number of threads per process determined by the --thre
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
+    ``python fGWAS.py test_data/sample1 test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
 (imputed) genotype. This is done using a random effects model that models phenotypic correlations between siblings,
 where sibling relations are inferred from the pedigree stored in the output of the imputation script: test_data/sample1.hdf5. The 'family variance estimate'
 output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance.
+The effects are output in test_data/h2_quad_0.8.hdf5 and are given with respect to the first allele in the .bim file.
 
 Now we have estimated locus specific summary statistics. To estimate effects and compare to the true effects, run
 

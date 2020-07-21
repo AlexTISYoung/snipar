@@ -145,8 +145,8 @@ if __name__ == '__main__':
 
     ### Genotype file ###
     gts_f = Bed(args.gts+'.bed',count_A1 = True)
-    bim = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S'))
-    obs_sid = bim[:,np.array([1,4,5])]
+    # Read .bim file
+    obs_sid = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S'))
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
@@ -177,7 +177,7 @@ if __name__ == '__main__':
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed
     imp_sid = convert_str_array(np.array(par_gts_f['sid']))
-    obs_sid_dict = make_id_dict(obs_sid[:,0])
+    obs_sid_dict = make_id_dict(obs_sid[:,1])
     in_obs_sid = np.zeros((imp_sid.shape[0]),dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]),dtype=int)
     for i in range(0,imp_sid.shape[0]):
@@ -260,7 +260,7 @@ if __name__ == '__main__':
     ### Output file ###
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
-    outfile['sid'] = encode_str_array(sid)
+    outfile['bim'] = encode_str_array(sid)
     X_length = 3
     outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',

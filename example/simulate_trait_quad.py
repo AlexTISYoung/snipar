@@ -21,7 +21,7 @@ args=parser.parse_args()
 fsize = args.fsize
 
 print('reading genotypes')
-gts_f = Bed(args.gts)
+gts_f = Bed(args.gts,count_A1 = True)
 gts_ids = gts_f.iid
 #gts_ids = np.loadtxt('fsize4.fam', dtype='S20')
 gts_ids = gts_ids[:,0:2]
