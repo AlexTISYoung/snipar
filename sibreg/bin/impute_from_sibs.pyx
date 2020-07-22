@@ -481,7 +481,8 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
             The following table explains the keys and their corresponding values within this file.
                 'imputed_par_gts' : imputed genotypes
                 'pos' : the position of SNPs(in the order of appearance in genotypes)
-                'sid' : SNP ids(in the order of appearance in genotypes)
+                "bim_columns" : Columns of the resulting bim file
+                "bim_values" : Contents of the resulting bim file
                 'pedigree' : pedigree table
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
@@ -633,6 +634,7 @@ def impute(sibships, iid_to_bed_index,  gts, ibd, pos, hdf5_output_dict, chromos
             f['families'] = np.array(sibships["FID"].values, dtype='S')
             f['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
             f['pos'] = pos
-            f["sid"] = np.array(hdf5_output_dict["sid"], dtype='S')
+            f["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
+            f["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)

@@ -309,5 +309,8 @@ def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_add
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
-    hdf5_output_dict = {"sid":sid, "pedigree":pedigree_output}
+    selected_bim = bim[bim["id"].isin(sid)]
+    bim_values = selected_bim.to_numpy().astype('S')
+    bim_columns = selected_bim.columns
+    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
     return sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict
