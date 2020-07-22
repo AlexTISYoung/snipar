@@ -176,7 +176,9 @@ if __name__ == '__main__':
                                   gt_indices[par_status[:,1]==1,2]))))
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed
-    imp_sid = convert_str_array(np.array(par_gts_f['sid']))
+    imp_bim_cols = convert_str_array(np.array(par_gts_f['bim_columns']))
+    imp_sid_col = np.where(imp_bim_cols=='id')[0][0]
+    imp_sid = convert_str_array(np.array(par_gts_f['bim_values'][:,imp_sid_col]))
     obs_sid_dict = make_id_dict(obs_sid[:,1])
     in_obs_sid = np.zeros((imp_sid.shape[0]),dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]),dtype=int)
