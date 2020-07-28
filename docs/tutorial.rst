@@ -57,4 +57,13 @@ If everything has worked, the bias should not be statistically significantly dif
 The Chi-Square test p-value should also not be statistically significant with high probability. (This tests that the sampling distribution
 of the estimates is correct, as well as the estimates being unbiased.)
 
-The estimates along with their standard errors are output in test_data/h2_quad_0.8.estimates.hdf5.
+The estimates along with their sampling covariance matrices and standard errors are output in test_data/h2_quad_0.8.estimates.hdf5.
+
+If the imputation has been performed from siblings alone, then the regression onto proband, imputed paternal, and imputed maternal becomes
+co-linear. This is because the imputation is the same for paternal and maternal genotypes. In this case, the regression should be performed
+onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the --parsum option to the script:
+
+    ``python fGWAS.py test_data/sample1 test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum --parsum``
+
+This will output estimates of direct and average parental (average of maternal and paternal) effects, along with sampling covariance
+matrices and standard errors.
