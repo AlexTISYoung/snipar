@@ -155,7 +155,13 @@ if __name__ == '__main__':
     ### Genotype file ###
     gts_f = Bed(args.gts+'.bed',count_A1 = True)
     # Read .bim file
-    obs_sid = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S'))
+    obs_sid = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S20'))
+    # Remove duplicates
+    sid_count = np.unique(obs_sid[:,1],return_counts = True)
+    duplicate_ids = set(sid_count[0][sid_count[1]>1])
+    if len(duplicate_ids)>0:
+        print(str(len(duplicate_ids)+' duplicated SNP ids will be removed from observed genotypes'))
+        obs_sid = obs_sid[np.array([x not in duplicate_ids for x in obs_sid[:,1]]),:]
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
@@ -195,7 +201,8 @@ if __name__ == '__main__':
         if imp_sid[i] in obs_sid_dict:
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
-    sid = obs_sid[obs_sid_index,:]
+    obs_sid_index = obs_sid_index[in_obs_sid]
+    sid = obs_sid[obs_sid_index[in_obs_sid],:]
     if np.sum(in_obs_sid) == 0:
         ValueError('No SNPs in common between imputed and observed genotypes')
     # Read imputed parental genotypes

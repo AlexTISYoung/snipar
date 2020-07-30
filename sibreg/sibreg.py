@@ -452,7 +452,7 @@ def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
     else:
         return ids, ids_fams, gts_fams
 
-def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
+def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
@@ -475,7 +475,10 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
         G_sib[i,:] = G_sib[i,:]/float(n_i)
-    return gtarray(G_sib,ids)
+    if return_famsizes:
+        return [gtarray(G_sib, ids),fam_counts,fam_sums]
+    else:
+        return gtarray(G_sib,ids)
 
 
 def find_par_gts(pheno_ids,ped,gts_id_dict,fams = None):
