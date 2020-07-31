@@ -52,15 +52,15 @@ class sibreg_71():
         
         self.theta = thetahat_vec
 
-    def neg_logll_grad(self, V):
+    def neg_logll_grad(self, V, theta = None, S = None):
         
         # ============================================ #
         # returns negative log likelihood and negative
         # of the gradient
         # ============================================ #
         
-        theta = self.theta
-        S = self.S
+        theta = self.theta if theta is None else theta
+        S = self.S if S is None else S
 
         # Unflatten V into a matrix
         d = S[0].shape[0]
@@ -96,14 +96,25 @@ class sibreg_71():
         return -log_ll, -Gvec
 
 
-    def solve(self, est_init = None):
-    
+    def solve(self,
+              theta = None, 
+              S = None, 
+              neg_logll_grad = None,
+              est_init = None,
+              printout = True):
+        
+        # inherit parameters from the class if they aren't defined
+        if theta is None:
+            theta = self.theta
+        if S is None:
+            S = self.S
+        if neg_logll_grad is None:
+            neg_logll_grad = self.neg_logll_grad
+        # theta = self.theta if (theta is None) else theta
+        # S = self.S if (S is None) else S
+        # neg_logll_grad = self.neg_logll_grad if (neg_logll_grad is None) else neg_logll_grad
+
         # == Solves our MLE problem == #
-
-        theta = self.theta
-        S = self.S
-        neg_logll_grad = self.neg_logll_grad
-
         n, m = theta.shape
         
         if est_init is not None:
@@ -114,15 +125,17 @@ class sibreg_71():
             if rowstrue & colstrue:
                 pass
             else:
-                print("Warning: Initial Estimate given is not of the proper dimension")
-                print("Making a matrix of 0s as the initial estimate")
-                print("=================================================")
-                
+                if printout == True:
+                    print("Warning: Initial Estimate given is not of the proper dimension")
+                    print("Making a matrix of 0s as the initial estimate")
+                    print("=================================================")
+                    
                 est_init = np.zeros((m, m))
         else:
-            print("No initial guess provided.")
-            print("Making a matrix of 0s as the initial estimate")
-            print("=================================================")
+            if printout == True:
+                print("No initial guess provided.")
+                print("Making a matrix of 0s as the initial estimate")
+                print("=================================================")
             
             est_init = np.zeros((m, m))
             
@@ -136,16 +149,18 @@ class sibreg_71():
             neg_logll_grad, 
             est_init_array,
             fprime = None,
+            args = (theta, S),
             bounds = bounds
         )
         
         output_matrix = return_to_symmetric(result[0], m)
         
-        print("Final Estimate:\n", output_matrix)
-        print("Convergence Flag: ", result[2]['task'])
-        print("Number of Iterations: ", result[2]['nit'])
-        print("Final Gradient: ", result[2]['grad'])
-        print("Max deviation of gradient from 0: ", np.max(np.abs(result[2]['grad'] - np.zeros(3))))
+        if printout == True:
+            print("Final Estimate:\n", output_matrix)
+            print("Convergence Flag: ", result[2]['task'])
+            print("Number of Iterations: ", result[2]['nit'])
+            print("Final Gradient: ", result[2]['grad'])
+            print("Max deviation of gradient from 0: ", np.max(np.abs(result[2]['grad'] - np.zeros(3))))
         
         return output_matrix, result 
 
