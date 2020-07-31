@@ -1,10 +1,5 @@
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set_style("whitegrid")
-from scipy.special import factorial
-from scipy.optimize import minimize, fmin_l_bfgs_b
+from scipy.optimize import fmin_l_bfgs_b
 from numba import jit, njit, prange
 import pprint
 
