@@ -47,4 +47,26 @@ def extract_bounds(n):
     bounds_list_out = [tuple(i) for i in bounds_list]
     
     return bounds_list_out
-    
+
+
+def delete_obs_jk(var, start_idx, end_idx, end_cond):
+
+    # ============================== #
+    # var: numpy array
+    # end_cond : boolean
+    # Function helps take out observations
+    # for a jackknife routine
+    # ============================== #
+
+    if end_cond:
+
+        var_jk = np.delete(var, range(start_idx, end_idx), 
+                             axis = 0)
+
+    else:
+
+        var_jk = np.delete(var, range(start_idx, var.shape[0]), 
+                             axis = 0)
+        var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
+        
+    return var_jk
