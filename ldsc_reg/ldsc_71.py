@@ -1,7 +1,7 @@
 import numpy as np
 from helperfuncs import extract_upper_triangle, return_to_symmetric, extract_bounds
 from scipy.optimize import fmin_l_bfgs_b
-
+from scipy.special import comb
 
 class sibreg_71():
     
@@ -104,15 +104,9 @@ class sibreg_71():
               printout = True):
         
         # inherit parameters from the class if they aren't defined
-        if theta is None:
-            theta = self.theta
-        if S is None:
-            S = self.S
-        if neg_logll_grad is None:
-            neg_logll_grad = self.neg_logll_grad
-        # theta = self.theta if (theta is None) else theta
-        # S = self.S if (S is None) else S
-        # neg_logll_grad = self.neg_logll_grad if (neg_logll_grad is None) else neg_logll_grad
+        theta = self.theta if (theta is None) else theta
+        S = self.S if (S is None) else S
+        neg_logll_grad = self.neg_logll_grad if (neg_logll_grad is None) else neg_logll_grad
 
         # == Solves our MLE problem == #
         n, m = theta.shape
@@ -163,6 +157,70 @@ class sibreg_71():
             print("Max deviation of gradient from 0: ", np.max(np.abs(result[2]['grad'] - np.zeros(3))))
         
         return output_matrix, result 
+
+    def jackknife_se(self,
+                  theta  = None, S = None,
+                  blocksize = 1):
+
+        # Simple jackknife estimator for SE
+        # Source: https://www.stat.berkeley.edu/~hhuang/STAT152/Jackknife-Bootstrap.pdf
+        # Default value of blocksize = 1 is the normal jackknife
+
+        theta = self.theta if (theta is None) else theta
+        S = self.S if (S is None) else S
+
+        assert theta.shape[0] == S.shape[0]
+
+        nobs = theta.shape[0]
+        
+        estimates_jk = []
+        
+        start_idx = 0
+        while True:
+            
+            end_idx = start_idx + blocksize
+            end_idx_cond = end_idx <= theta.shape[0]
+            
+            # remove ith observation
+            if end_idx_cond:
+                theta_jk = np.delete(theta, range(start_idx, end_idx), 
+                                     axis = 0)
+                S_jk = np.delete(S, range(start_idx, end_idx), 
+                                 axis = 0)
+            else:
+                theta_jk = np.delete(theta, range(start_idx, theta.shape[0]), 
+                                     axis = 0)
+                S_jk = np.delete(S, range(start_idx, S.shape[0]), 
+                                 axis = 0)
+            
+            if start_idx < theta.shape[0]:
+                # Get our estimate
+                output_matrix, _ = self.solve(theta = theta_jk,
+                                              S = S_jk,
+                                              printout = False)
+
+                estimates_jk.append(output_matrix)
+
+                start_idx += 1
+            if not end_idx_cond:
+                break
+            
+        estimates_jk = np.array(estimates_jk)
+        
+        # calculate the SE
+        estimate_jk_mean = estimates_jk.mean(axis = 0)
+        estimate_jk_mean = np.array([estimate_jk_mean] * estimates_jk.shape[0])
+        estimates_jk_dev = estimates_jk - estimate_jk_mean
+        estimates_jk_devsq = estimates_jk_dev ** 2
+        estimates_jk_devsq_sum = estimates_jk_devsq.sum(axis = 0)
+        
+        se_correction = (nobs - blocksize)/(blocksize *comb(nobs, blocksize))
+
+        se = se_correction * estimates_jk_devsq_sum
+        se = np.sqrt(se)
+        
+        return se  
+
 
 
 
