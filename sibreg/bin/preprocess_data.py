@@ -15,6 +15,7 @@ import logging
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
+from bgen_reader import read_bgen
 class Person:
     """Just a simple data structure representing individuals
 
@@ -208,7 +209,7 @@ def add_control(pedigree):
     return pedigree
 
 
-def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_address = None):
+def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, end=None, bim_address = None, bgen=False):
     """Processes the required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -246,12 +247,21 @@ def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_add
                 pos: A numpy array with the position of each SNP in the order of appearance in gts.
                 hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
     """
-    logging.info("For file "+genotypes_address+": Finding which chromosomes")
-    if bim_address is None:
-        bim_file = genotypes_address+'.bim'
+    logging.info("For file "+str(phased_address)+";"+str(unphased_address)+": Finding which chromosomes")
+    if unphased_address:
+        if bim_address is None:
+            bim_address = unphased_address+'.bim'
+        bim = pd.read_csv(bim_address, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+        
     else:
-        bim_file = bim_address
-    bim = pd.read_csv(bim_file, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+        #TODO conrtrol = for ADDRESS
+        if bim_address is None:
+            bim_address = phased_address+'.bgen'
+        bgen = read_bgen(bim_address, verbose=False)
+        bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
+        #TODO remove this
+        bim["Chr"] = '22'
+    
     chromosomes = bim["Chr"].unique()
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
     logging.info("with chromosomes " + str(chromosomes)+": " + "loading and filtering pedigree file ...")
@@ -293,18 +303,40 @@ def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_add
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bed file ...")
-    gts_f = Bed(genotypes_address+".bed",count_A1 = True)
-    ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
-    gts_ids = gts_f.iid[ids_in_ped]
-    if end is not None:        
-        gts = gts_f[ids_in_ped , start:end].read().val.astype(float)
-        pos = gts_f.pos[start:end, 2]
-        sid = gts_f.sid[start:end]
-    else:
-        gts = gts_f[ids_in_ped, :].read().val.astype(float)
-        pos = gts_f.pos[:, 2]
-        sid = gts_f.sid
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading genotype file ...")
+    phased_gts = None
+    unphased_gts = None
+    if unphased_address:
+        gts_f = Bed(unphased_address+".bed",count_A1 = True)
+        ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
+        gts_ids = gts_f.iid[ids_in_ped]
+        if end is not None:        
+            unphased_gts = gts_f[ids_in_ped , start:end].read().val.astype(np.intc)
+            pos = gts_f.pos[start:end, 2]
+            sid = gts_f.sid[start:end]
+        else:
+            unphased_gts = gts_f[ids_in_ped, :].read().val.astype(np.intc)
+            pos = gts_f.pos[:, 2]
+            sid = gts_f.sid
+    if phased_address:
+        bgen = read_bgen(phased_gts+".bgen", verbose=False)
+        gts_ids = np.array([[None, id] for id in bgen["samples"]])
+        pos = np.array(bim["coordinate"][start: end])
+        sid = np.array(bim["id"][start: end])
+        pop_size = len(gts_ids)
+        whole_genotype = []
+        for genotype in bgen["genotype"][start: end]:
+            computed = genotype.compute()
+            probs = computed["probs"] 
+            genomes = np.array([(None, None)]*pop_size)
+            genomes[probs[:,0] > 0.99, 0] = 1.
+            genomes[probs[:,1] > 0.99, 0] = 0.
+            genomes[probs[:,0] > 0.99, 1] = 1.
+            genomes[probs[:,1] > 0.99, 1] = 0.
+            whole_genotype.append(genomes)
+        unphased_gts = np.array(whole_genotype).transpose(1,0,2).astype(np.intc)
+
+
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
@@ -313,4 +345,5 @@ def prepare_data(pedigree, genotypes_address, ibd, start=None, end=None, bim_add
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns
     hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
-    return sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict
+    pos = pos.astype(int)
+    return sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict

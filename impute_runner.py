@@ -128,7 +128,8 @@ def run_imputation(data):
             time consumed byt the imputation.
     """
     pedigree = data["pedigree"]
-    bed_address = data["bed_address"]
+    phased_address = data.get("phased_address")
+    unphased_address = data.get("unphased_address")
     ibd_pd = data["ibd_pd"]
     output_address = data["output_address"]
     start = data.get("start")
@@ -137,12 +138,36 @@ def run_imputation(data):
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
-    logging.info("processing " + bed_address)
-    sibships, iid_to_bed_index, gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, bed_address, ibd_pd, start, end, bim)
-    gts = gts.astype(float)
+    bgen = data.get("bgen")
+    logging.info("processing " + str(phased_address) + "," + str(unphased_address))
+    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, bgen)
     pos = pos.astype(int)
     start_time = time.time()
-    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+    print("sibships", str(sibships)[:100],)
+    print("iid_to_bed_index", str(iid_to_bed_index)[:100],)
+    print("phased_gts", str(phased_gts)[:100],)
+    print("unphased_gts", str(unphased_gts)[:100],)
+    print("ibd", str(ibd)[:100],)
+    print("pos", str(pos)[:100],)
+    print("chromosomes", str(chromosomes)[:100],)
+    print("hdf5_output_dict", str(hdf5_output_dict)[:100])
+
+    print("=================================================")
+
+    print("sibships", str(sibships)[:100])
+    print("iid_to_bed_index", str(iid_to_bed_index)[:100])
+    print("phased_gts", str(phased_gts)[:100])
+    print("unphased_gts", str(unphased_gts)[:100])
+    print("ibd", str(ibd)[:100])
+    print("pos", str(pos)[:100])
+    print("hdf5_output_dict", str(hdf5_output_dict)[:100])
+    print("chromosome", str(chromosomes)[:100])
+    print("output_address", str(output_address)[:100])
+    print("threads", str(threads)[:100])
+    print("output_compression", str(output_compression)[:100])
+    print("output_compression_opts", str(output_compression_opts)[:100])
+
+    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     end_time = time.time()
     return (end_time-start_time)
 
@@ -151,11 +176,14 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
     parser = argparse.ArgumentParser()
     parser.add_argument('-c',
-                        action='store_true')    
+                        action='store_true')        
     parser.add_argument('ibd',
                         type=str,
                         help='IBD file')
-    parser.add_argument('genotypes_address',
+                        #control for at least one of these
+    parser.add_argument('--phased_genotypes_address',
+                        type=str,help='Address of genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+    parser.add_argument('--unphased_genotypes_address',
                         type=str,help='Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--from_chr',
                         type=int,
@@ -233,21 +261,26 @@ if __name__ == "__main__":
     else:
         chromosomes = [None]
 
-    if "~" in args.genotypes_address or "~" in args.output_address:
+    if (args.unphased_genotypes_address and "~" in args.unphased_genotypes_address) or (args.phased_genotypes_address and "~" in args.phased_genotypes_address) or (args.output_address and "~" in args.output_address):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address") 
 
+    def none_tansform(a, b, c):
+        if a is not None:
+            return a.replace(b, c)
+        return None
     inputs = [{"pedigree": pedigree,
-            "bed_address": args.genotypes_address.replace("~", chromosome),
-            "ibd_pd": ibd_pd, #[ibd_pd["Chr"] == chromosome],
-            "output_address":args.output_address.replace("~", chromosome),
+            "phased_address": none_tansform(args.phased_genotypes_address, "~", str(chromosome)),
+            "unphased_address": none_tansform(args.unphased_genotypes_address, "~", str(chromosome)),
+            "ibd_pd": ibd_pd,
+            "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
             "bim": args.bim,
             "threads": args.threads,
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
-                }
+            }
             for chromosome in chromosomes]
             
     pool = Pool(args.processes)
