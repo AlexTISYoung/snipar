@@ -160,7 +160,7 @@ if __name__ == '__main__':
     sid_count = np.unique(obs_sid[:,1],return_counts = True)
     duplicate_ids = set(sid_count[0][sid_count[1]>1])
     if len(duplicate_ids)>0:
-        print(str(len(duplicate_ids)+' duplicated SNP ids will be removed from observed genotypes'))
+        print(str(len(duplicate_ids))+' duplicated SNP ids will be removed from observed genotypes')
         obs_sid = obs_sid[np.array([x not in duplicate_ids for x in obs_sid[:,1]]),:]
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
@@ -202,7 +202,7 @@ if __name__ == '__main__':
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
     obs_sid_index = obs_sid_index[in_obs_sid]
-    sid = obs_sid[obs_sid_index[in_obs_sid],:]
+    sid = obs_sid[obs_sid_index,:]
     if np.sum(in_obs_sid) == 0:
         ValueError('No SNPs in common between imputed and observed genotypes')
     # Read imputed parental genotypes
