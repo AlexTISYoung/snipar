@@ -5,7 +5,7 @@ from scipy.special import comb
 
 class sibreg_72():
     
-    def __init__(self, S, r, u, theta = None):
+    def __init__(self, S, theta = None, u = None, r = None):
 
         for s in S:
             n, m = s.shape
@@ -13,14 +13,20 @@ class sibreg_72():
 
         if theta is None:
             print("Warning there is no value for theta. Maybe consider simulating it")
+        if u is None:
+            print("No value for U given. Generating a vector of ones (all SNPs weighted equally)")
+            u = np.ones(S.shape[0])
+        if r is None:
+            print("No value for r given. Generating a vector of ones for r")
+            r = np.ones(S.shape[0])
 
         self.theta = theta
         self.S = S
-        self.r = r
         self.u = u
+        self.r = r
         
 
-    def simdata(self, V, N):
+    def simdata(self, V, r, N):
         
         # Simulated data (theta hats) as per section 7.1
         # V = varcov matrix of true effects
@@ -59,7 +65,7 @@ class sibreg_72():
         
         self.theta = thetahat_vec
 
-    def neg_logll_grad(self, V, theta = None, S = None, r = None, u = None):
+    def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None):
         
         # ============================================ #
         # returns negative log likelihood and negative
@@ -68,9 +74,8 @@ class sibreg_72():
         
         theta = self.theta if theta is None else theta
         S = self.S if S is None else S
-        r = self.r if r is None else r
         u = self.u if u is None else u
-
+        r = self.r if r is None else r
 
         # Unflatten V into a matrix
         d = S[0].shape[0]
@@ -85,21 +90,21 @@ class sibreg_72():
         
             Si = S[i]
             thetai = theta[i, :]
-            ri = r[i]
             ui = u[i]
+            ri = r[i]
 
             d, ddash = Si.shape
             assert d == ddash # Each S has to be a square matrix
       
             # calculate log likelihood
             log_ll += -(d/2) * np.log(2 * np.pi)
-            log_ll += -(1/2) * np.log(np.linalg.det(Si + V))
-            log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + V))
+            log_ll += -(1/2) * np.log(np.linalg.det(Si + ri * V))
+            log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
             log_ll *= 1/ui
             
             
             # calculate gradient
-            SV_inv = np.linalg.inv(Si + V)
+            SV_inv = np.linalg.inv(Si + ri * V)
             G = -(1 / 2) * SV_inv
             G += (1 / 2) * np.dot(SV_inv,np.dot(np.outer(thetai, thetai),SV_inv))
             G *= 1/ui
@@ -113,9 +118,9 @@ class sibreg_72():
 
     def solve(self,
               theta = None, 
-              S = None, 
-              r = None,
+              S = None,
               u = None,
+              r = None,
               neg_logll_grad = None,
               est_init = None,
               printout = True):
@@ -123,8 +128,8 @@ class sibreg_72():
         # inherit parameters from the class if they aren't defined
         theta = self.theta if (theta is None) else theta
         S = self.S if S is None else S
-        r = self.r if r is None else r
         u = self.u if u is None else u
+        r = self.r if r is None else r
         neg_logll_grad = self.neg_logll_grad if neg_logll_grad is None else neg_logll_grad
 
         # == Solves our MLE problem == #
@@ -162,7 +167,7 @@ class sibreg_72():
             neg_logll_grad, 
             est_init_array,
             fprime = None,
-            args = (theta, S, r, u),
+            args = (theta, S, u, r),
             bounds = bounds
         )
         
@@ -173,7 +178,6 @@ class sibreg_72():
             print("Convergence Flag: ", result[2]['task'])
             print("Number of Iterations: ", result[2]['nit'])
             print("Final Gradient: ", result[2]['grad'])
-            print("Max deviation of gradient from 0: ", np.max(np.abs(result[2]['grad'] - np.zeros(3))))
         
         return output_matrix, result 
 
