@@ -98,7 +98,9 @@ class sibreg_72():
       
             # calculate log likelihood
             log_ll += -(d/2) * np.log(2 * np.pi)
-            log_ll += -(1/2) * np.log(np.linalg.det(Si + ri * V))
+            dit_sv = np.linalg.det(Si + ri * V)
+            dit_sv[dit_sv == 0] = 1e-6
+            log_ll += -(1/2) * np.log(dit_sv)
             log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
             log_ll *= 1/ui
             

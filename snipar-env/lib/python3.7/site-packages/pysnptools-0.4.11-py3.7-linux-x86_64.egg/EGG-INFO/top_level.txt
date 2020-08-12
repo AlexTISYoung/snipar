@@ -1,0 +1,10 @@
+pysnptools
+pysnptools/kernelreader
+pysnptools/kernelstandardizer
+pysnptools/pstreader
+pysnptools/snpreader
+pysnptools/standardizer
+pysnptools/util
+pysnptools/util/filecache
+pysnptools/util/mapreduce1
+pysnptools/util/mapreduce1/runner

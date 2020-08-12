@@ -156,7 +156,6 @@ class sibreg_71():
             print("Convergence Flag: ", result[2]['task'])
             print("Number of Iterations: ", result[2]['nit'])
             print("Final Gradient: ", result[2]['grad'])
-            print("Max deviation of gradient from 0: ", np.max(np.abs(result[2]['grad'] - np.zeros(3))))
         
         return output_matrix, result 
 

@@ -1,4 +1,5 @@
 import ldsc_72 as ld
+import ldsc_71 as ld1
 import numpy as np
 import h5py
 
