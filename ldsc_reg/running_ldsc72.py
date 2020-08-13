@@ -6,7 +6,7 @@ import glob
 import time
 startTime = time.time()
 
-files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5')
+files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 
 # read in first file
 file = files[0]
@@ -14,13 +14,14 @@ hf = h5py.File(file, 'r')
 theta  = hf.get('estimate')[()]
 S = hf.get('estimate_covariance')[()]
 
-for file in files[1:]:
-  hf = h5py.File(file, 'r')
-  theta_file  = hf.get('estimate')[()]
-  S_file = hf.get('estimate_covariance')[()]
-  
-  theta = np.append(theta, theta_file, axis = 0)
-  S = np.append(S, S_file, axis = 0)
+if len(files) > 1:
+  for file in files[1:]:
+      hf = h5py.File(file, 'r')
+      theta_file  = hf.get('estimate')[()]
+      S_file = hf.get('estimate_covariance')[()]
+      
+      theta = np.append(theta, theta_file, axis = 0)
+      S = np.append(S, S_file, axis = 0)
   
 N = theta.shape[0]
 

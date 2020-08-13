@@ -26,19 +26,13 @@ class sibreg_72():
         self.r = r
         
 
-    def simdata(self, V, r, N):
+    def simdata(self, V,  N):
         
         # Simulated data (theta hats) as per section 7.1
         # V = varcov matrix of true effects
         # N = Number of obs/SNPs to generate
         
-        theta = self.theta if theta is None else theta
-        S = self.S if S is None else S
-        u = self.u if u is None else u
-        r = self.r if r is None else r
-        
         S = self.S
-        theta = self.theta
         r = self.r
 
         thetahat_vec = []
@@ -92,6 +86,7 @@ class sibreg_72():
         
         for i in range(N):
             
+            #print(i)
         
             Si = S[i]
             thetai = theta[i, :]
@@ -102,12 +97,14 @@ class sibreg_72():
             assert d == ddash # Each S has to be a square matrix
       
             # calculate log likelihood
-            log_ll += -(d/2) * np.log(2 * np.pi)
+            log_ll_add = -(d/2) * np.log(2 * np.pi)
             dit_sv = np.linalg.det(Si + ri * V)
-            log_ll += -(1/2) * np.log(dit_sv)
-            log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
-            log_ll *= 1/ui
+            log_ll_add += -(1/2) * np.log(dit_sv)
+            log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
+            log_ll_add *= 1/ui
             
+            if np.isnan(log_ll_add) == False:
+                log_ll += log_ll_add
             
             # calculate gradient
             SV_inv = np.linalg.inv(Si + ri * V)
@@ -115,7 +112,8 @@ class sibreg_72():
             G += (1 / 2) * np.dot(SV_inv,np.dot(np.outer(thetai, thetai),SV_inv))
             G *= 1/ui
             
-            Gvec += G
+            if np.any(np.isnan(G)) == False:
+                Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
         print("Log Likelihood: ", log_ll)
