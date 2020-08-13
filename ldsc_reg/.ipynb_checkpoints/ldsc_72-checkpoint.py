@@ -32,11 +32,6 @@ class sibreg_72():
         # V = varcov matrix of true effects
         # N = Number of obs/SNPs to generate
         
-        theta = self.theta if theta is None else theta
-        S = self.S if S is None else S
-        u = self.u if u is None else u
-        r = self.r if r is None else r
-        
         S = self.S
         theta = self.theta
         r = self.r
