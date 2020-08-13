@@ -104,7 +104,6 @@ class sibreg_72():
             # calculate log likelihood
             log_ll += -(d/2) * np.log(2 * np.pi)
             dit_sv = np.linalg.det(Si + ri * V)
-            dit_sv[dit_sv == 0] = 1e-6
             log_ll += -(1/2) * np.log(dit_sv)
             log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
             log_ll *= 1/ui
@@ -119,7 +118,8 @@ class sibreg_72():
             Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
-        
+        print("Log Likelihood: ", log_ll)
+        print("Gradient: ", Gvec)
         return -log_ll, -Gvec
 
 
