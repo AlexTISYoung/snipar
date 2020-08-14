@@ -20,7 +20,7 @@ class sibreg():
             print("No value for r given. Generating a vector of ones for r")
             r = np.ones(S.shape[0])
         if f is None:
-            print("No value given for allele frequencies.")
+            print("Warning: No value given for allele frequencies. Some parameters won't be noramlized.")
 
         self.theta = theta
         self.S = S
@@ -89,6 +89,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizing variables
+        # V = V * N
         V_norm = V/N
         
         for i in range(N):
@@ -141,6 +142,7 @@ class sibreg():
               S = None,
               u = None,
               r = None,
+              f = None,
               neg_logll_grad = None,
               est_init = None,
               printout = True):
@@ -150,6 +152,7 @@ class sibreg():
         S = self.S if S is None else S
         u = self.u if u is None else u
         r = self.r if r is None else r
+        f = self.f if f is None else f
         neg_logll_grad = self.neg_logll_grad if neg_logll_grad is None else neg_logll_grad
 
         # == Solves our MLE problem == #
@@ -187,7 +190,7 @@ class sibreg():
             neg_logll_grad, 
             est_init_array,
             fprime = None,
-            args = (theta, S, u, r),
+            args = (theta, S, u, r, f),
             bounds = bounds
         )
         
