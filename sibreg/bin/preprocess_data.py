@@ -246,7 +246,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
                     Each segment consists of a start, an end, and an IBD status. The segment list is flattened meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
                 pos: A numpy array with the position of each SNP in the order of appearance in gts.
                 hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
-    """
+    """    
     logging.info("For file "+str(phased_address)+";"+str(unphased_address)+": Finding which chromosomes")
     if unphased_address:
         if bim_address is None:
@@ -260,7 +260,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         bgen = read_bgen(bim_address, verbose=False)
         bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
         #TODO remove this
-        bim["Chr"] = '22'
+        bim["Chr"] = '21'
     
     chromosomes = bim["Chr"].unique()
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
@@ -319,7 +319,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             pos = gts_f.pos[:, 2]
             sid = gts_f.sid
     if phased_address:
-        bgen = read_bgen(phased_gts+".bgen", verbose=False)
+        bgen = read_bgen(phased_address+".bgen", verbose=False)
         gts_ids = np.array([[None, id] for id in bgen["samples"]])
         pos = np.array(bim["coordinate"][start: end])
         sid = np.array(bim["id"][start: end])
@@ -331,11 +331,12 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             genomes = np.array([(None, None)]*pop_size)
             genomes[probs[:,0] > 0.99, 0] = 1.
             genomes[probs[:,1] > 0.99, 0] = 0.
-            genomes[probs[:,0] > 0.99, 1] = 1.
-            genomes[probs[:,1] > 0.99, 1] = 0.
+            genomes[probs[:,2] > 0.99, 1] = 1.
+            genomes[probs[:,3] > 0.99, 1] = 0.
             whole_genotype.append(genomes)
-        unphased_gts = np.array(whole_genotype).transpose(1,0,2).astype(np.intc)
-
+        phased_gts = np.array(whole_genotype).transpose(1,0,2).astype(np.intc)
+        if not unphased_gts:
+            unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
 
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")

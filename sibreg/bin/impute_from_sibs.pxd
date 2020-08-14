@@ -21,7 +21,7 @@ cdef float impute_snp_from_offsprings(int snp,
                       int[:, :, :] sib_hap_IBDs,                      
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2) nogil
+                      int len_snp_ibd2)
 
 
 cdef float impute_snp_from_parent_offsprings(int snp,
@@ -38,8 +38,17 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      ) nogil
+                      )
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
 
 cdef char is_possible_child(int child, int parent) nogil
+
+cdef void get_IBD(int[:] hap1,
+                  int[:] hap2,
+                  int length,
+                  int half_window,
+                  double threshold,
+                  int[:] agreement_count,
+                  double[:] agreement_percentage,
+                  int[:] agreement)

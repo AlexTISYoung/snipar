@@ -76,13 +76,22 @@ def imputation_test(chromosomes,
     whole_imputed_genes_pm = np.concatenate(chromosomes_imputed_genes_pm)
 
     covs_o = np.cov(whole_expected_genes_o, whole_imputed_genes_o)
+    print("whole_expected_genes_o")
+    print(whole_expected_genes_o)
+    print("whole_imputed_genes_o")
+    print(whole_imputed_genes_o)
     coef_o = covs_o[0,1]/covs_o[1,1]
     residual_var_o = np.var(whole_expected_genes_o - coef_o*whole_imputed_genes_o)
     s2_o = residual_var_o/(len(control_o_families)*22*2*covs_o[1,1])
     z_o = (1-coef_o)/np.sqrt(s2_o)
     q_o = norm.cdf(z_o)
     p_value_o = min(q_o, 1-q_o)
-
+    print("whole_expected_genes_pm")
+    print(whole_expected_genes_pm)
+    print("whole_imputed_genes_pm")
+    print(whole_imputed_genes_pm)
+    print("pm corr", np.corrcoef(whole_expected_genes_pm, whole_imputed_genes_pm))
+    print("o corr", np.corrcoef(whole_expected_genes_o, whole_imputed_genes_o))
     covs_pm = np.cov(whole_expected_genes_pm, whole_imputed_genes_pm)
     coef_pm = covs_pm[0,1]/covs_pm[1,1]
     residual_var_pm = np.var(whole_expected_genes_pm - coef_pm*whole_imputed_genes_pm)

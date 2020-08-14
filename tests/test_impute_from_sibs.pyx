@@ -166,4 +166,40 @@ class TestSibImpute(unittest.TestCase):
                     expected = expected_result_IBD2[par].get((i, j), None)
                     if expected is not None:
                         self.assertAlmostEqual(result, expected, 4, msg = "problem with type2, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected,result = "+str((expected, result)))
-    
+    def test_get_IBD(self):
+        length = 1000
+        half_window = 100
+        hap1 = np.array([1 for i in range(1000)]).astype("i")
+        hap2 = np.array([1 for i in range(1000)]).astype("i")
+        agreement_count = np.array([0 for i in range(1000)]).astype("i")
+        agreement_percentage = np.array([0. for i in range(1000)])
+        agreement = np.array([0 for i in range(1000)]).astype("i")
+        get_IBD(hap1, hap2, length, half_window, 0.5, agreement_count, agreement_percentage, agreement)
+
+        for i in range(length):
+            self.assertEqual(agreement[i], 1)
+        for i in range(length):
+            self.assertAlmostEqual(agreement_percentage[i], 1.)
+
+        hap1[[i%2==0 for i in range(length)]] = 0
+        hap2[[i%2==0 for i in range(length)]] = 0
+        get_IBD(hap1, hap2, length, half_window, 0.5, agreement_count, agreement_percentage, agreement)
+        for i in range(length):
+            self.assertEqual(agreement[i], 1)
+        for i in range(length):
+            self.assertAlmostEqual(agreement_percentage[i], 1.)
+
+        hap1 = np.array([i//500 for i in range(1000)]).astype("i")
+        hap2 = np.array([i//500 for i in range(1000)]).astype("i")
+        get_IBD(hap1, hap2, length, half_window, 0.5, agreement_count, agreement_percentage, agreement)
+        for i in range(length):
+            self.assertEqual(agreement[i], 1)
+        
+        hap1 = np.array([i//500 for i in range(1000)]).astype("i")
+        hap2 = np.array([1 for i in range(1000)]).astype("i")
+        get_IBD(hap1, hap2, length, half_window, 0.9999, agreement_count, agreement_percentage, agreement)
+
+        for i in range(500+half_window):
+            self.assertEqual(agreement[i], 0)
+        for i in range(500+half_window, length):
+            self.assertEqual(agreement[i], 1)

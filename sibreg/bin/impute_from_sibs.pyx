@@ -44,7 +44,6 @@ cdef extern from * nogil:
         omp_destroy_lock(&cnt_lock);
     }   
     void report(int mod, char* chromosomes, int total){
-        printf("sssssssssssssss %d \n", mod);
         time_t now;
         char* text;
         omp_set_lock(&cnt_lock);
@@ -56,7 +55,6 @@ cdef extern from * nogil:
             printf("%s INFO impute with chromosome %s: progress is %d \n", text, chromosomes, (100*cnt)/total);
         }
         omp_unset_lock(&cnt_lock);        
-        printf("eeeeeeeeeeeee %d \n", mod);
     }
     """
     void reset()
@@ -70,26 +68,30 @@ cdef void get_IBD(int[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement) nogil:    
-    cdef int i, start, end
+                  int[:] agreement):    
+    cdef int i
+    cdef int first, last
+
+    #TODO compare window size and length
     agreement_count[0] = 0
-    for i in range(0, half_window+1):
+    last = min(half_window, length-1)
+    for i in range(last+1):
         agreement_count[0] += (hap1[i] == hap2[i])
-        agreement_percentage[0] = agreement_count[0]/<double>(half_window+1)
+    agreement_percentage[0] = agreement_count[0]/<double>(last+1)
 
     for i in range(1, length):
-        agreement_count[i] = 0
-        end = i+half_window
-        prev_start = i-half_window-1
-        if 0 <= prev_start:
-            agreement_count[i] = agreement_count[i-1]-(hap1[prev_start] == hap2[prev_start])
-        if end < length:
-            agreement_count[i] = agreement_count[i]+(hap1[end] == hap2[end])
-        agreement_percentage[0] = agreement_count[0]/<double>(half_window+1)
+        agreement_count[i] = agreement_count[i-1]
+        last = i+half_window
+        first = i-half_window-1
+        if 0 <= first:
+            agreement_count[i] = agreement_count[i-1]-(hap1[first] == hap2[first])
+        if last < length:
+            agreement_count[i] = agreement_count[i]+(hap1[last] == hap2[last])
+        agreement_percentage[i] = agreement_count[i]/<double>(min(last+1, length) - max(0, first+1))
     
     for i in range(length):
         agreement[i] = (agreement_percentage[i]>threshold)
-        if hap1[i] == hap2[i]:
+        if hap1[i] != hap2[i]:
             agreement[i] = 0
 
 
@@ -149,7 +151,7 @@ cdef float impute_snp_from_offsprings(int snp,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2) nogil:
+                      int len_snp_ibd2):
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
 
     Args:
@@ -185,36 +187,14 @@ cdef float impute_snp_from_offsprings(int snp,
             Imputed parent sum divided by two. NAN if all the children are NAN in this SNP.
 
     """
-    # report(12, temp_char, 1)
     cdef float result = nan_float
     cdef float additive
     cdef int sibsum = 0
     cdef int counter, sib1, sib2, pair_index, sib_index1, sib_index2, hap_index, h00, h01, h10, h11, gs10, gs11, gs20, gs21
-    # report(13, temp_char, 1)
-    # report(len_snp_ibd0, temp_char, 1)
-    # report(len_snp_ibd1, temp_char, 1)
-    # report(len_snp_ibd0, temp_char, 1)
-    # report(555555, temp_char, 1)
 
-    # print("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-    # print("snp", str(snp)[:200])
-    # print("sib_indexes", str(np.array(sib_indexes))[:200])
-    # print("snp_ibd0", str(np.array(snp_ibd0))[:200])
-    # print("snp_ibd1", str(np.array(snp_ibd1))[:200])
-    # print("snp_ibd2", str(np.array(snp_ibd2))[:200])
-    # print("f", str(f)[:200])
-    # print("phased_gts", str(np.array(phased_gts))[:200])
-    # print("unphased_gts", str(np.array(unphased_gts))[:200])
-    # print("sib_hap_IBDs", str(sib_hap_IBDs)[:200])
-    # print("len_snp_ibd0", str(len_snp_ibd0)[:200])
-    # print("len_snp_ibd1", str(len_snp_ibd1)[:200])
-    # print("len_snp_ibd2", str(len_snp_ibd2)[:200])
-    # print("gs1", str(unphased_gts[sib_indexes[0], snp])[:200])
-    # print("gs2", str(unphased_gts[sib_indexes[2], snp])[:200])
 
-    if phased_gts != None:        
+    if phased_gts != None:
         if len_snp_ibd0==0 and len_snp_ibd1>0:
-            # report(14, temp_char, 1)
             result = 0
             counter = 0
             for pair_index in range(len_snp_ibd1):
@@ -223,10 +203,10 @@ cdef float impute_snp_from_offsprings(int snp,
                 sib_index1 = sib_indexes[sib1]
                 sib_index2 = sib_indexes[sib2]
                 hap_index = get_hap_index(sib1, sib2)
-                h00 = sib_hap_IBDs[hap_index, snp, 0]
-                h01 = sib_hap_IBDs[hap_index, snp, 1]
-                h10 = sib_hap_IBDs[hap_index, snp, 2]
-                h11 = sib_hap_IBDs[hap_index, snp, 3]
+                h00 = sib_hap_IBDs[hap_index, 0, snp]
+                h01 = sib_hap_IBDs[hap_index, 1, snp]
+                h10 = sib_hap_IBDs[hap_index, 2, snp]
+                h11 = sib_hap_IBDs[hap_index, 3, snp]
                 
                 gs10 = phased_gts[sib_index1, snp, 0]
                 gs11 = phased_gts[sib_index1, snp, 1]
@@ -234,18 +214,17 @@ cdef float impute_snp_from_offsprings(int snp,
                 gs21 = phased_gts[sib_index2, snp, 1]
                 if h00+h01+h10+h11 == 1:
                     if h00==1:
-                        result += (f + gs10 + gs11 + gs21)
+                        result += (f + gs10 + gs11 + gs21)/2
                     if h01==1:
-                        result += (f + gs10 + gs11 + gs20)
+                        result += (f + gs10 + gs11 + gs20)/2
                     if h10==1:
-                        result += (f + gs11 + gs10 + gs21)
+                        result += (f + gs11 + gs10 + gs21)/2
                     if h11==1:
-                        result += (f + gs11 + gs10 + gs20)
+                        result += (f + gs11 + gs10 + gs20)/2
                     counter += 1
-            # report(15, temp_char, 1)
-        if counter>1:
-            return result/counter
-    # report(16, temp_char, 1)
+                    
+            if counter>0:
+                return result/counter
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
@@ -286,8 +265,6 @@ cdef float impute_snp_from_offsprings(int snp,
             sib2 = sib_indexes[snp_ibd2[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])/2. + 2*f
         result = result/len_snp_ibd2
-    # report(17, temp_char, 1)
-    # print("result", result/2)
     return result/2
 
 @cython.wraparound(False)
@@ -307,7 +284,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      ) nogil:
+                      ):
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value
     
     If returns Nan if there are no sibling pairs that can be children of the existing parent.
@@ -356,73 +333,72 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     cdef int parent_sib1_h00, parent_sib1_h01, parent_sib1_h10, parent_sib1_h11, parent_offspring1_shared_allele_parent, parent_offspring1_shared_allele_offspring
     cdef int parent_sib2_h00, parent_sib2_h01, parent_sib2_h10, parent_sib2_h11, parent_offspring2_shared_allele_parent, parent_offspring2_shared_allele_offspring
     cdef float gp = unphased_gts[parent, snp]
-
     if phased_gts != None:
-            if len_snp_ibd0==0 and len_snp_ibd1>1:
-                result = 0
-                counter = 0
-                for pair_index in range(len_snp_ibd1):
-                    sib1 = snp_ibd0[pair_index, 0]
-                    sib2 = snp_ibd0[pair_index, 1]
-                    sib_index1 = sib_indexes[sib1]
-                    sib_index2 = sib_indexes[sib2]
-                    hap_index = get_hap_index(sib1, sib2)
-                    sibs_h00 = sib_hap_IBDs[hap_index, snp, 0]
-                    sibs_h01 = sib_hap_IBDs[hap_index, snp, 1]
-                    sibs_h10 = sib_hap_IBDs[hap_index, snp, 2]
-                    sibs_h11 = sib_hap_IBDs[hap_index, snp, 3]
-                    sibship_shared_allele_sib1 = sibs_h10 + sibs_h11
-                    sibship_shared_allele_sib2 = sibs_h01 + sibs_h11
-                    if sibs_h00 + sibs_h10 + sibs_h01 + sibs_h11 != 1:
-                        continue
+        if len_snp_ibd0==0 and len_snp_ibd1>0:
+            result = 0
+            counter = 0
+            for pair_index in range(len_snp_ibd1):
+                sib1 = snp_ibd1[pair_index, 0]
+                sib2 = snp_ibd1[pair_index, 1]
+                sib_index1 = sib_indexes[sib1]
+                sib_index2 = sib_indexes[sib2]
+                hap_index = get_hap_index(sib1, sib2)
+                sibs_h00 = sib_hap_IBDs[hap_index, 0, snp]
+                sibs_h01 = sib_hap_IBDs[hap_index, 1, snp]
+                sibs_h10 = sib_hap_IBDs[hap_index, 2, snp]
+                sibs_h11 = sib_hap_IBDs[hap_index, 3, snp]
+                sibship_shared_allele_sib1 = sibs_h10 + sibs_h11
+                sibship_shared_allele_sib2 = sibs_h01 + sibs_h11    
+                if sibs_h00 + sibs_h10 + sibs_h01 + sibs_h11 != 1:
+                    continue
 
-                    parent_sib1_h00 = parent_offspring_hap_IBDs[sib1, snp, 0]
-                    parent_sib1_h01 = parent_offspring_hap_IBDs[sib1, snp, 1]
-                    parent_sib1_h10 = parent_offspring_hap_IBDs[sib1, snp, 2]
-                    parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, snp, 3]
-                    parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
-                    parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
-                    if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
-                        continue
+                parent_sib1_h00 = parent_offspring_hap_IBDs[sib1, 0, snp]
+                parent_sib1_h01 = parent_offspring_hap_IBDs[sib1, 1, snp]
+                parent_sib1_h10 = parent_offspring_hap_IBDs[sib1, 2, snp]
+                parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, 3, snp]
+                parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
+                parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
+                if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
+                    continue
 
-                    parent_sib2_h00 = parent_offspring_hap_IBDs[sib2, snp, 0]
-                    parent_sib2_h01 = parent_offspring_hap_IBDs[sib2, snp, 1]
-                    parent_sib2_h10 = parent_offspring_hap_IBDs[sib2, snp, 2]
-                    parent_sib2_h11 = parent_offspring_hap_IBDs[sib2, snp, 3]
-                    parent_offspring2_shared_allele_parent = parent_sib2_h10 + parent_sib2_h11
-                    parent_offspring2_shared_allele_offspring = parent_sib2_h01 + parent_sib2_h11
-                    if parent_sib2_h00 + parent_sib2_h10 + parent_sib2_h01 + parent_sib2_h11 != 1:
-                        continue
-                    
-                    if parent_offspring1_shared_allele_offspring == sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring == sibship_shared_allele_sib2:
-                        result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+phased_gts[sib_index2, snp, 1-parent_offspring2_shared_allele_offspring]
-                        counter+=1
-                    elif parent_offspring1_shared_allele_offspring != sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring != sibship_shared_allele_sib2:
-                        result += phased_gts[sib_index2, snp, sibship_shared_allele_sib1]+f
-                if counter > 0:
-                    return result/counter
+                parent_sib2_h00 = parent_offspring_hap_IBDs[sib2, 0, snp]
+                parent_sib2_h01 = parent_offspring_hap_IBDs[sib2, 1, snp]
+                parent_sib2_h10 = parent_offspring_hap_IBDs[sib2, 2, snp]
+                parent_sib2_h11 = parent_offspring_hap_IBDs[sib2, 3, snp]
+                parent_offspring2_shared_allele_parent = parent_sib2_h10 + parent_sib2_h11
+                parent_offspring2_shared_allele_offspring = parent_sib2_h01 + parent_sib2_h11
+                if parent_sib2_h00 + parent_sib2_h10 + parent_sib2_h01 + parent_sib2_h11 != 1:
+                    continue
+                
+                if parent_offspring1_shared_allele_offspring == sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring == sibship_shared_allele_sib2:
+                    result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+phased_gts[sib_index2, snp, 1-parent_offspring2_shared_allele_offspring]
+                    counter+=1
+                elif parent_offspring1_shared_allele_offspring != sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring != sibship_shared_allele_sib2:
+                    result += phased_gts[sib_index2, snp, sibship_shared_allele_sib1]+f
+                    counter+=1
+            if counter > 0:
+                return result/counter
 
-            if len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2>0:
-                result = 0
-                counter = 0
-                for pair_index in range(len_snp_ibd1):
-                    sib1 = snp_ibd0[pair_index, 0]
-                    sib2 = snp_ibd0[pair_index, 1]
-                    sib_index1 = sib_indexes[sib1]
-                    sib_index2 = sib_indexes[sib2]
-                    parent_sib1_h00 = parent_offspring_hap_IBDs[sib1, snp, 0]
-                    parent_sib1_h01 = parent_offspring_hap_IBDs[sib1, snp, 1]
-                    parent_sib1_h10 = parent_offspring_hap_IBDs[sib1, snp, 2]
-                    parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, snp, 3]
-                    parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
-                    parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
-                    if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
-                        continue
-                    result += phased_gts[sib_index2, snp, parent_offspring1_shared_allele_parent]+f
-                    counter += 1
-                if counter > 0:
-                    return result/counter
-
+        if len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2>0:
+            result = 0
+            counter = 0
+            for pair_index in range(len_snp_ibd2):
+                sib1 = snp_ibd2[pair_index, 0]
+                sib2 = snp_ibd2[pair_index, 1]
+                sib_index1 = sib_indexes[sib1]
+                sib_index2 = sib_indexes[sib2]
+                parent_sib1_h00 = parent_offspring_hap_IBDs[sib1, 0, snp]
+                parent_sib1_h01 = parent_offspring_hap_IBDs[sib1, 1, snp]
+                parent_sib1_h10 = parent_offspring_hap_IBDs[sib1, 2, snp]
+                parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, 3, snp]
+                parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
+                parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
+                if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
+                    continue
+                result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+f
+                counter += 1
+            if counter > 0:
+                return result/counter
     result = nan_float
     counter = 0
     if len_snp_ibd0 > 0:
@@ -676,7 +652,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         tuple(list, numpy.array)
             The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
             
-    """
+    """    
     logging.warning("with chromosome " + str(chromosome)+": " + "imputing ...")
     if sibships.empty:
         logging.warning("with chromosome " + str(chromosome)+": " + "Error: No families to be imputed")
@@ -706,8 +682,6 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     #iid_to_bed_index
     cdef cmap[cstring, int] c_iid_to_bed_index = iid_to_bed_index
     #unphased_gts
-    if phased_gts and not unphased_gts:
-        uphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
     cdef int[:, :] c_unphased_gts = unphased_gts
     cdef int[:, :, :] c_phased_gts = phased_gts
     cdef int number_of_snps = c_unphased_gts.shape[1]
@@ -715,7 +689,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
     #pos
     cdef cnp.ndarray[cnp.int_t, ndim=1] c_pos = pos
-    
+
     cdef int len_snp_ibd0 = 0
     cdef int len_snp_ibd1 = 0
     cdef int len_snp_ibd2 = 0
@@ -734,58 +708,48 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int [:,:,:,:] parent_offspring_hap_IBDs = np.ones([number_of_threads, max_sibs, 4, number_of_snps], dtype=np.dtype("i"))
     cdef double[:, :] agreement_percentages = np.zeros((number_of_threads, number_of_snps))
     cdef int[:, :] agreement_counts = np.ones([number_of_threads, number_of_snps], dtype=np.dtype("i"))
+    #TODO make window size a parameter
     reset()
-    print("-------------------------------------1")
-    report(2, "aa", 2)
-    printf("aaa\n")
-    # print("AAAA")
-    print("-------------------------------------2")
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
-    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+    for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
             sibs_index[this_thread, i] = c_iid_to_bed_index[fams[index][i]]        
-        # report(2, chromosome_c, number_of_fams)
         if c_phased_gts != None:
             for i in range(1, sib_count[index]):
                 for j in range(i):
                     where = get_hap_index(i, j)
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 0, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
+                    #TODO change window size                    
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 0, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])                    
             
             if single_parent[index]:
-                for i in range(1, sib_count[index]):
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 1, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 2, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 100, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 3, :])
-        # report(3, chromosome_c, number_of_fams)
+                for i in range(0, sib_count[index]):
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 1, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 2, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 3, :])
         snp = 0
         while snp < number_of_snps:
             len_snp_ibd0 = 0
             len_snp_ibd1 = 0
             len_snp_ibd2 = 0
             loc = c_pos[snp]
-            # report(4, chromosome_c, number_of_fams)
             if sib_count[index] > 1:
-            #sibcount should be positive 
                 for i in range(1, sib_count[index]):
                     for j in range(i):
-                        # report(5, chromosome_c, number_of_fams)
                         sib1_index = sibs_index[this_thread, i]
                         sib2_index = sibs_index[this_thread, j]
                         sib1_id = fams[index][i]
                         sib2_id = fams[index][j]
-                        # report(6, chromosome_c, number_of_fams)
                         sib1_gene_isnan = isnan(c_unphased_gts[sib1_index, snp])
                         sib2_gene_isnan = isnan(c_unphased_gts[sib2_index, snp])
                         ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
                         if sib1_gene_isnan  and sib2_gene_isnan:
                             continue
-                        #if one sib is nan, create a ibd2 pair consisting of the other sib
                         elif not sib1_gene_isnan  and sib2_gene_isnan:
                             snp_ibd2[this_thread, len_snp_ibd2,0] = i
                             snp_ibd2[this_thread, len_snp_ibd2,1] = i
@@ -809,20 +773,16 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                 snp_ibd0[this_thread, len_snp_ibd0,0] = i
                                 snp_ibd0[this_thread, len_snp_ibd0,1] = j
                                 len_snp_ibd0 = len_snp_ibd0 + 1
-                        # report(7, chromosome_c, number_of_fams)
             else :
-                # report(8, chromosome_c, number_of_fams)
                 sib1_index = sibs_index[this_thread, 0]
                 if not isnan(c_unphased_gts[sib1_index, snp]):
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1
-            # report(9, chromosome_c, number_of_fams)
             if single_parent[index]:
-                # report(10, chromosome_c, number_of_fams)
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
-                                                                                sibs_index[this_thread, :],                                                                                
+                                                                                sibs_index[this_thread, :],
                                                                                 snp_ibd0[this_thread,:,:],
                                                                                 snp_ibd1[this_thread,:,:],
                                                                                 snp_ibd2[this_thread,:,:],
@@ -830,7 +790,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 c_phased_gts,
                                                                                 c_unphased_gts,
                                                                                 sib_hap_IBDs[this_thread,:,:,:],
-                                                                                parent_offspring_hap_IBDs[this_thread,:,:,:],                                                                                
+                                                                                parent_offspring_hap_IBDs[this_thread,:,:,:],
                                                                                 len_snp_ibd0,
                                                                                 len_snp_ibd1,
                                                                                 len_snp_ibd2
@@ -844,11 +804,10 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          freqs[snp],
                                                                          c_phased_gts,
                                                                          c_unphased_gts,
-                                                                         sib_hap_IBDs[this_thread,:,:],
+                                                                         sib_hap_IBDs[this_thread,:,:,:],
                                                                          len_snp_ibd0,
                                                                          len_snp_ibd1,
                                                                          len_snp_ibd2)
-            # report(12, chromosome_c, number_of_fams)
             snp = snp+1
     destroy()
     if output_address is not None:
