@@ -25,12 +25,12 @@ if len(files) > 1:
   
 N = theta.shape[0]
 
-#N = 100
-#S = np.array([np.array([[5, 0], [0, 5]]),
-#    np.array([[2, 0], [0, 2]])] * 50 )# 50 = N/2
-#V = np.identity(2) * 10.0
+N = 100
+S = np.array([np.array([[5, 0], [0, 5]]),
+      np.array([[2, 0], [0, 2]])] * 50 )# 50 = N/2
+V = np.identity(2) * 10.0
 
-model = ld.sibreg_72(S = S, theta = theta)
+model = ld.sibreg(S = S)
 
 output_matrix, result = model.solve()
 

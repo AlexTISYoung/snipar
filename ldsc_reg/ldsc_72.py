@@ -3,9 +3,9 @@ from helperfuncs import *
 from scipy.optimize import fmin_l_bfgs_b
 from scipy.special import comb
 
-class sibreg_72():
+class sibreg():
     
-    def __init__(self, S, theta = None, u = None, r = None):
+    def __init__(self, S, theta = None, u = None, r = None, f = None):
 
         for s in S:
             n, m = s.shape
@@ -19,11 +19,14 @@ class sibreg_72():
         if r is None:
             print("No value for r given. Generating a vector of ones for r")
             r = np.ones(S.shape[0])
+        if f is None:
+            print("No value given for allele frequencies.")
 
         self.theta = theta
         self.S = S
         self.u = u
         self.r = r
+        self.f = None
         
 
     def simdata(self, V,  N):
@@ -64,7 +67,7 @@ class sibreg_72():
         
         self.theta = thetahat_vec
 
-    def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None):
+    def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None, f = None):
         
         # ============================================ #
         # returns negative log likelihood and negative
@@ -75,6 +78,7 @@ class sibreg_72():
         S = self.S if S is None else S
         u = self.u if u is None else u
         r = self.r if r is None else r
+        f = self.f if f is None else f
 
         # Unflatten V into a matrix
         d = S[0].shape[0]
@@ -84,30 +88,41 @@ class sibreg_72():
         N = len(S)
         log_ll = 0
         
+        # Normalizing variables
+        V_norm = V/N
+        
         for i in range(N):
             
             #print(i)
+            
         
             Si = S[i]
             thetai = theta[i, :]
             ui = u[i]
             ri = r[i]
+            
+            fi = f[i]  if f is not None else None
 
             d, ddash = Si.shape
             assert d == ddash # Each S has to be a square matrix
+            
+            # normalizing variables using allele frequency
+            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0     
+            thetai = np.sqrt(normalizer) * thetai
+            Si = normalizer * Si
       
             # calculate log likelihood
             log_ll_add = -(d/2) * np.log(2 * np.pi)
-            dit_sv = np.linalg.det(Si + ri * V)
+            dit_sv = np.linalg.det(Si + ri * V_norm)
             log_ll_add += -(1/2) * np.log(dit_sv)
-            log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
+            log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V_norm))
             log_ll_add *= 1/ui
             
             if np.isnan(log_ll_add) == False:
                 log_ll += log_ll_add
             
             # calculate gradient
-            SV_inv = np.linalg.inv(Si + ri * V)
+            SV_inv = np.linalg.inv(Si + ri * V_norm)
             G = -(1 / 2) * SV_inv
             G += (1 / 2) * np.dot(SV_inv,np.dot(np.outer(thetai, thetai),SV_inv))
             G *= 1/ui
