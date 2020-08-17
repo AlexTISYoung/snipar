@@ -11,7 +11,6 @@ Functions
 """
 # distutils: language = c++
 #!/well/kong/users/wiw765/anaconda2/bin/python
-cdef char* temp_char = 'aaaa'
 import numpy as np
 import pandas as pd
 import logging
@@ -54,7 +53,7 @@ cdef extern from * nogil:
             text[strlen(text)-1] = 0;
             printf("%s INFO impute with chromosome %s: progress is %d \n", text, chromosomes, (100*cnt)/total);
         }
-        omp_unset_lock(&cnt_lock);        
+        omp_unset_lock(&cnt_lock);
     }
     """
     void reset()
@@ -68,11 +67,36 @@ cdef void get_IBD(int[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement):    
+                  int[:] agreement):
+    """Inferes IBD status between two haplotypes. For the location i, it checks [i-half_window, i+half_window] size, if they are the same on more than threshold portiona of the locations, it's IBD.
+    Agreement, agreement_count, agreement percentage will contain the inffered IBDs, number of similarities in the window and its percentage for all the locations respectively.
+asdasd
+    Args:
+        hap1 : int[:]
+            First haplotype
+
+        hap2 : int[:]
+            Second haplotype
+
+        length : int
+            Length of the haplotypes
+
+        half_window : int
+            For each location i, the IBD inference is restricted to [i-half_window, i+half_window] segment
+
+        threshold : float
+            We have an IBD segment if agreement_percentage is more than threshold
+
+        agreement_count : int[:]
+            For each location i, it's number of the time haplotypes agree with each other in the [i-half_window, i+half_window] window
+
+        agreement_percentage : float[:]
+            For each location i, it's the ratio of agreement between haplotypes in [i-half_window, i+half_window] window
+
+        agreement : int[:]
+            For each location i, it's the IBD status between haplotypes"""
     cdef int i
     cdef int first, last
-
-    #TODO compare window size and length
     agreement_count[0] = 0
     last = min(half_window, length-1)
     for i in range(last+1):
@@ -96,6 +120,14 @@ cdef void get_IBD(int[:] hap1,
 
 
 cdef int get_hap_index(int i, int j) nogil:
+    """Maps an unordered pair of integers to a single integer. Mapping is unique and continous.
+    Args:
+        i : int
+            
+        j : int
+
+    Returns:
+        int"""
     if i > j:
         return i*(i-1)/2+j
     if j > i:
@@ -153,25 +185,37 @@ cdef float impute_snp_from_offsprings(int snp,
                       int len_snp_ibd1,
                       int len_snp_ibd2):
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
+    If phased_gts is not NULL, it tries to do the imputation with that first and if it's not usable, it falls back to unphased data.
 
     Args:
         snp : int
-            The SNP index
+            index of each sibling between offsprings
+        
+        sib_indexes: int[:]
+            Determines the gts index for each sibling from index of each sibling between offsprings
 
-        snp_ibd0 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd0 : int[:,:]
             List of sib pairs that are ibd0 in this SNP. It is assumed that there are len_snp_ibd0 sib pairs is this list.
 
-        snp_ibd1 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd1 : int[:,:]
             List of sib pairs that are ibd1 in this SNP. It is assumed that there are len_snp_ibd1 sib pairs is this list
 
-        snp_ibd2 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd2 : int[:,:]
             List of sib pairs that are ibd2 in this SNP. It is assumed that there are len_snp_ibd2 sib pairs is this list
 
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.double_t, ndim=2]
-            A two-dimensional array containing genotypes for all individuals and SNPs.
+        phased_gts : int[:,:,:]
+            A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
+
+        unphased_gts : int[:,:]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+        
+        sib_hap_IBDs: int[:, :, :]
+            The IBD statuses of haplotypes. For each pair of siblings, first index is obtained by get_hap_index.
+            Second index determines which haplotype pair(0 is 0-0, 1 is 0-1, 2 is 1-0, 3 is 1-1),
+            third index the location of interest on the haplotypes
 
         len_snp_ibd0 : int
             The number of sibling pairs in snp_ibd0.
@@ -187,6 +231,7 @@ cdef float impute_snp_from_offsprings(int snp,
             Imputed parent sum divided by two. NAN if all the children are NAN in this SNP.
 
     """
+
     cdef float result = nan_float
     cdef float additive
     cdef int sibsum = 0
@@ -194,6 +239,7 @@ cdef float impute_snp_from_offsprings(int snp,
 
 
     if phased_gts != None:
+        # The only time that having phased data matters is when we have IBD1
         if len_snp_ibd0==0 and len_snp_ibd1>0:
             result = 0
             counter = 0
@@ -212,7 +258,9 @@ cdef float impute_snp_from_offsprings(int snp,
                 gs11 = phased_gts[sib_index1, snp, 1]
                 gs20 = phased_gts[sib_index2, snp, 0]
                 gs21 = phased_gts[sib_index2, snp, 1]
+                #checks whether inferred haplotype IBDs are consistend with the given IBD status
                 if h00+h01+h10+h11 == 1:
+                    # From the four observed alleles two are shared. So the imputation result is sum of f and the three distinct alleles divided by two.
                     if h00==1:
                         result += (f + gs10 + gs11 + gs21)/2
                     if h01==1:
@@ -225,6 +273,7 @@ cdef float impute_snp_from_offsprings(int snp,
                     
             if counter>0:
                 return result/counter
+
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
@@ -247,7 +296,7 @@ cdef float impute_snp_from_offsprings(int snp,
                 additive = f
             elif sibsum==1:
                 additive = 1+f
-                #figure out whether this is true this should be 1.5+f
+                #TODO figure out whether this is true this should be 1.5+f
             elif sibsum==2:
                 additive = 1+2*f
             elif sibsum==3:
@@ -265,6 +314,7 @@ cdef float impute_snp_from_offsprings(int snp,
             sib2 = sib_indexes[snp_ibd2[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])/2. + 2*f
         result = result/len_snp_ibd2
+
     return result/2
 
 @cython.wraparound(False)
@@ -292,8 +342,13 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     Args:
         snp : int
             The SNP index
+
         parent : int
             The index of parent's row in the bed matrix
+
+        sib_indexes: int[:]
+            Determines the gts index for each sibling from index of each sibling between offsprings
+
         snp_ibd0 : cnp.ndarray[cnp.int_t, ndim=2]
             List of sib pairs that are ibd0 in this SNP. It is assumed that there are len_snp_ibd0 sib pairs is this list.
 
@@ -306,8 +361,21 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        bed : cnp.ndarray[cnp.double_t, ndim=2]
-            A two-dimensional array containing genotypes for all individuals and SNPs.
+        phased_gts : int[:,:,:]
+            A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
+
+        unphased_gts : int[:,:]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+        sib_hap_IBDs: int[:, :, :]
+            The IBD statuses of haplotypes. For each pair of siblings, first index is obtained by get_hap_index.
+            Second index determines which haplotype pair(0 is 0-0, 1 is 0-1, 2 is 1-0, 3 is 1-1),
+            third index the location of interest on the haplotypes
+
+        parent_offspring_hap_IBDs: int[:, :, :]
+            The IBD statuses of haplotypes. For each pair of parent offspring, first index is obtained by sib index between siblings.
+            Second index determines which haplotype pair(0 is 0-0, 1 is 0-1, 2 is 1-0, 3 is 1-1),
+            third index the location of interest on the haplotypes
 
         len_snp_ibd0 : int
             The number of sibling pairs in snp_ibd0.
@@ -334,6 +402,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     cdef int parent_sib2_h00, parent_sib2_h01, parent_sib2_h10, parent_sib2_h11, parent_offspring2_shared_allele_parent, parent_offspring2_shared_allele_offspring
     cdef float gp = unphased_gts[parent, snp]
     if phased_gts != None:
+        #having phased data does not matter with IBD state 0
         if len_snp_ibd0==0 and len_snp_ibd1>0:
             result = 0
             counter = 0
@@ -348,7 +417,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                 sibs_h10 = sib_hap_IBDs[hap_index, 2, snp]
                 sibs_h11 = sib_hap_IBDs[hap_index, 3, snp]
                 sibship_shared_allele_sib1 = sibs_h10 + sibs_h11
-                sibship_shared_allele_sib2 = sibs_h01 + sibs_h11    
+                sibship_shared_allele_sib2 = sibs_h01 + sibs_h11
+                #checks inferred haplotype IBDs are consistent with the given IBD status
                 if sibs_h00 + sibs_h10 + sibs_h01 + sibs_h11 != 1:
                     continue
 
@@ -358,6 +428,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                 parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, 3, snp]
                 parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
                 parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
+                #checks inferred haplotype IBDs are consistent with the natural IBD status
                 if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
                     continue
 
@@ -367,15 +438,20 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                 parent_sib2_h11 = parent_offspring_hap_IBDs[sib2, 3, snp]
                 parent_offspring2_shared_allele_parent = parent_sib2_h10 + parent_sib2_h11
                 parent_offspring2_shared_allele_offspring = parent_sib2_h01 + parent_sib2_h11
+                #checks inferred haplotype IBDs are consistent with the natural IBD status
                 if parent_sib2_h00 + parent_sib2_h10 + parent_sib2_h01 + parent_sib2_h11 != 1:
                     continue
-                
+
                 if parent_offspring1_shared_allele_offspring == sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring == sibship_shared_allele_sib2:
+                    #if the allele shared between offspring is also shared between those and the existing parent
                     result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+phased_gts[sib_index2, snp, 1-parent_offspring2_shared_allele_offspring]
                     counter+=1
+
                 elif parent_offspring1_shared_allele_offspring != sibship_shared_allele_sib1 and parent_offspring2_shared_allele_offspring != sibship_shared_allele_sib2:
+                    #if the allele shared between offspring is not shared between those and the existing parent
                     result += phased_gts[sib_index2, snp, sibship_shared_allele_sib1]+f
                     counter+=1
+
             if counter > 0:
                 return result/counter
 
@@ -393,12 +469,14 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                 parent_sib1_h11 = parent_offspring_hap_IBDs[sib1, 3, snp]
                 parent_offspring1_shared_allele_parent = parent_sib1_h10 + parent_sib1_h11
                 parent_offspring1_shared_allele_offspring = parent_sib1_h01 + parent_sib1_h11
+                #checks inferred haplotype IBDs are consistent with the natural IBD status
                 if parent_sib1_h00 + parent_sib1_h10 + parent_sib1_h01 + parent_sib1_h11 != 1:
                     continue
                 result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+f
                 counter += 1
             if counter > 0:
                 return result/counter
+
     result = nan_float
     counter = 0
     if len_snp_ibd0 > 0:
@@ -576,7 +654,7 @@ cdef int get_IBD_type(cstring id1,
     cdef int result = 0
     cdef int index
     cdef cpair[cstring, cstring] key1
-    cdef cpair[cstring, cstring] key2    
+    cdef cpair[cstring, cstring] key2
     cdef vector[int] segments
     key1.first = id1
     key1.second = id2
@@ -611,15 +689,18 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         iid_to_bed_index : str->int
             A dictionary mapping IIDs of people to their location in the bed file.
 
+        phased_gts : numpy.array
+            Numpy array containing the phased genotype data. Axes are individulas and SNPS respectively.
+
         unphased_gts : numpy.array
-            Numpy array containing the genotype data from the bed file.
+            Numpy array containing the unphased genotype data from a bed file. Axes are individulas, SNPS and haplotype number respectively.
 
         ibd : pandas.Dataframe
             A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
             Each segment consists of a start, an end, and an IBD status. The segment list is flattened meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
 
         pos : numpy.array
-            A numpy array with the position of each SNP in the order of appearance in unphased_gts.
+            A numpy array with the position of each SNP in the order of appearance in phased and unphased gts.
         
         hdf5_output_dict : dict
             Other key values to be added to the HDF5 output
@@ -652,7 +733,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         tuple(list, numpy.array)
             The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
             
-    """    
+    """
     logging.warning("with chromosome " + str(chromosome)+": " + "imputing ...")
     if sibships.empty:
         logging.warning("with chromosome " + str(chromosome)+": " + "Error: No families to be imputed")
@@ -704,6 +785,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     byte_chromosome = chromosome.encode("ASCII")
     cdef char* chromosome_c = byte_chromosome
     cdef int mod = (number_of_fams+1)//100
+    #For hap_ibds, axes denote thread, individual pair, haplotypes and SNPs.
     cdef int [:,:,:,:] sib_hap_IBDs = np.ones([number_of_threads, max_ibd_pairs, 4, number_of_snps], dtype=np.dtype("i"))
     cdef int [:,:,:,:] parent_offspring_hap_IBDs = np.ones([number_of_threads, max_sibs, 4, number_of_snps], dtype=np.dtype("i"))
     cdef double[:, :] agreement_percentages = np.zeros((number_of_threads, number_of_snps))
@@ -717,6 +799,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         for i in range(sib_count[index]):
             sibs_index[this_thread, i] = c_iid_to_bed_index[fams[index][i]]        
         if c_phased_gts != None:
+            # First fills hap_ibds
             for i in range(1, sib_count[index]):
                 for j in range(i):
                     where = get_hap_index(i, j)
@@ -724,7 +807,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 0, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])                    
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
             
             if single_parent[index]:
                 for i in range(0, sib_count[index]):

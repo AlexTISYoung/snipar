@@ -218,8 +218,11 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         pedigree : pd.DataFrame 
             The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
         
-        genotypes_address : str
+        phased_address : str
             Address of the bed file (does not inlude '.bed').
+
+        phased_address : str
+            Address of the phased bgen file (does not inlude '.bgen').
         
         ibd : pd.DataFrame
             A pandas dataframe containing IBD statuses for all SNPs.
@@ -261,7 +264,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
         #TODO remove this
         bim["Chr"] = '21'
-    
+
     chromosomes = bim["Chr"].unique()
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
     logging.info("with chromosomes " + str(chromosomes)+": " + "loading and filtering pedigree file ...")
@@ -310,7 +313,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         gts_f = Bed(unphased_address+".bed",count_A1 = True)
         ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
         gts_ids = gts_f.iid[ids_in_ped]
-        if end is not None:        
+        if end is not None:
             unphased_gts = gts_f[ids_in_ped , start:end].read().val.astype(np.intc)
             pos = gts_f.pos[start:end, 2]
             sid = gts_f.sid[start:end]

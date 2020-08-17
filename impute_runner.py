@@ -16,12 +16,15 @@ Args:
         These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
     IBD : str
-            Address of a file containing IBD statuses for all SNPs.
+        Address of a file containing IBD statuses for all SNPs.
         This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
         Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
-    genotypes_address : str
-        Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
+    --phased_genotypes_address : str
+        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
+
+    --unphased_genotypes_address : str
+        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
@@ -138,9 +141,8 @@ def run_imputation(data):
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
-    bgen = data.get("bgen")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, bgen)
+    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim)
     pos = pos.astype(int)
     start_time = time.time()
     imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
@@ -152,15 +154,15 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
     parser = argparse.ArgumentParser()
     parser.add_argument('-c',
-                        action='store_true')        
+                        action='store_true')
     parser.add_argument('ibd',
                         type=str,
                         help='IBD file')
-                        #control for at least one of these
+                        #ُُTODOcontrol for at least one of these
     parser.add_argument('--phased_genotypes_address',
-                        type=str,help='Address of genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+                        type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--unphased_genotypes_address',
-                        type=str,help='Address of genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+                        type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--from_chr',
                         type=int,
                         default = 1,
