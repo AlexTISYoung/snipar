@@ -209,7 +209,7 @@ def add_control(pedigree):
     return pedigree
 
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, end=None, bim_address = None, bgen=False):
+def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, end=None, bim_address = None, chromosome = None):
     """Processes the required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -257,13 +257,13 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         bim = pd.read_csv(bim_address, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         
     else:
-        #TODO conrtrol = for ADDRESS
         if bim_address is None:
             bim_address = phased_address+'.bgen'
         bgen = read_bgen(bim_address, verbose=False)
         bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
-        #TODO remove this
-        bim["Chr"] = '21'
+        if chromosome is None:
+            raise Exception("chromosome should be specified when using phased data") 
+        bim["Chr"] = chromosome
 
     chromosomes = bim["Chr"].unique()
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
@@ -281,8 +281,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")    
-    #TODO what if people are related but do not have ibd on chrom
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")        
     logging.info("with chromosomes " + str(chromosomes)+": " + "loading and transforming ibd file ...")
     ibd["Chr"] = ibd["Chr"].astype(int)
     ibd = ibd.astype(str)

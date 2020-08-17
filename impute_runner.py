@@ -141,8 +141,9 @@ def run_imputation(data):
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
+    chromosome = data.get("chromosome")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim)
+    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, chromosome = chromosome)
     pos = pos.astype(int)
     start_time = time.time()
     imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
@@ -157,19 +158,16 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument('ibd',
                         type=str,
-                        help='IBD file')
-                        #ُُTODOcontrol for at least one of these
+                        help='IBD file')                        
     parser.add_argument('--phased_genotypes_address',
                         type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--unphased_genotypes_address',
-                        type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+                        type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
     parser.add_argument('--from_chr',
-                        type=int,
-                        default = 1,
+                        type=int,                        
                         help='Which chromosome (<=). Should be used with to_chr parameter.')
     parser.add_argument('--to_chr',
                         type=int,
-                        default = 2,
                         help='Which chromosome (<). Should be used with from_chr parameter.')
     parser.add_argument('--bim',
                         type=str,
@@ -217,6 +215,9 @@ if __name__ == "__main__":
                         help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
 
     args=parser.parse_args()
+    if args.phased_genotypes_address is None and args.unphased_genotypes_address is None:
+        raise Exception("You should supplement the code with at least one genotype address") 
+        
     #fids starting with _ are reserved for control
     #Families should not have grandparents
     if not args.pedigree:
@@ -241,7 +242,12 @@ if __name__ == "__main__":
 
     if (args.unphased_genotypes_address and "~" in args.unphased_genotypes_address) or (args.phased_genotypes_address and "~" in args.phased_genotypes_address) or (args.output_address and "~" in args.output_address):
         if args.to_chr is None or args.from_chr is None:
-            raise Exception("no chromosome range specified for the wildcard ~ in the address") 
+            raise Exception("no chromosome range specified for the wildcard ~ in the address")
+
+    if args.phased_genotypes_address:
+        print("SEEN")
+        if args.to_chr is None or args.from_chr is None:
+            raise Exception("Chromosome range should be specified with unphased genotype")
 
     def none_tansform(a, b, c):
         if a is not None:
@@ -258,6 +264,7 @@ if __name__ == "__main__":
             "threads": args.threads,
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
+            "chromosome":chromosome,
             }
             for chromosome in chromosomes]
             

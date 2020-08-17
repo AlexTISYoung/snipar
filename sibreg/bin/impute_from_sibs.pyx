@@ -570,7 +570,6 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
-        #TODO handle the case of only ibd2s with different genorypes
         result = 0
         counter = 0
         for pair_index in range(len_snp_ibd2):
@@ -649,7 +648,6 @@ cdef int get_IBD_type(cstring id1,
 
     """
 
-    # TODO use get
     #the value for ibd_dict is like this: [start1, end1, ibd_type1, start2, end2, ibd_type2,...]
     cdef int result = 0
     cdef int index
@@ -676,7 +674,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None, output_compression = None, output_compression_opts = None):
+def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999):
     """Does the parent sum imputation for families in sibships and all the SNPs in unphased_gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -723,11 +721,17 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         threads : int, optional
             Specifies the Number of threads to be used. If None there will be only one thread.
 
-        output_compression: str
+        output_compression : str
             Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
 
-        output_compression_opts': int
-            Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information. None means no compression setting.        
+        output_compression_opts : int
+            Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information. None means no compression setting.
+        
+        half_window : int, optional
+            For each location i, the IBD inference for the haplotypes is restricted to [i-half_window, i+half_window].
+
+        ibd_threshold : float, optional
+            Minimum ratio of agreement between haplotypes for declaring IBD.
 
     Returns:
         tuple(list, numpy.array)
@@ -790,7 +794,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int [:,:,:,:] parent_offspring_hap_IBDs = np.ones([number_of_threads, max_sibs, 4, number_of_snps], dtype=np.dtype("i"))
     cdef double[:, :] agreement_percentages = np.zeros((number_of_threads, number_of_snps))
     cdef int[:, :] agreement_counts = np.ones([number_of_threads, number_of_snps], dtype=np.dtype("i"))
-    #TODO make window size a parameter
+    cdef int half_window_c = half_window
+    cdef float ibd_threshold_c = ibd_threshold
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -803,18 +808,17 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             for i in range(1, sib_count[index]):
                 for j in range(i):
                     where = get_hap_index(i, j)
-                    #TODO change window size                    
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 0, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
-                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, 50, 0.999, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 0, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
+                    get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
             
             if single_parent[index]:
                 for i in range(0, sib_count[index]):
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 1, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 2, :])
-                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, 50, 0.98, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 3, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 1, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 2, :])
+                    get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,1], c_phased_gts[sibs_index[this_thread, i],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 3, :])
         snp = 0
         while snp < number_of_snps:
             len_snp_ibd0 = 0
