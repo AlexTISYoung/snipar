@@ -6,10 +6,11 @@ from scipy.special import comb
 class sibreg():
     
     def __init__(self, S, theta = None, u = None, r = None, f = None):
-
-        for s in S:
-            n, m = s.shape
-            assert n == m
+        
+        if S.ndim > 1:
+            for s in S:
+                n, m = s.shape
+                assert n == m
 
         if theta is None:
             print("Warning there is no value for theta. Maybe consider simulating it")
@@ -21,12 +22,19 @@ class sibreg():
             r = np.ones(S.shape[0])
         if f is None:
             print("Warning: No value given for allele frequencies. Some parameters won't be noramlized.")
-
-        self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
-        self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
-        self.u = u[~np.isnan(u)]
-        self.r = r[~np.isnan(r)]
-        self.f = None if f is None else f[~np.isnan(f)]
+        
+        if S.ndim > 1:
+            self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
+            self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
+            self.u = u[~np.isnan(u)]
+            self.r = r[~np.isnan(r)]
+            self.f = None if f is None else f[~np.isnan(f)]
+        else:
+            self.theta = None if theta is None else theta[~np.any(np.isnan(theta))]
+            self.S = S[~np.any(np.isnan(S))]
+            self.u = u[~np.isnan(u)]
+            self.r = r[~np.isnan(r)]
+            self.f = None if f is None else f[~np.isnan(f)]
     
 
     def simdata(self, V,  N):
