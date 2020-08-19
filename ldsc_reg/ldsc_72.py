@@ -22,12 +22,12 @@ class sibreg():
         if f is None:
             print("Warning: No value given for allele frequencies. Some parameters won't be noramlized.")
 
-        self.theta = theta
-        self.S = S
-        self.u = u
-        self.r = r
-        self.f = None
-        
+        self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
+        self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
+        self.u = u[~np.isnan(u)]
+        self.r = r[~np.isnan(r)]
+        self.f = None if f is None else f[~np.isnan(f)]
+    
 
     def simdata(self, V,  N):
         
@@ -168,18 +168,31 @@ class sibreg():
             else:
                 if printout == True:
                     print("Warning: Initial Estimate given is not of the proper dimension")
-                    print("Making a matrix of 0s as the initial estimate")
+                    print("Making 'optimal' matrix")
                     print("=================================================")
-                    
-                est_init = np.zeros((m, m))
+                
+                theta_full = theta
+                S_full = S/n
+                
+                theta_var = np.cov(theta_full.T)
+                S_hat = np.mean(S_full, axis = 0)
+                est_init = n * (theta_var - S_hat)
         else:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making a matrix of 0s as the initial estimate")
+                print("Making 'optimal' matrix")
                 print("=================================================")
             
-            est_init = np.zeros((m, m))
+            theta_full = theta
+            S_full = S/n
             
+            theta_var = np.cov(theta_full.T)
+            S_hat = np.mean(S_full, axis = 0)
+            est_init = n * (theta_var - S_hat)
+            
+        
+        # exporting for potential later reference
+        self.est_init = est_init
         
         # extract array from est init
         est_init_array = extract_upper_triangle(est_init) 
