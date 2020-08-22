@@ -1,6 +1,6 @@
 import numpy as np
 from helperfuncs import *
-from scipy.optimize import fmin_l_bfgs_b
+from scipy.optimize import fmin_l_bfgs_b, minimize
 from scipy.special import comb
 
 class sibreg():
@@ -23,27 +23,25 @@ class sibreg():
         if f is None:
             print("Warning: No value given for allele frequencies. Some parameters won't be noramlized.")
         
-        if S.ndim > 1:
-            self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
-            self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
-            self.u = u[~np.isnan(u)]
-            self.r = r[~np.isnan(r)]
-            self.f = None if f is None else f[~np.isnan(f)]
-        else:
-            self.theta = None if theta is None else theta[~np.any(np.isnan(theta))]
-            self.S = S[~np.any(np.isnan(S))]
-            self.u = u[~np.isnan(u)]
-            self.r = r[~np.isnan(r)]
-            self.f = None if f is None else f[~np.isnan(f)]
+        self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
+        self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
+        self.u = u[~np.isnan(u)]
+        self.r = r[~np.isnan(r)]
+        self.f = None if f is None else f[~np.isnan(f)]
     
 
-    def simdata(self, V,  N):
+    def simdata(self, V,  N, simr = False):
         
         # Simulated data (theta hats) as per section 7.1
         # V = varcov matrix of true effects
         # N = Number of obs/SNPs to generate
         
         S = self.S
+        
+        if simr:
+            self.r = np.random.uniform(low=1, high=5, size=N)
+            print("Simulated LD scores!")
+        
         r = self.r
 
         thetahat_vec = []
@@ -62,12 +60,13 @@ class sibreg():
             zeromat = np.zeros(d)
 
             # generate true effect vector
-            theta = np.random.multivariate_normal(zeromat, ri * V)
+            # theta = np.random.multivariate_normal(zeromat, ri * V)
 
-            sim = np.random.multivariate_normal(theta, Si)
+            sim = np.random.multivariate_normal(zeromat, Si + ri * V)
             
             # Append to vector of effects
             thetahat_vec.append(sim)
+        
         
         thetahat_vec = np.array(thetahat_vec)
 
@@ -99,7 +98,6 @@ class sibreg():
         # Normalizing variables
         # V = V * N
         V_norm = V/N
-        
         for i in range(N):
             
             #print(i)
@@ -110,13 +108,14 @@ class sibreg():
             ui = u[i]
             ri = r[i]
             
+            
             fi = f[i]  if f is not None else None
 
             d, ddash = Si.shape
             assert d == ddash # Each S has to be a square matrix
             
             # normalizing variables using allele frequency
-            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0     
+            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
             thetai = np.sqrt(normalizer) * thetai
             Si = normalizer * Si
       
@@ -140,6 +139,7 @@ class sibreg():
                 Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
+        print("V_norm: ", V_norm)
         print("Log Likelihood: ", log_ll)
         print("Gradient: ", Gvec)
         return -log_ll, -Gvec
@@ -202,26 +202,25 @@ class sibreg():
         # exporting for potential later reference
         self.est_init = est_init
         
+        print("Initial Guess: ", est_init)
         # extract array from est init
         est_init_array = extract_upper_triangle(est_init) 
         
         bounds = extract_bounds(m)
 
-        result = fmin_l_bfgs_b(
+        result = minimize(
             neg_logll_grad, 
             est_init_array,
-            fprime = None,
+            jac = True,
             args = (theta, S, u, r, f),
-            bounds = bounds
+            bounds = bounds,
+            method = 'L-BFGS-B'
         )
         
-        output_matrix = return_to_symmetric(result[0], m)
+        output_matrix = return_to_symmetric(result.x, m)
         
-        if printout == True:
-            print("Final Estimate:\n", output_matrix)
-            print("Convergence Flag: ", result[2]['task'])
-            print("Number of Iterations: ", result[2]['nit'])
-            print("Final Gradient: ", result[2]['grad'])
+        # re-normnalizing output matrix
+        output_matrix = output_matrix / n
         
         return output_matrix, result 
 
