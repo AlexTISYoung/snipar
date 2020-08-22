@@ -5,21 +5,21 @@ Options in effect:
   --out test_data/sample1
   --remove outputs/tmp/t__t_remove.txt
 
-Hostname: genetics3
-Working directory: /disk/genetics4/ukb/moeen/sibreg
-Start time: Fri Jun  5 19:24:14 2020
+Hostname: g01
+Working directory: /disk/homedirs/nber/harij/snipar/SNIPar
+Start time: Thu Jul 23 06:47:03 2020
 
-Random number seed: 1591399454
-1031774 MB RAM detected; reserving 515887 MB for main workspace.
+Random number seed: 1595501223
+257670 MB RAM detected; reserving 128835 MB for main workspace.
 1000 variants loaded from .bim file.
 12000 people (12000 males, 0 females) loaded from .fam.
---remove: 8005 people remaining.
+--remove: 7999 people remaining.
 Using 1 thread (no multithreaded calculations invoked).
-Before main variant filters, 0 founders and 8005 nonfounders present.
+Before main variant filters, 0 founders and 7999 nonfounders present.
 Calculating allele frequencies... done.
-1000 variants and 8005 people pass filters and QC.
+1000 variants and 7999 people pass filters and QC.
 Note: No phenotypes present.
 --make-bed to test_data/sample1.bed + test_data/sample1.bim +
 test_data/sample1.fam ... done.
 
-End time: Fri Jun  5 19:24:14 2020
+End time: Thu Jul 23 06:47:03 2020

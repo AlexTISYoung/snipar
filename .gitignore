@@ -13,3 +13,4 @@ screenlog*
 sibreg.egg-info/*
 **/.nfs*
 env/*
+ldsc_reg/sib_gwas.pdf

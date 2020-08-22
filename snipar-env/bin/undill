@@ -1,0 +1,4 @@
+#!/disk/homedirs/nber/harij/snipar/SNIPar/snipar-env/bin/python
+# EASY-INSTALL-SCRIPT: 'dill==0.3.2','undill'
+__requires__ = 'dill==0.3.2'
+__import__('pkg_resources').run_script('dill==0.3.2', 'undill')
