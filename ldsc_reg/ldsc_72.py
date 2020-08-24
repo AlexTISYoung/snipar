@@ -139,9 +139,6 @@ class sibreg():
                 Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
-        print("V_norm: ", V_norm)
-        print("Log Likelihood: ", log_ll)
-        print("Gradient: ", Gvec)
         return -log_ll, -Gvec
 
 
@@ -201,8 +198,7 @@ class sibreg():
         
         # exporting for potential later reference
         self.est_init = est_init
-        
-        print("Initial Guess: ", est_init)
+
         # extract array from est init
         est_init_array = extract_upper_triangle(est_init) 
         
@@ -222,6 +218,8 @@ class sibreg():
         # re-normnalizing output matrix
         output_matrix = output_matrix / n
         
+        self.output_matrix = output_matrix
+        
         return output_matrix, result 
 
     def jackknife_se(self,
@@ -230,7 +228,7 @@ class sibreg():
                   blocksize = 1):
 
         # Simple jackknife estimator for SE
-        # Source: https://www.stat.berkeley.edu/~hhuang/STAT152/Jackknife-Bootstrap.pdf
+        # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
         # Default value of blocksize = 1 is the normal jackknife
 
         theta = self.theta if (theta is None) else theta
@@ -270,25 +268,29 @@ class sibreg():
 
                 estimates_jk.append(output_matrix)
 
-                start_idx += 1
+                start_idx += blocksize
             else:
                 break
             
         estimates_jk = np.array(estimates_jk)
+        full_est = self.output_matrix
         
-        # calculate the SE
-        estimate_jk_mean = estimates_jk.mean(axis = 0)
-        estimate_jk_mean = np.array([estimate_jk_mean] * estimates_jk.shape[0])
-        estimates_jk_dev = estimates_jk - estimate_jk_mean
-        estimates_jk_devsq = estimates_jk_dev ** 2
-        estimates_jk_devsq_sum = estimates_jk_devsq.sum(axis = 0)
+        # calculate pseudo-values
+        n_blocks = nobs/blocksize
+        pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
         
-        se_correction = (nobs - blocksize)/(blocksize *comb(nobs, blocksize))
-
-        se = se_correction * estimates_jk_devsq_sum
-        se = np.sqrt(se)
+        # calculate jackknife se
+        pseudovalues = pseudovalues.reshape((nobs, theta.shape[1] * theta.shape[1]))
+        jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
+        jknife_var = np.diag(jknife_cov)
+        jknife_se = np.sqrt(jknife_var)
         
-        return se  
+        
+        # jknife_se = return_to_symmetric(jknife_se, theta.shape[1] * theta.shape[1])
+    
+        jknife_se  = jkse.reshape((theta.shape[1], theta.shape[1]))
+        
+        return jknife_se  
 
 
 
