@@ -21,7 +21,7 @@ model.simdata(V, N, simr = True)
 
 #snp = np.arange(1, len(theta_dir) + 1, 1)
 se = np.sqrt(S[:, 0, 0])/N
-zval = theta[:, 0]/se
+zval = model.theta[:, 0]/se
 pval = 2*norm.sf(np.abs(zval))
 pval[np.where(pval < 1e-32)] = 1e-32
 
