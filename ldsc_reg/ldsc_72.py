@@ -284,11 +284,8 @@ class sibreg():
         jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
         jknife_var = np.diag(jknife_cov)
         jknife_se = np.sqrt(jknife_var)
-        
-        
-        # jknife_se = return_to_symmetric(jknife_se, theta.shape[1] * theta.shape[1])
     
-        jknife_se  = jkse.reshape((theta.shape[1], theta.shape[1]))
+        jknife_se  = jknife_se.reshape((theta.shape[1], theta.shape[1]))
         
         return jknife_se  
 
