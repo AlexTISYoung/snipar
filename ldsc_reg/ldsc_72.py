@@ -44,7 +44,7 @@ class sibreg():
         
         r = self.r
 
-        thetahat_vec = []
+        thetahat_vec = np.empty((N, V.shape[1]))
         
         # make sure they are np arrays
         for i in range(N):
@@ -65,13 +65,13 @@ class sibreg():
             sim = np.random.multivariate_normal(zeromat, Si + ri * V)
             
             # Append to vector of effects
-            thetahat_vec.append(sim)
+            thetahat_vec[i, :] = sim
         
-        
-        thetahat_vec = np.array(thetahat_vec)
 
         print("Effect Vectors Simulated!")
         
+        self.snp = np.arange(1, N+1, 1)
+        self.pos = np.arange(1, N+1, 1)
         self.theta = thetahat_vec
 
     def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None, f = None):
@@ -100,9 +100,6 @@ class sibreg():
         V_norm = V/N
         for i in range(N):
             
-            #print(i)
-            
-        
             Si = S[i]
             thetai = theta[i, :]
             ui = u[i]
@@ -122,6 +119,7 @@ class sibreg():
             # calculate log likelihood
             log_ll_add = -(d/2) * np.log(2 * np.pi)
             dit_sv = np.linalg.det(Si + ri * V_norm)
+            dit_sv = 1e-6 if dit_sv < 0 else dit_sv
             log_ll_add += -(1/2) * np.log(dit_sv)
             log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V_norm))
             log_ll_add *= 1/ui
@@ -236,6 +234,7 @@ class sibreg():
         r = self.r if (r is None) else r
         u = self.u if (u is None) else u
 
+        
         assert theta.shape[0] == S.shape[0]
 
         nobs = theta.shape[0]
@@ -264,7 +263,8 @@ class sibreg():
                                               S = vars_jk[1],
                                               r = vars_jk[2],
                                               u = vars_jk[3],
-                                              printout = False)
+                                              printout = False,
+                                              est_init = self.est_init)
 
                 estimates_jk.append(output_matrix)
 
