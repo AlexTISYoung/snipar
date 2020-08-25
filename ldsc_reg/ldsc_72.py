@@ -60,9 +60,14 @@ class sibreg():
             zeromat = np.zeros(d)
 
             # generate true effect vector
-            # theta = np.random.multivariate_normal(zeromat, ri * V)
-
-            sim = np.random.multivariate_normal(zeromat, Si + ri * V)
+            if d > 1:
+                sim = np.random.multivariate_normal(zeromat, Si + ri * V/N)
+                if i > (2/3)*N:
+                    sim = np.random.multivariate_normal(zeromat, Si + ri * V)
+            else:
+                sim = np.random.normal(zeromat, Si + ri * V/N)
+                if i > (2/3)*N:
+                    sim = np.random.normal(zeromat, Si + ri * V)
             
             # Append to vector of effects
             thetahat_vec[i, :] = sim

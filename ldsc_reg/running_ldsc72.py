@@ -1,4 +1,9 @@
-
+'''
+This script reads in the simulated data made by
+Alex and solves for V. Currently it is unable to
+both with just the causal SNPs and the entire
+set of SNPs.
+'''
 import ldsc_72 as ld
 import ldsc_71 as ld1
 import numpy as np
@@ -7,8 +12,8 @@ import glob
 import time
 startTime = time.time()
 
-# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
-files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
+files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -23,7 +28,7 @@ if len(files) > 1:
   for file in files[1:]:
     print("Reading file: ", file)
     hf = h5py.File(file, 'r')
-    theta_file  = hf.get('estimate')[()]
+    theta_file  = hf.get('estimate')[()] 
     S_file = hf.get('estimate_covariance')[()]
     f_file = hf.get('freqs')[()]
     
@@ -37,10 +42,19 @@ print("S matrix:", S)
 print("Theta Matrix: ", theta)
 print("Initiating Model...")
 
-# N = 100
-# S = np.array([np.array([[5, 0], [0, 5]]),
-#       np.array([[2, 0], [0, 2]])] * 50 )# 50 = N/2
-# V = np.identity(2) * 10.0
+# Keeping only direct effects
+# S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
+# theta = theta[:, 0].reshape((theta.shape[0], 1))
+
+# amplifying direct effects
+Sdir = np.empty(len(S))
+for i in range(len(S)):
+  Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
+
+S = Sdir.reshape((len(S), 1, 1))
+theta = theta @ np.array([1.0, 0.5, 0.5])
+theta = theta.reshape((theta.shape[0], 1))
+
 
 model = ld.sibreg(S = S, theta = theta, f = f)
 

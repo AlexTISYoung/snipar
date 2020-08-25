@@ -1,3 +1,11 @@
+'''
+Reads in Alex's simulations and generates
+output which can be read by the ldsc package.
+
+Doesn't output the LD scores. LD scores
+are meant to be read from the baseline European
+sample provided by LDSC or something similar
+'''
 import numpy as np
 import pandas as pd
 import h5py

@@ -1,4 +1,8 @@
+'''
+Runs a simple simulation from within ldsc_72
+and solves it.
 
+'''
 import ldsc_72 as ld
 import ldsc_71 as ld1
 import numpy as np
