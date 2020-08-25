@@ -12,8 +12,9 @@ import glob
 import time
 startTime = time.time()
 
-files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 # files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
+files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -46,21 +47,21 @@ print("Initiating Model...")
 # S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
 # theta = theta[:, 0].reshape((theta.shape[0], 1))
 
-# amplifying direct effects
-Sdir = np.empty(len(S))
-for i in range(len(S)):
-  Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
+# # amplifying direct effects
+# Sdir = np.empty(len(S))
+# for i in range(len(S)):
+#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
 
-S = Sdir.reshape((len(S), 1, 1))
-theta = theta @ np.array([1.0, 0.5, 0.5])
-theta = theta.reshape((theta.shape[0], 1))
+# S = Sdir.reshape((len(S), 1, 1))
+# theta = theta @ np.array([1.0, 0.5, 0.5])
+# theta = theta.reshape((theta.shape[0], 1))
 
 
 model = ld.sibreg(S = S, theta = theta, f = f)
 
 print("Solving Model...")
 
-output_matrix, result = model.solve()
+output_matrix, result = model.solve(est_init = np.identity(3) * -1)
 
 print("Output matrix: ",output_matrix)
 print("Solver Output: ", result)
