@@ -212,7 +212,7 @@ class sibreg():
             est_init_array,
             jac = True,
             args = (theta, S, u, r, f),
-            bounds = bounds,
+#             bounds = bounds,
             method = 'L-BFGS-B'
         )
         
@@ -285,7 +285,7 @@ class sibreg():
         pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
         
         # calculate jackknife se
-        pseudovalues = pseudovalues.reshape((nobs, theta.shape[1] * theta.shape[1]))
+        pseudovalues = pseudovalues.reshape((n_blocks, theta.shape[1] * theta.shape[1]))
         jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
         jknife_var = np.diag(jknife_cov)
         jknife_se = np.sqrt(jknife_var)
