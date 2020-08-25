@@ -61,11 +61,11 @@ class sibreg():
 
             # generate true effect vector
             if d > 1:
-                sim = np.random.multivariate_normal(zeromat, Si + ri * V/N)
+                sim = np.random.multivariate_normal(zeromat, Si + ri * V)
                 if i > (2/3)*N:
                     sim = np.random.multivariate_normal(zeromat, Si + ri * V)
             else:
-                sim = np.random.normal(zeromat, Si + ri * V/N)
+                sim = np.random.normal(zeromat, Si + ri * V)
                 if i > (2/3)*N:
                     sim = np.random.normal(zeromat, Si + ri * V)
             

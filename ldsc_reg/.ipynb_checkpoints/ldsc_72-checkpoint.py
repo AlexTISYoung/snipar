@@ -1,15 +1,16 @@
 import numpy as np
 from helperfuncs import *
-from scipy.optimize import fmin_l_bfgs_b
+from scipy.optimize import fmin_l_bfgs_b, minimize
 from scipy.special import comb
 
-class sibreg_72():
+class sibreg():
     
-    def __init__(self, S, theta = None, u = None, r = None):
-
-        for s in S:
-            n, m = s.shape
-            assert n == m
+    def __init__(self, S, theta = None, u = None, r = None, f = None):
+        
+        if S.ndim > 1:
+            for s in S:
+                n, m = s.shape
+                assert n == m
 
         if theta is None:
             print("Warning there is no value for theta. Maybe consider simulating it")
@@ -19,24 +20,31 @@ class sibreg_72():
         if r is None:
             print("No value for r given. Generating a vector of ones for r")
             r = np.ones(S.shape[0])
-
-        self.theta = theta
-        self.S = S
-        self.u = u
-        self.r = r
+        if f is None:
+            print("Warning: No value given for allele frequencies. Some parameters won't be noramlized.")
         
+        self.theta = None if theta is None else theta[~np.any(np.isnan(theta), axis = 1)]
+        self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
+        self.u = u[~np.isnan(u)]
+        self.r = r[~np.isnan(r)]
+        self.f = None if f is None else f[~np.isnan(f)]
+    
 
-    def simdata(self, V, r, N):
+    def simdata(self, V,  N, simr = False):
         
         # Simulated data (theta hats) as per section 7.1
         # V = varcov matrix of true effects
         # N = Number of obs/SNPs to generate
         
         S = self.S
-        theta = self.theta
+        
+        if simr:
+            self.r = np.random.uniform(low=1, high=5, size=N)
+            print("Simulated LD scores!")
+        
         r = self.r
 
-        thetahat_vec = []
+        thetahat_vec = np.empty((N, V.shape[1]))
         
         # make sure they are np arrays
         for i in range(N):
@@ -52,20 +60,26 @@ class sibreg_72():
             zeromat = np.zeros(d)
 
             # generate true effect vector
-            theta = np.random.multivariate_normal(zeromat, ri * V)
-
-            sim = np.random.multivariate_normal(theta, Si)
+            if d > 1:
+                sim = np.random.multivariate_normal(zeromat, Si + ri * V)
+                if i > (2/3)*N:
+                    sim = np.random.multivariate_normal(zeromat, Si + ri * V)
+            else:
+                sim = np.random.normal(zeromat, Si + ri * V)
+                if i > (2/3)*N:
+                    sim = np.random.normal(zeromat, Si + ri * V)
             
             # Append to vector of effects
-            thetahat_vec.append(sim)
+            thetahat_vec[i, :] = sim
         
-        thetahat_vec = np.array(thetahat_vec)
 
         print("Effect Vectors Simulated!")
         
+        self.snp = np.arange(1, N+1, 1)
+        self.pos = np.arange(1, N+1, 1)
         self.theta = thetahat_vec
 
-    def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None):
+    def neg_logll_grad(self, V, theta = None, S = None, u = None, r = None, f = None):
         
         # ============================================ #
         # returns negative log likelihood and negative
@@ -76,6 +90,7 @@ class sibreg_72():
         S = self.S if S is None else S
         u = self.u if u is None else u
         r = self.r if r is None else r
+        f = self.f if f is None else f
 
         # Unflatten V into a matrix
         d = S[0].shape[0]
@@ -85,36 +100,48 @@ class sibreg_72():
         N = len(S)
         log_ll = 0
         
+        # Normalizing variables
+        # V = V * N
+        V_norm = V/N
         for i in range(N):
             
-        
             Si = S[i]
             thetai = theta[i, :]
             ui = u[i]
             ri = r[i]
+            
+            
+            fi = f[i]  if f is not None else None
 
             d, ddash = Si.shape
             assert d == ddash # Each S has to be a square matrix
+            
+            # normalizing variables using allele frequency
+            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
+            thetai = np.sqrt(normalizer) * thetai
+            Si = normalizer * Si
       
             # calculate log likelihood
-            log_ll += -(d/2) * np.log(2 * np.pi)
-            dit_sv = np.linalg.det(Si + ri * V)
-            dit_sv[dit_sv == 0] = 1e-6
-            log_ll += -(1/2) * np.log(dit_sv)
-            log_ll += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V))
-            log_ll *= 1/ui
+            log_ll_add = -(d/2) * np.log(2 * np.pi)
+            dit_sv = np.linalg.det(Si + ri * V_norm)
+            dit_sv = 1e-6 if dit_sv < 0 else dit_sv
+            log_ll_add += -(1/2) * np.log(dit_sv)
+            log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V_norm))
+            log_ll_add *= 1/ui
             
+            if np.isnan(log_ll_add) == False:
+                log_ll += log_ll_add
             
             # calculate gradient
-            SV_inv = np.linalg.inv(Si + ri * V)
+            SV_inv = np.linalg.inv(Si + ri * V_norm)
             G = -(1 / 2) * SV_inv
             G += (1 / 2) * np.dot(SV_inv,np.dot(np.outer(thetai, thetai),SV_inv))
             G *= 1/ui
             
-            Gvec += G
+            if np.any(np.isnan(G)) == False:
+                Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
-        
         return -log_ll, -Gvec
 
 
@@ -123,6 +150,7 @@ class sibreg_72():
               S = None,
               u = None,
               r = None,
+              f = None,
               neg_logll_grad = None,
               est_init = None,
               printout = True):
@@ -132,6 +160,7 @@ class sibreg_72():
         S = self.S if S is None else S
         u = self.u if u is None else u
         r = self.r if r is None else r
+        f = self.f if f is None else f
         neg_logll_grad = self.neg_logll_grad if neg_logll_grad is None else neg_logll_grad
 
         # == Solves our MLE problem == #
@@ -147,39 +176,52 @@ class sibreg_72():
             else:
                 if printout == True:
                     print("Warning: Initial Estimate given is not of the proper dimension")
-                    print("Making a matrix of 0s as the initial estimate")
+                    print("Making 'optimal' matrix")
                     print("=================================================")
-                    
-                est_init = np.zeros((m, m))
+                
+                theta_full = theta
+                S_full = S/n
+                
+                theta_var = np.cov(theta_full.T)
+                S_hat = np.mean(S_full, axis = 0)
+                est_init = n * (theta_var - S_hat)
         else:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making a matrix of 0s as the initial estimate")
+                print("Making 'optimal' matrix")
                 print("=================================================")
             
-            est_init = np.zeros((m, m))
+            theta_full = theta
+            S_full = S/n
+            
+            theta_var = np.cov(theta_full.T)
+            S_hat = np.mean(S_full, axis = 0)
+            est_init = n * (theta_var - S_hat)
             
         
+        # exporting for potential later reference
+        self.est_init = est_init
+
         # extract array from est init
         est_init_array = extract_upper_triangle(est_init) 
         
         bounds = extract_bounds(m)
 
-        result = fmin_l_bfgs_b(
+        result = minimize(
             neg_logll_grad, 
             est_init_array,
-            fprime = None,
-            args = (theta, S, u, r),
-            bounds = bounds
+            jac = True,
+            args = (theta, S, u, r, f),
+            bounds = bounds,
+            method = 'L-BFGS-B'
         )
         
-        output_matrix = return_to_symmetric(result[0], m)
+        output_matrix = return_to_symmetric(result.x, m)
         
-        if printout == True:
-            print("Final Estimate:\n", output_matrix)
-            print("Convergence Flag: ", result[2]['task'])
-            print("Number of Iterations: ", result[2]['nit'])
-            print("Final Gradient: ", result[2]['grad'])
+        # re-normnalizing output matrix
+        output_matrix = output_matrix / n
+        
+        self.output_matrix = output_matrix
         
         return output_matrix, result 
 
@@ -189,7 +231,7 @@ class sibreg_72():
                   blocksize = 1):
 
         # Simple jackknife estimator for SE
-        # Source: https://www.stat.berkeley.edu/~hhuang/STAT152/Jackknife-Bootstrap.pdf
+        # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
         # Default value of blocksize = 1 is the normal jackknife
 
         theta = self.theta if (theta is None) else theta
@@ -197,6 +239,7 @@ class sibreg_72():
         r = self.r if (r is None) else r
         u = self.u if (u is None) else u
 
+        
         assert theta.shape[0] == S.shape[0]
 
         nobs = theta.shape[0]
@@ -225,29 +268,31 @@ class sibreg_72():
                                               S = vars_jk[1],
                                               r = vars_jk[2],
                                               u = vars_jk[3],
-                                              printout = False)
+                                              printout = False,
+                                              est_init = self.est_init)
 
                 estimates_jk.append(output_matrix)
 
-                start_idx += 1
+                start_idx += blocksize
             else:
                 break
             
         estimates_jk = np.array(estimates_jk)
+        full_est = self.output_matrix
         
-        # calculate the SE
-        estimate_jk_mean = estimates_jk.mean(axis = 0)
-        estimate_jk_mean = np.array([estimate_jk_mean] * estimates_jk.shape[0])
-        estimates_jk_dev = estimates_jk - estimate_jk_mean
-        estimates_jk_devsq = estimates_jk_dev ** 2
-        estimates_jk_devsq_sum = estimates_jk_devsq.sum(axis = 0)
+        # calculate pseudo-values
+        n_blocks = nobs/blocksize
+        pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
         
-        se_correction = (nobs - blocksize)/(blocksize *comb(nobs, blocksize))
-
-        se = se_correction * estimates_jk_devsq_sum
-        se = np.sqrt(se)
+        # calculate jackknife se
+        pseudovalues = pseudovalues.reshape((nobs, theta.shape[1] * theta.shape[1]))
+        jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
+        jknife_var = np.diag(jknife_cov)
+        jknife_se = np.sqrt(jknife_var)
+    
+        jknife_se  = jknife_se.reshape((theta.shape[1], theta.shape[1]))
         
-        return se  
+        return jknife_se  
 
 
 
