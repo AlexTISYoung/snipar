@@ -15,5 +15,7 @@ sibreg.egg-info/*
 env/*
 ldsc_reg/sib_gwas.pdf
 ldsc_reg/simulated_data_dir.sumstats.gz
+ldsc_reg/simulated_data_par.sumstats.gz
 ldsc_reg/simulated_data_par.csv
+ldsc_reg/simulated_data_dir.csv
 ldsc_reg/ldscores
