@@ -61,7 +61,7 @@ model = ld.sibreg(S = S, theta = theta, f = f)
 
 print("Solving Model...")
 
-output_matrix, result = model.solve(est_init = np.identity(3) * -1)
+output_matrix, result = model.solve(est_init = np.identity(3))
 
 print("Output matrix: ",output_matrix)
 print("Solver Output: ", result)
