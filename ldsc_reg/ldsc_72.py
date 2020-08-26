@@ -281,7 +281,7 @@ class sibreg():
         full_est = self.output_matrix
         
         # calculate pseudo-values
-        n_blocks = nobs/blocksize
+        n_blocks = int(nobs/blocksize)
         pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
         
         # calculate jackknife se
