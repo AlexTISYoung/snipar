@@ -128,7 +128,7 @@ class sibreg():
             log_ll_add += -(1/2) * np.log(dit_sv)
             log_ll_add += -(1/2) * np.trace(np.outer(thetai, thetai) @ np.linalg.inv(Si + ri * V_norm))
             log_ll_add *= 1/ui
-            
+
             if np.isnan(log_ll_add) == False:
                 log_ll += log_ll_add
             
@@ -142,6 +142,8 @@ class sibreg():
                 Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
+
+        print(log_ll, ",",  V[0, 0], ",",  G[0, 0])
         return -log_ll, -Gvec
 
 
