@@ -61,7 +61,9 @@ model = ld.sibreg(S = S, theta = theta, f = f)
 
 print("Solving Model...")
 
+
 output_matrix, result = model.solve(est_init = np.atleast_2d(0.0))
+
 
 print("Output matrix: ",output_matrix)
 print("Solver Output: ", result)

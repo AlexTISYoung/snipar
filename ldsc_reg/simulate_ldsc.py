@@ -14,16 +14,11 @@ startTime = time.time()
 np.random.seed(123)
 
 N = 100
+S_size=  int(N/2)
+S = np.array([np.array([[.5, 0], [0, .8]]),
+    np.array([[0.5, 0], [0, 0.8]])] * S_size )
+V = np.identity(2) * 0.5
 
-# 2 dimensional
-# S_size = int(N/2)
-# S = np.array([np.array([[.5, 0], [0, .8]]),
-#     np.array([[0.5, 0], [0, 0.8]])] * S_size )
-# V = np.identity(2) * 0.5
-
-# 1 dimensional
-S = np.array([0.5] * N).reshape((N, 1, 1))
-V = np.atleast_2d(0.8)
 
 model = ld.sibreg(S = S)
 model.simdata(V, N, simr = True)
@@ -32,9 +27,12 @@ print("Solving Model...")
 
 output_matrix, result = model.solve(est_init = np.zeros((2, 2)))
 
+jkse = model.jackknife_se()
+
 print("==============================================")
 print("Output matrix: ",output_matrix)
 print("Solver Output: ", result)
+print("JK SE: ", jkse)
 print("==============================================")
 
 executionTime = (time.time() - startTime)
