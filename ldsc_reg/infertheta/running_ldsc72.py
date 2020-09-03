@@ -5,7 +5,6 @@ both with just the causal SNPs and the entire
 set of SNPs.
 '''
 import ldsc_72 as ld
-import ldsc_71 as ld1
 import numpy as np
 import h5py
 import glob
@@ -44,17 +43,17 @@ print("Theta Matrix: ", theta)
 print("Initiating Model...")
 
 # Keeping only direct effects
-S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
-theta = theta[:, 0].reshape((theta.shape[0], 1))
+#S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
+#theta = theta[:, 0].reshape((theta.shape[0], 1))
 
 # # amplifying direct effects
-# Sdir = np.empty(len(S))
-# for i in range(len(S)):
-#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
+Sdir = np.empty(len(S))
+for i in range(len(S)):
+  Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
 
-# S = Sdir.reshape((len(S), 1, 1))
-# theta = theta @ np.array([1.0, 0.5, 0.5])
-# theta = theta.reshape((theta.shape[0], 1))
+S = Sdir.reshape((len(S), 1, 1))
+theta = theta @ np.array([1.0, 0.5, 0.5])
+theta = theta.reshape((theta.shape[0], 1))
 
 
 model = ld.sibreg(S = S, theta = theta, f = f)
