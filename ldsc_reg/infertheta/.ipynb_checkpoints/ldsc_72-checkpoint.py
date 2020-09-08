@@ -139,7 +139,7 @@ class sibreg():
                 Gvec += G
 
         Gvec = extract_upper_triangle(Gvec)
-        return -log_ll #, -Gvec
+        return -log_ll , -Gvec
 
 
     def solve(self,
@@ -207,7 +207,7 @@ class sibreg():
         result = minimize(
             neg_logll_grad, 
             est_init_array,
-#             jac = True,
+            jac = True,
             args = (theta, S, u, r, f),
             bounds = bounds,
             method = 'L-BFGS-B'
