@@ -5,15 +5,16 @@ both with just the causal SNPs and the entire
 set of SNPs.
 '''
 import sib_ldsc_z as ld
+import helperfuncs as hp
 import numpy as np
 import h5py
 import glob
 import time
 startTime = time.time()
 
-files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 # files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
-#files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -55,8 +56,14 @@ S = Sdir.reshape((len(S), 1, 1))
 theta = theta @ np.array([1.0, 0.5, 0.5])
 theta = theta.reshape((theta.shape[0], 1))
 
+z = np.empty_like(theta)
+z[:] = np.nan
+for i in range(z.shape[0]):
+    z[i, :] = hp.calc_inv_root(S[i]) @ theta[i, :].T
+    
+print("Z: ", z)
 
-model = ld.sibreg(S = S, theta = theta, f = f)
+model = ld.sibreg(S = S, z = z, f = f)
 
 print("Solving Model...")
 

@@ -70,3 +70,18 @@ def delete_obs_jk(var, start_idx, end_idx, end_cond):
         var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
         
     return var_jk
+    
+def calc_inv_root(S):
+    '''
+    A stable solver for S^{-1/2}
+    '''
+    
+    if ~np.any(np.isnan(S)):
+        S_eig = np.linalg.eig(S)
+        l = np.zeros(S.shape)
+        np.fill_diagonal(l,np.power(S_eig[0],-0.5))
+        S_inv_root = S_eig[1].dot(np.dot(l,S_eig[1].T))
+    else:
+        S_inv_root =  np.empty_like(S)
+        S_inv_root[:] = np.nan
+    return S_inv_root

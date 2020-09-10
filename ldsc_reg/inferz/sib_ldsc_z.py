@@ -68,7 +68,7 @@ class sibreg():
             
             V = np.array(V)
             Si = np.array(Si)
-            S_inv = np.linalg.inv(np.sqrt(Si))
+            S_inv = hp.calc_inv_root(Si)
   
             # get shape of V
             d = V.shape[0]
@@ -110,7 +110,7 @@ class sibreg():
         logll = 1 dimensional matrix 
         """
         
-        S_inv_root = np.linalg.inv(np.sqrt(S))
+        S_inv_root = hp.calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         logdet = np.linalg.slogdet(Sigma)
         Sigma_inv = np.linalg.inv(Sigma)
@@ -137,7 +137,7 @@ class sibreg():
         grad_ll_v = dxd matrix 
         """
         
-        S_inv_root = np.linalg.inv(np.sqrt(S))
+        S_inv_root = hp.calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         Sigma_inv = np.linalg.inv(Sigma)
         z = z.reshape(z.shape[0],1)
