@@ -1,7 +1,7 @@
 #!/well/kong/users/wiw765/anaconda3/bin/python
 from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse, code
+import h5py, argparse
 import pandas as pd
 
 ######### Command line arguments #########
@@ -50,6 +50,7 @@ if __name__ == '__main__':
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
+        G = get_gts_matrix(pargts_list[0],gts_list[0],p.snp_ids,sib = args.fit_sib)
         pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
@@ -67,7 +68,6 @@ if __name__ == '__main__':
         pgs_out['ids'] = encode_str_array(pg.ids)
         pgs_out['cols'] = encode_str_array(pg.sid)
         pgs_out['fams'] = encode_str_array(pg.fams)
-        pgs_out['par_status'] = pg.par_status
         pgs_out.close()
     elif args.pgs is not None:
         if args.phenofile is None:
@@ -81,37 +81,6 @@ if __name__ == '__main__':
         print('Normalising PGS')
         pg.mean_normalise()
         pgs_f.close()
-        # try:
-        #     code.interact(local=locals())
-        #     pgs_f = h5py.File(args.pgs, 'r')
-        #     pg = gtarray(np.array(pgs_f['pgs']),
-        #                  convert_str_array(np.array(pgs_f['ids'])),
-        #                  sid = convert_str_array(np.array(pgs_f['cols'])),
-        #                  fams = convert_str_array(np.array(pgs_f['fams'])))
-        #     print('Normalising PGS')
-        #     pg.mean_normalise()
-        #     pg.gts = pg.gts/np.std(pg.gts[:,0])
-        #     pgs_f.close()
-        # except:
-        #     f = open(args.pgs, 'r')
-        #     cols = f.readline()
-        #     if len(cols.split('\t')) > len(cols.split(' ')):
-        #         cols = np.array(cols.split('\t'))
-        #         delim = '\t'
-        #     else:
-        #         cols = np.array(cols.split(' '))
-        #         delim = ' '
-        #     if cols[0] == 'FID' and cols[1] == 'IID':
-        #         pass
-        #     else:
-        #         raise ValueError('First two columns of PGS must be FID, IID')
-        #     f.close()
-        #     ids = np.loadtxt(args.pgs, dtype='U', usecols=(0, 1), delimiter=delim, skiprows=1)
-        #     pgs_vals = np.loadtxt(args.pgs, usecols=tuple([x for x in range(2, cols.shape[0])]), delimiter=delim,
-        #                           skiprows=1)
-        #     pg = gtarray(pgs_vals.reshape((pgs_vals.shape[0], 1)), ids[:, 1], sid=cols[2:cols.shape[0]], fams=ids[:, 0])
-        # else:
-        #     raise ValueError('Unsupported PGS file')
     else:
         raise ValueError('Weights or PGS must be provided')
 
