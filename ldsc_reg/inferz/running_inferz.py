@@ -12,9 +12,9 @@ import glob
 import time
 startTime = time.time()
 
-# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 # files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
-files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+# files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -68,10 +68,9 @@ model = ld.sibreg(S = S, z = z, f = f)
 print("Solving Model...")
 
 
-output_matrix, result = model.solve(est_init = np.atleast_2d(0.0))
+output_matrix, result = model.solve(est_init = np.atleast_2d(0.0)) # gradfunc = model._num_grad_V
 
-
-print("Output matrix: ",output_matrix)
+print("Output matrix: ", output_matrix)
 print("Solver Output: ", result)
 
 executionTime = (time.time() - startTime)
