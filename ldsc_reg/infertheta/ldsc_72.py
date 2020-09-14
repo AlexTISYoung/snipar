@@ -99,7 +99,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizing variables
-        V_norm = V/N
+        V_norm = V #/N
         for i in range(N):
             
             Si = S[i]

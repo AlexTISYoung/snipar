@@ -90,7 +90,7 @@ class sibreg():
         self.pos = np.arange(1, N+1, 1)
         self.z = zhat_vec
         
-    def _log_ll(self, V, z, S, u, r, f):
+    def _log_ll(self, V, z, S, u, r):
         
         """
         Returns the log likelihood matrix for a given SNP i as formulated by:
@@ -123,7 +123,7 @@ class sibreg():
         
         return L
     
-    def _grad_ll_v(self, V, z, S, u, r, f):
+    def _grad_ll_v(self, V, z, S, u, r):
         
         """
         Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
@@ -150,7 +150,7 @@ class sibreg():
         g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
         return -(1/2) * g
     
-    def _num_grad_V(self, V, z, S, u, r, f):
+    def _num_grad_V(self, V, z, S, u, r):
         """
         Returns numerical gradient vector of self._log_ll
         Mostly meant to check if self._grad_ll_v is working
@@ -175,8 +175,8 @@ class sibreg():
                 dV[i,j] = 10 ** (-6)
                 V_upper = V+dV
                 V_lower = V-dV
-                g[i,j] = (self._log_ll(V_upper, z, S, u, r, f) - \
-                          self._log_ll(V_lower, z, S, u, r, f)) / (2 * 10 ** (-6))
+                g[i,j] = (self._log_ll(V_upper, z, S, u, r) - \
+                          self._log_ll(V_lower, z, S, u, r)) / (2 * 10 ** (-6))
         return g
 
 
@@ -231,22 +231,21 @@ class sibreg():
         log_ll = 0
         
         # Normalizing variables
-        V_norm = V/N
+        V_norm = V #/N
         for i in range(N):
             
             Si = S[i]
             zi = z[i, :].reshape((d, 1))
             ui = u[i]
             ri = r[i]
-            
-            
             fi = f[i]  if f is not None else None
 
-            d, ddash = Si.shape
-            assert d == ddash # Each S has to be a square matrix
+            # normalizing variables using allele frequency
+            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
+            Si = normalizer * Si
             
-            log_ll += logllfunc(V_norm, zi, Si, ui, ri, fi)
-            Gvec += gradfunc(V_norm, zi, Si, ui, ri, fi)
+            log_ll += (1/ui) * logllfunc(V_norm, zi, Si, ui, ri)
+            Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ui, ri)
 
         Gvec = hp.extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")

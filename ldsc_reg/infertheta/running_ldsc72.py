@@ -11,9 +11,9 @@ import glob
 import time
 startTime = time.time()
 
-files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 # files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
-#files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -56,8 +56,7 @@ theta = theta @ np.array([1.0, 0.5, 0.5])
 theta = theta.reshape((theta.shape[0], 1))
 
 
-model = ld.sibreg(S = S, theta = theta, f = f)
-
+model = ld.sibreg(S = S, theta = theta, f = f) #
 print("Solving Model...")
 
 
