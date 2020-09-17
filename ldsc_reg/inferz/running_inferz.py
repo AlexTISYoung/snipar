@@ -26,36 +26,39 @@ S = hf.get('estimate_covariance')[()]
 f = hf.get('freqs')[()]
 
 if len(files) > 1:
-  for file in files[1:]:
-    print("Reading file: ", file)
-    hf = h5py.File(file, 'r')
-    theta_file  = hf.get('estimate')[()] 
-    S_file = hf.get('estimate_covariance')[()]
-    f_file = hf.get('freqs')[()]
-    
-    theta = np.append(theta, theta_file, axis = 0)
-    S = np.append(S, S_file, axis = 0)
-    f = np.append(f, f_file, axis = 0)
+    for file in files[1:]:
+        print("Reading file: ", file)
+        hf = h5py.File(file, 'r')
+        theta_file  = hf.get('estimate')[()] 
+        S_file = hf.get('estimate_covariance')[()]
+        f_file = hf.get('freqs')[()]
+
+        theta = np.append(theta, theta_file, axis = 0)
+        S = np.append(S, S_file, axis = 0)
+        f = np.append(f, f_file, axis = 0)
   
+
 N = theta.shape[0]
 
 print("S matrix:", S)
 print("Theta Matrix: ", theta)
 print("Initiating Model...")
 
-# Keeping only direct effects
-#S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
-#theta = theta[:, 0].reshape((theta.shape[0], 1))
+# == Keeping only direct effects == #
+# S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
+# theta = theta[:, 0].reshape((theta.shape[0], 1))
 
-# # amplifying direct effects
-Sdir = np.empty(len(S))
-for i in range(len(S)):
-  Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
+# == amplifying direct effects == #
+# Sdir = np.empty(len(S))
+# for i in range(len(S)):
+#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
 
-S = Sdir.reshape((len(S), 1, 1))
-theta = theta @ np.array([1.0, 0.5, 0.5])
-theta = theta.reshape((theta.shape[0], 1))
+# S = Sdir.reshape((len(S), 1, 1))
+# theta = theta @ np.array([1.0, 0.5, 0.5])
+# theta = theta.reshape((theta.shape[0], 1))
 
+
+# calcualting z
 z = np.empty_like(theta)
 z[:] = np.nan
 for i in range(z.shape[0]):
@@ -68,7 +71,7 @@ model = ld.sibreg(S = S, z = z, f = f)
 print("Solving Model...")
 
 
-output_matrix, result = model.solve(est_init = np.atleast_2d(0.0)) # , gradfunc = model._num_grad_V
+output_matrix, result = model.solve() # , gradfunc = model._num_grad_V
 
 print("Output matrix: ", output_matrix * N)
 print("Solver Output: ", result)

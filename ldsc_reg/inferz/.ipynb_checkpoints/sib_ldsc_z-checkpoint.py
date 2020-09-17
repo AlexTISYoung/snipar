@@ -141,7 +141,7 @@ class sibreg():
         Outputs:
         grad_ll_v = dxd matrix 
         """
-        
+                
         S_inv_root = hp.calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         Sigma_inv = np.linalg.inv(Sigma)
@@ -230,8 +230,8 @@ class sibreg():
         N = len(S)
         log_ll = 0
         
-        # Normalizing variables
-        V_norm = V #/N
+        # Normalizg variables
+        V_norm = V/N
         for i in range(N):
             
             Si = S[i]
@@ -244,7 +244,7 @@ class sibreg():
             normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
             Si = normalizer * Si
             
-            log_ll += (1/ui) * logllfunc(V_norm, zi, Si, ui, ri)
+            log_ll += (1/ui) * logllfunc(V_norm , zi, Si, ui, ri)
             Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ui, ri)
 
         Gvec = hp.extract_upper_triangle(Gvec)
@@ -333,11 +333,9 @@ class sibreg():
             method = 'L-BFGS-B'
         )
         
-        output_matrix = hp.return_to_symmetric(result.x, m)
+        output_matrix = hp.return_to_symmetric(result.x, m) * n
         
-        # re-normnalizing output matrix
-#         output_matrix = output_matrix / n
-        
+        # re-normnalizing output matrix 
         self.output_matrix = output_matrix
         
         return output_matrix, result 
