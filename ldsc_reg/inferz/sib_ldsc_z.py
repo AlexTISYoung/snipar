@@ -1,9 +1,95 @@
-import helperfuncs as hp
 import numpy as np
 from scipy.optimize import minimize
 from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
+
+def extract_upper_triangle(x):
+    
+    # =============================== #
+    # Extracts the upper triangular portion of 
+    # a symmetric matrix
+    # =============================== #
+    
+    n, m = x.shape
+    assert n == m
+    
+    upper_triangle = x[np.triu_indices(n)]
+    
+    return upper_triangle
+
+def return_to_symmetric(triangle_vec, final_size):
+    
+    # =============================== #
+    # Given a vector of the upper triangular matrix,
+    # get back the symmetric matrix
+    # =============================== #
+    
+    X = np.zeros((final_size,final_size))
+    X[np.triu_indices(X.shape[0], k = 0)] = triangle_vec
+    X = X + X.T - np.diag(np.diag(X))
+    
+    return X
+
+def extract_bounds(n):
+    
+    # =============================== #
+    # From a number n, the function
+    # outputs a list of bounds
+    # for a var cov matrix of size
+    # n x n
+    # =============================== #
+    
+    # extract idx of flat array whcih are diagonals
+    uptriangl_idx = np.array(np.triu_indices(n))
+    diags = uptriangl_idx[0, :] == uptriangl_idx[1, :]
+    
+    # Construct list of bounds
+    bounds_list = np.array([(None, None)] * len(diags))
+    bounds_list[diags] = (1e-6, None)
+    
+    bounds_list_out = [tuple(i) for i in bounds_list]
+    
+    return bounds_list_out
+
+
+def delete_obs_jk(var, start_idx, end_idx, end_cond):
+
+    # ============================== #
+    # var: numpy array
+    # end_cond : boolean
+    # Function helps take out observations
+    # for a jackknife routine
+    # ============================== #
+
+    if end_cond:
+
+        var_jk = np.delete(var, range(start_idx, end_idx), 
+                             axis = 0)
+
+    else:
+
+        var_jk = np.delete(var, range(start_idx, var.shape[0]), 
+                             axis = 0)
+        var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
+        
+    return var_jk
+    
+def calc_inv_root(S):
+    '''
+    A stable solver for S^{-1/2}
+    '''
+    
+    if ~np.any(np.isnan(S)):
+        S_eig = np.linalg.eig(S)
+        l = np.zeros(S.shape)
+        np.fill_diagonal(l,np.power(S_eig[0],-0.5))
+        S_inv_root = S_eig[1].dot(np.dot(l,S_eig[1].T))
+    else:
+        S_inv_root =  np.empty_like(S)
+        S_inv_root[:] = np.nan
+    return S_inv_root
+
 
 
 class sibreg():
@@ -68,7 +154,7 @@ class sibreg():
             
             V = np.array(V)
             Si = np.array(Si)
-            S_inv = hp.calc_inv_root(Si)
+            S_inv = calc_inv_root(Si)
   
             # get shape of V
             d = V.shape[0]
@@ -90,7 +176,7 @@ class sibreg():
         self.pos = np.arange(1, N+1, 1)
         self.z = zhat_vec
         
-    def _log_ll(self, V, z, S, u, r):
+    def _log_ll(self, V, z, S, r):
         
         """
         Returns the log likelihood matrix for a given SNP i as formulated by:
@@ -102,15 +188,14 @@ class sibreg():
         V = dxd numpy matrix
         z = dx1 numpy matrix
         S = dxd numpy matrix
-        u = 1 numpy matrix
-        r = 1 numpy matrix
-        f = 1 numpy matrix
+        r = scalar
+        f = scalar
         
         Outputs:
-        logll = 1 dimensional matrix 
+        logll = scalar
         """
         
-        S_inv_root = hp.calc_inv_root(S)
+        S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         logdet = np.linalg.slogdet(Sigma)
         Sigma_inv = np.linalg.inv(Sigma)
@@ -121,9 +206,9 @@ class sibreg():
             - (1/2) * logdet[0]*logdet[1] \
             - (1/2) * np.dot(z.T,Sigma_inv.dot(z))
         
-        return L
+        return L[0, 0]
     
-    def _grad_ll_v(self, V, z, S, u, r):
+    def _grad_ll_v(self, V, z, S, r):
         
         """
         Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
@@ -142,7 +227,7 @@ class sibreg():
         grad_ll_v = dxd matrix 
         """
                 
-        S_inv_root = hp.calc_inv_root(S)
+        S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         Sigma_inv = np.linalg.inv(Sigma)
         z = z.reshape(z.shape[0],1)
@@ -150,7 +235,7 @@ class sibreg():
         g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
         return -(1/2) * g
     
-    def _num_grad_V(self, V, z, S, u, r):
+    def _num_grad_V(self, V, z, S, r):
         """
         Returns numerical gradient vector of self._log_ll
         Mostly meant to check if self._grad_ll_v is working
@@ -175,8 +260,8 @@ class sibreg():
                 dV[i,j] = 10 ** (-6)
                 V_upper = V+dV
                 V_lower = V-dV
-                g[i,j] = (self._log_ll(V_upper, z, S, u, r) - \
-                          self._log_ll(V_lower, z, S, u, r)) / (2 * 10 ** (-6))
+                g[i,j] = (self._log_ll(V_upper, z, S, r) - \
+                          self._log_ll(V_lower, z, S, r)) / (2 * 10 ** (-6))
         return g
 
 
@@ -224,7 +309,7 @@ class sibreg():
 
         # Unflatten V into a matrix
         d = S[0].shape[0]
-        V = hp.return_to_symmetric(V, d)
+        V = return_to_symmetric(V, d)
         Gvec = np.zeros((d, d))
         
         N = len(S)
@@ -246,10 +331,10 @@ class sibreg():
             normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
             Si = normalizer * Si
        
-            log_ll += (1/ui) * logllfunc(V_norm , zi, Si, ui, ri)
-            Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ui, ri)
+            log_ll += (1/ui) * logllfunc(V_norm , zi, Si, ri)
+            Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ri)
         
-        Gvec = hp.extract_upper_triangle(Gvec)
+        Gvec = extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
         return -log_ll , -Gvec/N
@@ -322,9 +407,9 @@ class sibreg():
         self.est_init = est_init
 
         # extract array from est init
-        est_init_array = hp.extract_upper_triangle(est_init) 
+        est_init_array = extract_upper_triangle(est_init) 
         
-        bounds = hp.extract_bounds(m)     
+        bounds = extract_bounds(m)     
 
         result = minimize(
             neg_logll_grad, 
@@ -335,7 +420,7 @@ class sibreg():
             method = 'L-BFGS-B'
         )
         
-        output_matrix = hp.return_to_symmetric(result.x, m)
+        output_matrix = return_to_symmetric(result.x, m)
         
         # re-normnalizing output matrix 
         self.output_matrix = output_matrix
