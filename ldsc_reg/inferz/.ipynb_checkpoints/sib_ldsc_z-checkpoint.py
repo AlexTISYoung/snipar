@@ -239,18 +239,20 @@ class sibreg():
             ui = u[i]
             ri = r[i]
             fi = f[i]  if f is not None else None
+            
+            Si = N * Si
 
             # normalizing variables using allele frequency
             normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
             Si = normalizer * Si
-            
+       
             log_ll += (1/ui) * logllfunc(V_norm , zi, Si, ui, ri)
             Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ui, ri)
-
+        
         Gvec = hp.extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
-        return -log_ll , -Gvec
+        return -log_ll , -Gvec/N
 
 
     def solve(self,
@@ -333,7 +335,7 @@ class sibreg():
             method = 'L-BFGS-B'
         )
         
-        output_matrix = hp.return_to_symmetric(result.x, m) * n
+        output_matrix = hp.return_to_symmetric(result.x, m)
         
         # re-normnalizing output matrix 
         self.output_matrix = output_matrix
