@@ -70,12 +70,8 @@ model = ld.sibreg(S = S, z = z, f = f)
 
 print("Solving Model...")
 
-# giving it a good a starting position
-est_init = np.array([[ 0.2548573 ,  0.03763456, -0.01639566],
-                    [ 0.03763456,  0.80270458, -0.34035328],
-                  [-0.01639566, -0.34035328,  0.45330562]]) * N
 
-output_matrix, result = model.solve(est_init = est_init) # , gradfunc = model._num_grad_V
+output_matrix, result = model.solve() # , gradfunc = model._num_grad_V
 
 print("Output matrix: ", output_matrix/N)
 print("Solver Output: ", result)
