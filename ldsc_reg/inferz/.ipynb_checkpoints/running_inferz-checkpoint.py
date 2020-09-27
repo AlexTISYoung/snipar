@@ -62,7 +62,7 @@ print("Initiating Model...")
 z = np.empty_like(theta)
 z[:] = np.nan
 for i in range(z.shape[0]):
-    z[i, :] = hp.calc_inv_root(S[i]) @ theta[i, :].T
+    z[i, :] = ld.calc_inv_root(S[i]) @ theta[i, :].T
     
 print("Z: ", z)
 

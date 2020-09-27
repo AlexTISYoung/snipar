@@ -11,6 +11,7 @@ import h5py
 import glob
 import time
 startTime = time.time()
+print("Start time: ", startTime)
 
 # files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
 # files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
@@ -48,21 +49,34 @@ print("Initiating Model...")
 # S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
 # theta = theta[:, 0].reshape((theta.shape[0], 1))
 
+
 # == amplifying direct effects == #
 # Sdir = np.empty(len(S))
 # for i in range(len(S)):
-#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([1.0, 0.5, 0.5]).T
+#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
 
 # S = Sdir.reshape((len(S), 1, 1))
 # theta = theta @ np.array([1.0, 0.5, 0.5])
 # theta = theta.reshape((theta.shape[0], 1))
+
+# == Combining indirect effects to make V a 2x2 matrix == #
+tmatrix = np.array([[1.0, 0.0],
+                    [0.0, 0.5],
+                    [0.0, 0.5]])
+Sdir = np.empty((len(S), 2, 2))
+for i in range(len(S)):
+  Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+S = Sdir.reshape((len(S), 2, 2))
+theta = theta @ tmatrix
+theta = theta.reshape((theta.shape[0], 2))
 
 
 # calcualting z
 z = np.empty_like(theta)
 z[:] = np.nan
 for i in range(z.shape[0]):
-    z[i, :] = hp.calc_inv_root(S[i]) @ theta[i, :].T
+    z[i, :] = ld.calc_inv_root(S[i]) @ theta[i, :].T
     
 print("Z: ", z)
 
@@ -73,7 +87,8 @@ print("Solving Model...")
 
 output_matrix, result = model.solve() # , gradfunc = model._num_grad_V
 
-print("Output matrix: ", output_matrix/N)
+print("===================================")
+print("Output matrix: ", output_matrix)
 print("Solver Output: ", result)
 
 executionTime = (time.time() - startTime)

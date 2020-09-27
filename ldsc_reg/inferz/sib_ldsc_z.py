@@ -181,8 +181,9 @@ class sibreg():
         """
         Returns the log likelihood matrix for a given SNP i as formulated by:
         
-        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+        .. math::
+            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
                 
         Inputs:
         V = dxd numpy matrix
@@ -213,7 +214,8 @@ class sibreg():
         """
         Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
         
-        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+        .. math::
+            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
                 
         Inputs:
         V = dxd numpy matrix
@@ -275,12 +277,14 @@ class sibreg():
         """
         Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
         
-        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+        .. math::
+            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
         
         and
         
-        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+        .. math::
+            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
                 
         Inputs:
         V = dxd numpy matrix
@@ -316,7 +320,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizg variables
-        V_norm = V/N
+        V_norm = V#/N
         for i in range(N):
             
             Si = S[i]
@@ -325,7 +329,7 @@ class sibreg():
             ri = r[i]
             fi = f[i]  if f is not None else None
             
-#             Si = N * Si
+            Si = N * Si
 
             # normalizing variables using allele frequency
             normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
@@ -337,7 +341,7 @@ class sibreg():
         Gvec = extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
-        return -log_ll , -Gvec/N
+        return -log_ll , -Gvec#/N
 
 
     def solve(self,

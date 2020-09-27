@@ -316,7 +316,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizg variables
-        V_norm = V/N
+        V_norm = V#/N
         for i in range(N):
             
             Si = S[i]
@@ -325,7 +325,7 @@ class sibreg():
             ri = r[i]
             fi = f[i]  if f is not None else None
             
-#             Si = N * Si
+            Si = N * Si
 
             # normalizing variables using allele frequency
             normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
@@ -337,7 +337,7 @@ class sibreg():
         Gvec = extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
-        return -log_ll , -Gvec/N
+        return -log_ll , -Gvec#/N
 
 
     def solve(self,
