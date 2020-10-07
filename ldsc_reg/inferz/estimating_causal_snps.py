@@ -61,7 +61,19 @@ print("Initiating Model...")
 # theta = theta.reshape((theta.shape[0], 1))
 
 # == Combining indirect effects to make V a 2x2 matrix == #
-tmatrix = np.array([[1.0, 0.0],
+# tmatrix = np.array([[1.0, 0.0],
+#                     [0.0, 0.5],
+#                     [0.0, 0.5]])
+# Sdir = np.empty((len(S), 2, 2))
+# for i in range(len(S)):
+#     Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+# S = Sdir.reshape((len(S), 2, 2))
+# theta = theta @ tmatrix
+# theta = theta.reshape((theta.shape[0], 2))
+
+# == keeping direct effect and population effect == #
+tmatrix = np.array([[1.0, 1.0],
                     [0.0, 0.5],
                     [0.0, 0.5]])
 Sdir = np.empty((len(S), 2, 2))
@@ -72,13 +84,12 @@ S = Sdir.reshape((len(S), 2, 2))
 theta = theta @ tmatrix
 theta = theta.reshape((theta.shape[0], 2))
 
-
-# calcualting z
+# == calcualting z == #
 z = np.empty_like(theta)
 z[:] = np.nan
 for i in range(z.shape[0]):
     z[i, :] = ld.calc_inv_root(S[i]) @ theta[i, :].T
-    
+
 print("Z: ", z)
 
 model = ld.sibreg(S = S, z = z, f = f) 
@@ -86,7 +97,7 @@ model = ld.sibreg(S = S, z = z, f = f)
 print("Solving Model...")
 
 
-output_matrix, result = model.solve() # , gradfunc = model._num_grad_V
+output_matrix, result = model.solve()
 
 print("===================================")
 print("Output matrix: ", output_matrix)
@@ -95,21 +106,5 @@ print("Solver Output: ", result)
 executionTime = (time.time() - startTime)
 print('Execution time: ' + f'{executionTime:.2f}', " seconds")
 
-
-# == Plotting == #
-V00 = np.linspace(0, 1, 100)
-V11 = np.linspace(0, 1, 100)
-
-logll_mat = np.empty((100, 100))
-
-for v00idx, v00 in enumerate(V00):
-    for v11idx, v11 in enumerate(V11):
-        Vin = np.array([[v00, 0.0],
-                       [0.0, v11]])
-        Vin = ld.extract_upper_triangle(Vin)# * N
-        logll_mat[v00idx, v11idx] = -model.neg_logll_grad(Vin)[0]
-
-fig, ax = plt.subplots()
-ax.plot()
 
 
