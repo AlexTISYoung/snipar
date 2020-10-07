@@ -96,20 +96,4 @@ executionTime = (time.time() - startTime)
 print('Execution time: ' + f'{executionTime:.2f}', " seconds")
 
 
-# == Plotting == #
-V00 = np.linspace(0, 1, 100)
-V11 = np.linspace(0, 1, 100)
-
-logll_mat = np.empty((100, 100))
-
-for v00idx, v00 in enumerate(V00):
-    for v11idx, v11 in enumerate(V11):
-        Vin = np.array([[v00, 0.0],
-                       [0.0, v11]])
-        Vin = ld.extract_upper_triangle(Vin)# * N
-        logll_mat[v00idx, v11idx] = -model.neg_logll_grad(Vin)[0]
-
-fig, ax = plt.subplots()
-ax.plot()
-
 

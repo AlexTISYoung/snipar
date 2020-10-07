@@ -67,7 +67,6 @@ print("Initiating Model...")
 # Sdir = np.empty((len(S), 2, 2))
 # for i in range(len(S)):
 #     Sdir[i] = tmatrix.T @ S[i] @ tmatrix
-
 # S = Sdir.reshape((len(S), 2, 2))
 # theta = theta @ tmatrix
 # theta = theta.reshape((theta.shape[0], 2))
