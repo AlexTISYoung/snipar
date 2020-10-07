@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize
+import scipy.optimize
 from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
@@ -181,8 +182,9 @@ class sibreg():
         """
         Returns the log likelihood matrix for a given SNP i as formulated by:
         
-        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+        .. math::
+            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
                 
         Inputs:
         V = dxd numpy matrix
@@ -198,7 +200,13 @@ class sibreg():
         S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         logdet = np.linalg.slogdet(Sigma)
-        Sigma_inv = np.linalg.inv(Sigma)
+        
+        det = np.linalg.det(Sigma)
+        if det > 1e-6 or det < -1e-6:
+            Sigma_inv = np.linalg.inv(Sigma)
+        else:
+            Sigma_inv = np.linalg.pinv(Sigma)
+
         z = z.reshape(V.shape[0],1)
         d = V.shape[0]
     
@@ -213,7 +221,8 @@ class sibreg():
         """
         Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
         
-        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+        .. math::
+            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
                 
         Inputs:
         V = dxd numpy matrix
@@ -229,7 +238,13 @@ class sibreg():
                 
         S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
-        Sigma_inv = np.linalg.inv(Sigma)
+        
+        det = np.linalg.det(Sigma)
+        if det > 1e-6 or det < -1e-6:
+            Sigma_inv = np.linalg.inv(Sigma)
+        else:
+            Sigma_inv = np.linalg.pinv(Sigma)
+        
         z = z.reshape(z.shape[0],1)
         SSigma_inv = S_inv_root.dot(Sigma_inv)
         g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
@@ -275,12 +290,14 @@ class sibreg():
         """
         Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
         
-        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+        .. math::
+            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
         
         and
         
-        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+        .. math::
+            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
                 
         Inputs:
         V = dxd numpy matrix
@@ -316,7 +333,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizg variables
-        V_norm = V#/N
+        V_norm = V
         for i in range(N):
             
             Si = S[i]
@@ -337,7 +354,7 @@ class sibreg():
         Gvec = extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
-        return -log_ll , -Gvec#/N
+        return -log_ll , -Gvec
 
 
     def solve(self,
@@ -417,9 +434,11 @@ class sibreg():
             jac = True,
             args = (z, S, u, r, f, logllfunc, gradfunc),
             bounds = bounds,
-            method = 'L-BFGS-B'
+            method = 'L-BFGS-B',
+            options = {'ftol' : 1e-15}
+            
         )
-        
+
         output_matrix = return_to_symmetric(result.x, m)
         
         # re-normnalizing output matrix 

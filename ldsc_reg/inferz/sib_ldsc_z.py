@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize
+import scipy.optimize
 from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
@@ -199,7 +200,13 @@ class sibreg():
         S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
         logdet = np.linalg.slogdet(Sigma)
-        Sigma_inv = np.linalg.inv(Sigma)
+        
+        det = np.linalg.det(Sigma)
+        if det > 1e-6 or det < -1e-6:
+            Sigma_inv = np.linalg.inv(Sigma)
+        else:
+            Sigma_inv = np.linalg.pinv(Sigma)
+
         z = z.reshape(V.shape[0],1)
         d = V.shape[0]
     
@@ -231,7 +238,13 @@ class sibreg():
                 
         S_inv_root = calc_inv_root(S)
         Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
-        Sigma_inv = np.linalg.inv(Sigma)
+        
+        det = np.linalg.det(Sigma)
+        if det > 1e-6 or det < -1e-6:
+            Sigma_inv = np.linalg.inv(Sigma)
+        else:
+            Sigma_inv = np.linalg.pinv(Sigma)
+        
         z = z.reshape(z.shape[0],1)
         SSigma_inv = S_inv_root.dot(Sigma_inv)
         g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
@@ -320,7 +333,7 @@ class sibreg():
         log_ll = 0
         
         # Normalizg variables
-        V_norm = V#/N
+        V_norm = V
         for i in range(N):
             
             Si = S[i]
@@ -341,7 +354,7 @@ class sibreg():
         Gvec = extract_upper_triangle(Gvec)
         print(f"{log_ll}, {V}")
         
-        return -log_ll , -Gvec#/N
+        return -log_ll , -Gvec
 
 
     def solve(self,
@@ -421,9 +434,11 @@ class sibreg():
             jac = True,
             args = (z, S, u, r, f, logllfunc, gradfunc),
             bounds = bounds,
-            method = 'L-BFGS-B'
+            method = 'L-BFGS-B',
+            options = {'ftol' : 1e-20}
+            
         )
-        
+
         output_matrix = return_to_symmetric(result.x, m)
         
         # re-normnalizing output matrix 
