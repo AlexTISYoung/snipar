@@ -13,6 +13,12 @@ import matplotlib.pyplot as plt
 
 
 effect_estimated = "population"
+# effect estimated can be
+# full (for a 3x3 V matrix)
+# population
+# direct_plus_averageparental
+# direct_plus_population
+
 print(f"Estimating {effect_estimated} effect")
 
 startTime = time.time()
@@ -90,6 +96,8 @@ elif effect_estimated == "direct_plus_population":
     S = Sdir.reshape((len(S), 2, 2))
     theta = theta @ tmatrix
     theta = theta.reshape((theta.shape[0], 2))
+elif effect_estimated == "full":
+    pass
 
 # == calcualting z == #
 z = np.empty_like(theta)
