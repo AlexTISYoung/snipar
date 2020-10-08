@@ -11,6 +11,10 @@ import glob
 import time
 import matplotlib.pyplot as plt
 
+
+effect_estimated = "population"
+print(f"Estimating {effect_estimated} effect")
+
 startTime = time.time()
 print("Start time: ", startTime)
 
@@ -46,42 +50,46 @@ print("S matrix:", S)
 print("Theta Matrix: ", theta)
 print("Initiating Model...")
 
+
+
 # == Keeping only direct effects == #
 # S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
 # theta = theta[:, 0].reshape((theta.shape[0], 1))
 
+if effect_estimated == "population":
+    # == Keeping population effect == #
+    Sdir = np.empty(len(S))
+    for i in range(len(S)):
+    Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
 
-# == amplifying direct effects == #
-# Sdir = np.empty(len(S))
-# for i in range(len(S)):
-#   Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
+    S = Sdir.reshape((len(S), 1, 1))
+    theta = theta @ np.array([1.0, 0.5, 0.5])
+    theta = theta.reshape((theta.shape[0], 1))
+elif effect_estimated == "direct_plus_averageparental":
 
-# S = Sdir.reshape((len(S), 1, 1))
-# theta = theta @ np.array([1.0, 0.5, 0.5])
-# theta = theta.reshape((theta.shape[0], 1))
+    # == Combining indirect effects to make V a 2x2 matrix == #
+    tmatrix = np.array([[1.0, 0.0],
+                        [0.0, 0.5],
+                        [0.0, 0.5]])
+    Sdir = np.empty((len(S), 2, 2))
+    for i in range(len(S)):
+        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+    S = Sdir.reshape((len(S), 2, 2))
+    theta = theta @ tmatrix
+    theta = theta.reshape((theta.shape[0], 2))
+elif effect_estimated == "direct_plus_population":
 
-# == Combining indirect effects to make V a 2x2 matrix == #
-# tmatrix = np.array([[1.0, 0.0],
-#                     [0.0, 0.5],
-#                     [0.0, 0.5]])
-# Sdir = np.empty((len(S), 2, 2))
-# for i in range(len(S)):
-#     Sdir[i] = tmatrix.T @ S[i] @ tmatrix
-# S = Sdir.reshape((len(S), 2, 2))
-# theta = theta @ tmatrix
-# theta = theta.reshape((theta.shape[0], 2))
+    # == keeping direct effect and population effect == #
+    tmatrix = np.array([[1.0, 1.0],
+                        [0.0, 0.5],
+                        [0.0, 0.5]])
+    Sdir = np.empty((len(S), 2, 2))
+    for i in range(len(S)):
+        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
 
-# == keeping direct effect and population effect == #
-tmatrix = np.array([[1.0, 1.0],
-                    [0.0, 0.5],
-                    [0.0, 0.5]])
-Sdir = np.empty((len(S), 2, 2))
-for i in range(len(S)):
-    Sdir[i] = tmatrix.T @ S[i] @ tmatrix
-
-S = Sdir.reshape((len(S), 2, 2))
-theta = theta @ tmatrix
-theta = theta.reshape((theta.shape[0], 2))
+    S = Sdir.reshape((len(S), 2, 2))
+    theta = theta @ tmatrix
+    theta = theta.reshape((theta.shape[0], 2))
 
 # == calcualting z == #
 z = np.empty_like(theta)
