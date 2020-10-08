@@ -72,12 +72,24 @@ print("Initiating Model...")
 # theta = theta @ tmatrix
 # theta = theta.reshape((theta.shape[0], 2))
 
-# calcualting z
+# == keeping direct effect and population effect == #
+tmatrix = np.array([[1.0, 1.0],
+                    [0.0, 0.5],
+                    [0.0, 0.5]])
+Sdir = np.empty((len(S), 2, 2))
+for i in range(len(S)):
+    Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+S = Sdir.reshape((len(S), 2, 2))
+theta = theta @ tmatrix
+theta = theta.reshape((theta.shape[0], 2))
+
+# == calcualting z == #
 z = np.empty_like(theta)
 z[:] = np.nan
 for i in range(z.shape[0]):
     z[i, :] = ld.calc_inv_root(S[i]) @ theta[i, :].T
-    
+
 print("Z: ", z)
 
 model = ld.sibreg(S = S, z = z, f = f) 
