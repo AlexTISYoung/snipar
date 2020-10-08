@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 
 
-effect_estimated = "population"
+effect_estimated = "direct_plus_population"
 # effect estimated can be
 # full (for a 3x3 V matrix)
 # population
@@ -66,7 +66,7 @@ if effect_estimated == "population":
     # == Keeping population effect == #
     Sdir = np.empty(len(S))
     for i in range(len(S)):
-    Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
+        Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
 
     S = Sdir.reshape((len(S), 1, 1))
     theta = theta @ np.array([1.0, 0.5, 0.5])

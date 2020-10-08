@@ -336,8 +336,6 @@ class sibreg():
         V_norm = V
         for i in range(N):
             
-            if i % 1000 == 0:
-                print(i)
 
             Si = S[i]
             zi = z[i, :].reshape((d, 1))
