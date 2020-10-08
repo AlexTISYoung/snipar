@@ -4,6 +4,7 @@ import scipy.optimize
 from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
+from numba import jit, njit, prange
 
 def extract_upper_triangle(x):
     
@@ -75,7 +76,25 @@ def delete_obs_jk(var, start_idx, end_idx, end_cond):
         var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
         
     return var_jk
+
+
+@njit
+def normalize_S(S, norm):
+    '''
+    A function which normalizes a vector of S matrices
+    '''
     
+    N = S.shape[0]
+    S_norm = np.zeros_like(S)
+    for idx in range(N):
+        
+        Si = S[idx]
+        normi = norm[idx]
+        S_norm[idx] = Si * normi
+    
+    return S_norm
+
+@njit
 def calc_inv_root(S):
     '''
     A stable solver for S^{-1/2}
@@ -92,6 +111,193 @@ def calc_inv_root(S):
     return S_inv_root
 
 
+@njit
+def _log_ll(V, z, S, r):
+
+    """
+    Returns the log likelihood matrix for a given SNP i as formulated by:
+
+    .. math::
+        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+
+    Inputs:
+    V = dxd numpy matrix
+    z = dx1 numpy matrix
+    S = dxd numpy matrix
+    r = scalar
+    f = scalar
+
+    Outputs:
+    logll = scalar
+    """
+
+    S_inv_root = calc_inv_root(S)
+    Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
+    logdet = np.linalg.slogdet(Sigma)
+
+    det = np.linalg.det(Sigma)
+    if det > 1e-6 or det < -1e-6:
+        Sigma_inv = np.linalg.inv(Sigma)
+    else:
+        Sigma_inv = np.linalg.pinv(Sigma)
+
+    z = z.reshape(V.shape[0],1)
+    d = V.shape[0]
+
+    L = - (d/2) * np.log(2 * np.pi) \
+        - (1/2) * logdet[0]*logdet[1] \
+        - (1/2) * np.dot(z.T,Sigma_inv.dot(z))
+
+    return L[0, 0]
+
+
+@njit
+def _grad_ll_v(V, z, S, r):
+
+    """
+    Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
+
+    .. math::
+        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+
+    Inputs:
+    V = dxd numpy matrix
+    z = dx1 numpy matrix
+    S = dxd numpy matrix
+    u = 1 numpy matrix
+    r = 1 numpy matrix
+    f = 1 numpy matrix
+
+    Outputs:
+    grad_ll_v = dxd matrix 
+    """
+
+    S_inv_root = calc_inv_root(S)
+    Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
+
+    det = np.linalg.det(Sigma)
+    if det > 1e-6 or det < -1e-6:
+        Sigma_inv = np.linalg.inv(Sigma)
+    else:
+        Sigma_inv = np.linalg.pinv(Sigma)
+
+    z = z.reshape(z.shape[0],1)
+    SSigma_inv = S_inv_root.dot(Sigma_inv)
+    g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
+    return -(1/2) * g
+
+
+@njit(parallel = True)
+def neg_logll_grad(V, 
+                   z, S, 
+                   u, r):
+
+    """
+    Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
+
+    .. math::
+        l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
+                \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
+
+    and
+
+    .. math::
+        \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
+
+    Inputs:
+    V = dxd numpy matrix
+    z = dxN numpy matrix
+    S = dxd numpy matrix
+    u = 1 numpy matrix
+    r = 1 numpy matrix
+    f = 1 numpy matrix
+    logllfunc = function which calculates logll
+                (uses self._log_ll by default)
+    gradfunc = function which calculated grad of logll
+                (uses self._grad_ll_v by default)
+
+    Outputs:
+    -log_ll = 1x1 scalar
+    -Gvec = dxd numpy matrix
+    """
+
+    # Unflatten V into a matrix
+    d = S[0].shape[0]
+    N = len(S)
+    
+    Gvec = np.zeros((N, d, d))
+    log_ll = np.zeros(N)
+
+    # Normalizg variables
+    V_norm = V
+    for i in prange(N):
+
+        Si = S[i]
+        zi = z[i, :].reshape((d, 1))
+        ui = u[i]
+        ri = r[i]
+
+        Si = N * Si
+
+        log_ll[i] = (1/ui) * _log_ll(V_norm , zi, Si, ri)
+        Gvec[i, :, :] = (1/ui) * _grad_ll_v(V_norm, zi, Si, ri)
+
+    return -log_ll.sum() , -Gvec.sum(axis = 0)
+
+
+def neglike_wrapper(V, z, S, u, r, f):
+    
+    '''
+    Wrapper for neg_logll_grad to convert V from an
+    array of individual parameters to a symmetric
+    matrix and solve for the negative log likelihood
+    '''
+    d = S[0].shape[0]
+    N = S.shape[0]
+    
+    V = return_to_symmetric(V, d)
+    
+    normalizer = 2 * f  * (1 - f) if f is not None else np.ones(N)
+    S = normalize_S(S, normalizer)
+    
+    logll, Gvec = neg_logll_grad(V, 
+                               z, S, 
+                               u, r)
+    
+    Gvec = extract_upper_triangle(Gvec)
+    
+    return logll, Gvec
+
+
+def _num_grad_V(self, V, z, S, r):
+    """
+    Returns numerical gradient vector of self._log_ll
+    Mostly meant to check if self._grad_ll_v is working
+    properly
+        
+    Inputs:
+    V = dxd numpy matrix
+    z = dx1 numpy matrix
+    S = dxd numpy matrix
+    u = 1 numpy matrix
+    r = 1 numpy matrix
+    f = 1 numpy matrix
+        
+    Outputs:
+    g = dxd matrix 
+    """
+        
+    g = np.zeros(V.shape)
+        for i in range(0,V.shape[0]):
+            for j in range(0,V.shape[1]):
+                dV = np.zeros((V.shape))
+                dV[i,j] = 10 ** (-6)
+                V_upper = V+dV
+                V_lower = V-dV
+                g[i,j] = (_log_ll(V_upper, z, S, r) - \
+                          s_log_ll(V_lower, z, S, r)) / (2 * 10 ** (-6))
+    return g
 
 class sibreg():
     
@@ -176,185 +382,7 @@ class sibreg():
         self.snp = np.arange(1, N+1, 1)
         self.pos = np.arange(1, N+1, 1)
         self.z = zhat_vec
-        
-    def _log_ll(self, V, z, S, r):
-        
-        """
-        Returns the log likelihood matrix for a given SNP i as formulated by:
-        
-        .. math::
-            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
-                
-        Inputs:
-        V = dxd numpy matrix
-        z = dx1 numpy matrix
-        S = dxd numpy matrix
-        r = scalar
-        f = scalar
-        
-        Outputs:
-        logll = scalar
-        """
-        
-        S_inv_root = calc_inv_root(S)
-        Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
-        logdet = np.linalg.slogdet(Sigma)
-        
-        det = np.linalg.det(Sigma)
-        if det > 1e-6 or det < -1e-6:
-            Sigma_inv = np.linalg.inv(Sigma)
-        else:
-            Sigma_inv = np.linalg.pinv(Sigma)
 
-        z = z.reshape(V.shape[0],1)
-        d = V.shape[0]
-    
-        L = - (d/2) * np.log(2 * np.pi) \
-            - (1/2) * logdet[0]*logdet[1] \
-            - (1/2) * np.dot(z.T,Sigma_inv.dot(z))
-        
-        return L[0, 0]
-    
-    def _grad_ll_v(self, V, z, S, r):
-        
-        """
-        Returns the gradient of the log likelihood wrt V for a given SNP i as formulated by:
-        
-        .. math::
-            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
-                
-        Inputs:
-        V = dxd numpy matrix
-        z = dx1 numpy matrix
-        S = dxd numpy matrix
-        u = 1 numpy matrix
-        r = 1 numpy matrix
-        f = 1 numpy matrix
-        
-        Outputs:
-        grad_ll_v = dxd matrix 
-        """
-                
-        S_inv_root = calc_inv_root(S)
-        Sigma = np.identity(S.shape[0])+r*np.dot(S_inv_root.dot(V),S_inv_root)
-        
-        det = np.linalg.det(Sigma)
-        if det > 1e-6 or det < -1e-6:
-            Sigma_inv = np.linalg.inv(Sigma)
-        else:
-            Sigma_inv = np.linalg.pinv(Sigma)
-        
-        z = z.reshape(z.shape[0],1)
-        SSigma_inv = S_inv_root.dot(Sigma_inv)
-        g = r * SSigma_inv.dot(np.dot(Sigma-z.dot(z.T),SSigma_inv.T))
-        return -(1/2) * g
-    
-    def _num_grad_V(self, V, z, S, r):
-        """
-        Returns numerical gradient vector of self._log_ll
-        Mostly meant to check if self._grad_ll_v is working
-        properly
-        
-        Inputs:
-        V = dxd numpy matrix
-        z = dx1 numpy matrix
-        S = dxd numpy matrix
-        u = 1 numpy matrix
-        r = 1 numpy matrix
-        f = 1 numpy matrix
-        
-        Outputs:
-        g = dxd matrix 
-        """
-        
-        g = np.zeros(V.shape)
-        for i in range(0,V.shape[0]):
-            for j in range(0,V.shape[1]):
-                dV = np.zeros((V.shape))
-                dV[i,j] = 10 ** (-6)
-                V_upper = V+dV
-                V_lower = V-dV
-                g[i,j] = (self._log_ll(V_upper, z, S, r) - \
-                          self._log_ll(V_lower, z, S, r)) / (2 * 10 ** (-6))
-        return g
-
-
-    def neg_logll_grad(self, V, 
-                       z = None, S = None, 
-                       u = None, r = None, 
-                       f = None,
-                       logllfunc = None,
-                       gradfunc = None):
-        
-        """
-        Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
-        
-        .. math::
-            l_i = -\frac{d}{2} log (2 \pi) - \frac{1}{2} log ( |I + r_i S_i^{-1/2} V S_i^{-1/2}| ) -
-                    \frac{1}{2} z_i^T (I + r_i S_i^{-1/2} V S_i^{-1/2}) ^{-1} z_i
-        
-        and
-        
-        .. math::
-            \frac{dl}{dV} = S^{-1/2} \Sigma_i^{-1} (\Sigma - z_i z_i^T) \Sigma_i^{-1} S^{-1/2}
-                
-        Inputs:
-        V = dxd numpy matrix
-        z = dxN numpy matrix
-        S = dxd numpy matrix
-        u = 1 numpy matrix
-        r = 1 numpy matrix
-        f = 1 numpy matrix
-        logllfunc = function which calculates logll
-                    (uses self._log_ll by default)
-        gradfunc = function which calculated grad of logll
-                    (uses self._grad_ll_v by default)
-        
-        Outputs:
-        -log_ll = 1x1 scalar
-        -Gvec = dxd numpy matrix
-        """
-        
-        z = self.z if z is None else z
-        S = self.S if S is None else S
-        u = self.u if u is None else u
-        r = self.r if r is None else r
-        f = self.f if f is None else f
-        logllfunc = self._log_ll if logllfunc is None else logllfunc
-        gradfunc = self._grad_ll_v if gradfunc is None else gradfunc
-
-        # Unflatten V into a matrix
-        d = S[0].shape[0]
-        V = return_to_symmetric(V, d)
-        Gvec = np.zeros((d, d))
-        
-        N = len(S)
-        log_ll = 0
-        
-        # Normalizg variables
-        V_norm = V
-        for i in range(N):
-            
-            Si = S[i]
-            zi = z[i, :].reshape((d, 1))
-            ui = u[i]
-            ri = r[i]
-            fi = f[i]  if f is not None else None
-            
-            Si = N * Si
-
-            # normalizing variables using allele frequency
-            normalizer = 2 * fi  * (1 - fi) if fi is not None else 1.0
-            Si = normalizer * Si
-        
-            log_ll += (1/ui) * logllfunc(V_norm , zi, Si, ri)
-            Gvec += (1/ui) * gradfunc(V_norm, zi, Si, ri)
-        
-        Gvec = extract_upper_triangle(Gvec)
-        print(f"{log_ll}, {V}")
-        
-        return -log_ll , -Gvec
 
 
     def solve(self,
@@ -363,9 +391,7 @@ class sibreg():
               u = None,
               r = None,
               f = None,
-              neg_logll_grad = None,
-              logllfunc = None,
-              gradfunc = None,
+              neg_logll_grad = neglike_wrapper,
               est_init = None,
               printout = True):
         
@@ -390,9 +416,6 @@ class sibreg():
         u = self.u if u is None else u
         r = self.r if r is None else r
         f = self.f if f is None else f
-        neg_logll_grad = self.neg_logll_grad if neg_logll_grad is None else neg_logll_grad
-        logllfunc = self._log_ll if logllfunc is None else logllfunc
-        gradfunc = self._grad_ll_v if gradfunc is None else gradfunc
 
         # == Solves our MLE problem == #
         n, m = z.shape
@@ -432,7 +455,7 @@ class sibreg():
             neg_logll_grad, 
             est_init_array,
             jac = True,
-            args = (z, S, u, r, f, logllfunc, gradfunc),
+            args = (z, S, u, r, f),
             bounds = bounds,
             method = 'L-BFGS-B',
             options = {'ftol' : 1e-15}

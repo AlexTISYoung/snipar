@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 
 
-effect_estimated = "direct_plus_population"
+effect_estimated = "direct_plus_averageparental"
 # effect estimated can be
 # full (for a 3x3 V matrix)
 # population

@@ -46,7 +46,7 @@ class test_regrnd_functions(unittest.TestCase):
         
         for i in range(N):
             scipy_logll[i] = get_logll_scipy(V, model.z[i, :], model.r[i], model.S[i])
-            a_logll[i] = ld._log_ll(V, model.z[i, :], model.S[i], model.r[i])
+            a_logll[i] = model._log_ll(V, model.z[i, :], model.S[i], model.r[i])
             
         
         np.allclose(scipy_logll, a_logll)
@@ -74,8 +74,8 @@ class test_regrnd_functions(unittest.TestCase):
         nderiv = np.empty((N, 2, 2))
         
         for i in range(N):
-            aderiv[i, :, :] = ld._grad_ll_v(V, model.z[i, :], model.S[i],  model.r[i])
-            nderiv[i, :, :] = ld._num_grad_V(V, model.z[i, :], model.S[i],  model.r[i])
+            aderiv[i, :, :] = model._grad_ll_v(V, model.z[i, :], model.S[i],  model.r[i])
+            nderiv[i, :, :] = model._num_grad_V(V, model.z[i, :], model.S[i],  model.r[i])
 
         np.allclose(aderiv, nderiv)
         
