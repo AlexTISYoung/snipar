@@ -24,9 +24,8 @@ print(f"Estimating {effect_estimated} effect")
 startTime = time.time()
 print("Start time: ", startTime)
 
-# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
-# files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
-files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file

@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import pandas as pd
 
+startTime = time.time()
+print("Start time: ", startTime)
+
 # == Direct Effect == #
 print("=====================================")
 print("Making CSV for Average Parental Effects")
@@ -128,11 +131,69 @@ ldscores = ldscores.merge(nloci, how = "left", on = "CHR")
 # Merging LD scores with main Data Frame
 main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
 
+# dropping NAs
+main_df = main_df.dropna()
+
+# transforming inputs
+
+S = np.array(list(main_df.S)) 
+z = np.array(list(main_df.z))
+f = np.array(list(main_df["MAF"]))
+r = np.array(list(main_df["L2"]))
+u = np.array(list(main_df["L2"]))
+
+effect_estimated = "direct_plus_averageparental"
+
+if effect_estimated == "population":
+    # == Keeping population effect == #
+    Sdir = np.empty(len(S))
+    for i in range(len(S)):
+        Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
+
+    S = Sdir.reshape((len(S), 1, 1))
+    z = z @ np.array([1.0, 0.5, 0.5])
+    z = z.reshape((z.shape[0], 1))
+elif effect_estimated == "direct_plus_averageparental":
+
+    # == Combining indirect effects to make V a 2x2 matrix == #
+    tmatrix = np.array([[1.0, 0.0],
+                        [0.0, 0.5],
+                        [0.0, 0.5]])
+    Sdir = np.empty((len(S), 2, 2))
+    for i in range(len(S)):
+        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+    S = Sdir.reshape((len(S), 2, 2))
+    z = z @ tmatrix
+    z = z.reshape((z.shape[0], 2))
+elif effect_estimated == "direct_plus_population":
+
+    # == keeping direct effect and population effect == #
+    tmatrix = np.array([[1.0, 1.0],
+                        [0.0, 0.5],
+                        [0.0, 0.5]])
+    Sdir = np.empty((len(S), 2, 2))
+    for i in range(len(S)):
+        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+    S = Sdir.reshape((len(S), 2, 2))
+    z = z @ tmatrix
+    z = z.reshape((z.shape[0], 2))
+elif effect_estimated == "full":
+    pass
+
 # == Initializing model == #
-model = ld.sibreg(S = np.array(list(main_df.S)), 
-                z = np.array(list(main_df.z)), 
-                f = np.array(list(main_df["MAF"])),
-                r = np.array(list(main_df["L2"])),
-                u = np.array(list(main_df["L2"]))) 
+model = ld.sibreg(S = S, 
+                z = z, 
+                f = f,
+                r = r,
+                u = u) 
 
 output_matrix, result = model.solve()
+
+print(f"======================================")
+print(f"Output Matrix: {output_matrix}")
+print(f"Result: {result}")
+
+
+executionTime = (time.time() - startTime)
+print('Execution time: ' + f'{executionTime:.2f}', " seconds")
