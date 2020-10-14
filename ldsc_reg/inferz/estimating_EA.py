@@ -1,6 +1,6 @@
 '''
-This script reads in the simulated data made by
-Alex and solves for V.
+This script reads the HDF5 files for EA
+and estimates V
 '''
 import sib_ldsc_z as ld
 import numpy as np
@@ -11,24 +11,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 startTime = time.time()
-print("Start time: ", startTime)
+print("Start time: ", time.localtime(startTime))
 
 # == Direct Effect == #
 print("=====================================")
 print("Making CSV for Average Parental Effects")
 print("=====================================")
 # reading in  data
-files = glob.glob("/disk/genetics/ukb/alextisyoung/vcinf/1/chr_*.hdf5")
+files = glob.glob("/disk/genetics/ukb/alextisyoung/genotypes/EA/chr_*.hdf5")
 
 file = files[0]
 print("Reading in file: ", file)
 hf = h5py.File(file, 'r')
-metadata = hf.get('bim')[()]
-chromosome = metadata[:, 0]
-snp = metadata[:, 1]
-pos = metadata[:, 3]
-A1 = metadata[:, 4]
-A2 = metadata[:, 5]
+snp = hf.get("sid")[()]
+nobs = len(snp)
+chromosome = [int(i) for i in file[-7:-5].split("_") if i.isdigit()] * nobs
 theta  = hf.get('estimate')[()]
 se  = hf.get('estimate_ses')[()]
 N = hf.get('N_L')[()]
@@ -38,12 +35,9 @@ f = hf.get('freqs')[()]
 for file in files[1:]:
     print("Reading in file: ", file)
     hf = h5py.File(file, 'r')
-    metadata = hf.get('bim')[()]
-    chromosome_file = metadata[:, 0]
-    snp_file = metadata[:, 1]
-    pos_file = metadata[:, 3]
-    A1_file = metadata[:, 4]
-    A2_file = metadata[:, 5]
+    snp_file = hf.get("sid")[()]
+    nobs = len(snp_file)
+    chromosome_file = [int(i) for i in file[-7:-5].split("_") if i.isdigit()] * nobs    
     theta_file  = hf.get('estimate')[()]
     se_file  = hf.get('estimate_ses')[()]
     S_file = hf.get('estimate_covariance')[()]
@@ -52,9 +46,6 @@ for file in files[1:]:
 
     chromosome = np.append(chromosome, chromosome_file, axis = 0)
     snp = np.append(snp, snp_file, axis = 0)
-    pos = np.append(pos, pos_file, axis = 0)
-    A1 = np.append(A1, A1_file, axis = 0)
-    A2 = np.append(A2, A2_file, axis = 0)
     theta = np.append(theta, theta_file, axis = 0)
     se = np.append(se, se_file, axis = 0)
     S = np.append(S, S_file, axis = 0)
@@ -67,9 +58,6 @@ zval = theta/se
 # Constructing dataframe of data
 zdata = pd.DataFrame({'CHR' : chromosome,
                     'SNP' : snp,
-                    'pos' : pos,
-                    'A1' : A1,
-                    'A2' : A2,
                     'N' : N,
                     'z' : zval.tolist(),
                     'se' : se.tolist(),
@@ -78,23 +66,18 @@ zdata = pd.DataFrame({'CHR' : chromosome,
 
 zdata['CHR'] = zdata['CHR'].astype(float)
 zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
-zdata['pos'] = zdata['pos'].astype(str).str.replace("b'", "").str[:-1]
-zdata['A1'] = zdata['A1'].astype(str).str.replace("b'", "").str[:-1]
-zdata['A2'] = zdata['A2'].astype(str).str.replace("b'", "").str[:-1]
+
 
 # == Reading in LD Scores == #
 ldscore_path = "/var/genetics/pub/data/ld_ref_panel/eur_w_ld_chr/"
 
-def M(fh, num=None, N=2, common=False):
+def M(fh, N=2, common=False):
     '''Parses .l{N}.M files, split across num chromosomes. See docs/file_formats_ld.txt.'''
     parsefunc = lambda y: [float(z) for z in open(y, 'r').readline().split()]
     suffix = '.l' + str(N) + '.M'
     suffix += '_5_50'
 
-    if num is not None:
-        x = np.sum([parsefunc(sub_chr(fh, i) + suffix) for i in get_present_chrs(fh, num+1)], axis=0)
-    else:
-        x = parsefunc(fh + suffix)
+    x = parsefunc(fh + suffix)
 
     return np.array(x).reshape((1, len(x)))
 

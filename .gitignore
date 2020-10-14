@@ -1,3 +1,5 @@
+*.bed
+*.csv
 *.cpp
 *.pyc
 *.so

@@ -242,7 +242,7 @@ def neg_logll_grad(V,
         log_ll[i] = (1/ui) * _log_ll(V_norm , zi, Si, ri)
         Gvec[i, :, :] = (1/ui) * _grad_ll_v(V_norm, zi, Si, ri)
 
-    return -log_ll.sum() , -Gvec.sum(axis = 0)
+    return -log_ll.sum()/float(N) , -Gvec.sum(axis = 0)/float(N) 
 
 
 def neglike_wrapper(V, z, S, u, r, f):
@@ -459,8 +459,8 @@ class sibreg():
             jac = True,
             args = (z, S, u, r, f),
             bounds = bounds,
-            method = 'L-BFGS-B'
-            # options = {'ftol' : 1e-15}
+            method = 'L-BFGS-B',
+            options = {'ftol' : 1e-20}
             
         )
 
