@@ -111,10 +111,10 @@ model = ld.sibreg(S = S, z = z, f = f)
 print("Solving Model...")
 
 
-output_matrix, result = model.solve()
+output, result = model.solve()
 
 print("===================================")
-print("Output matrix: ", output_matrix)
+print("Output matrix: ", output)
 print("Solver Output: ", result)
 
 executionTime = (time.time() - startTime)
