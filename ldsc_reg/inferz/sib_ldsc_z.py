@@ -459,8 +459,8 @@ class sibreg():
             jac = True,
             args = (z, S, u, r, f),
             bounds = bounds,
-            method = 'L-BFGS-B',
-            options = {'ftol' : 1e-20}
+            method = 'L-BFGS-B'
+            # options = {'ftol' : 1e-20}
             
         )
 
