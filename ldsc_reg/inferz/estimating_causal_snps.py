@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 
 
-effect_estimated = "direct_plus_averageparental"
+effect_estimated = "direct_plus_population"
 # effect estimated can be
 # full (for a 3x3 V matrix)
 # population
@@ -24,8 +24,8 @@ print(f"Estimating {effect_estimated} effect")
 startTime = time.time()
 print("Start time: ", startTime)
 
-files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
-# files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
@@ -111,10 +111,10 @@ model = ld.sibreg(S = S, z = z, f = f)
 print("Solving Model...")
 
 
-output_matrix, result = model.solve()
+output, result = model.solve()
 
 print("===================================")
-print("Output matrix: ", output_matrix)
+print("Output matrix: ", output)
 print("Solver Output: ", result)
 
 executionTime = (time.time() - startTime)
