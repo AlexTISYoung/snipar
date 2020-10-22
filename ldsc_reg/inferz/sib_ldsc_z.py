@@ -168,7 +168,7 @@ def Vmat2V(Vmat, M):
 
 
 @njit
-def _log_ll(V, z, S, r, N):
+def _log_ll(V, z, S, l, N):
 
     """
     Returns the log likelihood matrix for a given SNP i as formulated by:
@@ -181,7 +181,7 @@ def _log_ll(V, z, S, r, N):
     V = dxd numpy matrix
     z = dx1 numpy matrix
     S = dxd numpy matrix
-    r = scalar
+    l = scalar
     f = scalar
 
     Outputs:
@@ -190,7 +190,7 @@ def _log_ll(V, z, S, r, N):
     Vmat = V2Vmat(V, N)
 
     Vnew, Snew = standardize_mat(Vmat, S, N)
-    Sigma = Snew + Vnew
+    Sigma = Snew + l * Vnew
     logdet = np.linalg.slogdet(Sigma)
 
     det = np.linalg.det(Sigma)
@@ -210,7 +210,7 @@ def _log_ll(V, z, S, r, N):
 
 
 @njit
-def _grad_ll_v(V, z, S, r, N):
+def _grad_ll_v(V, z, S, l, N):
 
     """
     """
@@ -219,7 +219,7 @@ def _grad_ll_v(V, z, S, r, N):
     d = S.shape[0]
 
     Vnew, Snew = standardize_mat(Vmat, S, N)
-    Sigma = Snew + Vnew
+    Sigma = Snew + l * Vnew
     
     # getting important scalars
     v1 = V[0]
@@ -244,31 +244,31 @@ def _grad_ll_v(V, z, S, r, N):
 
     det = np.linalg.det(Sigma)
 
-    T = z1sq * (1 + (v2/sigma2sq)) - \
-            2 * z1 * z2 * (rs + r * np.sqrt(v1 * v2)/(sigma1 * sigma2)) + \
-            z2sq * (1 + v1/sigma1sq)
+    T = z1sq * (1 + (l * v2/sigma2sq)) - \
+            2 * z1 * z2 * (rs + r * l * np.sqrt(v1 * v2)/(sigma1 * sigma2)) + \
+            z2sq * (1 + l * v1/sigma1sq)
 
     # gradient wrt v1
-    ddet_dv1 = 1/sigma1sq * (1 + v2/sigma2sq) - (r/(sigma1 * sigma2)) * \
-            (rs * np.sqrt(v2/v1) + r * v2/(sigma1 * sigma2)) 
+    ddet_dv1 = l/sigma1sq * (1 + l * v2/sigma2sq) - (l * r/(sigma1 * sigma2)) * \
+            (rs * np.sqrt(v2/v1) + r * l * v2/(sigma1 * sigma2)) 
 
-    dT_dv1 = (z2sq/sigma1sq) - (r * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
+    dT_dv1 = (z2sq * l/sigma1sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
 
     dl_dv1 = -(1/2) * 1/det * (ddet_dv1 * (1 - T/det) + dT_dv1)
 
     # gradient wrt v2
-    ddet_dv2 = 1/sigma2sq * (1 + v1/sigma1sq) - (r/(sigma1 * sigma2)) * \
-            (rs * np.sqrt(v1/v2) + r * v1/(sigma1 * sigma2)) 
+    ddet_dv2 = l/sigma2sq * (1 + l * v1/sigma1sq) - (l * r/(sigma1 * sigma2)) * \
+            (rs * np.sqrt(v1/v2) + r * l * v1/(sigma1 * sigma2)) 
 
-    dT_dv2 = (z1sq/sigma2sq) - (r * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
+    dT_dv2 = (z1sq * l/sigma2sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
 
     dl_dv2 = -(1/2) * 1/det * (ddet_dv2 * (1 - T/det) + dT_dv2)
 
     # gradient wrt r
-    ddet_dr = -2 * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
-         (rs + (r * np.sqrt(v1 * v2))/(sigma1 * sigma2))
+    ddet_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
+         (rs + (r * l * np.sqrt(v1 * v2))/(sigma1 * sigma2))
 
-    dT_dr = -2 * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
+    dT_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
 
     dl_dr = -(1/2) * 1/det * (ddet_dr * (1 - T/det) + dT_dr)
 
@@ -278,7 +278,7 @@ def _grad_ll_v(V, z, S, r, N):
 @njit(parallel = True)
 def neg_logll_grad(V, 
                    z, S, 
-                   u, r):
+                   l, u):
 
     """
     Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
@@ -321,14 +321,14 @@ def neg_logll_grad(V,
         Si = S[i]
         zi = z[i, :]
         ui = u[i]
-        ri = r[i]
+        li = l[i]
 
-        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, ri, N)
-        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, ri, N)  #_num_grad_V
+        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, N)
+        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, N)  #_num_grad_V
 
     return -log_ll.sum() , -Gvec.sum(axis = 0)
 
-def neglike_wrapper(V, z, S, u, r, f):
+def neglike_wrapper(V, z, S, l, u, f):
     
     '''
     Wrapper for neg_logll_grad to convert V from an
@@ -344,7 +344,7 @@ def neglike_wrapper(V, z, S, u, r, f):
     
     logll, Gvec = neg_logll_grad(V, 
                                z, S, 
-                               u, r)
+                               l, u)
     
     print(f"Logll : {logll}")
     print(f"V : {V}")
@@ -353,7 +353,7 @@ def neglike_wrapper(V, z, S, u, r, f):
 
 
 @njit
-def _num_grad_V(V, z, S, r, N):
+def _num_grad_V(V, z, S, l, N):
     """
     Returns numerical gradient vector of self._log_ll
     Mostly meant to check if self._grad_ll_v is working
@@ -378,13 +378,13 @@ def _num_grad_V(V, z, S, r, N):
         dV[i] = 10 ** (-6)
         V_upper = V+dV
         V_lower = V-dV
-        g[i] = (_log_ll(V_upper, z, S, r, N) - \
-                    _log_ll(V_lower, z, S, r, N)) / (2 * 10 ** (-6))
+        g[i] = (_log_ll(V_upper, z, S, l, N) - \
+                    _log_ll(V_lower, z, S, l, N)) / (2 * 10 ** (-6))
     return g
 
 class sibreg():
     
-    def __init__(self, S, z = None, u = None, r = None, f = None):
+    def __init__(self, S, z = None, l = None, u = None,  f = None):
         
         if S.ndim > 1:
             for s in S:
@@ -396,20 +396,20 @@ class sibreg():
         if u is None:
             print("No value for U given. Generating a vector of ones (all SNPs weighted equally)")
             u = np.ones(S.shape[0])
-        if r is None:
-            print("No value for r given. Generating a vector of ones for r")
-            r = np.ones(S.shape[0])
+        if l is None:
+            print("No value for LD Scores given. Generating a vector of ones for l")
+            l = np.ones(S.shape[0])
         if f is None:
             print("Warning: No value given for allele frequencies. Some parameters won't be normalized.")
         
         self.z = None if z is None else z[~np.any(np.isnan(z), axis = 1)]
         self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
         self.u = u[~np.isnan(u)]
-        self.r = r[~np.isnan(r)]
+        self.l = l[~np.isnan(l)]
         self.f = None if f is None else f[~np.isnan(f)]
     
 
-    def simdata(self, V,  N, simr = False):
+    def simdata(self, V,  N, simld = False):
         """
         Simulates data for z scores.
         
@@ -430,16 +430,17 @@ class sibreg():
         
         S = self.S
         
-        if simr:
-            self.r = np.random.uniform(low=1, high=5, size=N)
+        if simld:
+            self.l = np.random.uniform(low=1, high=5, size=N)
             print("Simulated LD scores!")
         
-        r = self.r
+        l = self.l
 
         zhat_vec = np.empty((N, V.shape[1]))
         for i in range(N):
             
             Si = S[i]
+            li = l[i]
             
             V = np.array(V)
             Si = np.array(Si)
@@ -450,7 +451,7 @@ class sibreg():
             Vnew, Snew = standardize_mat(V, Si, N)
 
             # generate true effect vector
-            sim = np.random.multivariate_normal(zeromat, Snew + Vnew)
+            sim = np.random.multivariate_normal(zeromat, Snew + li * Vnew)
             
             # Append to vector of effects
             zhat_vec[i, :] = sim
@@ -464,8 +465,8 @@ class sibreg():
     def solve(self,
               z = None, 
               S = None,
+              l = None,
               u = None,
-              r = None,
               f = None,
               neg_logll_grad = neglike_wrapper,
               est_init = None,
@@ -489,8 +490,8 @@ class sibreg():
         # inherit parameters from the class if they aren't defined
         z = self.z if z is None else z
         S = self.S if S is None else S
+        l = self.l if l is None else l
         u = self.u if u is None else u
-        r = self.r if r is None else r
         f = self.f if f is None else f
 
         # == Solves our MLE problem == #
@@ -506,14 +507,14 @@ class sibreg():
             else:
                 if printout == True:
                     print("Warning: Initial Estimate given is not of the proper dimension")
-                    print("Making 'optimal' matrix")
+                    print("Making zero vector")
                     print("=================================================")
                 
                 est_init = np.zeros(m)
         else:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making 'optimal' matrix")
+                print("Making zero vector")
                 print("=================================================")
             
             est_init = np.zeros(m)
@@ -526,7 +527,7 @@ class sibreg():
             neg_logll_grad, 
             est_init,
             jac = True,
-            args = (z, S, u, r, f),
+            args = (z, S, l, u, f),
             bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
             method = 'L-BFGS-B'
             # options = {'ftol' : 1e-20}
@@ -547,7 +548,7 @@ class sibreg():
 
     def jackknife_se(self,
                   theta  = None, S = None,
-                  r = None, u = None,
+                  l = None, u = None,
                   blocksize = 1):
 
         # Simple jackknife estimator for SE
@@ -556,7 +557,7 @@ class sibreg():
 
         theta = self.theta if (theta is None) else theta
         S = self.S if (S is None) else S
-        r = self.r if (r is None) else r
+        l = self.l if (l is None) else l
         u = self.u if (u is None) else u
 
         
@@ -586,7 +587,7 @@ class sibreg():
                 # Get our estimate
                 output_matrix, _ = self.solve(theta = vars_jk[0],
                                               S = vars_jk[1],
-                                              r = vars_jk[2],
+                                              l = vars_jk[2],
                                               u = vars_jk[3],
                                               printout = False,
                                               est_init = self.est_init)
