@@ -323,8 +323,6 @@ def neg_logll_grad(V,
         ui = u[i]
         ri = r[i]
 
-        # Si = N * Si
-
         log_ll[i] = (1/ui) * _log_ll(V, zi, Si, ri, N)
         Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, ri, N)  #_num_grad_V
 

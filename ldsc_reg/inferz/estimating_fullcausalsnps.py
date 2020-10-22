@@ -141,7 +141,7 @@ f = np.array(list(main_df["MAF"]))
 r = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "full"
+effect_estimated = "direct_plus_population"
 
 if effect_estimated == "population":
     # == Keeping population effect == #

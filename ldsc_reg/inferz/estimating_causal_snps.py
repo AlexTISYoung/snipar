@@ -12,7 +12,7 @@ import time
 import matplotlib.pyplot as plt
 
 
-effect_estimated = "direct_plus_population"
+effect_estimated = "direct_plus_averageparental"
 # effect estimated can be
 # full (for a 3x3 V matrix)
 # population
@@ -24,8 +24,8 @@ print(f"Estimating {effect_estimated} effect")
 startTime = time.time()
 print("Start time: ", startTime)
 
-# files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
-files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
+files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
+# files = glob.glob("C:/Users/Hariharan/Documents/genoecon_work/snipardata/causal.hdf5")
 print("Reading files...")
 
 # read in first file
