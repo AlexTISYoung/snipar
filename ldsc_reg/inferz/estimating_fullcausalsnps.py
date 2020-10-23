@@ -6,11 +6,11 @@ import sib_ldsc_z as ld
 import numpy as np
 import h5py
 import glob
-import time
+import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 
-startTime = time.time()
+startTime = datetime.datetime.now() 
 print("Start time: ", startTime)
 
 # == Direct Effect == #
@@ -140,7 +140,7 @@ f = np.array(list(main_df["MAF"]))
 l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "direct_plus_averageparental"
+effect_estimated = "direct_plus_population"
 
 if effect_estimated == "population":
     # == Keeping population effect == #
@@ -194,5 +194,5 @@ print(f"Output Matrix: {output_matrix}")
 print(f"Result: {result}")
 
 
-executionTime = (time.time() - startTime)
+executionTime = (datetime.datetime.now() - startTime)
 print('Execution time: ' + f'{executionTime:.2f}', " seconds")

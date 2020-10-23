@@ -8,7 +8,7 @@ import sib_ldsc_z as ld
 import numpy as np
 import h5py
 import glob
-import time
+import datetime
 import matplotlib.pyplot as plt
 
 
@@ -21,7 +21,7 @@ effect_estimated = "direct_plus_averageparental"
 
 print(f"Estimating {effect_estimated} effect")
 
-startTime = time.time()
+startTime = datetime.datetime.now() 
 print("Start time: ", startTime)
 
 files = glob.glob('/disk/genetics/ukb/alextisyoung/vcinf/1/causal.hdf5')
@@ -117,7 +117,7 @@ print("===================================")
 print("Output matrix: ", output)
 print("Solver Output: ", result)
 
-executionTime = (time.time() - startTime)
+executionTime = (datetime.datetime.now() - startTime)
 print('Execution time: ' + f'{executionTime:.2f}', " seconds")
 
 

@@ -6,12 +6,12 @@ import ldsc_reg.inferz.sib_ldsc_z as ld
 import numpy as np
 import h5py
 import glob
-import time
+import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 
-startTime = time.time()
-print("Start time: ", time.localtime(startTime))
+startTime = datetime.datetime.now()  
+print("Start time: ", startTime)
 
 # == Direct Effect == #
 print("=====================================")
@@ -125,7 +125,7 @@ f = np.array(list(main_df["f"]))
 l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "direct_plus_averageparental"
+effect_estimated = "direct_plus_population"
 
 if effect_estimated == "population":
     # == Keeping population effect == #
@@ -169,14 +169,15 @@ model = ld.sibreg(S = S,
                 z = z, 
                 l = l,
                 f = f,
-                u = u) 
+                u = u,
+                M = len(S)) 
 
-output_matrix, result = model.solve()
+output_matrix, result = model.solve(est_init = np.ones(3) * 0.5)
 
 print(f"======================================")
 print(f"Output Matrix: {output_matrix}")
 print(f"Result: {result}")
 
 
-executionTime = (time.time() - startTime)
+executionTime = (datetime.datetime.now() - startTime)
 print('Execution time: ' + f'{executionTime:.2f}', " seconds")

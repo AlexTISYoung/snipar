@@ -401,7 +401,7 @@ class sibreg():
             print("Warning: No value given for allele frequencies. Some parameters won't be normalized.")
         if M is None:
             print("No value for effective number of loci is given. Using total number of loci instead")
-            self.M = len(S[~np.any(np.isnan(S), axis = (1, 2))])
+            M = len(S[~np.any(np.isnan(S), axis = (1, 2))])
         
         self.z = None if z is None else z[~np.any(np.isnan(z), axis = 1)]
         self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
