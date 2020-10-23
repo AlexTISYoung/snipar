@@ -2,7 +2,7 @@
 This script reads the HDF5 files for EA
 and estimates V
 '''
-import sib_ldsc_z as ld
+import ldsc_reg.inferz.sib_ldsc_z as ld
 import numpy as np
 import h5py
 import glob
@@ -18,14 +18,14 @@ print("=====================================")
 print("Making CSV for Average Parental Effects")
 print("=====================================")
 # reading in  data
-files = glob.glob("/disk/genetics/ukb/alextisyoung/genotypes/EA/chr_*.hdf5")
+files = glob.glob("/disk/genetics/ukb/alextisyoung/haplotypes/relatives/EA/chr_*.hdf5")
 
 file = files[0]
 print("Reading in file: ", file)
 hf = h5py.File(file, 'r')
-snp = hf.get("sid")[()]
-nobs = len(snp)
-chromosome = [int(i) for i in file[-7:-5].split("_") if i.isdigit()] * nobs
+metadata = hf.get("bim")[()]
+chromosome = metadata[:, 0]
+snp = metadata[:, 1]
 theta  = hf.get('estimate')[()]
 se  = hf.get('estimate_ses')[()]
 N = hf.get('N_L')[()]
@@ -35,9 +35,9 @@ f = hf.get('freqs')[()]
 for file in files[1:]:
     print("Reading in file: ", file)
     hf = h5py.File(file, 'r')
-    snp_file = hf.get("sid")[()]
-    nobs = len(snp_file)
-    chromosome_file = [int(i) for i in file[-7:-5].split("_") if i.isdigit()] * nobs    
+    metadata = hf.get("bim")[()]
+    chromosome_file = metadata[:, 0]  
+    snp_file = metadata[:, 1]
     theta_file  = hf.get('estimate')[()]
     se_file  = hf.get('estimate_ses')[()]
     S_file = hf.get('estimate_covariance')[()]
@@ -59,17 +59,18 @@ zval = theta/se
 zdata = pd.DataFrame({'CHR' : chromosome,
                     'SNP' : snp,
                     'N' : N,
+                    "f" : f,
                     'z' : zval.tolist(),
                     'se' : se.tolist(),
                     "S" : S.tolist()})
 
 
-zdata['CHR'] = zdata['CHR'].astype(float)
+zdata['CHR'] = zdata['CHR'].astype(int)
 zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
 
 
 # == Reading in LD Scores == #
-ldscore_path = "/var/genetics/pub/data/ld_ref_panel/eur_w_ld_chr/"
+ldscore_path = "/disk/genetics/ukb/alextisyoung/haplotypes/relatives/bedfiles/ldscores/"
 
 def M(fh, N=2, common=False):
     '''Parses .l{N}.M files, split across num chromosomes. See docs/file_formats_ld.txt.'''
@@ -84,11 +85,11 @@ def M(fh, N=2, common=False):
 # Reading LD Scores
 
 files = glob.glob(f"{ldscore_path}/*[0-9].l2.ldscore.gz")
-ldscores = pd.DataFrame(columns = ["CHR", "SNP", "BP", "CM", "MAF", "L2"])
+ldscores = pd.DataFrame(columns = ["CHR", "SNP", "BP", "L2"])
 
 for file in files:
     snpi = pd.read_csv(file, compression='gzip', sep = "\t")
-    ldscores = pd.concat([ldscores, snpi])
+    ldscores = pd.concat([ldscores, snpi], sort = False)
 
 # Reading Number of Loci
 files_M = glob.glob(f"{ldscore_path}/*[0-9].l2.M_5_50")
@@ -96,7 +97,7 @@ nloci = pd.DataFrame(columns = ["M", "CHR"])
 
 for file in files_M:
     
-    if len(file) == 60:
+    if len(file) - len(ldscore_path) == 11:
         chrom = int(file[-11])
     else:
         chrom = int(file[-12:-10])
@@ -120,11 +121,11 @@ main_df = main_df.dropna()
 
 S = np.array(list(main_df.S)) 
 z = np.array(list(main_df.z))
-f = np.array(list(main_df["MAF"]))
-r = np.array(list(main_df["L2"]))
+f = np.array(list(main_df["f"]))
+l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "direct_plus_population"
+effect_estimated = "direct_plus_averageparental"
 
 if effect_estimated == "population":
     # == Keeping population effect == #
@@ -166,8 +167,8 @@ elif effect_estimated == "full":
 # == Initializing model == #
 model = ld.sibreg(S = S, 
                 z = z, 
+                l = l,
                 f = f,
-                r = r,
                 u = u) 
 
 output_matrix, result = model.solve()

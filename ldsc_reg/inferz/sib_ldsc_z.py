@@ -278,7 +278,8 @@ def _grad_ll_v(V, z, S, l, N):
 @njit(parallel = True)
 def neg_logll_grad(V, 
                    z, S, 
-                   l, u):
+                   l, u,
+                   M):
 
     """
     Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
@@ -299,10 +300,7 @@ def neg_logll_grad(V,
     u = 1 numpy matrix
     r = 1 numpy matrix
     f = 1 numpy matrix
-    logllfunc = function which calculates logll
-                (uses self._log_ll by default)
-    gradfunc = function which calculated grad of logll
-                (uses self._grad_ll_v by default)
+    M = Scalar
 
     Outputs:
     -log_ll = 1x1 scalar
@@ -323,12 +321,12 @@ def neg_logll_grad(V,
         ui = u[i]
         li = l[i]
 
-        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, N)
-        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, N)  #_num_grad_V
+        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, M)
+        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, M)  #_num_grad_V
 
     return -log_ll.sum() , -Gvec.sum(axis = 0)
 
-def neglike_wrapper(V, z, S, l, u, f):
+def neglike_wrapper(V, z, S, l, u, f, M):
     
     '''
     Wrapper for neg_logll_grad to convert V from an
@@ -344,7 +342,7 @@ def neglike_wrapper(V, z, S, l, u, f):
     
     logll, Gvec = neg_logll_grad(V, 
                                z, S, 
-                               l, u)
+                               l, u, M)
     
     print(f"Logll : {logll}")
     print(f"V : {V}")
@@ -353,7 +351,7 @@ def neglike_wrapper(V, z, S, l, u, f):
 
 
 @njit
-def _num_grad_V(V, z, S, l, N):
+def _num_grad_V(V, z, S, l, M):
     """
     Returns numerical gradient vector of self._log_ll
     Mostly meant to check if self._grad_ll_v is working
@@ -378,13 +376,13 @@ def _num_grad_V(V, z, S, l, N):
         dV[i] = 10 ** (-6)
         V_upper = V+dV
         V_lower = V-dV
-        g[i] = (_log_ll(V_upper, z, S, l, N) - \
-                    _log_ll(V_lower, z, S, l, N)) / (2 * 10 ** (-6))
+        g[i] = (_log_ll(V_upper, z, S, l, M) - \
+                    _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
     return g
 
 class sibreg():
     
-    def __init__(self, S, z = None, l = None, u = None,  f = None):
+    def __init__(self, S, z = None, l = None, u = None,  f = None, M = None):
         
         if S.ndim > 1:
             for s in S:
@@ -401,12 +399,16 @@ class sibreg():
             l = np.ones(S.shape[0])
         if f is None:
             print("Warning: No value given for allele frequencies. Some parameters won't be normalized.")
+        if M is None:
+            print("No value for effective number of loci is given. Using total number of loci instead")
+            self.M = len(S[~np.any(np.isnan(S), axis = (1, 2))])
         
         self.z = None if z is None else z[~np.any(np.isnan(z), axis = 1)]
         self.S = S[~np.any(np.isnan(S), axis = (1, 2))]
         self.u = u[~np.isnan(u)]
         self.l = l[~np.isnan(l)]
         self.f = None if f is None else f[~np.isnan(f)]
+        self.M = M
     
 
     def simdata(self, V,  N, simld = False):
@@ -468,6 +470,7 @@ class sibreg():
               l = None,
               u = None,
               f = None,
+              M = None,
               neg_logll_grad = neglike_wrapper,
               est_init = None,
               printout = True):
@@ -493,31 +496,18 @@ class sibreg():
         l = self.l if l is None else l
         u = self.u if u is None else u
         f = self.f if f is None else f
+        M = self.M if M is None else M
 
         # == Solves our MLE problem == #
         m = 3
         
-        if est_init is not None:
-            # Shape of initial varcov guess
-            rowstrue = est_init.shape[0] == m
-            colstrue = est_init.shape[1] == m
-
-            if rowstrue & colstrue:
-                pass
-            else:
-                if printout == True:
-                    print("Warning: Initial Estimate given is not of the proper dimension")
-                    print("Making zero vector")
-                    print("=================================================")
-                
-                est_init = np.zeros(m)
-        else:
+        if est_init is None:
             if printout == True:
                 print("No initial guess provided.")
                 print("Making zero vector")
                 print("=================================================")
-            
-            est_init = np.zeros(m)
+                
+                est_init = np.zeros(m)
             
         
         # exporting for potential later reference
@@ -527,7 +517,7 @@ class sibreg():
             neg_logll_grad, 
             est_init,
             jac = True,
-            args = (z, S, l, u, f),
+            args = (z, S, l, u, f, M),
             bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
             method = 'L-BFGS-B'
             # options = {'ftol' : 1e-20}

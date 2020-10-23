@@ -99,7 +99,6 @@ def M(fh, num=None, N=2, common=False):
     return np.array(x).reshape((1, len(x)))
 
 # Reading LD Scores
-
 files = glob.glob(f"{ldscore_path}/*[0-9].l2.ldscore.gz")
 ldscores = pd.DataFrame(columns = ["CHR", "SNP", "BP", "CM", "MAF", "L2"])
 
@@ -113,7 +112,7 @@ nloci = pd.DataFrame(columns = ["M", "CHR"])
 
 for file in files_M:
     
-    if len(file) == 60:
+    if len(file) - len(ldscore_path) == 11:
         chrom = int(file[-11])
     else:
         chrom = int(file[-12:-10])
@@ -138,10 +137,10 @@ main_df = main_df.dropna()
 S = np.array(list(main_df.S)) 
 z = np.array(list(main_df.z))
 f = np.array(list(main_df["MAF"]))
-r = np.array(list(main_df["L2"]))
+l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "direct_plus_population"
+effect_estimated = "direct_plus_averageparental"
 
 if effect_estimated == "population":
     # == Keeping population effect == #
@@ -184,10 +183,11 @@ elif effect_estimated == "full":
 model = ld.sibreg(S = S, 
                 z = z, 
                 f = f,
-                r = r,
-                u = u) 
+                l = l,
+                u = u,
+                M = len(S)) 
 
-output_matrix, result = model.solve()
+output_matrix, result = model.solve() #est_init = np.ones(3)
 
 print(f"======================================")
 print(f"Output Matrix: {output_matrix}")
