@@ -1,4 +1,6 @@
 import numpy as np
+import glob
+import pandas as pd
 from scipy.optimize import minimize
 import scipy.optimize
 from scipy.special import comb
@@ -110,7 +112,21 @@ def calc_inv_root(S):
         S_inv_root[:] = np.nan
     return S_inv_root
 
+
+@njit
+def makeDmat(S, M):
+    '''
+    Makes D matrix = M [[1/sigma_1, 0], [0, 1/sigma_2]]
+    '''
+
+    sigma1 = np.sqrt(M * S[0, 0])
+    sigma2 = np.sqrt(M * S[1, 1])
     
+    Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
+                                [0, 1/sigma2]])
+    
+    return Dmat
+
 @njit
 def standardize_mat(V, S, M):
     '''
@@ -122,11 +138,7 @@ def standardize_mat(V, S, M):
     and Snew = Dmat @ S @ Dmat
     '''
     
-    sigma1 = np.sqrt(M * S[0, 0])
-    sigma2 = np.sqrt(M * S[1, 1])
-    
-    Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
-                                [0, 1/sigma2]])
+    Dmat = makeDmat(S, M)
     Snew = Dmat @ S @ Dmat
     Vnew = Dmat @ V @ Dmat
     
@@ -604,3 +616,127 @@ class sibreg():
         jknife_se  = jknife_se.reshape((theta.shape[1], theta.shape[1]))
         
         return jknife_se  
+
+
+
+#  == Reading LD scores == #
+
+
+def M(fh, N=2, common=False):
+    '''Parses .l{N}.M files, split across num chromosomes. See docs/file_formats_ld.txt.'''
+    parsefunc = lambda y: [float(z) for z in open(y, 'r').readline().split()]
+    suffix = '.l' + str(N) + '.M'
+    suffix += '_5_50'
+
+    x = parsefunc(fh + suffix)
+
+    return np.array(x).reshape((1, len(x)))
+
+
+def read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames):
+    '''
+    Reads in LD scores
+    ldscore_path : string signifying where the ldscores are
+    ldfiles : string - a glob identifier for all the ld score files
+    ldcolnames : list - the columns present in the ldscore data
+    Mfiles : string - a glob identifier for all the files which has M data
+    Mcolnames : list - the columns present in the M file data
+    '''
+    files = glob.glob(f"{ldscore_path}/{ldfiles}")
+    ldscores = pd.DataFrame(columns = ldcolnames)
+
+    for file in files:
+        snpi = pd.read_csv(file, compression='gzip', sep = "\t")
+        ldscores = pd.concat([ldscores, snpi], sort = False)
+
+    # Reading Number of Loci
+    files_M = glob.glob(f"{ldscore_path}/{Mfiles}")
+    nloci = pd.DataFrame(columns = Mcolnames)
+
+    for file in files_M:
+        
+        if len(file) - len(ldscore_path) == 11:
+            chrom = int(file[-11])
+        else:
+            chrom = int(file[-12:-10])
+        
+        nloci_i = pd.DataFrame({"M" : [M(file[:-10])[0, 0]],
+                                "CHR" : [chrom]})
+        
+        nloci = pd.concat([nloci, nloci_i])
+
+    nloci = nloci.reset_index(drop = True)
+
+    ldscores = ldscores.merge(nloci, how = "left", on = "CHR")
+
+    return ldscores
+
+
+# == Some useful transformations == #
+
+def transform_estimates(effect_estimated,
+                        S, theta):
+    '''
+    Transforms theta (can also be z) and S data into
+    the required format
+    Format types can be:
+    - population (1 dimensional)
+    - direct_plus_averageparental (2 dimensional)
+    - direct_plus_population (2 dimensional)
+    - full (3 dimensional)
+
+    Assumes input data is 3 dimensional
+    '''
+    if effect_estimated == "population":
+        # == Keeping population effect == #
+        Sdir = np.empty(len(S))
+        for i in range(len(S)):
+            Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
+
+        S = Sdir.reshape((len(S), 1, 1))
+        theta = theta @ np.array([1.0, 0.5, 0.5])
+        theta = theta.reshape((theta.shape[0], 1))
+    elif effect_estimated == "direct_plus_averageparental":
+
+        # == Combining indirect effects to make V a 2x2 matrix == #
+        tmatrix = np.array([[1.0, 0.0],
+                            [0.0, 0.5],
+                            [0.0, 0.5]])
+        Sdir = np.empty((len(S), 2, 2))
+        for i in range(len(S)):
+            Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+        S = Sdir.reshape((len(S), 2, 2))
+        theta = theta @ tmatrix
+        theta = theta.reshape((theta.shape[0], 2))
+    elif effect_estimated == "direct_plus_population":
+
+        # == keeping direct effect and population effect == #
+        tmatrix = np.array([[1.0, 1.0],
+                            [0.0, 0.5],
+                            [0.0, 0.5]])
+        Sdir = np.empty((len(S), 2, 2))
+        for i in range(len(S)):
+            Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+        S = Sdir.reshape((len(S), 2, 2))
+        theta = theta @ tmatrix
+        theta = theta.reshape((theta.shape[0], 2))
+    elif effect_estimated == "full":
+        pass
+
+
+    return S, theta
+
+
+@njit
+def theta2z(theta, S, M):
+    '''
+    Transforms vector of theta values
+    into z values based on S
+    '''
+    zval = np.empty_like(theta)
+    for i in range(theta.shape[0]):
+        Dmat = makeDmat(S[i], M)
+        zval[i, :] = Dmat @ theta[i, :]
+
+    return zval

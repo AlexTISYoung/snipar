@@ -12,15 +12,6 @@ import datetime
 import matplotlib.pyplot as plt
 
 
-effect_estimated = "direct_plus_averageparental"
-# effect estimated can be
-# full (for a 3x3 V matrix)
-# population
-# direct_plus_averageparental
-# direct_plus_population
-
-print(f"Estimating {effect_estimated} effect")
-
 startTime = datetime.datetime.now() 
 print("Start time: ", startTime)
 
@@ -56,55 +47,12 @@ print("Theta Matrix: ", theta)
 print("Initiating Model...")
 
 
+effect_estimated = "direct_plus_averageparental"
+print(f"Estimating {effect_estimated} effect")
+S, theta = ld.transform_estimates(effect_estimated, S, theta)
 
-# == Keeping only direct effects == #
-# S = S[:,0 ,0].reshape((S.shape[0], 1, 1))
-# theta = theta[:, 0].reshape((theta.shape[0], 1))
-
-if effect_estimated == "population":
-    # == Keeping population effect == #
-    Sdir = np.empty(len(S))
-    for i in range(len(S)):
-        Sdir[i] = np.array([[1.0, 0.5, 0.5]]) @ S[i] @ np.array([[1.0, 0.5, 0.5]]).T
-
-    S = Sdir.reshape((len(S), 1, 1))
-    theta = theta @ np.array([1.0, 0.5, 0.5])
-    theta = theta.reshape((theta.shape[0], 1))
-elif effect_estimated == "direct_plus_averageparental":
-
-    # == Combining indirect effects to make V a 2x2 matrix == #
-    tmatrix = np.array([[1.0, 0.0],
-                        [0.0, 0.5],
-                        [0.0, 0.5]])
-    Sdir = np.empty((len(S), 2, 2))
-    for i in range(len(S)):
-        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
-    S = Sdir.reshape((len(S), 2, 2))
-    theta = theta @ tmatrix
-    theta = theta.reshape((theta.shape[0], 2))
-elif effect_estimated == "direct_plus_population":
-
-    # == keeping direct effect and population effect == #
-    tmatrix = np.array([[1.0, 1.0],
-                        [0.0, 0.5],
-                        [0.0, 0.5]])
-    Sdir = np.empty((len(S), 2, 2))
-    for i in range(len(S)):
-        Sdir[i] = tmatrix.T @ S[i] @ tmatrix
-
-    S = Sdir.reshape((len(S), 2, 2))
-    theta = theta @ tmatrix
-    theta = theta.reshape((theta.shape[0], 2))
-elif effect_estimated == "full":
-    pass
-
-# == calcualting z == #
-z = np.empty_like(theta)
-z[:] = np.nan
-for i in range(z.shape[0]):
-    z[i, :] = ld.calc_inv_root(S[i]) @ theta[i, :].T
-
-print("Z: ", z)
+# making z value
+zval = ld.theta2z(theta, S, M = len(S))
 
 model = ld.sibreg(S = S, z = z, f = f) 
 
