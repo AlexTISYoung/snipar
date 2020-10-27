@@ -334,7 +334,7 @@ def neg_logll_grad(V,
         li = l[i]
 
         log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, M)
-        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, M)  #_num_grad_V
+        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
 
     return -log_ll.sum() , -Gvec.sum(axis = 0)
 
@@ -483,7 +483,7 @@ class sibreg():
               u = None,
               f = None,
               M = None,
-              neg_logll_grad = neglike_wrapper,
+              neg_logll_grad_func = neglike_wrapper,
               est_init = None,
               printout = True):
         
@@ -526,11 +526,11 @@ class sibreg():
         self.est_init = est_init
 
         result = minimize(
-            neg_logll_grad, 
+            neg_logll_grad_func, 
             est_init,
             jac = True,
             args = (z, S, l, u, f, M),
-            bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
+            # bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
             method = 'L-BFGS-B'
             # options = {'ftol' : 1e-20}
             
@@ -669,7 +669,7 @@ def read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames):
 
     ldscores = ldscores.merge(nloci, how = "left", on = "CHR")
 
-    return ldscores
+    return ldscores, nloci
 
 
 # == Some useful transformations == #

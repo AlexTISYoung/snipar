@@ -87,7 +87,8 @@ ldcolnames = ["CHR", "SNP", "BP", "CM", "MAF", "L2"]
 Mfiles = "*[0-9].l2.M_5_50"
 Mcolnames = ["M", "CHR"]
 
-ldscores = ld.read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames)
+ldscores, mfile = ld.read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames)
+M = mfile['M'].sum()
 
 # Merging LD scores with main Data Frame
 main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
@@ -103,11 +104,11 @@ f = np.array(list(main_df["MAF"]))
 l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-effect_estimated = "direct_plus_averageparental"
+effect_estimated = "direct_plus_population"
 S, theta = ld.transform_estimates(effect_estimated, S, theta)
 
 # making z value
-zval = ld.theta2z(theta, S, M = len(S))
+zval = ld.theta2z(theta, S, M = M)
 
 # == Initializing model == #
 model = ld.sibreg(S = S, 
@@ -115,7 +116,7 @@ model = ld.sibreg(S = S,
                 f = f,
                 l = l,
                 u = u,
-                M = len(S)) 
+                M = M) 
 
 output_matrix, result = model.solve() #est_init = np.ones(3)
 
