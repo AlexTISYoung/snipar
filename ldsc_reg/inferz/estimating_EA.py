@@ -2,7 +2,7 @@
 This script reads the HDF5 files for EA
 and estimates V
 '''
-import ldsc_reg.inferz.sib_ldsc_z as ld
+import sib_ldsc_z as ld
 import numpy as np
 import h5py
 import glob
@@ -15,7 +15,7 @@ print("Start time: ", startTime)
 
 # == Direct Effect == #
 print("=====================================")
-print("Making CSV for Average Parental Effects")
+print("Reading in Data")
 print("=====================================")
 # reading in  data
 files = glob.glob("/disk/genetics/ukb/alextisyoung/haplotypes/relatives/EA/chr_*.hdf5")
@@ -32,6 +32,13 @@ N = hf.get('N_L')[()]
 S = hf.get('estimate_covariance')[()]
 f = hf.get('freqs')[()]
 
+# normalizing S
+sigma2 = hf.get('sigma2')[()]
+tau = hf.get('tau')[()]
+phvar = sigma2+sigma2/tau
+S = S/phvar
+
+
 for file in files[1:]:
     print("Reading in file: ", file)
     hf = h5py.File(file, 'r')
@@ -43,6 +50,12 @@ for file in files[1:]:
     S_file = hf.get('estimate_covariance')[()]
     f_file = hf.get('freqs')[()]
     N_file = hf.get('N_L')[()]
+
+    # normalizing S
+    sigma2 = hf.get('sigma2')[()]
+    tau = hf.get('tau')[()]
+    phvar = sigma2+sigma2/tau
+    S_file = S_file/phvar
 
     chromosome = np.append(chromosome, chromosome_file, axis = 0)
     snp = np.append(snp, snp_file, axis = 0)
@@ -89,7 +102,8 @@ f = np.array(list(main_df["f"]))
 l = np.array(list(main_df["L2"]))
 u = np.array(list(main_df["L2"]))
 
-M = mfile['M'].sum()
+# M = mfile['M'].sum()
+M = len(S)
 
 effect_estimated = "direct_plus_population"
 
@@ -114,4 +128,4 @@ print(f"Result: {result}")
 
 
 executionTime = (datetime.datetime.now() - startTime)
-print('Execution time: ' + f'{executionTime:.2f}', " seconds")
+print('Execution time: ' + f'{executionTime}', " seconds")

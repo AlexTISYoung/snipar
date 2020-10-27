@@ -530,7 +530,7 @@ class sibreg():
             est_init,
             jac = True,
             args = (z, S, l, u, f, M),
-            # bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
+            bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
             method = 'L-BFGS-B'
             # options = {'ftol' : 1e-20}
             
