@@ -1,3 +1,9 @@
+'''
+Generates a plot of M vs Estimators to understnad
+how changing the M used while estimating changes the
+estimated parameters
+'''
+
 import numpy as np
 import sib_ldsc_z as ld
 from scipy.optimize import minimize
