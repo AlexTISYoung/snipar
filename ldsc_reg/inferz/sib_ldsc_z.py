@@ -65,17 +65,22 @@ def delete_obs_jk(var, start_idx, end_idx, end_cond):
     # Function helps take out observations
     # for a jackknife routine
     # ============================== #
+    
+    if var is not None: # in case we pass a none given f value
 
-    if end_cond:
+        if end_cond:
 
-        var_jk = np.delete(var, range(start_idx, end_idx), 
-                             axis = 0)
+            var_jk = np.delete(var, range(start_idx, end_idx), 
+                                axis = 0)
 
+        else:
+            
+            var_jk = np.delete(var, range(start_idx, var.shape[0]), 
+                                axis = 0)
+            var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
     else:
-
-        var_jk = np.delete(var, range(start_idx, var.shape[0]), 
-                             axis = 0)
-        var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
+        
+        var_jk = None
         
     return var_jk
 
@@ -320,7 +325,6 @@ def neg_logll_grad(V,
     """
 
     # Unflatten V into a matrix
-    d = S[0].shape[0]
     N = len(S)
     
     Gvec = np.zeros((N, 3))
@@ -346,18 +350,17 @@ def neglike_wrapper(V, z, S, l, u, f, M):
     matrix and solve for the negative log likelihood
     '''
 
-    d = S[0].shape[0]
     N = S.shape[0]
     
-    normalizer = 2 * f  * (1 - f) if f is not None else np.ones(N)
+    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
     S = normalize_S(S, normalizer)
     
     logll, Gvec = neg_logll_grad(V, 
                                z, S, 
                                l, u, M)
     
-    print(f"Logll : {logll}")
-    print(f"V : {V}")
+    # print(f"Logll : {logll}")
+    # print(f"V : {V}")
     
     return logll, Gvec
 
@@ -549,50 +552,61 @@ class sibreg():
         return output, result 
 
     def jackknife_se(self,
-                  theta  = None, S = None,
+                  z = None, S = None,
                   l = None, u = None,
+                  f = None, M = None,
                   blocksize = 1):
 
         # Simple jackknife estimator for SE
         # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
         # Default value of blocksize = 1 is the normal jackknife
-
-        theta = self.theta if (theta is None) else theta
-        S = self.S if (S is None) else S
-        l = self.l if (l is None) else l
-        u = self.u if (u is None) else u
+        
+        
+        # inherit parameters from the class if they aren't defined
+        z = self.z if z is None else z
+        S = self.S if S is None else S
+        l = self.l if l is None else l
+        u = self.u if u is None else u
+        f = self.f if f is None else f
+        M = self.M if M is None else M
 
         
-        assert theta.shape[0] == S.shape[0]
+        assert z.shape[0] == S.shape[0]
 
-        nobs = theta.shape[0]
-        
+        nobs = z.shape[0]
+
         estimates_jk = []
-        
+
         start_idx = 0
+        
         while True:
-            
+
             end_idx = start_idx + blocksize
-            end_idx_cond = end_idx <= theta.shape[0]
-            
+            end_idx_cond = end_idx <= z.shape[0]
+
             # remove blocks of observations
 
             vars_jk = []
 
-            for var in [theta, S, r, u]:
+            for var in [z, S, l, u, f]:
 
                 var_jk = delete_obs_jk(var, start_idx, end_idx,
-                                       end_idx_cond)
+                                    end_idx_cond)
                 vars_jk.append(var_jk)
-            
-            if start_idx < theta.shape[0]:
+
+            if start_idx < z.shape[0]:
                 # Get our estimate
-                output_matrix, _ = self.solve(theta = vars_jk[0],
-                                              S = vars_jk[1],
-                                              l = vars_jk[2],
-                                              u = vars_jk[3],
-                                              printout = False,
-                                              est_init = self.est_init)
+                output, _ = self.solve(z = vars_jk[0],
+                                    S = vars_jk[1],
+                                    l = vars_jk[2],
+                                    u = vars_jk[3],
+                                    f = None,
+                                    M = M,
+                                    printout = False,
+                                    est_init = self.est_init)
+
+
+                output_matrix = np.array([output['v1'], output['v2'], output['r']])
 
                 estimates_jk.append(output_matrix)
 
@@ -601,20 +615,19 @@ class sibreg():
                 break
             
         estimates_jk = np.array(estimates_jk)
-        full_est = self.output_matrix
-        
+        full_est_params = self.output
+        full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
+
+
         # calculate pseudo-values
         n_blocks = int(nobs/blocksize)
         pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
-        
+
         # calculate jackknife se
-        pseudovalues = pseudovalues.reshape((n_blocks, theta.shape[1] * theta.shape[1]))
         jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
         jknife_var = np.diag(jknife_cov)
         jknife_se = np.sqrt(jknife_var)
-    
-        jknife_se  = jknife_se.reshape((theta.shape[1], theta.shape[1]))
-        
+
         return jknife_se  
 
 
