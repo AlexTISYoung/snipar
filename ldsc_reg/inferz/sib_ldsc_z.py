@@ -293,10 +293,7 @@ def _grad_ll_v(V, z, S, l, N):
 
 
 @njit(parallel = True)
-def neg_logll_grad(V, 
-                   z, S, 
-                   l, u,
-                   M):
+def neg_logll_grad(V, z, S, l, u, M):
 
     """
     Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
@@ -368,12 +365,12 @@ def neglike_wrapper(V, z, S, l, u, f, M):
 @njit
 def _num_grad_V(V, z, S, l, M):
     """
-    Returns numerical gradient vector of self._log_ll
-    Mostly meant to check if self._grad_ll_v is working
+    Returns numerical gradient vector of _log_ll
+    Mostly meant to check if _grad_ll_v is working
     properly
         
     Inputs:
-    V = dxd numpy matrix
+    V = dx1 numpy matrix
     z = dx1 numpy matrix
     S = dxd numpy matrix
     u = 1 numpy matrix
@@ -394,6 +391,63 @@ def _num_grad_V(V, z, S, l, M):
         g[i] = (_log_ll(V_upper, z, S, l, M) - \
                     _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
     return g
+
+@njit
+def _num_grad2_V(V, z, S, l, M):
+    """
+    Calculates second derivative matrix (the Hessian) of 
+    the log likelihood at a particular observation
+
+    Used to calculate the standard errors of the estimates.
+    """
+
+    h = np.zeros((V.shape[0], V.shape[0]))
+
+    for i in range(V.shape[0]):
+        dV = np.zeros_like(V)
+        dV[i] = 10 ** (-6)
+        V_upper = V+dV
+        V_lower = V-dV
+        h[i, :] = (_grad_ll_v(V_upper, z, S, l, M) - \
+                    _grad_ll_v(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
+    
+    return h
+
+@njit(parallel = True)
+def _data_hessian(V, z, S, l, u, M):
+    """
+    Get hessian matrix at a particular value
+    of V across all data points
+    """
+
+    # Unflatten V into a matrix
+    N = len(S)
+    H = np.zeros((N, 3, 3))
+
+    for i in prange(N):
+
+        Si = S[i]
+        zi = z[i, :]
+        ui = u[i]
+        li = l[i]
+
+        H[i, :, :] = (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
+
+    return -H.sum(axis = 0)
+
+def get_hessian(V, z, S, l, u, f, M):
+    """
+    Get Hessian Matrix for dataset
+    """
+
+    N = S.shape[0]
+    
+    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
+    S = normalize_S(S, normalizer)
+    
+    H = _data_hessian(V, z, S, l, u, M)
+
+    return H
 
 class sibreg():
     
@@ -519,11 +573,15 @@ class sibreg():
         if est_init is None:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making zero vector")
+                print("Making Method of Moments Guess")
                 print("=================================================")
                 
-                est_init = np.zeros(m)
-            
+                S_hat = np.mean(S, axis = 0)
+                D = makeDmat(S_hat, M)
+                theta = np.linalg.inv(D) @ z
+                theta_full = theta
+                theta_var = np.cov(theta_full.T)
+                est_init = M * (theta_var - S_hat)
         
         # exporting for potential later reference
         self.est_init = est_init
@@ -548,6 +606,12 @@ class sibreg():
         
         # re-normnalizing output matrix 
         self.output = output
+
+        # Getting Inverse Hessian
+        H = get_hessian(result.x, z, S, l, l, f, M)
+        invH = np.linalg.inv(H)
+
+        output["invH"] = invH
         
         return output, result 
 
@@ -578,6 +642,7 @@ class sibreg():
         estimates_jk = []
 
         start_idx = 0
+        loop_number = 1
         
         while True:
 
@@ -596,6 +661,9 @@ class sibreg():
 
             if start_idx < z.shape[0]:
                 # Get our estimate
+                print(f"Loop Number: {loop_number}")
+                print(f"Current Block: {start_idx} to {end_idx}")
+
                 output, _ = self.solve(z = vars_jk[0],
                                     S = vars_jk[1],
                                     l = vars_jk[2],
@@ -611,6 +679,8 @@ class sibreg():
                 estimates_jk.append(output_matrix)
 
                 start_idx += blocksize
+
+                loop_number += 1
             else:
                 break
             

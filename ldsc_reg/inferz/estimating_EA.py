@@ -9,9 +9,13 @@ import glob
 import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
+import logging
+
+logging.basicConfig(filename= "ldsc_reg/inferz/estimating_EA.log", 
+                     level = logging.INFO)
 
 startTime = datetime.datetime.now()  
-print("Start time: ", startTime)
+logging.info(f"Start time:  {startTime}")
 
 # == Direct Effect == #
 print("=====================================")
@@ -36,7 +40,6 @@ f = hf.get('freqs')[()]
 sigma2 = hf.get('sigma2')[()]
 tau = hf.get('tau')[()]
 phvar = sigma2+sigma2/tau
-S = S/phvar
 
 
 for file in files[1:]:
@@ -54,8 +57,6 @@ for file in files[1:]:
     # normalizing S
     sigma2 = hf.get('sigma2')[()]
     tau = hf.get('tau')[()]
-    phvar = sigma2+sigma2/tau
-    S_file = S_file/phvar
 
     chromosome = np.append(chromosome, chromosome_file, axis = 0)
     snp = np.append(snp, snp_file, axis = 0)
@@ -122,10 +123,22 @@ model = ld.sibreg(S = S,
 
 output_matrix, result = model.solve() # est_init = np.ones(3) * 0.5
 
-print(f"======================================")
-print(f"Output Matrix: {output_matrix}")
-print(f"Result: {result}")
+# rescaling
+output_matrix['v1'] = output_matrix['v1']/phvar
+output_matrix['v2'] = output_matrix['v2']/phvar
 
+logging.info(f"======================================")
+logging.info(f"Output Matrix: {output_matrix}")
+logging.info(f"Result: {result}")
+
+
+estimationTime = (datetime.datetime.now() - startTime)
+logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
+
+# Get standard errors
+stderrors = model.jackknife_se(blocksize = 1000)
+
+logging.info(f"Jackknife Standard Errors: {stderrors}")
 
 executionTime = (datetime.datetime.now() - startTime)
-print('Execution time: ' + f'{executionTime}', " seconds")
+logging.info(f"Execution time: {executionTime}")
