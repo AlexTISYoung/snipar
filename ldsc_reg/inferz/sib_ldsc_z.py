@@ -576,17 +576,14 @@ class sibreg():
                 print("Making Method of Moments Guess")
                 print("=================================================")
                 
-                S_hat = np.mean(S, axis = 0)
-                Dmat = makeDmat(S_hat, M)
-                Snew = Dmat @ S_hat @ Dmat
-                z_var = np.cov(z.T)
-                Vnew_init = z_var - Snew
-                V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
-                Vnotsym = V_init[1, 0] != V_init[0, 1]
-                if Vnotsym:
-                    print(f"Warning: Vinit isn't symmetric. V[0, 1]:{V_init[0, 1]}, V[1, 0] : {V_init[1, 0]}")
-                est_init = np.array([V_init[0, 0], V_init[1, 1], V_init[0, 1]])
-                print(f"Initial estimate: {est_init}")
+            S_hat = np.mean(S, axis = 0)
+            Dmat = makeDmat(S_hat, M)
+            Snew = Dmat @ S_hat @ Dmat
+            z_var = np.cov(z.T)
+            Vnew_init = z_var - Snew
+            V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
+            est_init = Vmat2V(V_init, M)
+            print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
         self.est_init = est_init

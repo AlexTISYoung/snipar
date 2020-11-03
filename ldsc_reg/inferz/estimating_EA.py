@@ -12,7 +12,9 @@ import pandas as pd
 import logging
 
 logging.basicConfig(filename= "ldsc_reg/inferz/estimating_EA.log", 
-                     level = logging.INFO)
+                     level = logging.INFO,
+                     format = "%(asctime)s: %(message)s",
+                     filemode = "w")
 
 startTime = datetime.datetime.now()  
 logging.info(f"Start time:  {startTime}")
@@ -136,7 +138,7 @@ estimationTime = (datetime.datetime.now() - startTime)
 logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
 
 # Get standard errors
-stderrors = model.jackknife_se(blocksize = 50_000)
+stderrors = model.jackknife_se(blocksize = 1000)
 
 logging.info(f"Jackknife Standard Errors: {stderrors}")
 
