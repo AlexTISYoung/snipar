@@ -136,7 +136,7 @@ estimationTime = (datetime.datetime.now() - startTime)
 logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
 
 # Get standard errors
-stderrors = model.jackknife_se(blocksize = 1000)
+stderrors = model.jackknife_se(blocksize = 50_000)
 
 logging.info(f"Jackknife Standard Errors: {stderrors}")
 

@@ -77,7 +77,7 @@ def delete_obs_jk(var, start_idx, end_idx, end_cond):
             
             var_jk = np.delete(var, range(start_idx, var.shape[0]), 
                                 axis = 0)
-            var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
+            # var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
     else:
         
         var_jk = None
@@ -577,11 +577,16 @@ class sibreg():
                 print("=================================================")
                 
                 S_hat = np.mean(S, axis = 0)
-                D = makeDmat(S_hat, M)
-                theta = np.linalg.inv(D) @ z
-                theta_full = theta
-                theta_var = np.cov(theta_full.T)
-                est_init = M * (theta_var - S_hat)
+                Dmat = makeDmat(S_hat, M)
+                Snew = Dmat @ S_hat @ Dmat
+                z_var = np.cov(z.T)
+                Vnew_init = z_var - Snew
+                V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
+                Vnotsym = V_init[1, 0] != V_init[0, 1]
+                if Vnotsym:
+                    print(f"Warning: Vinit isn't symmetric. V[0, 1]:{V_init[0, 1]}, V[1, 0] : {V_init[1, 0]}")
+                est_init = np.array([V_init[0, 0], V_init[1, 1], V_init[0, 1]])
+                print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
         self.est_init = est_init
@@ -647,7 +652,7 @@ class sibreg():
         while True:
 
             end_idx = start_idx + blocksize
-            end_idx_cond = end_idx <= z.shape[0]
+            end_idx_cond = end_idx <= nobs
 
             # remove blocks of observations
 
@@ -659,7 +664,7 @@ class sibreg():
                                     end_idx_cond)
                 vars_jk.append(var_jk)
 
-            if start_idx < z.shape[0]:
+            if start_idx < nobs:
                 # Get our estimate
                 print(f"Loop Number: {loop_number}")
                 print(f"Current Block: {start_idx} to {end_idx}")
@@ -668,7 +673,7 @@ class sibreg():
                                     S = vars_jk[1],
                                     l = vars_jk[2],
                                     u = vars_jk[3],
-                                    f = None,
+                                    f = vars_jk[4],
                                     M = M,
                                     printout = False,
                                     est_init = self.est_init)
