@@ -615,8 +615,9 @@ class sibreg():
         # Getting Inverse Hessian
         H = get_hessian(result.x, z, S, l, l, f, M)
         invH = np.linalg.inv(H)
-
-        output["invH"] = invH
+        std_err_mat = np.sqrt(invH)
+        
+        output["std_err_mat"] = std_err_mat
         
         return output, result 
 
@@ -624,7 +625,8 @@ class sibreg():
                   z = None, S = None,
                   l = None, u = None,
                   f = None, M = None,
-                  blocksize = 1):
+                  blocksize = 1,
+                  printinfo = False):
 
         # Simple jackknife estimator for SE
         # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
@@ -666,8 +668,9 @@ class sibreg():
 
             if start_idx < nobs:
                 # Get our estimate
-                print(f"Loop Number: {loop_number}")
-                print(f"Current Block: {start_idx} to {end_idx}")
+                if printinfo:
+                    print(f"Loop Number: {loop_number}")
+                    print(f"Current Block: {start_idx} to {end_idx}")
 
                 output, _ = self.solve(z = vars_jk[0],
                                     S = vars_jk[1],
