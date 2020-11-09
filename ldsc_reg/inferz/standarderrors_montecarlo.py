@@ -34,7 +34,9 @@ def sim_data(nsim = 100):
     return inv_hess, jkse, estimates
 
 
+np.random.seed(123)
 inv_hess, jkse, estimates = sim_data()
+inv_hess = inv_hess/np.sqrt(2)
 
 # plotting
 fig, ax = plt.subplots(3, 1, figsize = (8, 16))
