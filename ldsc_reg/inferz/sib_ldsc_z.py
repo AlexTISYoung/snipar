@@ -292,7 +292,7 @@ def _grad_ll_v(V, z, S, l, N):
     return np.array([dl_dv1, dl_dv2, dl_dr])
 
 
-@njit(parallel = True)
+@njit(parallel = True, fastmath = True)
 def neg_logll_grad(V, z, S, l, u, M):
 
     """
@@ -324,8 +324,8 @@ def neg_logll_grad(V, z, S, l, u, M):
     # Unflatten V into a matrix
     N = len(S)
     
-    Gvec = np.zeros((N, 3))
-    log_ll = np.zeros(N)
+    G = np.zeros((3))
+    log_ll = 0.0
 
     for i in prange(N):
 
@@ -334,10 +334,10 @@ def neg_logll_grad(V, z, S, l, u, M):
         ui = u[i]
         li = l[i]
 
-        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, M)
-        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
+        log_ll += (1/ui) * _log_ll(V, zi, Si, li, M)
+        G += (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
 
-    return -log_ll.sum() , -Gvec.sum(axis = 0)
+    return -log_ll , -G
 
 def neglike_wrapper(V, z, S, l, u, f, M):
     
@@ -413,7 +413,7 @@ def _num_grad2_V(V, z, S, l, M):
     
     return h
 
-@njit(parallel = True)
+@njit(parallel = True, fastmath = True)
 def _data_hessian(V, z, S, l, u, M):
     """
     Get hessian matrix at a particular value
@@ -422,7 +422,7 @@ def _data_hessian(V, z, S, l, u, M):
 
     # Unflatten V into a matrix
     N = len(S)
-    H = np.zeros((N, 3, 3))
+    H = np.zeros((3, 3))
 
     for i in prange(N):
 
@@ -431,9 +431,9 @@ def _data_hessian(V, z, S, l, u, M):
         ui = u[i]
         li = l[i]
 
-        H[i, :, :] = (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
+        H += (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
 
-    return -H.sum(axis = 0)
+    return -H
 
 def get_hessian(V, z, S, l, u, f, M):
     """
