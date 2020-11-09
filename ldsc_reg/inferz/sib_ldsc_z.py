@@ -10,10 +10,10 @@ from numba import jit, njit, prange
 
 def extract_upper_triangle(x):
     
-    # =============================== #
-    # Extracts the upper triangular portion of 
-    # a symmetric matrix
-    # =============================== #
+    '''
+    Extracts the upper triangular portion of 
+    a symmetric matrix
+    '''
     
     n, m = x.shape
     assert n == m
@@ -24,10 +24,10 @@ def extract_upper_triangle(x):
 
 def return_to_symmetric(triangle_vec, final_size):
     
-    # =============================== #
-    # Given a vector of the upper triangular matrix,
-    # get back the symmetric matrix
-    # =============================== #
+    '''
+    Given a vector of the upper triangular matrix,
+    get back the symmetric matrix
+    '''
     
     X = np.zeros((final_size,final_size))
     X[np.triu_indices(X.shape[0], k = 0)] = triangle_vec
@@ -37,12 +37,12 @@ def return_to_symmetric(triangle_vec, final_size):
 
 def extract_bounds(n):
     
-    # =============================== #
-    # From a number n, the function
-    # outputs a list of bounds
-    # for a var cov matrix of size
-    # n x n
-    # =============================== #
+    '''
+    From a number n, the function
+    outputs a list of bounds
+    for a var cov matrix of size
+    n x n
+    '''
     
     # extract idx of flat array whcih are diagonals
     uptriangl_idx = np.array(np.triu_indices(n))
@@ -59,12 +59,12 @@ def extract_bounds(n):
 
 def delete_obs_jk(var, start_idx, end_idx, end_cond):
 
-    # ============================== #
-    # var: numpy array
-    # end_cond : boolean
-    # Function helps take out observations
-    # for a jackknife routine
-    # ============================== #
+    '''
+    var: numpy array
+    end_cond : boolean
+    Function helps take out observations
+    for a jackknife routine
+    '''
     
     if var is not None: # in case we pass a none given f value
 

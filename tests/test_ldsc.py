@@ -24,7 +24,8 @@ def get_logll_scipy(V, z, l, S, M):
     
     
 class test_regrnd_functions(unittest.TestCase):
-    
+
+        
     def test_logll(self):
         '''
         Testing if log likelihood function is 
@@ -52,7 +53,7 @@ class test_regrnd_functions(unittest.TestCase):
             a_logll[i] = ld._log_ll(ld.Vmat2V(V, model.M), model.z[i, :], model.S[i], model.l[i], model.M)
             
         
-        np.allclose(scipy_logll, a_logll)
+        self.assertTrue(np.allclose(scipy_logll, a_logll))
     
     def test_grad_logll(self):
     
@@ -80,7 +81,7 @@ class test_regrnd_functions(unittest.TestCase):
             aderiv[i, :] = ld._grad_ll_v(ld.Vmat2V(V, model.M), model.z[i, :], model.S[i],  model.l[i], model.M)
             nderiv[i, :] = ld._num_grad_V(ld.Vmat2V(V, model.M), model.z[i, :], model.S[i], model.l[i], model.M)
 
-        np.allclose(aderiv, nderiv)
+        self.assertTrue(np.allclose(aderiv, nderiv))
         
         
 if  __name__=='__main__':
