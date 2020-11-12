@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from numpy import testing
-import ldsc_reg.inferz.sib_ldsc_z as ld
+import ldsc_reg.sib_ldsc_z as ld
 import scipy.stats
 
 def get_logll_scipy(V, z, l, S, M):
