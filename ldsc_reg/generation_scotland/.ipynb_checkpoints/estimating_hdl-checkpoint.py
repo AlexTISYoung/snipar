@@ -1,8 +1,10 @@
 '''
-This script reads the HDF5 files for EA
+This script reads the HDF5 files for Generation Scotland
 and estimates V
+
+Trait: HDL
 '''
-import sib_ldsc_z as ld
+
 import numpy as np
 import h5py
 import glob
@@ -11,27 +13,35 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import logging
 
-logging.basicConfig(filename= "ldsc_reg/inferz/estimating_EA.log", 
+
+import sys
+import os
+sys.path.append(os.getcwd() + '/..')
+import sib_ldsc_z as ld
+
+
+logging.basicConfig(filename= "estimating_hdl.log", 
                      level = logging.INFO,
                      format = "%(message)s",
                      filemode = "w")
 
+
 startTime = datetime.datetime.now()  
 logging.info(f"Start time:  {startTime}")
 
-# == Reading in data == #
+# == Reading in Data == #
 print("=====================================")
 print("Reading in Data")
 print("=====================================")
 # reading in  data
-files = glob.glob("/disk/genetics/ukb/alextisyoung/haplotypes/relatives/EA/chr_*.hdf5")
+files = glob.glob("/disk/genetics/ukb/alextisyoung/GS20k_sumstats/traits/3/chr_*.hdf5")
 
 file = files[0]
 print("Reading in file: ", file)
 hf = h5py.File(file, 'r')
 metadata = hf.get("bim")[()]
 chromosome = metadata[:, 0]
-snp = metadata[:, 1]
+snp = metadata[:, 3]
 theta  = hf.get('estimate')[()]
 se  = hf.get('estimate_ses')[()]
 N = hf.get('N_L')[()]
@@ -49,7 +59,7 @@ for file in files[1:]:
     hf = h5py.File(file, 'r')
     metadata = hf.get("bim")[()]
     chromosome_file = metadata[:, 0]  
-    snp_file = metadata[:, 1]
+    snp_file = metadata[:, 3]
     theta_file  = hf.get('estimate')[()]
     se_file  = hf.get('estimate_ses')[()]
     S_file = hf.get('estimate_covariance')[()]
@@ -70,7 +80,7 @@ for file in files[1:]:
 
 # Constructing dataframe of data
 zdata = pd.DataFrame({'CHR' : chromosome,
-                    'SNP' : snp,
+                    'BP' : snp,
                     'N' : N,
                     "f" : f,
                     'theta' : theta.tolist(),
@@ -79,11 +89,12 @@ zdata = pd.DataFrame({'CHR' : chromosome,
 
 
 zdata['CHR'] = zdata['CHR'].astype(int)
-zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
+zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
 
 
 # == Reading in LD Scores == #
-ldscore_path = "/disk/genetics/ukb/alextisyoung/haplotypes/relatives/bedfiles/ldscores/"
+
+ldscore_path = "/disk/genetics/ukb/alextisyoung/GS20k_sumstats/ldscores/"
 ldfiles = "*[0-9].l2.ldscore.gz"
 ldcolnames = ["CHR", "SNP", "BP", "L2"]
 Mfiles = "*[0-9].l2.M_5_50"
@@ -91,11 +102,16 @@ Mcolnames = ["M", "CHR"]
 
 ldscores, mfile = ld.read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames)
 
+
 # Merging LD scores with main Data Frame
-main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
+ldscores['BP'] = ldscores['BP'].astype('int')
+zdata['BP'] = zdata['BP'].astype('int')
+
+main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "BP"])
 
 # dropping NAs
 main_df = main_df.dropna()
+
 
 # transforming inputs
 
@@ -112,6 +128,7 @@ effect_estimated = "direct_plus_population"
 
 S, theta = ld.transform_estimates(effect_estimated, S, theta)
 
+
 # making z value
 zval = ld.theta2z(theta, S, M = M)
 
@@ -123,24 +140,20 @@ model = ld.sibreg(S = S,
                 u = u,
                 M = M) 
 
-output_matrix, result = model.solve() # est_init = np.ones(3) * 0.5
 
-# rescaling
-output_matrix['v1'] = output_matrix['v1']/phvar
-output_matrix['v2'] = output_matrix['v2']/phvar
+output_matrix, result = model.solve() 
 
 logging.info(f"======================================")
 logging.info(f"Output Matrix: {output_matrix}")
 logging.info(f"Result: {result}")
 
-
 estimationTime = (datetime.datetime.now() - startTime)
 logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
 
-# Get standard errors
-stderrors = model.jackknife_se(blocksize = 1000)
+# # Get standard errors
+# stderrors = model.jackknife_se(blocksize = 1000)
 
-logging.info(f"Jackknife Standard Errors: {stderrors}")
+# logging.info(f"Jackknife Standard Errors: {stderrors}")
 
-executionTime = (datetime.datetime.now() - startTime)
-logging.info(f"Execution time: {executionTime}")
+# executionTime = (datetime.datetime.now() - startTime)
+# logging.info(f"Execution time: {executionTime}")
