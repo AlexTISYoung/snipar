@@ -19,7 +19,7 @@ import os
 sys.path.append('/homes/nber/harij/gitrepos/SNIPar/ldsc_reg')
 import sib_ldsc_z as ld
 
-logging.basicConfig(filename= f"ldsc_reg/generation_scotland/estimating_gs.log", 
+logging.basicConfig(filename= f"ldsc_reg/generation_scotland/estimating_gs_education.log", 
                          level = logging.INFO,
                          format = "%(message)s",
                          filemode = "w")
