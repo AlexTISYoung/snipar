@@ -10,10 +10,10 @@ from numba import jit, njit, prange
 
 def extract_upper_triangle(x):
     
-    # =============================== #
-    # Extracts the upper triangular portion of 
-    # a symmetric matrix
-    # =============================== #
+    '''
+    Extracts the upper triangular portion of 
+    a symmetric matrix
+    '''
     
     n, m = x.shape
     assert n == m
@@ -24,10 +24,10 @@ def extract_upper_triangle(x):
 
 def return_to_symmetric(triangle_vec, final_size):
     
-    # =============================== #
-    # Given a vector of the upper triangular matrix,
-    # get back the symmetric matrix
-    # =============================== #
+    '''
+    Given a vector of the upper triangular matrix,
+    get back the symmetric matrix
+    '''
     
     X = np.zeros((final_size,final_size))
     X[np.triu_indices(X.shape[0], k = 0)] = triangle_vec
@@ -37,12 +37,12 @@ def return_to_symmetric(triangle_vec, final_size):
 
 def extract_bounds(n):
     
-    # =============================== #
-    # From a number n, the function
-    # outputs a list of bounds
-    # for a var cov matrix of size
-    # n x n
-    # =============================== #
+    '''
+    From a number n, the function
+    outputs a list of bounds
+    for a var cov matrix of size
+    n x n
+    '''
     
     # extract idx of flat array whcih are diagonals
     uptriangl_idx = np.array(np.triu_indices(n))
@@ -59,23 +59,28 @@ def extract_bounds(n):
 
 def delete_obs_jk(var, start_idx, end_idx, end_cond):
 
-    # ============================== #
-    # var: numpy array
-    # end_cond : boolean
-    # Function helps take out observations
-    # for a jackknife routine
-    # ============================== #
+    '''
+    var: numpy array
+    end_cond : boolean
+    Function helps take out observations
+    for a jackknife routine
+    '''
+    
+    if var is not None: # in case we pass a none given f value
 
-    if end_cond:
+        if end_cond:
 
-        var_jk = np.delete(var, range(start_idx, end_idx), 
-                             axis = 0)
+            var_jk = np.delete(var, range(start_idx, end_idx), 
+                                axis = 0)
 
+        else:
+            
+            var_jk = np.delete(var, range(start_idx, var.shape[0]), 
+                                axis = 0)
+            # var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
     else:
-
-        var_jk = np.delete(var, range(start_idx, var.shape[0]), 
-                             axis = 0)
-        var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
+        
+        var_jk = None
         
     return var_jk
 
@@ -174,7 +179,7 @@ def Vmat2V(Vmat, M):
     r = M * Vmat[0, 1]/np.sqrt(v1 * v2)
     r_check = M * Vmat[1, 0]/np.sqrt(v1 * v2)
 
-    assert r == r_check
+    assert np.abs(r - r_check) < 10 ** -6
 
     return np.array([v1, v2, r])
 
@@ -287,11 +292,8 @@ def _grad_ll_v(V, z, S, l, N):
     return np.array([dl_dv1, dl_dv2, dl_dr])
 
 
-@njit(parallel = True)
-def neg_logll_grad(V, 
-                   z, S, 
-                   l, u,
-                   M):
+@njit(parallel = True, fastmath = True)
+def neg_logll_grad(V, z, S, l, u, M):
 
     """
     Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
@@ -320,11 +322,10 @@ def neg_logll_grad(V,
     """
 
     # Unflatten V into a matrix
-    d = S[0].shape[0]
     N = len(S)
     
-    Gvec = np.zeros((N, 3))
-    log_ll = np.zeros(N)
+    G = np.zeros((3))
+    log_ll = 0.0
 
     for i in prange(N):
 
@@ -333,10 +334,10 @@ def neg_logll_grad(V,
         ui = u[i]
         li = l[i]
 
-        log_ll[i] = (1/ui) * _log_ll(V, zi, Si, li, M)
-        Gvec[i, :] = (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
+        log_ll += (1/ui) * _log_ll(V, zi, Si, li, M)
+        G += (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
 
-    return -log_ll.sum() , -Gvec.sum(axis = 0)
+    return -log_ll , -G
 
 def neglike_wrapper(V, z, S, l, u, f, M):
     
@@ -346,22 +347,17 @@ def neglike_wrapper(V, z, S, l, u, f, M):
     matrix and solve for the negative log likelihood
     '''
 
-    d = S[0].shape[0]
     N = S.shape[0]
     
-    if f is None:
-        normalizer = np.ones(N)
-    else:
-        normalizer = 2 * f  * (1 - f) if f is not None else np.ones(N)
-        
+    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
     S = normalize_S(S, normalizer)
     
     logll, Gvec = neg_logll_grad(V, 
                                z, S, 
                                l, u, M)
     
-    print(f"Logll : {logll}")
-    print(f"V : {V}")
+    # print(f"Logll : {logll}")
+    # print(f"V : {V}")
     
     return logll, Gvec
 
@@ -369,12 +365,12 @@ def neglike_wrapper(V, z, S, l, u, f, M):
 @njit
 def _num_grad_V(V, z, S, l, M):
     """
-    Returns numerical gradient vector of self._log_ll
-    Mostly meant to check if self._grad_ll_v is working
+    Returns numerical gradient vector of _log_ll
+    Mostly meant to check if _grad_ll_v is working
     properly
         
     Inputs:
-    V = dxd numpy matrix
+    V = dx1 numpy matrix
     z = dx1 numpy matrix
     S = dxd numpy matrix
     u = 1 numpy matrix
@@ -395,6 +391,63 @@ def _num_grad_V(V, z, S, l, M):
         g[i] = (_log_ll(V_upper, z, S, l, M) - \
                     _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
     return g
+
+@njit
+def _num_grad2_V(V, z, S, l, M):
+    """
+    Calculates second derivative matrix (the Hessian) of 
+    the log likelihood at a particular observation
+
+    Used to calculate the standard errors of the estimates.
+    """
+
+    h = np.zeros((V.shape[0], V.shape[0]))
+
+    for i in range(V.shape[0]):
+        dV = np.zeros_like(V)
+        dV[i] = 10 ** (-6)
+        V_upper = V+dV
+        V_lower = V-dV
+        h[i, :] = (_grad_ll_v(V_upper, z, S, l, M) - \
+                    _grad_ll_v(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
+    
+    return h
+
+@njit(parallel = True, fastmath = True)
+def _data_hessian(V, z, S, l, u, M):
+    """
+    Get hessian matrix at a particular value
+    of V across all data points
+    """
+
+    # Unflatten V into a matrix
+    N = len(S)
+    H = np.zeros((3, 3))
+
+    for i in prange(N):
+
+        Si = S[i]
+        zi = z[i, :]
+        ui = u[i]
+        li = l[i]
+
+        H += (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
+
+    return -H
+
+def get_hessian(V, z, S, l, u, f, M):
+    """
+    Get Hessian Matrix for dataset
+    """
+
+    N = S.shape[0]
+    
+    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
+    S = normalize_S(S, normalizer)
+    
+    H = _data_hessian(V, z, S, l, u, M)
+
+    return H
 
 class sibreg():
     
@@ -520,11 +573,17 @@ class sibreg():
         if est_init is None:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making zero vector")
+                print("Making Method of Moments Guess")
                 print("=================================================")
                 
-                est_init = np.zeros(m)
-            
+            S_hat = np.mean(S, axis = 0)
+            Dmat = makeDmat(S_hat, M)
+            Snew = Dmat @ S_hat @ Dmat
+            z_var = np.cov(z.T)
+            Vnew_init = z_var - Snew
+            V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
+            est_init = Vmat2V(V_init, M)
+            print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
         self.est_init = est_init
@@ -549,6 +608,13 @@ class sibreg():
         
         # re-normnalizing output matrix 
         self.output = output
+
+        # Getting Inverse Hessian
+        H = get_hessian(result.x, z, S, l, l, f, M)
+        invH = np.linalg.inv(H)
+        std_err_mat = np.sqrt(invH)
+        
+        output["std_err_mat"] = std_err_mat
         
         return output, result 
 
@@ -556,7 +622,8 @@ class sibreg():
                   z = None, S = None,
                   l = None, u = None,
                   f = None, M = None,
-                  blocksize = 1):
+                  blocksize = 1,
+                  printinfo = False):
 
         # Simple jackknife estimator for SE
         # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
@@ -575,15 +642,17 @@ class sibreg():
         assert z.shape[0] == S.shape[0]
 
         nobs = z.shape[0]
-        
+
         estimates_jk = []
-        
+
         start_idx = 0
+        loop_number = 1
+        
         while True:
-            
+
             end_idx = start_idx + blocksize
-            end_idx_cond = end_idx <= z.shape[0]
-            
+            end_idx_cond = end_idx <= nobs
+
             # remove blocks of observations
 
             vars_jk = []
@@ -591,46 +660,49 @@ class sibreg():
             for var in [z, S, l, u, f]:
 
                 var_jk = delete_obs_jk(var, start_idx, end_idx,
-                                       end_idx_cond)
+                                    end_idx_cond)
                 vars_jk.append(var_jk)
-            
-            if start_idx < z.shape[0]:
+
+            if start_idx < nobs:
                 # Get our estimate
+                if printinfo:
+                    print(f"Loop Number: {loop_number}")
+                    print(f"Current Block: {start_idx} to {end_idx}")
+
                 output, _ = self.solve(z = vars_jk[0],
-                                              S = vars_jk[1],
-                                              l = vars_jk[2],
-                                              u = vars_jk[3],
-                                              f = vars_jk[4],
-                                              M = M,
-                                              printout = False,
-                                              est_init = self.est_init)
-                
-                
+                                    S = vars_jk[1],
+                                    l = vars_jk[2],
+                                    u = vars_jk[3],
+                                    f = vars_jk[4],
+                                    M = M,
+                                    printout = False,
+                                    est_init = self.est_init)
+
+
                 output_matrix = np.array([output['v1'], output['v2'], output['r']])
 
                 estimates_jk.append(output_matrix)
 
                 start_idx += blocksize
+
+                loop_number += 1
             else:
                 break
             
         estimates_jk = np.array(estimates_jk)
         full_est_params = self.output
         full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
-        
-        
+
+
         # calculate pseudo-values
         n_blocks = int(nobs/blocksize)
         pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
-        
+
         # calculate jackknife se
-        pseudovalues = pseudovalues.reshape((n_blocks, z.shape[1] * z.shape[1]))
         jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
         jknife_var = np.diag(jknife_cov)
         jknife_se = np.sqrt(jknife_var)
-    
-        jknife_se  = jknife_se.reshape((z.shape[1], z.shape[1]))
-        
+
         return jknife_se  
 
 

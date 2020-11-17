@@ -179,7 +179,7 @@ def Vmat2V(Vmat, M):
     r = M * Vmat[0, 1]/np.sqrt(v1 * v2)
     r_check = M * Vmat[1, 0]/np.sqrt(v1 * v2)
 
-    assert r == r_check
+    assert np.abs(r - r_check) < 10 ** -6
 
     return np.array([v1, v2, r])
 
@@ -610,7 +610,7 @@ class sibreg():
         self.output = output
 
         # Getting Inverse Hessian
-        H = get_hessian(result.x, z, S, l, l, f, M)
+        H = get_hessian(result.x, z, S, l, u, f, M)
         invH = np.linalg.inv(H)
         std_err_mat = np.sqrt(invH)
         
