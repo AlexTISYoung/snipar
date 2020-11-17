@@ -45,6 +45,7 @@ ldscores['BP'] = ldscores['BP'].astype('int')
 
 # trait 7 gives weird results
 traitnos.remove(7)
+traitnos = [14]
 for traitcode in traitnos:
     
     if traitcode == 7:
