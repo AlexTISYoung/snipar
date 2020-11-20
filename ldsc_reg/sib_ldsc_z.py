@@ -721,7 +721,7 @@ def M(fh, N=2, common=False):
     return np.array(x).reshape((1, len(x)))
 
 
-def read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames):
+def read_ldscores(ldscore_path, ldcolnames):
     '''
     Reads in LD scores
     ldscore_path : string signifying where the ldscores are
@@ -730,23 +730,23 @@ def read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames):
     Mfiles : string - a glob identifier for all the files which has M data
     Mcolnames : list - the columns present in the M file data
     '''
-    files = glob.glob(f"{ldscore_path}/{ldfiles}")
+    files = glob.glob(f"{ldscore_path}")
     ldscores = pd.DataFrame(columns = ldcolnames)
 
     for file in files:
         snpi = pd.read_csv(file, compression='gzip', sep = "\t")
         ldscores = pd.concat([ldscores, snpi], sort = False)
+        
+    return ldscores
 
+def read_mfiles(Mfilepath, Mcolnames):
     # Reading Number of Loci
-    files_M = glob.glob(f"{ldscore_path}/{Mfiles}")
+    files_M = glob.glob(f"{Mfilepath}")
     nloci = pd.DataFrame(columns = Mcolnames)
 
     for file in files_M:
         
-        if len(file) - len(ldscore_path) == 11:
-            chrom = int(file[-11])
-        else:
-            chrom = int(file[-12:-10])
+        chrom = int(file[-12:-10].strip('/'))
         
         nloci_i = pd.DataFrame({"M" : [M(file[:-10])[0, 0]],
                                 "CHR" : [chrom]})
@@ -755,9 +755,7 @@ def read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mcolnames):
 
     nloci = nloci.reset_index(drop = True)
 
-    ldscores = ldscores.merge(nloci, how = "left", on = "CHR")
-
-    return ldscores, nloci
+    return nloci
 
 
 # == Some useful transformations == #

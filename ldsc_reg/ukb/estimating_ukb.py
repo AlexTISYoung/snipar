@@ -5,17 +5,19 @@ import datetime
 import matplotlib.pyplot as plt
 import pandas as pd
 import logging
-
+import argparse
 
 import sys
 import os
 sys.path.append('/homes/nber/harij/gitrepos/SNIPar/ldsc_reg')
 import sib_ldsc_z as ld
-
+    
+    
+    
 logging.basicConfig(filename= f"ldsc_reg/ukb/estimating_ukb.log", 
-                         level = logging.INFO,
-                         format = "%(message)s",
-                         filemode = "w")
+                            level = logging.INFO,
+                            format = "%(message)s",
+                            filemode = "w")
 
 
 traitnos = glob.glob("/disk/genetics/ukb/alextisyoung/haplotypes/relatives/traits/[0-9]*/")
@@ -25,7 +27,7 @@ traitcodes = pd.read_csv("/disk/genetics/ukb/alextisyoung/haplotypes/relatives/t
             names = ['traitcode', 'trait'], 
             sep = ' ')
 
-    
+
 # == Reading in LD Scores == #
 ldscore_path = "/disk/genetics/ukb/alextisyoung/haplotypes/relatives/bedfiles/ldscores/"
 ldfiles = "*[0-9].l2.ldscore.gz"
@@ -37,16 +39,16 @@ ldscores, mfile = ld.read_ldscores(ldscore_path, ldfiles, ldcolnames, Mfiles, Mc
 
 
 for traitcode in traitnos:
-    
-    
+
+
     traitname = traitcodes.loc[traitcodes['traitcode'] == traitcode, 'trait'].values[0]
     print(f"Trait name: {traitname}")
-    
+
     startTime = datetime.datetime.now()  
     logging.info(f"===============================")
     logging.info(f"Trait name:  {traitname}")
     logging.info(f"Start time:  {startTime}")
-    
+
     # == Reading in data == #
     print("=====================================")
     print("Reading in Data")
@@ -95,7 +97,7 @@ for traitcode in traitnos:
         S = np.append(S, S_file, axis = 0)
         f = np.append(f, f_file, axis = 0)
         N = np.append(N, N_file, axis = 0)
-        
+
     # Constructing dataframe of data
     zdata = pd.DataFrame({'CHR' : chromosome,
                         'SNP' : snp,
@@ -114,7 +116,7 @@ for traitcode in traitnos:
 
     # dropping NAs
     main_df = main_df.dropna()
-    
+
     # transforming inputs
     S = np.array(list(main_df.S)) 
     theta = np.array(list(main_df.theta))
@@ -141,10 +143,10 @@ for traitcode in traitnos:
                     M = M) 
 
     output_matrix, result = model.solve()
-    
+
     logging.info(f"Output Matrix: {output_matrix}")
     logging.info(f"Result: {result}")
 
     estimationTime = (datetime.datetime.now() - startTime)
     logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
-    
+
