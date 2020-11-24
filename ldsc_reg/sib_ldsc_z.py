@@ -215,6 +215,8 @@ def _log_ll(V, z, S, l, N):
         Sigma_inv = np.linalg.inv(Sigma)
     else:
         Sigma_inv = np.linalg.pinv(Sigma)
+    
+    Sigma_inv = np.ascontiguousarray(Sigma_inv)
 
     d = Vmat.shape[0]
     z = z.reshape(d,1)
@@ -618,50 +620,45 @@ class sibreg():
         
         return output, result 
 
-    def jackknife_se(self,
-                  z = None, S = None,
-                  l = None, u = None,
-                  f = None, M = None,
-                  blocksize = 1,
-                  printinfo = False):
 
-        # Simple jackknife estimator for SE
-        # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
-        # Default value of blocksize = 1 is the normal jackknife
+@njit
+def jackknife_se(model,
+                z, S,
+                l, u,
+                f, M,
+                full_est_params,
+                blocksize = 1,
+                printinfo = False):
+
+    # Simple jackknife estimator for SE
+    # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
+    # Default value of blocksize = 1 is the normal jackknife
+   
+    assert z.shape[0] == S.shape[0]
+
+    nobs = z.shape[0]
+
+    estimates_jk = []
+
+    start_idx = 0
+    loop_number = 1
+
+    full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
         
-        
-        # inherit parameters from the class if they aren't defined
-        z = self.z if z is None else z
-        S = self.S if S is None else S
-        l = self.l if l is None else l
-        u = self.u if u is None else u
-        f = self.f if f is None else f
-        M = self.M if M is None else M
+    while True:
 
-        
-        assert z.shape[0] == S.shape[0]
+        end_idx = start_idx + blocksize
+        end_idx_cond = end_idx <= nobs
 
-        nobs = z.shape[0]
+        # remove blocks of observations
 
-        estimates_jk = []
+        vars_jk = []
 
-        start_idx = 0
-        loop_number = 1
-        
-        while True:
+        for var in [z, S, l, u, f]:
 
-            end_idx = start_idx + blocksize
-            end_idx_cond = end_idx <= nobs
-
-            # remove blocks of observations
-
-            vars_jk = []
-
-            for var in [z, S, l, u, f]:
-
-                var_jk = delete_obs_jk(var, start_idx, end_idx,
+            var_jk = delete_obs_jk(var, start_idx, end_idx,
                                     end_idx_cond)
-                vars_jk.append(var_jk)
+            vars_jk.append(var_jk)
 
             if start_idx < nobs:
                 # Get our estimate
@@ -669,14 +666,14 @@ class sibreg():
                     print(f"Loop Number: {loop_number}")
                     print(f"Current Block: {start_idx} to {end_idx}")
 
-                output, _ = self.solve(z = vars_jk[0],
+                output, _ = model.solve(z = vars_jk[0],
                                     S = vars_jk[1],
                                     l = vars_jk[2],
                                     u = vars_jk[3],
                                     f = vars_jk[4],
                                     M = M,
                                     printout = False,
-                                    est_init = self.est_init)
+                                    est_init = full_est)
 
 
                 output_matrix = np.array([output['v1'], output['v2'], output['r']])
@@ -689,21 +686,18 @@ class sibreg():
             else:
                 break
             
-        estimates_jk = np.array(estimates_jk)
-        full_est_params = self.output
-        full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
+    estimates_jk = np.array(estimates_jk)
 
+    # calculate pseudo-values
+    n_blocks = int(nobs/blocksize)
+    pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
 
-        # calculate pseudo-values
-        n_blocks = int(nobs/blocksize)
-        pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
+    # calculate jackknife se
+    jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
+    jknife_var = np.diag(jknife_cov)
+    jknife_se = np.sqrt(jknife_var)
 
-        # calculate jackknife se
-        jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
-        jknife_var = np.diag(jknife_cov)
-        jknife_se = np.sqrt(jknife_var)
-
-        return jknife_se  
+    return jknife_se  
 
 
 
