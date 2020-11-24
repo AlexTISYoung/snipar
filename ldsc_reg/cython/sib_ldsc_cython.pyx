@@ -1,95 +1,13 @@
 import numpy as np
 cimport numpy as np
 
-# DTYPE = np.int
-# ctypedef np.int_t DTYPE_t
-
-cpdef extract_upper_triangle(np.ndarray x):
-    
-    '''
-    Extracts the upper triangular portion of 
-    a symmetric matrix
-    '''
-    
-    cdef int n = x.shape[0]
-    cdef int m = x.shape[1]
-    assert n == m
-    
-    cdef np.ndarray upper_triangle = x[np.triu_indices(n)]
-    
-    return upper_triangle
-
-def return_to_symmetric(triangle_vec, final_size):
-    
-    '''
-    Given a vector of the upper triangular matrix,
-    get back the symmetric matrix
-    '''
-    
-    X = np.zeros((final_size,final_size))
-    X[np.triu_indices(X.shape[0], k = 0)] = triangle_vec
-    X = X + X.T - np.diag(np.diag(X))
-    
-    return X
-
-def extract_bounds(n):
-    
-    '''
-    From a number n, the function
-    outputs a list of bounds
-    for a var cov matrix of size
-    n x n
-    '''
-    
-    # extract idx of flat array whcih are diagonals
-    uptriangl_idx = np.array(np.triu_indices(n))
-    diags = uptriangl_idx[0, :] == uptriangl_idx[1, :]
-    
-    # Construct list of bounds
-    bounds_list = np.array([(None, None)] * len(diags))
-    bounds_list[diags] = (1e-6, None)
-    
-    bounds_list_out = [tuple(i) for i in bounds_list]
-    
-    return bounds_list_out
-
-
-def delete_obs_jk(var, start_idx, end_idx, end_cond):
-
-    '''
-    var: numpy array
-    end_cond : boolean
-    Function helps take out observations
-    for a jackknife routine
-    '''
-    
-    if var is not None: # in case we pass a none given f value
-
-        if end_cond:
-
-            var_jk = np.delete(var, range(start_idx, end_idx), 
-                                axis = 0)
-
-        else:
-            
-            var_jk = np.delete(var, range(start_idx, var.shape[0]), 
-                                axis = 0)
-            # var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
-    else:
-        
-        var_jk = None
-        
-    return var_jk
-
-
-
-def normalize_S(S, norm):
+cpdef np.ndarray[np.double_t, ndim=3] normalize_S(np.ndarray[np.double_t, ndim=3] S, np.ndarray[np.double_t, ndim=1] norm):
     '''
     A function which normalizes a vector of S matrices
     '''
     
-    N = S.shape[0]
-    S_norm = np.zeros_like(S)
+    cdef int N = S.shape[0]
+    cdef np.ndarray[np.double_t, ndim=3] S_norm = np.zeros_like(S)
     for idx in range(N):
         
         Si = S[idx]
@@ -99,14 +17,17 @@ def normalize_S(S, norm):
     return S_norm
 
 
-def calc_inv_root(S):
+cpdef np.ndarray[np.double_t, ndim=2] calc_inv_root(np.ndarray[np.double_t, ndim=2] S):
     '''
     A stable solver for S^{-1/2}
     '''
     
+    cdef int ns = S.shape[0]
+    cdef int ms = S.shpae[1]
+    
     if ~np.any(np.isnan(S)):
         S_eig = np.linalg.eig(S)
-        l = np.zeros(S.shape)
+        l = np.zeros((ns, ms))
         np.fill_diagonal(l,np.power(S_eig[0],-0.5))
         S_inv_root = S_eig[1].dot(np.dot(l,S_eig[1].T))
     else:
@@ -116,21 +37,23 @@ def calc_inv_root(S):
 
 
 
-def makeDmat(S, M):
+cpdef np.ndarray[np.double_t, ndim=2] makeDmat(np.ndarray[np.double_t, ndim=2] S, int M):
     '''
     Makes D matrix = M [[1/sigma_1, 0], [0, 1/sigma_2]]
     '''
 
-    sigma1 = np.sqrt(M * S[0, 0])
-    sigma2 = np.sqrt(M * S[1, 1])
+    cdef double sigma1 = np.sqrt(M * S[0, 0])
+    cdef double sigma2 = np.sqrt(M * S[1, 1])
     
-    Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
+    cdef np.ndarray[np.double_t, ndim=2] Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
                                 [0, 1/sigma2]])
     
     return Dmat
 
 
-def standardize_mat(V, S, M):
+cpdef np.ndarray[np.double_t, ndim=3] standardize_mat(np.ndarray[np.double_t, ndim=2] V, 
+                                                      np.ndarray[np.double_t, ndim=2] S, 
+                                                      int M):
     '''
     Standardizes V and S matrices by constructing
     D = M [[1/sigma_1, 0], [0, 1/sigma_2]]. sigma_1 and sigma_2
@@ -140,30 +63,33 @@ def standardize_mat(V, S, M):
     and Snew = Dmat @ S @ Dmat
     '''
     
-    Dmat = makeDmat(S, M)
-    Snew = Dmat @ S @ Dmat
-    Vnew = Dmat @ V @ Dmat
+    cdef np.ndarray[np.double_t, ndim=2] Dmat = makeDmat(S, M)
+    cdef np.ndarray[np.double_t, ndim=2] Snew = Dmat @ S @ Dmat
+    cdef np.ndarray[np.double_t, ndim=2] Vnew = Dmat @ V @ Dmat
     
-    return Vnew, Snew
+    cdef np.ndarray[np.double_t, ndim=3] Vout = np.array([Vnew, Snew])
+    
+    return Vout
 
 
-def V2Vmat(V, M):
+cpdef np.ndarray[np.double_t, ndim=2] V2Vmat(np.ndarray[np.double_t, ndim=1] V, int M):
     '''
     Transforms a 1 dimensional V array
     with 3 elements v1, v2 and r
     into a V matrix
     '''
     # getting important scalars
-    v1 = V[0]
-    v2 = V[1]
-    r = V[2]
+    cdef double v1 = V[0]
+    cdef double v2 = V[1]
+    cdef double r = V[2]
 
-    Vmat = (1/M) * np.array([[v1, r * np.sqrt(v1 * v2)], [r * np.sqrt(v1 * v2), v2]])
+    cdef np.ndarray[np.double_t, ndim=2] Vmat = (1/M) * np.array([[v1, r * np.sqrt(v1 * v2)], 
+                                                                  [r * np.sqrt(v1 * v2), v2]])
 
     return Vmat
 
 
-def Vmat2V(Vmat, M):
+cpdef np.ndarray[np.double_t, ndim=1] Vmat2V(np.ndarray[np.double_t, ndim=2] Vmat, int M):
     '''
     Makes a 2x2 V matrix
     into a 1 dimensional V
@@ -171,18 +97,22 @@ def Vmat2V(Vmat, M):
     r
     '''
 
-    v1 = M * Vmat[0, 0]
-    v2 = M * Vmat[1, 1]
-    r = M * Vmat[0, 1]/np.sqrt(v1 * v2)
-    r_check = M * Vmat[1, 0]/np.sqrt(v1 * v2)
+    cdef double v1 = M * Vmat[0, 0]
+    cdef double v2 = M * Vmat[1, 1]
+    cdef double r = M * Vmat[0, 1]/np.sqrt(v1 * v2)
+    cdef double r_check = M * Vmat[1, 0]/np.sqrt(v1 * v2)
+    
+    cdef np.ndarray[np.double_t, ndim=1] V = np.array([v1, v2, r])
+    
+    return V
 
-    assert np.abs(r - r_check) < 10 ** -6
-
-    return np.array([v1, v2, r])
 
 
-
-def _log_ll(V, z, S, l, N):
+cpdef double _log_ll(np.ndarray[np.double_t, ndim=1] V, 
+                     np.ndarray[np.double_t, ndim=1] z, 
+                     np.ndarray[np.double_t, ndim=2] S, 
+                     double l, 
+                     int N):
 
     """
     Returns the log likelihood matrix for a given SNP i as formulated by:
@@ -201,96 +131,116 @@ def _log_ll(V, z, S, l, N):
     Outputs:
     logll = scalar
     """
-    Vmat = V2Vmat(V, N)
+    cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
 
-    Vnew, Snew = standardize_mat(Vmat, S, N)
-    Sigma = Snew + l * Vnew
+    cdef np.ndarray[np.double_t, ndim=3] Vout = standardize_mat(Vmat, S, N)
+    cdef np.ndarray[np.double_t, ndim=2] Vnew = Vout[0]
+    cdef np.ndarray[np.double_t, ndim=2] Snew = Vout[1]
+
+    cdef np.ndarray[np.double_t, ndim=2] Sigma = Snew + l * Vnew
     logdet = np.linalg.slogdet(Sigma)
 
-    det = np.linalg.det(Sigma)
+    cdef double det = np.linalg.det(Sigma)
     if det > 1e-6 or det < -1e-6:
         Sigma_inv = np.linalg.inv(Sigma)
     else:
         Sigma_inv = np.linalg.pinv(Sigma)
 
-    d = Vmat.shape[0]
-    z = z.reshape(d,1)
+    cdef int d = Vmat.shape[0]
+    cdef np.ndarray[np.double_t, ndim=2] z2d = z.reshape(d,1)
 
-    L = - (d/2) * np.log(2 * np.pi) \
+    cdef np.ndarray[np.double_t, ndim=2] L = - (d/2) * np.log(2 * np.pi) \
         - (1/2) * logdet[0]*logdet[1] \
-        - (1/2) * z.T @ Sigma_inv @ z
+        - (1/2) * z2d.T @ Sigma_inv @ z2d
+    
+    cdef double logll = L[0, 0]
 
-    return L[0, 0]
+    return logll
 
 
 
-def _grad_ll_v(V, z, S, l, N):
+cpdef np.ndarray[np.double_t, ndim=1] _grad_ll_v(
+    np.ndarray[np.double_t, ndim=1] V, 
+    np.ndarray[np.double_t, ndim=1] z, 
+    np.ndarray[np.double_t, ndim=2] S, 
+    double l, 
+    int N
+):
 
     """
     """
 
-    Vmat = V2Vmat(V, N)
-    d = S.shape[0]
+    cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
+    cdef int d = S.shape[0]
 
-    Vnew, Snew = standardize_mat(Vmat, S, N)
-    Sigma = Snew + l * Vnew
+    cdef np.ndarray[np.double_t, ndim=3] Vout = standardize_mat(Vmat, S, N)
+    cdef np.ndarray[np.double_t, ndim=2] Vnew = Vout[0]
+    cdef np.ndarray[np.double_t, ndim=2] Snew = Vout[1]
+    
+    cdef np.ndarray[np.double_t, ndim=2] Sigma = Snew + l * Vnew
     
     # getting important scalars
-    v1 = V[0]
-    v2 = V[1]
-    r = V[2]
+    cdef double v1 = V[0]
+    cdef double v2 = V[1]
+    cdef double r = V[2]
 
-    rs = Snew[0, 1]
+    cdef double rs = Snew[0, 1]
 
-    sigma1 = np.sqrt(N * S[0, 0])
-    sigma2 = np.sqrt(N * S[1, 1])
+    cdef double sigma1 = np.sqrt(N * S[0, 0])
+    cdef double sigma2 = np.sqrt(N * S[1, 1])
 
-    sigma1sq = sigma1 ** 2
-    sigma2sq = sigma2 ** 2
+    cdef double sigma1sq = sigma1 ** 2
+    cdef double sigma2sq = sigma2 ** 2
     
-    assert len(z.shape) == 1
+    cdef double z1 = z[0]
+    cdef double z2 = z[1]
     
-    z1 = z[0]
-    z2 = z[1]
-    
-    z1sq = z1 ** 2
-    z2sq = z2 ** 2
+    cdef double z1sq = z1 ** 2
+    cdef double z2sq = z2 ** 2
 
-    det = np.linalg.det(Sigma)
+    cdef double det = np.linalg.det(Sigma)
 
-    T = z1sq * (1 + (l * v2/sigma2sq)) - \
+    cdef double T = z1sq * (1 + (l * v2/sigma2sq)) - \
             2 * z1 * z2 * (rs + r * l * np.sqrt(v1 * v2)/(sigma1 * sigma2)) + \
             z2sq * (1 + l * v1/sigma1sq)
 
     # gradient wrt v1
-    ddet_dv1 = l/sigma1sq * (1 + l * v2/sigma2sq) - (l * r/(sigma1 * sigma2)) * \
+    cdef double ddet_dv1 = l/sigma1sq * (1 + l * v2/sigma2sq) - (l * r/(sigma1 * sigma2)) * \
             (rs * np.sqrt(v2/v1) + r * l * v2/(sigma1 * sigma2)) 
 
-    dT_dv1 = (z2sq * l/sigma1sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
+    cdef double dT_dv1 = (z2sq * l/sigma1sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
 
-    dl_dv1 = -(1/2) * 1/det * (ddet_dv1 * (1 - T/det) + dT_dv1)
+    cdef double dl_dv1 = -(1/2) * 1/det * (ddet_dv1 * (1 - T/det) + dT_dv1)
 
     # gradient wrt v2
-    ddet_dv2 = l/sigma2sq * (1 + l * v1/sigma1sq) - (l * r/(sigma1 * sigma2)) * \
+    cdef double ddet_dv2 = l/sigma2sq * (1 + l * v1/sigma1sq) - (l * r/(sigma1 * sigma2)) * \
             (rs * np.sqrt(v1/v2) + r * l * v1/(sigma1 * sigma2)) 
 
-    dT_dv2 = (z1sq * l/sigma2sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
+    cdef double dT_dv2 = (z1sq * l/sigma2sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
 
-    dl_dv2 = -(1/2) * 1/det * (ddet_dv2 * (1 - T/det) + dT_dv2)
+    cdef double dl_dv2 = -(1/2) * 1/det * (ddet_dv2 * (1 - T/det) + dT_dv2)
 
     # gradient wrt r
-    ddet_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
+    cdef double ddet_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
          (rs + (r * l * np.sqrt(v1 * v2))/(sigma1 * sigma2))
 
-    dT_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
+    cdef double dT_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
 
-    dl_dr = -(1/2) * 1/det * (ddet_dr * (1 - T/det) + dT_dr)
+    cdef double dl_dr = -(1/2) * 1/det * (ddet_dr * (1 - T/det) + dT_dr)
+    
+    cdef np.ndarray[np.double_t, ndim=1] grad = np.array([dl_dv1, dl_dv2, dl_dr])
 
-    return np.array([dl_dv1, dl_dv2, dl_dr])
+    return grad
 
 
 
-def neg_logll_grad(V, z, S, l, u, M):
+cpdef tuple neg_logll_grad(
+    np.ndarray[np.double_t, ndim=1] V, 
+    np.ndarray[np.double_t, ndim=2] z, 
+    np.ndarray[np.double_t, ndim=3] S, 
+    np.ndarray[np.double_t, ndim=1] l, 
+    np.ndarray[np.double_t, ndim=1] u, 
+    int M):
 
     """
     Returns the loglikelihood and its gradient wrt V for a given SNP i as formulated by:
@@ -319,10 +269,10 @@ def neg_logll_grad(V, z, S, l, u, M):
     """
 
     # Unflatten V into a matrix
-    N = len(S)
+    cdef int N = len(S)
     
-    G = np.zeros((3))
-    log_ll = 0.0
+    cdef np.ndarray[np.double_t, ndim=1] G = np.zeros((3))
+    cdef double log_ll = 0.0
 
     for i in range(N):
 
@@ -336,112 +286,112 @@ def neg_logll_grad(V, z, S, l, u, M):
 
     return -log_ll , -G
 
-def neglike_wrapper(V, z, S, l, u, f, M):
+# def neglike_wrapper(V, z, S, l, u, f, M):
     
-    '''
-    Wrapper for neg_logll_grad to convert V from an
-    array of individual parameters to a symmetric
-    matrix and solve for the negative log likelihood
-    '''
+#     '''
+#     Wrapper for neg_logll_grad to convert V from an
+#     array of individual parameters to a symmetric
+#     matrix and solve for the negative log likelihood
+#     '''
 
-    N = S.shape[0]
+#     N = S.shape[0]
     
-    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
-    S = normalize_S(S, normalizer)
+#     normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
+#     S = normalize_S(S, normalizer)
     
-    logll, Gvec = neg_logll_grad(V, 
-                               z, S, 
-                               l, u, M)
+#     logll, Gvec = neg_logll_grad(V, 
+#                                z, S, 
+#                                l, u, M)
     
-    # print(f"Logll : {logll}")
-    # print(f"V : {V}")
+#     # print(f"Logll : {logll}")
+#     # print(f"V : {V}")
     
-    return logll, Gvec
+#     return logll, Gvec
 
 
 
-def _num_grad_V(V, z, S, l, M):
-    """
-    Returns numerical gradient vector of _log_ll
-    Mostly meant to check if _grad_ll_v is working
-    properly
+# def _num_grad_V(V, z, S, l, M):
+#     """
+#     Returns numerical gradient vector of _log_ll
+#     Mostly meant to check if _grad_ll_v is working
+#     properly
         
-    Inputs:
-    V = dx1 numpy matrix
-    z = dx1 numpy matrix
-    S = dxd numpy matrix
-    u = 1 numpy matrix
-    r = 1 numpy matrix
-    f = 1 numpy matrix
+#     Inputs:
+#     V = dx1 numpy matrix
+#     z = dx1 numpy matrix
+#     S = dxd numpy matrix
+#     u = 1 numpy matrix
+#     r = 1 numpy matrix
+#     f = 1 numpy matrix
         
-    Outputs:
-    g = dxd matrix 
-    """
+#     Outputs:
+#     g = dxd matrix 
+#     """
     
-    g = np.zeros(V.shape)
+#     g = np.zeros(V.shape)
 
-    for i in range(0,V.shape[0]):
-        dV = np.zeros(V.shape)
-        dV[i] = 10 ** (-6)
-        V_upper = V+dV
-        V_lower = V-dV
-        g[i] = (_log_ll(V_upper, z, S, l, M) - \
-                    _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
-    return g
+#     for i in range(0,V.shape[0]):
+#         dV = np.zeros(V.shape)
+#         dV[i] = 10 ** (-6)
+#         V_upper = V+dV
+#         V_lower = V-dV
+#         g[i] = (_log_ll(V_upper, z, S, l, M) - \
+#                     _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
+#     return g
 
 
-def _num_grad2_V(V, z, S, l, M):
-    """
-    Calculates second derivative matrix (the Hessian) of 
-    the log likelihood at a particular observation
+# def _num_grad2_V(V, z, S, l, M):
+#     """
+#     Calculates second derivative matrix (the Hessian) of 
+#     the log likelihood at a particular observation
 
-    Used to calculate the standard errors of the estimates.
-    """
+#     Used to calculate the standard errors of the estimates.
+#     """
 
-    h = np.zeros((V.shape[0], V.shape[0]))
+#     h = np.zeros((V.shape[0], V.shape[0]))
 
-    for i in range(V.shape[0]):
-        dV = np.zeros_like(V)
-        dV[i] = 10 ** (-6)
-        V_upper = V+dV
-        V_lower = V-dV
-        h[i, :] = (_grad_ll_v(V_upper, z, S, l, M) - \
-                    _grad_ll_v(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
+#     for i in range(V.shape[0]):
+#         dV = np.zeros_like(V)
+#         dV[i] = 10 ** (-6)
+#         V_upper = V+dV
+#         V_lower = V-dV
+#         h[i, :] = (_grad_ll_v(V_upper, z, S, l, M) - \
+#                     _grad_ll_v(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
     
-    return h
+#     return h
 
 
-def _data_hessian(V, z, S, l, u, M):
-    """
-    Get hessian matrix at a particular value
-    of V across all data points
-    """
+# def _data_hessian(V, z, S, l, u, M):
+#     """
+#     Get hessian matrix at a particular value
+#     of V across all data points
+#     """
 
-    # Unflatten V into a matrix
-    N = len(S)
-    H = np.zeros((3, 3))
+#     # Unflatten V into a matrix
+#     N = len(S)
+#     H = np.zeros((3, 3))
 
-    for i in range(N):
+#     for i in range(N):
 
-        Si = S[i]
-        zi = z[i, :]
-        ui = u[i]
-        li = l[i]
+#         Si = S[i]
+#         zi = z[i, :]
+#         ui = u[i]
+#         li = l[i]
 
-        H += (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
+#         H += (1/ui) * _num_grad2_V(V, zi, Si, li, M) 
 
-    return -H
+#     return -H
 
-def get_hessian(V, z, S, l, u, f, M):
-    """
-    Get Hessian Matrix for dataset
-    """
+# def get_hessian(V, z, S, l, u, f, M):
+#     """
+#     Get Hessian Matrix for dataset
+#     """
 
-    N = S.shape[0]
+#     N = S.shape[0]
     
-    normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
-    S = normalize_S(S, normalizer)
+#     normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
+#     S = normalize_S(S, normalizer)
     
-    H = _data_hessian(V, z, S, l, u, M)
+#     H = _data_hessian(V, z, S, l, u, M)
 
-    return H
+#     return H
