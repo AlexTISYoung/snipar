@@ -579,7 +579,7 @@ class sibreg():
             S_hat = np.mean(S, axis = 0)
             Dmat = makeDmat(S_hat, M)
             Snew = Dmat @ S_hat @ Dmat
-            z_var = np.cov(z.T)
+            z_var = np.cov(z.T, aweights = 1/u)
             Vnew_init = z_var - Snew
             V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
             est_init = Vmat2V(V_init, M)
