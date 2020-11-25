@@ -28,6 +28,10 @@ if __name__ == '__main__':
                                                             How to convert the 3 dimensional data
                                                             into 2 dimensions. Options are direct_plus_population and
                                                             direct_plus_averageparental. Default is direct_plus_population.''')
+    parser.add_argument('--rbound', dest = "rbounds", action='store_true')
+    parser.add_argument('--no-rbound', dest = "rbounds", action = 'store_false')
+    parser.set_defaults(rbounds=True)
+    
     args=parser.parse_args()
     
     if args.logfile is not None:
@@ -42,13 +46,10 @@ if __name__ == '__main__':
     print(f"Start time:  {startTime}")
     
     if args.logfile is not None:
-        logging.info(f"===============================")
         logging.info(f"Start time:  {startTime}")
 
     # == Reading in data == #
-    print("=====================================")
     print("Reading in Data")
-    print("=====================================")
     # reading in  data
     filenames = args.path2file
 
@@ -108,6 +109,12 @@ if __name__ == '__main__':
 
     zdata['CHR'] = zdata['CHR'].astype(int)
     zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
+    
+    zdata_n_message = f"Number of Observations before merging LD-Scores: {zdata.shape[0]}"
+    
+    print(zdata_n_message)
+    if args.logfile is not None:
+        logging.info(zdata_n_message)
 
 
     # == Reading in LD Scores == #
@@ -120,6 +127,12 @@ if __name__ == '__main__':
 
     # dropping NAs
     main_df = main_df.dropna()
+    
+    maindata_n_message = f"Number of Observations after merging LD-Scores and dropping NAs: {main_df.shape[0]}"
+    
+    print(maindata_n_message)
+    if args.logfile is not None:
+        logging.info(maindata_n_message)
 
     # transforming inputs
 
@@ -155,7 +168,7 @@ if __name__ == '__main__':
                     u = u,
                     M = M) 
 
-    output_matrix, result = model.solve()
+    output_matrix, result = model.solve(rbounds = args.rbounds)
     
     estimates = {'v1' : output_matrix['v1'],
                 'v2' : output_matrix['v2'],
@@ -165,12 +178,14 @@ if __name__ == '__main__':
     
     estimationTime = (datetime.datetime.now() - startTime)
     
+    print("----------------------------------")
     print(f"Estimates: {estimates}")
     print(f"Standard Errors: {std_errors}")
     print(f"Maximizer Output: {result}")
     print(f"Estimation time (before calculating standard errors): {estimationTime}")
     
     if args.logfile is not None:
+        logging.info("----------------------------------")
         logging.info(f"Estimates: {estimates}")
         logging.info(f"Standard Errors: {std_errors}")
         logging.info(f"Maximizer Output: {result}")

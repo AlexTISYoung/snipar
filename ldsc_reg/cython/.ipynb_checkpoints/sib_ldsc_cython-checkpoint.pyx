@@ -132,34 +132,34 @@ cpdef double _log_ll(np.ndarray[np.double_t, ndim=1] V,
     cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
 
     Vnew, Snew = standardize_mat(Vmat, S, N)
-    cdef np.ndarray[np.double_t, ndim=2] Sigma = Snew + l * Vnew
-    cdef tuple logdet = np.linalg.slogdet(Sigma)
+    Sigma = Snew + l * Vnew
+    logdet = np.linalg.slogdet(Sigma)
 
-    cdef double det = np.linalg.det(Sigma)
+    det = np.linalg.det(Sigma)
     if det > 1e-6 or det < -1e-6:
         Sigma_inv = np.linalg.inv(Sigma)
     else:
         Sigma_inv = np.linalg.pinv(Sigma)
 
-    cdef int d = Vmat.shape[0]
+    d = Vmat.shape[0]
     z2d = z.reshape(d,1)
 
     L = - (d/2.0) * np.log(2 * np.pi) \
         - (1.0/2.0) * logdet[0]*logdet[1] \
         - (1.0/2.0) * z2d.T @ Sigma_inv @ z2d
 
-    return L[0, 0]
+    logll = L[0, 0]
 
     return logll
 
 
 
-cpdef np.ndarray[np.double_t, ndim=1] _grad_ll_v(
-    np.ndarray[np.double_t, ndim=1] V, 
-    np.ndarray[np.double_t, ndim=1] z, 
-    np.ndarray[np.double_t, ndim=2] S, 
-    double l, 
-    int N
+cpdef _grad_ll_v(
+    V, 
+    z, 
+    S, 
+    l, 
+    N
 ):
 
     """

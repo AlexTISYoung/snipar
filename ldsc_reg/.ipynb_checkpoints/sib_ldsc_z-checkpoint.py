@@ -6,55 +6,7 @@ import scipy.optimize
 from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
-from numba import jit, njit, prange
-
-def extract_upper_triangle(x):
-    
-    '''
-    Extracts the upper triangular portion of 
-    a symmetric matrix
-    '''
-    
-    n, m = x.shape
-    assert n == m
-    
-    upper_triangle = x[np.triu_indices(n)]
-    
-    return upper_triangle
-
-def return_to_symmetric(triangle_vec, final_size):
-    
-    '''
-    Given a vector of the upper triangular matrix,
-    get back the symmetric matrix
-    '''
-    
-    X = np.zeros((final_size,final_size))
-    X[np.triu_indices(X.shape[0], k = 0)] = triangle_vec
-    X = X + X.T - np.diag(np.diag(X))
-    
-    return X
-
-def extract_bounds(n):
-    
-    '''
-    From a number n, the function
-    outputs a list of bounds
-    for a var cov matrix of size
-    n x n
-    '''
-    
-    # extract idx of flat array whcih are diagonals
-    uptriangl_idx = np.array(np.triu_indices(n))
-    diags = uptriangl_idx[0, :] == uptriangl_idx[1, :]
-    
-    # Construct list of bounds
-    bounds_list = np.array([(None, None)] * len(diags))
-    bounds_list[diags] = (1e-6, None)
-    
-    bounds_list_out = [tuple(i) for i in bounds_list]
-    
-    return bounds_list_out
+from numba import jit, njit, prange, int64, float64
 
 
 def delete_obs_jk(var, start_idx, end_idx, end_cond):
@@ -131,6 +83,25 @@ def makeDmat(S, M):
                                 [0, 1/sigma2]])
     
     return Dmat
+
+@njit(parallel=True)
+def makeSnew_vec(S, M):
+
+    '''
+    Makes a vector of S and a scalar value M
+    into a vector of Snew = Dmat @ Si @ Dmat
+    for each Si in S
+    '''
+    
+    Snew_mat = np.zeros_like(S)
+
+    for idx in prange(len(S)):
+        Si = S[idx]
+        Dmat = makeDmat(Si, M)
+        Snew = Dmat @ Si @ Dmat
+        Snew_mat[idx] = Snew
+        
+    return Snew_mat
 
 @njit
 def standardize_mat(V, S, M):
@@ -451,6 +422,30 @@ def get_hessian(V, z, S, l, u, f, M):
 
     return H
 
+
+    
+def Vinit(z, S, l, M):
+    '''
+    Get initial estimate to start
+    solver from
+    '''
+    
+    # compile function
+    _ = makeSnew_vec(S[0:2], M)
+    
+    # actual run should be much faster
+    Snew_mat = makeSnew_vec(S, M)
+        
+    Snew = np.average(Snew_mat, axis=0, weights = 1/l)
+    z_var = np.cov(z.T, aweights = 1/l)
+    l_bar = np.mean(l)
+    v1 = (z_var[0, 0] - 1)/l_bar
+    v2 = (z_var[1, 1] - 1)/l_bar
+    r = (z_var[0, 1] - Snew[0, 1])/(l_bar * np.sqrt(v1 * v2))
+
+    est_init = np.array([v1, v2, r])
+    return est_init
+
 class sibreg():
     
     def __init__(self, S, z = None, l = None, u = None,  f = None, M = None):
@@ -544,7 +539,8 @@ class sibreg():
               M = None,
               neg_logll_grad_func = neglike_wrapper,
               est_init = None,
-              printout = True):
+              printout = True,
+              rbounds = True):
         
         """
         Solves the ldsc problem of infering the V matrix
@@ -576,26 +572,21 @@ class sibreg():
             if printout == True:
                 print("No initial guess provided.")
                 print("Making Method of Moments Guess")
-                print("=================================================")
                 
-            S_hat = np.mean(S, axis = 0)
-            Dmat = makeDmat(S_hat, M)
-            Snew = Dmat @ S_hat @ Dmat
-            z_var = np.cov(z.T, aweights = 1/u)
-            Vnew_init = z_var - Snew
-            V_init = np.linalg.inv(Dmat) @ Vnew_init @ np.linalg.inv(Dmat)
-            est_init = Vmat2V(V_init, M)
+            est_init = Vinit(z, S, u, M)
             print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
         self.est_init = est_init
+        
+        rlimit = (-1, 1) if rbounds else (None, None)
 
         result = minimize(
             neg_logll_grad_func, 
             est_init,
             jac = True,
             args = (z, S, l, u, f, M),
-            bounds = [(1e-6, None), (1e-6, None), (-1, 1)],
+            bounds = [(1e-6, None), (1e-6, None), rlimit],
             method = 'L-BFGS-B'
             # options = {'ftol' : 1e-20}
             
