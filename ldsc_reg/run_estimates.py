@@ -11,6 +11,25 @@ import sys
 import os
 import sib_ldsc_z as ld
 
+def print_call(call):
+    
+    '''
+    Gives the call given to python
+    in a nice string
+    '''
+    
+    message = ''
+    for i in range(len(call)):
+        if call[i][0] != "-":
+            message += call[i]
+            message += ' \\ \n'
+        else:
+            message += call[i] + " "
+    
+    return message
+           
+        
+
 if __name__ == '__main__':
     # command line arguments
     parser=argparse.ArgumentParser()
@@ -39,6 +58,13 @@ if __name__ == '__main__':
                                  level = logging.INFO,
                                  format = "%(message)s",
                                  filemode = "w")
+        
+    args_call = print_call(sys.argv)
+    print(args_call)
+    if args.logfile is not None:
+        logging.info(f"Call: \n {args_call}")
+    
+    
     
     startTime = datetime.datetime.now()
     
