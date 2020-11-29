@@ -18,7 +18,7 @@ def simulate_se(N):
     output, _ = model.solve()
 
     invhess_est = np.diag(output['std_err_mat'])
-    jkse_est = model.jackknife_se(blocksize = int(N/100))
+    jkse_est = ld.jkse(model, output, blocksize = int(N/100), num_procs = 4)
     estimates = np.array([output['v1'], output['v2'], output['r']])
 
     return [invhess_est, jkse_est, estimates]

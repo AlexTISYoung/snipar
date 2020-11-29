@@ -647,6 +647,8 @@ def jkse_core(indices,
     
     return output_matrix
 
+    
+
 def jkse(model,
         full_est_params,
         blocksize = 1,
