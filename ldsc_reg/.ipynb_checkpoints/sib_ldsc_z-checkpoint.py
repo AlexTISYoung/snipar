@@ -7,7 +7,8 @@ from scipy.special import comb
 from scipy.misc import derivative
 import scipy.stats
 from numba import jit, njit, prange, int64, float64
-
+import multiprocessing as mp
+from functools import partial
 
 def delete_obs_jk(var, start_idx, end_idx, end_cond):
 
@@ -611,86 +612,77 @@ class sibreg():
         
         return output, result 
 
+# == Parallelized Jackknife == #
 
-@njit
-def jackknife_se(model,
-                z, S,
-                l, u,
-                f, M,
-                full_est_params,
-                blocksize = 1,
-                printinfo = False):
+def jkse_core(indices,
+             model,
+             full_est):
+    
+    '''
+    This runs the core estimation
+    for each jackknife iteration
+    '''
+    
+    mask = np.ones(model.z.shape[0], dtype=bool)
+    mask[indices] = False
+    
+    z = model.z[mask]
+    S = model.S[mask]
+    l = model.l[mask]
+    u = model.u[mask]
+    f = model.f[mask] if model.f is not None else model.f
+    M = model.M
+    
+    output, _ = model.solve(z = z,
+                    S = S,
+                    l = l,
+                    u = u,
+                    f = f,
+                    M = M,
+                    printout = False,
+                    est_init = full_est)
+    
+    
+    output_matrix = np.array([output['v1'], output['v2'], output['r']])
+    
+    return output_matrix
 
-    # Simple jackknife estimator for SE
-    # Ref: https://github.com/bulik/ldsc/blob/aa33296abac9569a6422ee6ba7eb4b902422cc74/ldscore/jackknife.py#L231
-    # Default value of blocksize = 1 is the normal jackknife
-   
-    assert z.shape[0] == S.shape[0]
-
-    nobs = z.shape[0]
-
-    estimates_jk = []
-
-    start_idx = 0
-    loop_number = 1
-
+def jkse(model,
+        full_est_params,
+        blocksize = 1,
+        printinfo = False,
+        num_procs = 2):
+    
+    '''
+    This runs the whole block jackknife 
+    routine in parallel
+    '''
+    
+    nblocks = int(np.ceil(model.z.shape[0]/blocksize))
+    
+    # construct blocks of indices
+    indices = list(range(1, model.z.shape[0]))
+    index_blocks = [indices[i * blocksize:(i + 1) * blocksize] for i in range((len(indices) + blocksize - 1) // blocksize )]
+    
+    # store full parameter estimate as array
     full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
-        
-    while True:
-
-        end_idx = start_idx + blocksize
-        end_idx_cond = end_idx <= nobs
-
-        # remove blocks of observations
-
-        vars_jk = []
-
-        for var in [z, S, l, u, f]:
-
-            var_jk = delete_obs_jk(var, start_idx, end_idx,
-                                    end_idx_cond)
-            vars_jk.append(var_jk)
-
-            if start_idx < nobs:
-                # Get our estimate
-                if printinfo:
-                    print(f"Loop Number: {loop_number}")
-                    print(f"Current Block: {start_idx} to {end_idx}")
-
-                output, _ = model.solve(z = vars_jk[0],
-                                    S = vars_jk[1],
-                                    l = vars_jk[2],
-                                    u = vars_jk[3],
-                                    f = vars_jk[4],
-                                    M = M,
-                                    printout = False,
-                                    est_init = full_est)
-
-
-                output_matrix = np.array([output['v1'], output['v2'], output['r']])
-
-                estimates_jk.append(output_matrix)
-
-                start_idx += blocksize
-
-                loop_number += 1
-            else:
-                break
-            
+    
+    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est)
+    
+    num_procs = num_procs
+    pool = mp.Pool(num_procs)
+    estimates_jk = pool.map(jkse_toparallelize, index_blocks)
     estimates_jk = np.array(estimates_jk)
-
-    # calculate pseudo-values
-    n_blocks = int(nobs/blocksize)
-    pseudovalues = n_blocks * full_est - (n_blocks - 1) * estimates_jk
+    
+    pseudovalues = nblocks * full_est - (nblocks - 1) * estimates_jk
 
     # calculate jackknife se
-    jknife_cov = np.cov(pseudovalues.T, ddof=1) / n_blocks
+    jknife_cov = np.cov(pseudovalues.T, ddof=1) / nblocks
     jknife_var = np.diag(jknife_cov)
     jknife_se = np.sqrt(jknife_var)
 
     return jknife_se  
-
-
+    
 
 #  == Reading LD scores == #
 
