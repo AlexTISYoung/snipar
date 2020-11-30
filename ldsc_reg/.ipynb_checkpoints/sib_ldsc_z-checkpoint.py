@@ -10,33 +10,6 @@ from numba import jit, njit, prange, int64, float64
 import multiprocessing as mp
 from functools import partial
 
-def delete_obs_jk(var, start_idx, end_idx, end_cond):
-
-    '''
-    var: numpy array
-    end_cond : boolean
-    Function helps take out observations
-    for a jackknife routine
-    '''
-    
-    if var is not None: # in case we pass a none given f value
-
-        if end_cond:
-
-            var_jk = np.delete(var, range(start_idx, end_idx), 
-                                axis = 0)
-
-        else:
-            
-            var_jk = np.delete(var, range(start_idx, var.shape[0]), 
-                                axis = 0)
-            # var_jk = np.delete(var_jk, range(end_idx - var.shape[0]))
-    else:
-        
-        var_jk = None
-        
-    return var_jk
-
 
 @njit
 def normalize_S(S, norm):
@@ -156,7 +129,7 @@ def Vmat2V(Vmat, M):
     return np.array([v1, v2, r])
 
 
-@njit
+@njit(fastmath = True)
 def _log_ll(V, z, S, l, N):
 
     """
@@ -200,7 +173,7 @@ def _log_ll(V, z, S, l, N):
     return L[0, 0]
 
 
-@njit
+@njit(fastmath = True)
 def _grad_ll_v(V, z, S, l, N):
 
     """
@@ -321,12 +294,9 @@ def neglike_wrapper(V, z, S, l, u, f, M):
     normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
     S = normalize_S(S, normalizer)
     
-    logll, Gvec = neg_logll_grad(V, 
-                               z, S, 
-                               l, u, M)
     
-    # print(f"Logll : {logll}")
-    # print(f"V : {V}")
+    logll, Gvec = neg_logll_grad(V, z, S, 
+                                l, u, M)
     
     return logll, Gvec
 
@@ -361,7 +331,7 @@ def _num_grad_V(V, z, S, l, M):
                     _log_ll(V_lower, z, S, l, M)) / (2 * 10 ** (-6))
     return g
 
-@njit
+
 def _num_grad2_V(V, z, S, l, M):
     """
     Calculates second derivative matrix (the Hessian) of 
@@ -382,7 +352,7 @@ def _num_grad2_V(V, z, S, l, M):
     
     return h
 
-@njit(parallel = True, fastmath = True)
+
 def _data_hessian(V, z, S, l, u, M):
     """
     Get hessian matrix at a particular value
