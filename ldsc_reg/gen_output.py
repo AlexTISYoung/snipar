@@ -31,20 +31,20 @@ for file in files:
     A2 = metadata[:, 5]
     N = hf.get('N_L')[()]
 
-    simulated_data_out = pd.DataFrame({'chromosome' : chromosome,
-                                    'snp' : snp,
-                                    'pos' : pos,
-                                    'A1' : A1,
-                                    'A2' : A2,
-                                    'N' : N})
+simulated_data_out = pd.DataFrame({'chromosome' : chromosome,
+                                'snp' : snp,
+                                'pos' : pos,
+                                'A1' : A1,
+                                'A2' : A2,
+                                'N' : N})
 
-    simulated_data_out['chromosome'] = simulated_data_out['chromosome'].astype(float)
-    simulated_data_out['snp'] = simulated_data_out['snp'].astype(str).str.replace("b'", "").str[:-1]
-    simulated_data_out['pos'] = simulated_data_out['pos'].astype(str).str.replace("b'", "").str[:-1]
-    simulated_data_out['A1'] = simulated_data_out['A1'].astype(str).str.replace("b'", "").str[:-1]
-    simulated_data_out['A2'] = simulated_data_out['A2'].astype(str).str.replace("b'", "").str[:-1]
+simulated_data_out['chromosome'] = simulated_data_out['chromosome'].astype(float)
+simulated_data_out['snp'] = simulated_data_out['snp'].astype(str).str.replace("b'", "").str[:-1]
+simulated_data_out['pos'] = simulated_data_out['pos'].astype(str).str.replace("b'", "").str[:-1]
+simulated_data_out['A1'] = simulated_data_out['A1'].astype(str).str.replace("b'", "").str[:-1]
+simulated_data_out['A2'] = simulated_data_out['A2'].astype(str).str.replace("b'", "").str[:-1]
 
-    simulated_data_out.to_csv(f"ldsc_reg/inferz/ldsc_reg/{chr_num}.bim", sep = ' ')
+simulated_data_out.to_csv(f"ldsc_reg/inferz/ldsc_reg/{chr_num}.bim", sep = ' ')
 
 
 

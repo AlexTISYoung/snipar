@@ -266,7 +266,7 @@ def _grad_ll_v(V, z, S, l, N):
     return np.array([dl_dv1, dl_dv2, dl_dr])
 
 
-@njit(parallel = True, fastmath = True)
+@njit(fastmath = True)
 def neg_logll_grad(V, z, S, l, u, M):
 
     """
@@ -303,13 +303,8 @@ def neg_logll_grad(V, z, S, l, u, M):
 
     for i in prange(N):
 
-        Si = S[i]
-        zi = z[i, :]
-        ui = u[i]
-        li = l[i]
-
-        log_ll += (1/ui) * _log_ll(V, zi, Si, li, M)
-        G += (1/ui) * _grad_ll_v(V, zi, Si, li, M) 
+        log_ll += (1/u[i]) * _log_ll(V, z[i, :], S[i], l[i], M)
+        G += (1/u[i]) * _grad_ll_v(V, z[i, :], S[i], l[i], M) 
 
     return -log_ll , -G
 

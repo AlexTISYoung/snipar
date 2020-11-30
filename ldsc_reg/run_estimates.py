@@ -51,7 +51,27 @@ if __name__ == '__main__':
     parser.add_argument('--no-rbound', dest = "rbounds", action = 'store_false')
     parser.set_defaults(rbounds=True)
     
+    parser.add_argument('--jkse', dest = "jkse", action = 'store_true', help = '''
+    Specifies if one wants to estimate block Jack Knife Standard errors
+    ''')
+    parser.set_defaults(jkse=False)
+    parser.add_argument('--jkse_blocksize', type = int, help = "Block Size for Block Jackknife Standard Errors.")
+    parser.set_defaults(jkse_blocksize=1000)
+    parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
+    parser.set_defaults(jkse_cores = 2)
     args=parser.parse_args()
+    
+    
+    if args.jkse_blocksize is not None and args.jkse == False:
+        print('''Option for Block Jack Knife block size was passed but wasn't told to actually estimate
+                Block Jackknife Standard Errors. Script will run but will not estimate Block Jack Knife Standard
+                Errors.''')
+    
+    
+    if args.jkse_cores is not None and args.jkse == False:
+        print('''Option for Block Jack Knife cores was passed but wasn't told to actually estimate
+                Block Jackknife Standard Errors. Script will run but will not estimate Block Jack Knife Standard
+                Errors.''')
     
     if args.logfile is not None:
         logging.basicConfig(filename= args.logfile, 
@@ -208,11 +228,34 @@ if __name__ == '__main__':
     print(f"Estimates: {estimates}")
     print(f"Standard Errors: {std_errors}")
     print(f"Maximizer Output: {result}")
-    print(f"Estimation time (before calculating standard errors): {estimationTime}")
+    print(f"Estimation time: {estimationTime}")
     
     if args.logfile is not None:
         logging.info("----------------------------------")
         logging.info(f"Estimates: {estimates}")
         logging.info(f"Standard Errors: {std_errors}")
         logging.info(f"Maximizer Output: {result}")
-        logging.info(f"Estimation time (before calculating standard errors): {estimationTime}")
+        logging.info(f"Estimation time: {estimationTime}")
+        
+    if args.jkse:
+        
+        print(f"Jack Knife Block Sizes = {args.jkse_blocksize}")
+        print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
+        print("Estimating Block Jackknife Standard Errors...")
+        
+        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores)
+
+        print(f"Block Jack Knife Standard Errors: {jkse}")
+        
+        estimationTime_jkse = (datetime.datetime.now() - startTime)
+        
+        print(f"Estimation time with Block Jack Knife Standard Error Estimation: {estimationTime_jkse}")
+        
+
+        if args.logfile is not None:
+            logging.info(f"Jack Knife Block Sizes = {args.jkse_blocksize}")
+            logging.info(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
+            logging.info(f"Block Jack Knife Standard Errors: {jkse}")
+            logging.info(f"Estimation time with Block Jack Knife Standard Error Estimation: {estimationTime_jkse}")
+            
+            

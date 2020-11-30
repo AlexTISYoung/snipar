@@ -13,5 +13,8 @@ do
     
     python ${path2ldscreg}/run_estimates.py /disk/genetics/ukb/alextisyoung/haplotypes/simulated_pops/${dir}/gen_0_gen_1_phenotype.hdf5 \
             -ldsc "/disk/genetics/ukb/alextisyoung/haplotypes/simulated_pops/${dir}/ldscores/*[0-9].l2.ldscore.gz" \
-            -l "/homes/nber/harij/gitrepos/SNIPar/ldsc_reg/multigen_sim/${dir}.log"
+            -l "/homes/nber/harij/gitrepos/SNIPar/ldsc_reg/multigen_sim/${dir}.log" \
+            --jkse \
+            --jkse_blocksize 20 \
+            --jkse_cores 4
 done
