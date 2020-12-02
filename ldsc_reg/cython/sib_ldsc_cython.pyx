@@ -1,13 +1,16 @@
 import numpy as np
 cimport numpy as np
 
-cpdef np.ndarray[np.double_t, ndim=3] normalize_S(np.ndarray[np.double_t, ndim=3] S, np.ndarray[np.double_t, ndim=1] norm):
+DTYPE = np.int
+ctypedef np.int_t DTYPE_t
+
+cpdef np.ndarray[DTYPE_t, ndim=3] normalize_S(np.ndarray[DTYPE_t, ndim=3] S, np.ndarray[DTYPE_t, ndim=1] norm):
     '''
     A function which normalizes a vector of S matrices
     '''
     
     cdef int N = S.shape[0]
-    cdef np.ndarray[np.double_t, ndim=3] S_norm = np.zeros_like(S)
+    cdef np.ndarray[DTYPE_t, ndim=3] S_norm = np.zeros_like(S)
     for idx in range(N):
         
         Si = S[idx]
@@ -17,7 +20,7 @@ cpdef np.ndarray[np.double_t, ndim=3] normalize_S(np.ndarray[np.double_t, ndim=3
     return S_norm
 
 
-cpdef np.ndarray[np.double_t, ndim=2] calc_inv_root(np.ndarray[np.double_t, ndim=2] S):
+cpdef np.ndarray[DTYPE_t, ndim=2] calc_inv_root(np.ndarray[np.double_t, ndim=2] S):
     '''
     A stable solver for S^{-1/2}
     '''

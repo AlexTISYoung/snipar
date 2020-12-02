@@ -58,7 +58,7 @@ def makeDmat(S, M):
     
     return Dmat
 
-@njit(parallel=True)
+@njit
 def makeSnew_vec(S, M):
 
     '''

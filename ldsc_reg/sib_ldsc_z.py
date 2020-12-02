@@ -58,25 +58,6 @@ def makeDmat(S, M):
     
     return Dmat
 
-@njit(parallel=True)
-def makeSnew_vec(S, M):
-
-    '''
-    Makes a vector of S and a scalar value M
-    into a vector of Snew = Dmat @ Si @ Dmat
-    for each Si in S
-    '''
-    
-    Snew_mat = np.zeros_like(S)
-
-    for idx in prange(len(S)):
-        Si = S[idx]
-        Dmat = makeDmat(Si, M)
-        Snew = Dmat @ Si @ Dmat
-        Snew_mat[idx] = Snew
-        
-    return Snew_mat
-
 @njit
 def standardize_mat(V, S, M):
     '''
@@ -388,26 +369,45 @@ def get_hessian(V, z, S, l, u, f, M):
 
     return H
 
+@njit
+def makeSnew_vec(S, M):
 
+    '''
+    Makes a vector of S and a scalar value M
+    into a vector of Snew = Dmat @ Si @ Dmat
+    for each Si in S
+    '''
+    
+    Snew_mat = np.zeros_like(S)
+
+    for idx in prange(len(S)):
+        Si = S[idx]
+        Dmat = makeDmat(Si, M)
+        Snew = Dmat @ Si @ Dmat
+        Snew_mat[idx] = Snew
+        
+    return Snew_mat
     
 def Vinit(z, S, l, M):
     '''
     Get initial estimate to start
     solver from
     '''
-    
-    # compile function
-    _ = makeSnew_vec(S[0:2], M)
-    
-    # actual run should be much faster
-    Snew_mat = makeSnew_vec(S, M)
-        
-    Snew = np.average(Snew_mat, axis=0, weights = 1/l)
+
+    S_hat = np.average(S, axis = 0, weights = 1/l)
+    Dmat = makeDmat(S_hat, M)       
+    Snew = Dmat @ S_hat @ Dmat
     z_var = np.cov(z.T, aweights = 1/l)
     l_bar = np.mean(l)
-    v1 = (z_var[0, 0] - 1)/l_bar
-    v2 = (z_var[1, 1] - 1)/l_bar
-    r = (z_var[0, 1] - Snew[0, 1])/(l_bar * np.sqrt(v1 * v2))
+
+    sigma1sq = S_hat[0, 0] * M
+    sigma1 = np.sqrt(sigma1sq)
+    sigma2sq = S_hat[1, 1] * M
+    sigma2 = np.sqrt(sigma2sq)
+
+    v1 = (z_var[0, 0] - 1) * sigma1sq/l_bar
+    v2 = (z_var[1, 1] - 1) * sigma2sq/l_bar
+    r = (z_var[0, 1] - Snew[0, 1]) * (sigma1 * sigma2)/(l_bar * np.sqrt(v1 * v2))
 
     est_init = np.array([v1, v2, r])
     return est_init
