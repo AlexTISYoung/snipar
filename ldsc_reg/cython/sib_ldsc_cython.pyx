@@ -1,10 +1,10 @@
 import numpy as np
 cimport numpy as np
 
-DTYPE = np.int
-ctypedef np.int_t DTYPE_t
+DTYPE = np.float
+ctypedef np.float DTYPE_t
 
-cpdef np.ndarray[DTYPE_t, ndim=3] normalize_S(np.ndarray[DTYPE_t, ndim=3] S, np.ndarray[DTYPE_t, ndim=1] norm):
+cpdef np.ndarray[np.double_t, ndim=3] normalize_S(np.ndarray[np.double_t, ndim=3] S, np.ndarray[np.double_t, ndim=1] norm):
     '''
     A function which normalizes a vector of S matrices
     '''
@@ -20,13 +20,13 @@ cpdef np.ndarray[DTYPE_t, ndim=3] normalize_S(np.ndarray[DTYPE_t, ndim=3] S, np.
     return S_norm
 
 
-cpdef np.ndarray[DTYPE_t, ndim=2] calc_inv_root(np.ndarray[np.double_t, ndim=2] S):
+cpdef np.ndarray[np.double_t, ndim=2] calc_inv_root(np.ndarray[np.double_t, ndim=2] S):
     '''
     A stable solver for S^{-1/2}
     '''
     
     cdef int ns = S.shape[0]
-    cdef int ms = S.shpae[1]
+    cdef int ms = S.shape[1]
     
     if ~np.any(np.isnan(S)):
         S_eig = np.linalg.eig(S)
@@ -48,8 +48,8 @@ cpdef np.ndarray[np.double_t, ndim=2] makeDmat(np.ndarray[np.double_t, ndim=2] S
     cdef double sigma1 = np.sqrt(M * S[0, 0])
     cdef double sigma2 = np.sqrt(M * S[1, 1])
     
-    cdef np.ndarray[np.double_t, ndim=2] Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
-                                [0, 1/sigma2]])
+    cdef np.ndarray[np.double_t, ndim=2] Dmat = np.sqrt(M) * np.array([[1./sigma1, 0], 
+                                                                        [0, 1./sigma2]])
     
     return Dmat
 
@@ -84,7 +84,7 @@ cpdef np.ndarray[np.double_t, ndim=2] V2Vmat(np.ndarray[np.double_t, ndim=1] V, 
     cdef double v2 = V[1]
     cdef double r = V[2]
 
-    cdef np.ndarray[np.double_t, ndim=2] Vmat = (1/M) * np.array([[v1, r * np.sqrt(v1 * v2)], 
+    cdef np.ndarray[np.double_t, ndim=2] Vmat = (1./M) * np.array([[v1, r * np.sqrt(v1 * v2)], 
                                                                   [r * np.sqrt(v1 * v2), v2]])
 
     return Vmat
@@ -132,6 +132,7 @@ cpdef double _log_ll(np.ndarray[np.double_t, ndim=1] V,
     Outputs:
     logll = scalar
     """
+    
     cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
 
     Vnew, Snew = standardize_mat(Vmat, S, N)
@@ -139,7 +140,7 @@ cpdef double _log_ll(np.ndarray[np.double_t, ndim=1] V,
     logdet = np.linalg.slogdet(Sigma)
 
     det = np.linalg.det(Sigma)
-    if det > 1e-6 or det < -1e-6:
+    if (det > 1e-6) or (det < -1e-6):
         Sigma_inv = np.linalg.inv(Sigma)
     else:
         Sigma_inv = np.linalg.pinv(Sigma)

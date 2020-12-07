@@ -540,9 +540,9 @@ class sibreg():
                 print("Making Method of Moments Guess")
                 
             est_init = Vinit(z, S, u, M)
-            print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
+        print(f"Initial estimate: {est_init}")
         self.est_init = est_init
         
         rlimit = (-1, 1) if rbounds else (None, None)
