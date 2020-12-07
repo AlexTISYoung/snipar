@@ -369,25 +369,7 @@ def get_hessian(V, z, S, l, u, f, M):
 
     return H
 
-@njit
-def makeSnew_vec(S, M):
 
-    '''
-    Makes a vector of S and a scalar value M
-    into a vector of Snew = Dmat @ Si @ Dmat
-    for each Si in S
-    '''
-    
-    Snew_mat = np.zeros_like(S)
-
-    for idx in prange(len(S)):
-        Si = S[idx]
-        Dmat = makeDmat(Si, M)
-        Snew = Dmat @ Si @ Dmat
-        Snew_mat[idx] = Snew
-        
-    return Snew_mat
-    
 def Vinit(z, S, l, M):
     '''
     Get initial estimate to start
