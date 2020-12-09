@@ -61,7 +61,7 @@ if __name__ == '__main__':
     parser.set_defaults(jkse_cores = 2)
     
     parser.add_argument('-maf', '--maf-thresh', dest = "maf", type = float, help = """The threshold of minor allele frequency. All SNPs below this threshold
-                                                                        are dropped. Default is 5%. Set number as the percentage i.e. 5% instead of 0.05""")
+                                                                        are dropped. Default is 5 percent. Set number as the percentage i.e. 5 instead of 0.05""")
     parser.set_defaults(maf = 5.0)
     args=parser.parse_args()
     
