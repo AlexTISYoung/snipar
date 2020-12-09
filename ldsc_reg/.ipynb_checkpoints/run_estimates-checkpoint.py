@@ -26,7 +26,7 @@ def print_call(call):
         else:
             message += call[i] + " "
     
-    return message
+    return message[1:-1]
            
         
 
@@ -59,6 +59,10 @@ if __name__ == '__main__':
     parser.set_defaults(jkse_blocksize=1000)
     parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
     parser.set_defaults(jkse_cores = 2)
+    
+    parser.add_argument('-maf', '--maf-thresh', dest = "maf", type = float, help = """The threshold of minor allele frequency. All SNPs below this threshold
+                                                                        are dropped. Default is 5%. Set number as the percentage i.e. 5% instead of 0.05""")
+    parser.set_defaults(maf = 5.0)
     args=parser.parse_args()
     
     
@@ -107,6 +111,7 @@ if __name__ == '__main__':
     metadata = hf.get("bim")[()]
     chromosome = metadata[:, 0]
     snp = metadata[:, 1]
+    bp = metadata[:, 3]
     theta  = hf.get('estimate')[()]
     se  = hf.get('estimate_ses')[()]
     N = hf.get('N_L')[()]
@@ -125,6 +130,7 @@ if __name__ == '__main__':
             metadata = hf.get("bim")[()]
             chromosome_file = metadata[:, 0]  
             snp_file = metadata[:, 1]
+            bp_file = metadata[:, 3]
             theta_file  = hf.get('estimate')[()]
             se_file  = hf.get('estimate_ses')[()]
             S_file = hf.get('estimate_covariance')[()]
@@ -137,6 +143,7 @@ if __name__ == '__main__':
 
             chromosome = np.append(chromosome, chromosome_file, axis = 0)
             snp = np.append(snp, snp_file, axis = 0)
+            bp = np.append(bp, bp_file, axis = 0)
             theta = np.append(theta, theta_file, axis = 0)
             se = np.append(se, se_file, axis = 0)
             S = np.append(S, S_file, axis = 0)
@@ -146,6 +153,7 @@ if __name__ == '__main__':
     # Constructing dataframe of data
     zdata = pd.DataFrame({'CHR' : chromosome,
                         'SNP' : snp,
+                        'BP' : bp,
                         'N' : N,
                         "f" : f,
                         'theta' : theta.tolist(),
@@ -155,8 +163,20 @@ if __name__ == '__main__':
 
     zdata['CHR'] = zdata['CHR'].astype(int)
     zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
+    zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
+    zdata['BP'] = zdata['BP'].astype('int')
     
-    zdata_n_message = f"Number of Observations before merging LD-Scores: {zdata.shape[0]}"
+    
+    zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
+    
+    print(zdata_n_message)
+    if args.logfile is not None:
+        logging.info(zdata_n_message)
+    
+    # dropping obs based on MAF
+    zdata = zdata[zdata['f'] >= args.maf/100.0]
+    
+    zdata_n_message = f"Number of Observations before merging LD-Scores, after removing low MAF SNPs: {zdata.shape[0]}"
     
     print(zdata_n_message)
     if args.logfile is not None:
@@ -167,13 +187,20 @@ if __name__ == '__main__':
     ldscore_path = args.ldsc_scores
     ldcolnames = ["CHR", "SNP", "BP", "L2"]
     ldscores= ld.read_ldscores(ldscore_path, ldcolnames)
+    # ldscores['BP'] = ldscores['BP'].astype('int')
 
     # Merging LD scores with main Data Frame
     main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
 
     # dropping NAs
     main_df = main_df.dropna()
-    
+
+    if main_df.shape[0] == 0:
+        print("No matches while matching LD-score data with main dataset using RSID.")
+        print("Trying to match with BP.")
+        main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "BP"])
+        main_df = main_df.dropna()
+
     maindata_n_message = f"Number of Observations after merging LD-Scores and dropping NAs: {main_df.shape[0]}"
     
     print(maindata_n_message)
@@ -214,7 +241,8 @@ if __name__ == '__main__':
                     u = u,
                     M = M) 
 
-    output_matrix, result = model.solve(rbounds = args.rbounds)
+    output_matrix, result = model.solve(est_init = np.array([phvar/2, phvar/2, 0.0]),
+                                        rbounds = args.rbounds)
     
     estimates = {'v1' : output_matrix['v1'],
                 'v2' : output_matrix['v2'],
@@ -243,7 +271,8 @@ if __name__ == '__main__':
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
         
-        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores)
+        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores,
+                        rbounds = args.rbounds)
 
         print(f"Block Jack Knife Standard Errors: {jkse}")
         

@@ -59,6 +59,10 @@ if __name__ == '__main__':
     parser.set_defaults(jkse_blocksize=1000)
     parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
     parser.set_defaults(jkse_cores = 2)
+    
+    parser.add_argument('-maf', '--maf-thresh', dest = "maf", type = float, help = """The threshold of minor allele frequency. All SNPs below this threshold
+                                                                        are dropped. Default is 5%. Set number as the percentage i.e. 5% instead of 0.05""")
+    parser.set_defaults(maf = 5.0)
     args=parser.parse_args()
     
     
@@ -162,7 +166,17 @@ if __name__ == '__main__':
     zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype('int')
     
-    zdata_n_message = f"Number of Observations before merging LD-Scores: {zdata.shape[0]}"
+    
+    zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
+    
+    print(zdata_n_message)
+    if args.logfile is not None:
+        logging.info(zdata_n_message)
+    
+    # dropping obs based on MAF
+    zdata = zdata[zdata['f'] >= args.maf/100.0]
+    
+    zdata_n_message = f"Number of Observations before merging LD-Scores, after removing low MAF SNPs: {zdata.shape[0]}"
     
     print(zdata_n_message)
     if args.logfile is not None:
@@ -257,7 +271,8 @@ if __name__ == '__main__':
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
         
-        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores)
+        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores,
+                        rbounds = args.rbounds)
 
         print(f"Block Jack Knife Standard Errors: {jkse}")
         

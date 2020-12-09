@@ -563,7 +563,8 @@ class sibreg():
 
 def jkse_core(indices,
              model,
-             full_est):
+             full_est,
+             rbounds = True):
     
     '''
     This runs the core estimation
@@ -587,7 +588,8 @@ def jkse_core(indices,
                     f = f,
                     M = M,
                     printout = False,
-                    est_init = full_est)
+                    est_init = full_est,
+                    rbounds = rbounds)
     
     
     output_matrix = np.array([output['v1'], output['v2'], output['r']])
@@ -600,7 +602,8 @@ def jkse(model,
         full_est_params,
         blocksize = 1,
         printinfo = False,
-        num_procs = 2):
+        num_procs = 2,
+        rbounds = True):
     
     '''
     This runs the whole block jackknife 
@@ -616,7 +619,7 @@ def jkse(model,
     # store full parameter estimate as array
     full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
     
-    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est)
+    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est, rbounds = rbounds)
     
     num_procs = num_procs
     pool = mp.Pool(num_procs)

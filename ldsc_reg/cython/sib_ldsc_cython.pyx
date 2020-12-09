@@ -70,7 +70,9 @@ cpdef tuple standardize_mat(np.ndarray[np.double_t, ndim=2] V,
     cdef np.ndarray[np.double_t, ndim=2] Snew = Dmat @ S @ Dmat
     cdef np.ndarray[np.double_t, ndim=2] Vnew = Dmat @ V @ Dmat
     
-    return Vnew, Snew
+    std_mats = (Vnew, Snew)
+    
+    return std_mats
 
 
 cpdef np.ndarray[np.double_t, ndim=2] V2Vmat(np.ndarray[np.double_t, ndim=1] V, int M):
@@ -135,99 +137,102 @@ cpdef double _log_ll(np.ndarray[np.double_t, ndim=1] V,
     
     cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
 
-    Vnew, Snew = standardize_mat(Vmat, S, N)
-    Sigma = Snew + l * Vnew
-    logdet = np.linalg.slogdet(Sigma)
+    cdef tuple stdmat_tuple = standardize_mat(Vmat, S, N)
+    cdef np.ndarray[np.double_t, ndim=2] Vnew = stdmat_tuple[0]
+    cdef np.ndarray[np.double_t, ndim=2] Snew = stdmat_tuple[1]
+    
+    cdef np.ndarray[np.double_t, ndim=2] Sigma = Snew + l * Vnew
+    cdef tuple logdet = np.linalg.slogdet(Sigma)
 
-    det = np.linalg.det(Sigma)
+    cdef double det = np.linalg.det(Sigma)
     if (det > 1e-6) or (det < -1e-6):
         Sigma_inv = np.linalg.inv(Sigma)
     else:
         Sigma_inv = np.linalg.pinv(Sigma)
 
-    d = Vmat.shape[0]
-    z2d = z.reshape(d,1)
+    cdef int d = Vmat.shape[0]
+    cdef np.ndarray[np.double_t, ndim=2] z2d = z.reshape(d,1)
 
-    L = - (d/2.0) * np.log(2 * np.pi) \
+    cdef np.ndarray[np.double_t, ndim=2] L = - (d/2.0) * np.log(2 * np.pi) \
         - (1.0/2.0) * logdet[0]*logdet[1] \
         - (1.0/2.0) * z2d.T @ Sigma_inv @ z2d
 
-    logll = L[0, 0]
+    cdef double logll = L[0, 0]
 
     return logll
 
 
 
-cpdef _grad_ll_v(
-    V, 
-    z, 
-    S, 
-    l, 
-    N
+cpdef np.ndarray[np.double_t, ndim=1] _grad_ll_v(
+    np.ndarray[np.double_t, ndim=1] V, 
+    np.ndarray[np.double_t, ndim=1] z, 
+    np.ndarray[np.double_t, ndim=2] S, 
+    double l, 
+    int N
 ):
 
     """
     """
 
     cdef np.ndarray[np.double_t, ndim=2] Vmat = V2Vmat(V, N)
-    d = S.shape[0]
+    cdef int d = S.shape[0]
 
-    Vout = standardize_mat(Vmat, S, N)
-    Vnew = Vout[0]
-    Snew = Vout[1]
+    cdef tuple stdmat_tuple = standardize_mat(Vmat, S, N)
+    cdef np.ndarray[np.double_t, ndim=2] Vnew = stdmat_tuple[0]
+    cdef np.ndarray[np.double_t, ndim=2] Snew = stdmat_tuple[1]
     
-    Sigma = Snew + l * Vnew
+    cdef np.ndarray[np.double_t, ndim=2] Sigma = Snew + l * Vnew
     
     # getting important scalars
-    v1 = V[0]
-    v2 = V[1]
-    r = V[2]
+    cdef double v1 = V[0]
+    cdef double v2 = V[1]
+    cdef double r = V[2]
 
-    rs = Snew[0, 1]
+    cdef double rs = Snew[0, 1]
 
-    sigma1 = np.sqrt(N * S[0, 0])
-    sigma2 = np.sqrt(N * S[1, 1])
+    cdef double sigma1 = np.sqrt(N * S[0, 0])
+    cdef double sigma2 = np.sqrt(N * S[1, 1])
 
-    sigma1sq = sigma1 ** 2
-    sigma2sq = sigma2 ** 2
+    cdef double sigma1sq = sigma1 ** 2
+    cdef double sigma2sq = sigma2 ** 2
     
-    z1 = z[0]
-    z2 = z[1]
+    cdef double z1 = z[0]
+    cdef double z2 = z[1]
     
-    z1sq = z1 ** 2
-    z2sq = z2 ** 2
+    cdef double z1sq = z1 ** 2
+    cdef double z2sq = z2 ** 2
 
-    det = np.linalg.det(Sigma)
+    cdef double det = np.linalg.det(Sigma)
 
-    T = z1sq * (1 + (l * v2/sigma2sq)) - \
-            2 * z1 * z2 * (rs + r * l * np.sqrt(v1 * v2)/(sigma1 * sigma2)) + \
-            z2sq * (1 + l * v1/sigma1sq)
+    cdef double T = z1sq * (1.0 + (l * v2/sigma2sq)) - \
+            2.0 * z1 * z2 * (rs + r * l * np.sqrt(v1 * v2)/(sigma1 * sigma2)) + \
+            z2sq * (1.0 + l * v1/sigma1sq)
 
     # gradient wrt v1
-    ddet_dv1 = l/sigma1sq * (1 + l * v2/sigma2sq) - (l * r/(sigma1 * sigma2)) * \
+    cdef double ddet_dv1 = l/sigma1sq * (1.0 + l * v2/sigma2sq) - (l * r/(sigma1 * sigma2)) * \
             (rs * np.sqrt(v2/v1) + r * l * v2/(sigma1 * sigma2)) 
 
-    dT_dv1 = (z2sq * l/sigma1sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
+    cdef double dT_dv1 = (z2sq * l/sigma1sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v2/v1)
 
-    dl_dv1 = -(1/2) * 1/det * (ddet_dv1 * (1 - T/det) + dT_dv1)
+    cdef double dl_dv1 = -(1.0/2) * 1.0/det * (ddet_dv1 * (1 - T/det) + dT_dv1)
 
     # gradient wrt v2
-    ddet_dv2 = l/sigma2sq * (1 + l * v1/sigma1sq) - (l * r/(sigma1 * sigma2)) * \
+    cdef double ddet_dv2 = l/sigma2sq * (1.0 + l * v1/sigma1sq) - (l * r/(sigma1 * sigma2)) * \
             (rs * np.sqrt(v1/v2) + r * l * v1/(sigma1 * sigma2)) 
 
-    dT_dv2 = (z1sq * l/sigma2sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
+    cdef double dT_dv2 = (z1sq * l/sigma2sq) - (r * l * z1 * z2)/(sigma1 * sigma2) * np.sqrt(v1/v2)
 
-    dl_dv2 = -(1/2) * 1/det * (ddet_dv2 * (1 - T/det) + dT_dv2)
+    cdef double dl_dv2 = -(1.0/2.0) * 1.0/det * (ddet_dv2 * (1 - T/det) + dT_dv2)
 
     # gradient wrt r
-    ddet_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
+    cdef double ddet_dr = -2.0 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * \
          (rs + (r * l * np.sqrt(v1 * v2))/(sigma1 * sigma2))
 
-    dT_dr = -2 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
+    cdef double dT_dr = -2.0 * l * np.sqrt(v1 * v2)/(sigma1 * sigma2) * z1 * z2
 
-    dl_dr = -(1/2) * 1/det * (ddet_dr * (1 - T/det) + dT_dr)
+    cdef double dl_dr = -(1.0/2.0) * 1.0/det * (ddet_dr * (1 - T/det) + dT_dr)
     
-    grad = np.array([dl_dv1, dl_dv2, dl_dr])
+    cdef np.ndarray[np.double_t, ndim=1] grad = np.array([dl_dv1, dl_dv2, dl_dr])
 
     return grad
 
@@ -285,35 +290,32 @@ cpdef tuple neg_logll_grad(
 
     return -log_ll , -G
 
-# cpdef tuple neglike_wrapper(
-#     np.ndarray[np.double_t, ndim=1] V,
-#     np.ndarray[np.double_t, ndim=2] z,
-#     np.ndarray[np.double_t, ndim=3] S,
-#     np.ndarray[np.double_t, ndim=1] l,
-#     np.ndarray[np.double_t, ndim=1] u,
-#     np.ndarray[np.double_t, ndim=1] f,
-#     double M
-# ):
+cpdef tuple neglike_wrapper(
+    np.ndarray[np.double_t, ndim=1] V,
+    np.ndarray[np.double_t, ndim=2] z,
+    np.ndarray[np.double_t, ndim=3] S,
+    np.ndarray[np.double_t, ndim=1] l,
+    np.ndarray[np.double_t, ndim=1] u,
+    np.ndarray[np.double_t, ndim=1] f,
+    int M
+):
     
-#     '''
-#     Wrapper for neg_logll_grad to convert V from an
-#     array of individual parameters to a symmetric
-#     matrix and solve for the negative log likelihood
-#     '''
+    '''
+    Wrapper for neg_logll_grad to convert V from an
+    array of individual parameters to a symmetric
+    matrix and solve for the negative log likelihood
+    '''
 
-#     cdef int N = S.shape[0]
+    cdef int N = S.shape[0]
     
-#     cdef np.ndarray[np.double_t, ndim=1] normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
-#     S = normalize_S(S, normalizer)
+    cdef np.ndarray[np.double_t, ndim=1] normalizer = 2 * f * (1 - f) if f is not None else np.ones(N)
+    S = normalize_S(S, normalizer)
     
-#     logll, Gvec = neg_logll_grad(V, 
-#                                z, S, 
-#                                l, u, M)
+    logll, Gvec = neg_logll_grad(V, 
+                               z, S, 
+                               l, u, M)
     
-#     # print(f"Logll : {logll}")
-#     # print(f"V : {V}")
-    
-#     return logll, Gvec
+    return logll, Gvec
 
 
 
