@@ -227,6 +227,12 @@ if __name__ == '__main__':
         effect_estimated = args.effect_transform
     else:
         effect_estimated = "direct_plus_population"
+    
+    effect_message = f"Transforming effects into: {effect_estimated}"
+
+    print(effect_message)
+    if args.logfile is not None:
+        logging.info(effect_message)
 
     S, theta = ld.transform_estimates(effect_estimated, S, theta)
 
