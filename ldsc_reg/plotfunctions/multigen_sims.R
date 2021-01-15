@@ -20,18 +20,15 @@ multigen %>%
                    yintercept = r_se)) +
     geom_point(aes(x = 1:nrow(multigen), y = r_invhse,
                    color = "Inverse Hessian")) +
-    geom_smooth(aes(x = 1:nrow(multigen), y = r_invhse,
-                    color = "Inverse Hessian"), 
-                method = lm, se= FALSE) +
+    geom_hline(aes(yintercept = mean(r_invhse), color = 'Inverse Hessian')) +
     geom_point(aes(x = 1:nrow(multigen), y = r_jkse,
                    color = "Block Jack Knife")) +
-    geom_smooth(aes(x = 1:nrow(multigen), y = r_jkse,
-                    color = "Block Jack Knife"), 
-                method = lm, se= FALSE) +
+    geom_hline(aes(yintercept = mean(r_jkse), color = 'Block Jack Knife')) +
     scale_color_brewer(palette = "Set1") +
     labs(color = "",
          x = "Run", y = "",
-         title = "Jack Knife vs Inverse Hessian")
+         title = "Jack Knife vs Inverse Hessian",
+         caption = "")
 
 
 ggsave(paste0(ldsc_path, "multigen_sim/multisims/comparing_se.png"),

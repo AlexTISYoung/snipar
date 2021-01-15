@@ -43,7 +43,7 @@ readlogfiles <- function(log_files){
             r <- str_split(estimates[3], ":")[[1]][2] %>% as.numeric()
         
             invh_se <- logdata[str_which(logdata, "Standard Errors:")]
-            invh_se <- str_extract_all(invh_se, "\\d+.\\d+")[[1]]
+            invh_se <- str_extract_all(invh_se, "\\d+.\\d+|nan")[[1]]
             v1_invhse <- invh_se[1] %>% as.numeric()
             v2_invhse <- invh_se[2] %>% as.numeric()
             r_invhse <- invh_se[3] %>% as.numeric()

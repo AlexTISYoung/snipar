@@ -74,12 +74,12 @@ ldsc_restricted <- ldsc %>%
 # plots
 ggplot() +
     geom_hline(yintercept = 1.0, color = 'darkgray') +
-    geom_point(data = estimates_df_rbound,
+    geom_point(data = estimates_df_rbound %>% filter(traitcode != 4),
                aes(reorder(traitname, r), 
                    r, color = traitname,
                    shape = "SNIPAR"),
                size = 3, position = position_nudge(x = -0.1)) +
-    geom_errorbar(data = estimates_df_rbound,
+    geom_errorbar(data = estimates_df_rbound %>% filter(traitcode != 4),
                   aes(x = traitname, 
                       ymin = r_ci_lo_invh, 
                       ymax = r_ci_hi_invh,
@@ -118,15 +118,15 @@ ggsave(paste0(ldsc_path, "generation_scotland/gs_horserace_rbound.png"),
 
 ggplot() +
     geom_hline(yintercept = 1.0, color = 'darkgray') +
-    geom_point(data = estimates_df_norbound,
+    geom_point(data = estimates_df_norbound %>% filter(traitcode != 4),
                aes(reorder(traitname, r), 
                    r, color = traitname,
                    shape = "SNIPAR"),
                size = 3, position = position_nudge(x = -0.1)) +
-    geom_errorbar(data = estimates_df_norbound,
+    geom_errorbar(data = estimates_df_norbound %>% filter(traitcode != 4),
                   aes(x = traitname, 
-                      ymin = r_ci_lo_jk, 
-                      ymax = r_ci_hi_jk,
+                      ymin = r_ci_lo_invh, 
+                      ymax = r_ci_hi_invh,
                       color = traitname,
                       linetype = "SNIPAR"),
                   width = 0.2,
@@ -152,7 +152,7 @@ ggplot() +
          caption = "Dataset: Generation Scotland") +
     scale_linetype_manual(values = c("longdash", "solid")) +
     scale_shape_manual(values = c(17, 16)) + 
-    theme(legend.position = c(0.8, 0.2),
+    theme(legend.position = c(0.2, 0.8),
           plot.caption = element_text(face = "italic", color = "gray", hjust = 0))
 
 ggsave(paste0(ldsc_path, "generation_scotland/gs_horserace_norbound.png"),
@@ -162,14 +162,14 @@ ggsave(paste0(ldsc_path, "generation_scotland/gs_horserace_norbound.png"),
 
 ggplot() +
     geom_hline(yintercept = 1.0, color = 'darkgray') +
-    geom_point(data = estimates_df_avgparental,
+    geom_point(data = estimates_df_avgparental %>% filter(traitcode != 4),
                aes(reorder(traitname, r), 
                    r, color = traitname),
                size = 3, position = position_nudge(x = -0.1)) +
-    geom_errorbar(data = estimates_df_avgparental,
+    geom_errorbar(data = estimates_df_avgparental %>% filter(traitcode != 4),
                   aes(x = traitname, 
-                      ymin = r_ci_lo_jk, 
-                      ymax = r_ci_hi_jk,
+                      ymin = r_ci_lo_invh, 
+                      ymax = r_ci_hi_invh,
                       color = traitname),
                   width = 0.2,
                   position = position_nudge(x = -0.1)) +
@@ -187,4 +187,32 @@ ggsave(paste0(ldsc_path, "generation_scotland/gs_horserace_norbound_avgparental.
        height = 6,
        width = 9)  
 
+
+# SE Comparison
+
+estimates_df_norbound %>% left_join(ldsc_restricted %>% filter(traitcode %in% estimates_df_norbound$traitcode), 
+                                    by = "traitcode", suffix = c(".snipar", ".ldsc")) %>%
+    ggplot() +
+    geom_hline(yintercept = 1.0, color = 'darkgray') +
+    geom_point(aes(reorder(traitname.snipar, r.snipar), rse^2/r_invhse^2)) +
+    labs(x = "", y = "(LDSC SE)^2/(SNIPAR SE)^2",
+         title = "Comparing Standard Errors",
+         subtitle = "R not Bounded")
+
+ggsave(paste0(ldsc_path, "generation_scotland/gs_comparingse_norbound.png"),
+       height = 6,
+       width = 9)  
+
+estimates_df_rbound %>% left_join(ldsc_restricted %>% filter(traitcode %in% estimates_df_rbound$traitcode), 
+                                  by = "traitcode", suffix = c(".snipar", ".ldsc")) %>%
+    ggplot() +
+    geom_hline(yintercept = 1.0, color = 'darkgray') +
+    geom_point(aes(reorder(traitname.snipar, r.snipar), rse^2/r_invhse^2)) +
+    labs(x = "", y = "(LDSC SE)^2/(SNIPAR SE)^2",
+         title = "Comparing Standard Errors",
+         subtitle = "R Bounded")
+
+ggsave(paste0(ldsc_path, "generation_scotland/gs_comparingse_rbound.png"),
+       height = 6,
+       width = 9)  
 

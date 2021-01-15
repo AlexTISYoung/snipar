@@ -22,3 +22,4 @@ ldsc_reg/simulated_data_par.csv
 ldsc_reg/simulated_data_dir.csv
 ldsc_reg/ldscores
 snipar-env/*
+.Rproj.user
