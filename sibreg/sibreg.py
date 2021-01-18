@@ -542,18 +542,32 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
+def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_controls = False):
     ####### Find parental status #######
-    ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
-    # Get families
-    fams = convert_str_array(np.array(par_gts_f['families']))
     # Get pedigree
     ped = convert_str_array(np.array(par_gts_f['pedigree']))
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    ped = ped[np.logical_not(controls),:]
+    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib)]
+    if compute_controls:
+        G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib))
+        G.append(
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
+                                     ids=ids, sib=sib))
+        G.append(
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
+                                     ids=ids, sib=sib))
+        return G
+    else:
+        return G[0]
+
+
+def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False):
+    ### Imputed parental file ###
+    # Get families
+    fams = convert_str_array(np.array(par_gts_f['families']))
     ### Genotype file ###
     bim = gts_f.split('.bed')[0] + '.bim'
     gts_f = Bed(gts_f,count_A1=True)
@@ -634,13 +648,16 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     del imp_gts
     return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels, par_status = par_status)
 
-def compute_pgs(par_gts_f,gts_f,pgs, sib = False):
-    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib)
+def compute_pgs(par_gts_f,gts_f,pgs, sib = False, compute_controls = False):
+    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib, compute_controls = compute_controls)
     if sib:
         cols = np.array(['proband','sibling','paternal','maternal'])
     else:
         cols = np.array(['proband','paternal','maternal'])
-    return pgs.compute(G,cols)
+    if compute_controls:
+        return [pgs.compute(x,cols) for x in G]
+    else:
+        return pgs.compute(G,cols)
 
 def fit_null_model(y,X,fam_labels,tau_init):
     # Optimize null model
@@ -661,4 +678,3 @@ def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
     print('Residual variance estimate: ' + str(round(optim['sigma2'],4)))
     alpha = rmodel.alpha_mle(optim['tau'],optim['sigma2'],compute_cov = True)
     return alpha
-
