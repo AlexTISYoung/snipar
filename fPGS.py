@@ -1,8 +1,21 @@
 #!/well/kong/users/wiw765/anaconda3/bin/python
 from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse
+import h5py, argparse, code
 import pandas as pd
+
+def pgs_write(pg,pgs_out,name):
+    pg.mean_normalise()
+    # Rescale by observed proband PGS
+    pg.gts = pg.gts / np.std(pg.gts[:, 0])
+    print('PGS computed')
+    ####### Write PGS to file ########
+    pgs_out[name] = pg.gts
+    pgs_out[name+'_ids'] = encode_str_array(pg.ids)
+    pgs_out[name+'_cols'] = encode_str_array(pg.sid)
+    pgs_out[name+'_fams'] = encode_str_array(pg.fams)
+    return None
+
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -16,6 +29,8 @@ if __name__ == '__main__':
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1 in the analysis sample',default=False)
+    parser.add_argument('--compute_controls', action='store_true', default=False,
+                        help='Compute PGS for control families (default False)')
     parser.add_argument('--fit_sib',action='store_true',default=False,help='Fit indirect effects from siblings')
     parser.add_argument('--ped',type=str,help='Path to pedigree file. By default uses pedigree in imputed parental genotype HDF5 file',default=None)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
@@ -51,23 +66,25 @@ if __name__ == '__main__':
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
         G = get_gts_matrix(pargts_list[0],gts_list[0],p.snp_ids,sib = args.fit_sib)
-        pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib)
+        pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib, compute_controls = args.compute_controls)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
-            pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p, sib = args.fit_sib))
-        # Normalise PGS
-        pg.mean_normalise()
-        # Rescale by observed proband PGS
-        pg.gts = pg.gts/np.std(pg.gts[:,0])
+            if args.compute_controls:
+                pg_i = compute_pgs(pargts_list[i],gts_list[i],p, sib = args.fit_sib,compute_controls = args.compute_controls)
+                pg = [pg[x].add(pg_i[x]) for x in range(0,len(pg))]
+            else:
+                pg = pg.add(compute_pgs(pargts_list[i],gts_list[i],p, sib = args.fit_sib,compute_controls = args.compute_controls))
         print('PGS computed')
-
         ####### Write PGS to file ########
-        print('Writing PGS to '+args.outprefix+'.pgs.hdf5')
-        pgs_out = h5py.File(args.outprefix+'.pgs.hdf5','w')
-        pgs_out['pgs'] = pg.gts
-        pgs_out['ids'] = encode_str_array(pg.ids)
-        pgs_out['cols'] = encode_str_array(pg.sid)
-        pgs_out['fams'] = encode_str_array(pg.fams)
+        print('Writing PGS to ' + args.outprefix + '.pgs.hdf5')
+        pgs_out = h5py.File(args.outprefix + '.pgs.hdf5', 'w')
+        if args.compute_controls:
+            pgs_write(pg[0], pgs_out, 'pgs')
+            pgs_write(pg[1],pgs_out,'_p_')
+            pgs_write(pg[2], pgs_out, '_m_')
+            pgs_write(pg[3],pgs_out,'_o_')
+        else:
+            pgs_write(pg,pgs_out,'pgs')
         pgs_out.close()
     elif args.pgs is not None:
         if args.phenofile is None:
