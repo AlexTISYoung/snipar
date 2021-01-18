@@ -1,11 +1,9 @@
-#!/well/kong/users/wiw765/anaconda3/bin/python
 from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse, code
+import h5py, argparse
 import pandas as pd
 
 def pgs_write(pg,pgs_out,name):
-    pg.mean_normalise()
     # Rescale by observed proband PGS
     pg.gts = pg.gts / np.std(pg.gts[:, 0])
     print('PGS computed')
@@ -84,7 +82,7 @@ if __name__ == '__main__':
             pgs_write(pg[2], pgs_out, '_m_')
             pgs_write(pg[3],pgs_out,'_o_')
         else:
-            pgs_write(pg,pgs_out,'pgs')
+            pgs_write(pg, pgs_out, 'pgs')
         pgs_out.close()
     elif args.pgs is not None:
         if args.phenofile is None:
@@ -92,9 +90,9 @@ if __name__ == '__main__':
         print('Reading PGS from '+args.pgs)
         pgs_f = h5py.File(args.pgs, 'r')
         pg = gtarray(np.array(pgs_f['pgs']),
-                     convert_str_array(np.array(pgs_f['ids'])),
-                     sid=convert_str_array(np.array(pgs_f['cols'])),
-                     fams=convert_str_array(np.array(pgs_f['fams'])))
+                     convert_str_array(np.array(pgs_f['pgs_ids'])),
+                     sid=convert_str_array(np.array(pgs_f['pgs_cols'])),
+                     fams=convert_str_array(np.array(pgs_f['pgs_fams'])))
         print('Normalising PGS')
         pg.mean_normalise()
         pgs_f.close()
@@ -145,3 +143,4 @@ if __name__ == '__main__':
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+

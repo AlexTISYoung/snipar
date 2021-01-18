@@ -2,7 +2,7 @@ import numpy as np
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.optimize import fmin_l_bfgs_b
-import h5py
+import h5py, code
 
 class model(object):
     """Define a linear model with within-class correlations.
@@ -544,6 +544,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
 
 def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_controls = False):
     ####### Find parental status #######
+    ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
     # Get pedigree
     ped = convert_str_array(np.array(par_gts_f['pedigree']))
@@ -565,7 +566,6 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_cont
 
 
 def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False):
-    ### Imputed parental file ###
     # Get families
     fams = convert_str_array(np.array(par_gts_f['families']))
     ### Genotype file ###
@@ -648,6 +648,7 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False
     del imp_gts
     return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels, par_status = par_status)
 
+
 def compute_pgs(par_gts_f,gts_f,pgs, sib = False, compute_controls = False):
     G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib, compute_controls = compute_controls)
     if sib:
@@ -678,3 +679,5 @@ def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
     print('Residual variance estimate: ' + str(round(optim['sigma2'],4)))
     alpha = rmodel.alpha_mle(optim['tau'],optim['sigma2'],compute_cov = True)
     return alpha
+
+

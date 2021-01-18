@@ -1,22 +1,16 @@
 # SNIPar
 
-SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
-and for performing robust GWAS using the resulting imputed parental genotypes
+SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed genotypes in a nuclear family, and for performing
+family based genome-wide association and polygenic score analyses. 
 
 # Main features:
 
-Impute the expected sum of maternal and paternal genotypes given genotype data on the sibling
-    offspring of the parents and IBD sharing between the sibling offspring
+Impute missing parental genotypes given the observed genotypes in a nuclear family (impute_runner.py).
 
-Imputes the expected genotype of the missing parent given a parent-offspring pair, or a parent and multiple full sibling
-offspring along with the shared IBD segments of those offspring. 
+Perform family based GWAS using observed and imputed parental genotypes (fGWAS.py). 
 
-Performs robust GWAS using observed and imputed parental genotypes along with observed proband genotypes (fGWAS.py script).
-
-Computes PGS values for probands and parents from SNP weights using observed/imputed parental genotypes; analyse the direct and parental effects
-of the PGS on traits (fPGS.py). 
-
-The fGWAS.py and fPGS.py scripts use a random effects model to model phenotypic correlations between siblings. 
+Compute polygenic scores for probands and parents from SNP weights using observed/imputed parental genotypes, and perform family
+ based analysis of polygenic scores (fPGS.py script). 
 
 # Documentation
 
