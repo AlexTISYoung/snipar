@@ -9,16 +9,16 @@ Impute missing parental genotypes given the observed genotypes in a nuclear fami
 
 Perform family based GWAS using observed and imputed parental genotypes (fGWAS.py). 
 
-Compute polygenic scores for probands and parents from SNP weights using observed/imputed parental genotypes, and perform family
+Compute polygenic scores for probands, siblings, and parents from SNP weights using observed/imputed parental genotypes, and perform family
  based analysis of polygenic scores (fPGS.py script). 
 
 # Documentation
 
-Documentation for the modules and scripts is at: https://sibreg.readthedocs.io/en/master/
+Documentation for the modules and scripts is at: https://snipar.readthedocs.io/en/latest/
 
-It is recommended to read the guide: https://sibreg.readthedocs.io/en/master/guide.html
+It is recommended to read the guide: https://snipar.readthedocs.io/en/latest/guide.html
 
-And to work through the tutorial: https://sibreg.readthedocs.io/en/master/tutorial.html
+And to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
 
 # Package Install Instructions
 
