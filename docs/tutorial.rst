@@ -1,6 +1,6 @@
 Tutorial
 ********
-Tutorial on performing robust GWAS using family data. Before working through the tutorial, please first install the package and run the tests.
+Tutorial on performing imputing missing parental genotypes and performing family based GWAS and polygenic score analyses. Before working through the tutorial, please first install the package and run the tests.
 
 To generate the test data, in the main SNIPar directory, run:
 
@@ -43,7 +43,7 @@ The effects are output in test_data/h2_quad_0.8.hdf5 and are given with respect 
 
 Now we have estimated locus specific summary statistics. To estimate effects and compare to the true effects, run
 
-    ``Rscript example/estimate_sim_effects.R test_data/h2_quad_0.8.hdf5 test_data/h2_quad_0.8.effects.txt test_data/h2_quad_0.8.estimates``
+    ``python example/estimate_sim_effects.py test_data/h2_quad_0.8.hdf5 test_data/h2_quad_0.8.effects.txt``
 
 This should print estimates of the bias of the effect estimates, with output something like this:
 
