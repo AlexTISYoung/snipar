@@ -45,7 +45,9 @@ This should print estimates of the bias of the effect estimates, with output som
     ``Bias for maternal effects: 0.0267; S.E. 0.0465``
     ``Bias for population effects as estimates of direct effects: 0.4334; S.E. 0.0416``
 
-If everything has worked, the bias estimates should not be statistically significantly different from zero (with high probability).
+If everything has worked, the bias estimates for direct, paternal and maternal effects should not be statistically significantly different from zero (with high probability).
+Population effects, which are estimated by univariate regression of individual's phenotypes onto their genotypes as in standard GWAS,
+here are biased estimates of direct effects, since population effects include both direct and indirect parental effects.
 
 If the imputation has been performed from siblings alone, then the regression onto proband, imputed paternal, and imputed maternal becomes
 co-linear. This is because the imputation is the same for paternal and maternal genotypes. In this case, the regression should be performed
