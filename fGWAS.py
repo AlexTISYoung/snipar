@@ -4,14 +4,14 @@ import h5py, argparse, os, time, code
 import numpy as np
 import numpy.ma as ma
 
-def read_phenotype(phenofile, missing_char = 'NA'):
-    pheno = Pheno(args.phenofile, missing=args.missing_char).read()
+def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
+    pheno = Pheno(phenofile, missing=missing_char).read()
     y = np.array(pheno.val)
     pheno_ids = np.array(pheno.iid)[:,1]
     if y.ndim == 1:
         pass
     elif y.ndim == 2:
-        y = y[:, args.phen_index - 1]
+        y = y[:, phen_index - 1]
     else:
         raise (ValueError('Incorrect dimensions of phenotype array'))
     # Remove y NAs
@@ -21,6 +21,68 @@ def read_phenotype(phenofile, missing_char = 'NA'):
         pheno_ids = pheno_ids[y_not_nan]
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
     return y, pheno_ids
+
+def match_phenotype(G,y,pheno_ids):
+    in_G_dict = np.array([x in G.id_dict for x in pheno_ids])
+    y = y[in_G_dict]
+    pheno_ids = pheno_ids[in_G_dict]
+    pheno_id_dict = make_id_dict(pheno_ids)
+    y = y[[pheno_id_dict[x] for x in G.ids]]
+    return y
+
+def fit_null_model(y,fam_labels,tau_init = 1):
+    null_model = sibreg.model(y, np.ones((y.shape[0], 1)), fam_labels)
+    sigma_2_init = np.var(y) * tau_init / (1 + args.tau_init)
+    null_optim = null_model.optimize_model(np.array([sigma_2_init, args.tau_init]))
+    return null_optim['sigma2'], null_optim['tau']
+
+def transform_phenotype(L,y, fam_indices):
+    # Mean normalise phenotype
+    y = y - np.mean(y)
+    # Transform by family
+    for fam in fam_indices.keys():
+        famsize = fam_indices[fam].shape[0]
+        if famsize == 1:
+            y[fam_indices[fam]] = inv_root[1] * y[fam_indices[fam]]
+        else:
+            y[fam_indices[fam]] = inv_root[famsize].dot(y[fam_indices[fam]])
+    return y
+
+def fit_models(y,G):
+    G.gts = G.gts.transpose(2,0,1)
+    XTX = np.einsum('...ij,...ik', G.gts, G.gts)
+    XTY = np.einsum('...ij,i',G.gts,y)
+    alpha = np.linalg.solve(XTX,XTY)
+    alpha_cov = np.linalg.inv(XTX)
+    alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
+    return alpha, alpha_cov, alpha_ses
+
+def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, N_L):
+    print('Writing output to ' + outprefix + '.hdf5')
+    outfile = h5py.File(outprefix + '.hdf5', 'w')
+    outbim = np.column_stack((G.chrom,G.sid,G.pos,G.alleles))
+    outfile['bim'] = encode_str_array(outbim)
+    if parsum:
+        X_length = 2
+        outcols = np.array(['direct', 'avg_parental'])
+    else:
+        X_length = 3
+        outcols = np.array(['direct', 'paternal', 'maternal'])
+    outfile.create_dataset('estimate_covariance', (sid.shape[0], X_length, X_length), dtype='f', chunks=True,
+                           compression='gzip', compression_opts=9)
+    outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
+    outfile.create_dataset('estimate_ses', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+                           compression_opts=9)
+    outfile['estimate'][:] = alpha
+    outfile['estimate_cols'] = encode_str_array(outcols)
+    outfile['estimate_ses'][:] = alpha_ses
+    outfile['estimate_covariance'][:] = alpha_cov
+    outfile['sigma2'] = sigma2
+    outfile['tau'] = tau
+    outfile['N_L'] = N_L
+    outfile['freqs'] = G.freqs
+    outfile.close()
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -40,92 +102,34 @@ if __name__ == '__main__':
     args=parser.parse_args()
 
     ######### Read Phenotype ########
-    y , pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char)
-
+    y , pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts, args.gts)
-
-    code.interact(local=locals())
-    # Filter genotypes based on frequency and missingness
-    print('Filtering on frequency and MAF')
-    freqs = ma.mean(gts,axis=0)/2.0
-    missingness = ma.mean(gts.mask,axis=0)
-    freqs_pass = np.logical_and(freqs > args.min_maf,freqs < (1-args.min_maf))
-    print(str(freqs.shape[0]-np.sum(freqs_pass))+' SNPs with MAF<'+str(args.min_maf))
-    missingness_pass = 100*missingness < args.max_missing
-    print(str(freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(args.max_missing)+'%')
-    filter_pass = np.logical_and(freqs_pass,missingness_pass)
-    gts = gts[:,filter_pass]
-    imp_gts = imp_gts[:,filter_pass]
-    sid = sid[filter_pass,:]
-    freqs = freqs[filter_pass]
-    N_L = np.sum(np.logical_not(gts.mask),axis=0)
-    print('After filtering, '+str(np.sum(filter_pass))+' SNPs remain')
-    # Find indices in reduced data
-    par_status, gt_indices, fam_labels = find_par_gts(pheno_ids, ped, fams, gts_id_dict)
+    G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum)
     # Check for empty fam labels
-    no_fam = np.array([len(x)==0 for x in fam_labels])
-    if np.sum(no_fam)>0:
+    no_fam = np.array([len(x) == 0 for x in G.fams])
+    if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
-    print('Constructing family based genotype matrix')
-    ### Make genotype design matrix
-    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = args.parsum)
-    del gts
-    del imp_gts
-    # Fill NAs
-    print('Imputing missing genotypes with population frequency')
-    G[np.isnan(G)] = 0
+    #### Filter SNPs ####
+    print('Filtering based on MAF and missingness')
+    G.filter_snps(args.min_maf, args.max_missing)
+    #### Fill NAs ####
+    print('Imputing missing values with population frequencies')
+    N_L = G.fill_NAs()
+    #### Match phenotype ####
+    y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
     print('Estimating variance components')
-    null_model = sibreg.model(y,np.ones((y.shape[0],1)),fam_labels)
-    sigma_2_init = np.var(y) * args.tau_init / (1 + args.tau_init)
-    null_optim = null_model.optimize_model(np.array([sigma_2_init,args.tau_init]))
-    sigma2 = null_optim['sigma2']
-    tau = null_optim['tau']
+    sigma2, tau = fit_null_model(y,G.fams, tau_init = args.tau_init)
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
-    ##### Transform ######
-    #### Get inverse square root of Sigma ###
+    ##### Transform genotypes and phenotypes ######
     print('Transforming genotypes and phenotypes')
-    L = null_model.sigma_inv_root(tau,sigma2)
-    #### Transform genotype and phenotype ###
-    # Mean normalise
-    y = y - np.mean(y)
-    for label in L.keys():
-        label_indices = null_model.label_indices[label]
-        y[label_indices] = np.dot(L[label],y[label_indices])
-        for i in range(G.shape[2]):
-            G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
+    L = null_model.sigma_inv_root(tau, sigma2)
+    G.diagonalise(L)
+    y = transform_phenotype(L, y, G.fam_indices)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
-    XTX = np.einsum('...ij,...ik', G, G)
-    XTY = np.einsum('...ij,i',G,y)
-    alpha = np.linalg.solve(XTX,XTY)
-    alpha_cov = np.linalg.inv(XTX)
-    alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
-    t2 = time.time()
+    alpha, alpha_cov, alpha_ses = fit_models(y,G)
     print('Time: '+str(t2-t1)+' seconds')
-    ### Output file ###
-    print('Writing output to '+args.outprefix+'.hdf5')
-    outfile = h5py.File(args.outprefix+'.hdf5','w')
-    outfile['bim'] = encode_str_array(sid)
-    if args.parsum:
-        X_length = 2
-        outcols = np.array(['direct','avg_parental'])
-    else:
-        X_length = 3
-        outcols = np.array(['direct','paternal','maternal'])
-    outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
-    outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
-                           compression_opts=9)
-    outfile.create_dataset('estimate_ses', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
-                           compression_opts=9)
-    outfile['estimate'][:] = alpha
-    outfile['estimate_cols'] = encode_str_array(outcols)
-    outfile['estimate_ses'][:] = alpha_ses
-    outfile['estimate_covariance'][:] = alpha_cov
-    outfile['sigma2'] = sigma2
-    outfile['tau'] = tau
-    outfile['N_L'] = N_L
-    outfile['freqs'] = freqs
-    outfile.close()
+    ### Save output ###
+    write_output(G, args.outprefix, args.parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, N_L)

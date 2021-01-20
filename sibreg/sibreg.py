@@ -174,15 +174,17 @@ class model(object):
         return optim
 
     def sigma_inv_root(self,tau,sigma2):
-
+        sigma_u = sigma2 / tau
         sigma2_nsqrt = dict()
-
-        for label in self.y_lab.keys():
-            sigma_u = sigma2/tau
-            Sigma_lab = sigma_u*np.ones((self.label_counts[label],self.label_counts[label]))
+        famsizes = np.unique(list(self.label_counts.values()))
+        sigma2_nsqrt[1] = np.power(sigma_u+sigma2,-0.5)
+        famsizes = famsizes[famsizes>1]
+        for famsize in famsizes:
+            Sigma_lab = sigma_u*np.ones((famsize,famsize))
             np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
-            sigma2_chol_lab = np.linalg.cholesky(Sigma_lab)
-            sigma2_nsqrt[label] = np.linalg.inv(sigma2_chol_lab)
+            vals, vectors = np.linalg.eigh(Sigma_lab)
+            vals = np.power(vals,-0.5)
+            sigma2_nsqrt[famsize] = vectors.dot(vals.dot(vectors.T))
 
         return sigma2_nsqrt
 
@@ -243,7 +245,7 @@ def simulate(n,alpha,sigma2,tau):
     return model(y,X,labels)
 
 class gtarray(object):
-    def __init__(self,garray,ids, sid = None, id_index = 0, alleles = None, fams= None, par_status = None):
+    def __init__(self,garray,ids, sid = None, id_index = 0, alleles = None, pos = None, chrom = None, fams= None, par_status = None):
         if type(garray) == np.ndarray or type(garray)==np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -252,6 +254,7 @@ class gtarray(object):
             self.shape = garray.shape
             self.ndim = garray.ndim
             self.dtype = garray.dtype
+            self.freqs = None
         else:
             raise ValueError('Genotypes must be a numpy ndarray')
         if garray.shape[0] == ids.shape[0]:
@@ -271,12 +274,22 @@ class gtarray(object):
             else:
                 raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
         if alleles is not None:
-            if alleles.shape[0] == sid.shape[0]:
+            if alleles.shape[0] == garray.shape[1]:
                 self.alleles = alleles
             else:
-                raise ValueError('Size of alleles does not match size of SNP ids')
+                raise ValueError('Size of alleles does not match size of genotypes')
         else:
             self.alleles = None
+        if pos is not None:
+            if pos.shape[0] == garray.shape[1]:
+                self.pos = pos
+            else:
+                raise ValueError('Size of position vector does not match genotype array')
+        if chrom is not None:
+            if chrom.shape[0] == garray.shape[1]:
+                self.chrom = chrom
+            else:
+                raise ValueError('Size of chromosome vector does not match genotype array')
 
         if fams is not None:
             if fams.shape[0] == ids.shape[0] and fams.ndim==1:
@@ -295,6 +308,43 @@ class gtarray(object):
             self.par_status = None
 
         self.mean_normalised = False
+
+        if np.sum(self.gts.mask)>0:
+            self.has_NAs = True
+        else:
+            self.has_NAs = False
+
+    def freqs(self):
+        if self.ndim == 2:
+            self.freqs = ma.mean(self.gts,axis=0)/2.0
+        elif self.ndim == 3:
+            self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
+
+    def filter_snps(self, min_maf = 0, max_missing = 0):
+        if self.freqs is None:
+            self.freqs()
+        if self.ndim == 2:
+            missingness = ma.mean(self.gts.mask,axis=0)
+        elif self.ndim == 3:
+            missingness = ma.mean(self.gts.mask[:,0,:])
+        freqs_pass = np.logical_and(self.freqs > min_maf, freqs < (1 - min_maf))
+        print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
+        missingness_pass = 100 * missingness < max_missing
+        print(str(freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
+        filter_pass = np.logical_and(freqs_pass, missingness_pass)
+        self.freqs = self.freqs[filter_pass]
+        if self.ndim == 2:
+            self.gts = self.gts[:,filter_pass]
+        elif self.ndim == 3:
+            self.gts = self.gts[:,:,filter_pass]
+        if self.sid is not None:
+            self.sid = self.sid[filter_pass]
+        if self.pos is not None:
+            self.pos = self.pos[filter_pass]
+        if self.alleles is not None:
+            self.alleles = self.alleles[filter_pass]
+        if self.chrom is not None:
+            self.chrom = self.chrom[filter_pass]
 
     def mean_normalise(self):
         if not self.mean_normalised:
@@ -315,7 +365,15 @@ class gtarray(object):
     def fill_NAs(self):
         if not self.mean_normalised:
             self.mean_normalise()
+        if self.ndim == 2:
+            N_L = np.sum(np.logical_not(self.gts.mask), axis=0)
+        elif self.ndim == 3:
+            N_L = np.sum(np.logical_not(self.gts.mask[:,0,:]), axis=0)
         self.gts[self.gts.mask] = 0
+        self.gts.mask = False
+        self.has_NAs = False
+        return N_L
+
 
     def add(self,garray):
         if type(garray)==gtarray:
@@ -354,6 +412,31 @@ class gtarray(object):
 
         return gtarray(add_gts,ids_out,self.sid,alleles = self.alleles, fams = self.fams[self_index])
 
+    def diagonalise(self,inv_root):
+        if fams is None:
+            raise(ValueError('Family labels needed for diagonalization'))
+        if not self.mean_normalised:
+            self.mean_normalise()
+        if self.has_NAs:
+            self.fill_NAs()
+        unique_fams, famsizes = np.unique(self.fams)
+        fam_indices = dict()
+        # Transform
+        for fam in unique_fams:
+            fam_indices[fam] = np.where(self.fams == fam)[0]
+            famsize = fam_indices[fam].shape[0]
+            if self.ndim == 2:
+                if famsize == 1:
+                    self.gts[fam_indices[fam], :] = inv_root[1]*self.gts[fam_indices[fam],:]
+                else:
+                    self.gts[fam_indices[fam],:] = inv_root[famsize].dot(self.gts[fam_indices[fam],:])
+            elif self.ndim == 3:
+                if famsize == 1:
+                    self.gts[fam_indices[fam], : , :] = inv_root[1]*self.gts[fam_indices[fam], : , :]
+                else:
+                    for j in range(self.shape[1]):
+                        self.gts[fam_indices[fam],j, :] = inv_root[famsize].dot(self.gts[fam_indices[fam],j, :])
+        self.fam_indices = fam_indices
 
 class pgs(object):
     def __init__(self,snp_ids,weights,alleles):
@@ -524,25 +607,31 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
                     par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
 
-def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
+def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
     if np.min(gt_indices)<0:
-        raise ValueError('Missing genotype index')
+        raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
-    G = np.zeros((N,3,gts.shape[1]),np.float32)
-    # Observed proband genotype
-    G[:, 0, :] = gts[gt_indices[:, 0], :]
-    # Observed fathers
-    G[par_status[:,0]==0, 1, :] = gts[gt_indices[par_status[:,0]==0, 1], :]
-    # Imputed fathers
-    G[par_status[:,0]==1, 1, :] = imp_gts[gt_indices[par_status[:,0]==1, 1], :]
-    # Observed mothers
-    G[par_status[:,1]==0, 2, :] = gts[gt_indices[par_status[:,1]==0, 2], :]
-    # Imputed mothers
-    G[par_status[:,1]==1, 2, :] = imp_gts[gt_indices[par_status[:,1]==1, 2], :]
+    if parsum:
+        gdim = 2
+    else:
+        gdim = 3
+    G = np.zeros((N,gdim,gts.shape[1]),np.float32)
+    # Proband genotypes
+    G[:,0,:] = gts[gt_indices[:,0],:]
+    # Paternal genotypes
+    G[par_status[:,0]==0,1,:] = gts[gt_indices[par_status[:,0]==0,1],:]
+    G[par_status[:, 0] == 1, 1, :] = imp_gts[gt_indices[par_status[:, 0] == 1, 1], :]
+    # Maternal genotypes
+    if parsum:
+        G[par_status[:, 1] == 0, 1, :] += gts[gt_indices[par_status[:, 1] == 0, 2], :]
+        G[par_status[:, 1] == 1, 1, :] += imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
+    else:
+        G[par_status[:, 1] == 0, 2, :] = gts[gt_indices[par_status[:, 1] == 0, 2], :]
+        G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compute_controls = False):
+def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False):
     ####### Find parental status #######
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
@@ -551,7 +640,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib)]
+    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f, snp_ids = snp_ids,ids = ids, sib = sib, parsum = parsum)]
     if compute_controls:
         G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib))
         G.append(
@@ -565,13 +654,15 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
         return G[0]
 
 
-def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib = False):
+def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, parsum = False):
     # Get families
     fams = convert_str_array(np.array(par_gts_f['families']))
     ### Genotype file ###
     bim = gts_f.split('.bed')[0] + '.bim'
     gts_f = Bed(gts_f,count_A1=True)
-    alleles = np.loadtxt(bim, dtype='U')[:,4:6]
+    alleles = np.loadtxt(bim, dtype='U', usecols = (4,5))
+    pos = np.loadtxt(bim, dtype=int, usecols = 3)
+    chromosome = np.loadtxt(bim, dtype = int, usecols = 0)
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
@@ -623,16 +714,21 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
         if imp_sid[i] in obs_sid_dict and imp_sid[i] in snp_set:
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
+    if np.sum(in_obs_sid) == 0:
+        raise ValueError('No SNPs with non-duplicated IDs in common between imputed, observed, and PGS')
     obs_sid_index = obs_sid_index[in_obs_sid]
     sid = imp_sid[in_obs_sid]
     alleles = alleles[obs_sid_index,:]
-    if np.sum(in_obs_sid) == 0:
-        raise ValueError('No SNPs with non-duplicated IDs in common between imputed, observed, and PGS')
-
+    chromosome = chromosome[obs_sid_index]
+    pos = pos[obs_sid_index]
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')
-    imp_gts = np.array(par_gts_f['imputed_par_gts'][:,in_obs_sid])
-    imp_gts = imp_gts[imp_indices,:]
+    if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
+        imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
+        imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
+    else:
+        imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
+        imp_gts = imp_gts[imp_indices,:]
     fams = fams[imp_indices]
     # Read observed genotypes
     print('Reading observed genotypes')
@@ -645,17 +741,17 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
     ### Make genotype design matrix
     if sib:
         G = np.zeros((ids.shape[0],4,gts.shape[1]),dtype = np.float32)
-        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = parsum)
         G[:,1,:] = get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     else:
-        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices)
+        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum = parsum)
     del gts
     del imp_gts
-    return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels, par_status = par_status)
+    return gtarray(G,ids,sid, alleles = alleles, pos = pos, chrom = chromosome, fams = fam_labels, par_status = par_status)
 
 
 def compute_pgs(par_gts_f,gts_f,pgs, sib = False, compute_controls = False):
-    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib, compute_controls = compute_controls)
+    G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib = sib, compute_controls = compute_controls)
     if sib:
         cols = np.array(['proband','sibling','paternal','maternal'])
     else:
