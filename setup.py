@@ -32,7 +32,7 @@ setup(name='sibreg',
       ],
       keywords='statistics genetics',
       packages=['sibreg', 'sibreg.bin'],
-      setup_requires=['pytest-runner', 'numpy==1.19.0, 'Cython==0.29.21'],
+      setup_requires=['pytest-runner', 'numpy==1.19.0', 'Cython==0.29.21'],
       install_requires=[
             'bgen-reader==4.0.4',
             'numpy==1.19.0',
