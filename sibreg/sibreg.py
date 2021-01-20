@@ -337,8 +337,10 @@ class gtarray(object):
             self.gts = self.gts[:,filter_pass]
         elif self.ndim == 3:
             self.gts = self.gts[:,:,filter_pass]
+        self.shape = self.gts.shape
         if self.sid is not None:
             self.sid = self.sid[filter_pass]
+            self.sid_dict = make_id_dict(sid)
         if self.pos is not None:
             self.pos = self.pos[filter_pass]
         if self.alleles is not None:

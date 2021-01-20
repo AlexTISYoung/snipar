@@ -36,7 +36,7 @@ def fit_null_model(y,fam_labels,tau_init = 1):
     null_optim = null_model.optimize_model(np.array([sigma_2_init, args.tau_init]))
     return null_model, null_optim['sigma2'], null_optim['tau']
 
-def transform_phenotype(L,y, fam_indices):
+def transform_phenotype(inv_root,y, fam_indices):
     # Mean normalise phenotype
     y = y - np.mean(y)
     # Transform by family
@@ -68,11 +68,11 @@ def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau,
     else:
         X_length = 3
         outcols = np.array(['direct', 'paternal', 'maternal'])
-    outfile.create_dataset('estimate_covariance', (sid.shape[0], X_length, X_length), dtype='f', chunks=True,
+    outfile.create_dataset('estimate_covariance', (G.sid.shape[0], X_length, X_length), dtype='f', chunks=True,
                            compression='gzip', compression_opts=9)
-    outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+    outfile.create_dataset('estimate', (G.sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
-    outfile.create_dataset('estimate_ses', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
+    outfile.create_dataset('estimate_ses', (G.sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile['estimate'][:] = alpha
     outfile['estimate_cols'] = encode_str_array(outcols)
@@ -131,6 +131,5 @@ if __name__ == '__main__':
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
-    print('Time: '+str(t2-t1)+' seconds')
     ### Save output ###
     write_output(G, args.outprefix, args.parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, N_L)
