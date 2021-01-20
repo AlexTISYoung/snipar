@@ -31,10 +31,10 @@ def match_phenotype(G,y,pheno_ids):
     return y
 
 def fit_null_model(y,fam_labels,tau_init = 1):
-    null_model = sibreg.model(y, np.ones((y.shape[0], 1)), fam_labels)
+    null_model = model(y, np.ones((y.shape[0], 1)), fam_labels)
     sigma_2_init = np.var(y) * tau_init / (1 + args.tau_init)
     null_optim = null_model.optimize_model(np.array([sigma_2_init, args.tau_init]))
-    return null_optim['sigma2'], null_optim['tau']
+    return null_model, null_optim['sigma2'], null_optim['tau']
 
 def transform_phenotype(L,y, fam_indices):
     # Mean normalise phenotype
@@ -112,6 +112,7 @@ if __name__ == '__main__':
     #### Filter SNPs ####
     print('Filtering based on MAF and missingness')
     G.filter_snps(args.min_maf, args.max_missing)
+    print(str(G.shape[2])+' SNPs that pass MAF and missingness filters')
     #### Fill NAs ####
     print('Imputing missing values with population frequencies')
     N_L = G.fill_NAs()
@@ -119,7 +120,7 @@ if __name__ == '__main__':
     y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
     print('Estimating variance components')
-    sigma2, tau = fit_null_model(y,G.fams, tau_init = args.tau_init)
+    null_model, sigma2, tau = fit_null_model(y,G.fams, tau_init = args.tau_init)
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
     ##### Transform genotypes and phenotypes ######

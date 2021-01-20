@@ -183,9 +183,9 @@ class model(object):
             Sigma_lab = sigma_u*np.ones((famsize,famsize))
             np.fill_diagonal(Sigma_lab,sigma_u+sigma2)
             vals, vectors = np.linalg.eigh(Sigma_lab)
-            vals = np.power(vals,-0.5)
-            sigma2_nsqrt[famsize] = vectors.dot(vals.dot(vectors.T))
-
+            vals = np.power(vals,0.25)
+            vectors = vectors/vals
+            sigma2_nsqrt[famsize] = vectors.dot(vectors.T)
         return sigma2_nsqrt
 
     def predict(self,X):
@@ -326,11 +326,11 @@ class gtarray(object):
         if self.ndim == 2:
             missingness = ma.mean(self.gts.mask,axis=0)
         elif self.ndim == 3:
-            missingness = ma.mean(self.gts.mask[:,0,:])
-        freqs_pass = np.logical_and(self.freqs > min_maf, freqs < (1 - min_maf))
+            missingness = ma.mean(self.gts.mask[:,0,:],axis = 0)
+        freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
         print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
         missingness_pass = 100 * missingness < max_missing
-        print(str(freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
+        print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
         filter_pass = np.logical_and(freqs_pass, missingness_pass)
         self.freqs = self.freqs[filter_pass]
         if self.ndim == 2:
@@ -413,13 +413,13 @@ class gtarray(object):
         return gtarray(add_gts,ids_out,self.sid,alleles = self.alleles, fams = self.fams[self_index])
 
     def diagonalise(self,inv_root):
-        if fams is None:
+        if self.fams is None:
             raise(ValueError('Family labels needed for diagonalization'))
         if not self.mean_normalised:
             self.mean_normalise()
         if self.has_NAs:
             self.fill_NAs()
-        unique_fams, famsizes = np.unique(self.fams)
+        unique_fams, famsizes = np.unique(self.fams, return_counts = True)
         fam_indices = dict()
         # Transform
         for fam in unique_fams:
