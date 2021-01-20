@@ -39,7 +39,9 @@ setup(name='sibreg',
             'pysnptools==0.4.11',
             'pandas==0.24.2',
             'networkx==2.2',
-            'Cython==0.29.15'
+            'Cython==0.29.15',
+            'h5py==2.10.0',
+            'bgen-reader==4.0.4',
         ],
       tests_require=['pytest'],
       extras_require={
