@@ -542,7 +542,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_controls = False):
+def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compute_controls = False):
     ####### Find parental status #######
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
@@ -565,7 +565,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_cont
         return G[0]
 
 
-def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False):
+def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib = False):
     # Get families
     fams = convert_str_array(np.array(par_gts_f['families']))
     ### Genotype file ###
@@ -607,7 +607,12 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False
                                   gt_indices[par_status[:,1]==1,2]))))
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed and restrict to those in list
-    snp_set = set(snp_ids)
+    if snp_ids is None:
+        snp_ids = gts_f.sid
+    # Remove duplicate ids
+    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts = True)
+    snp_set = set(snp_ids[snp_indices[snp_counts==1]])
+    # Read and match SNP ids
     imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
     imp_sid = imp_bim[:,1]    
     obs_sid = gts_f.sid
@@ -622,7 +627,7 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False
     sid = imp_sid[in_obs_sid]
     alleles = alleles[obs_sid_index,:]
     if np.sum(in_obs_sid) == 0:
-        raise ValueError('No SNPs in common between imputed, observed, and PGS')
+        raise ValueError('No SNPs with non-duplicated IDs in common between imputed, observed, and PGS')
 
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')

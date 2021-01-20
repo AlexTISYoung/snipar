@@ -71,6 +71,13 @@ To compute the PGS from the true direct effects, use the following command:
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
 It outputs the PGS to test_data/direct.pgs.txt, which is a white-space delimited text file with columns FID (family ID, shared between siblings), IID (individual ID),
 proband (PGS of individual with given IID), maternal (observed or imputed PGS of that individual's mother), paternal (observed or imputed PGS of that individual's father).
+The script also supports bed files and imputed files split by chromosome. If you had bed files as chr_1.bed, chr_2.bed, ..., chr_22.bed; and imputed parental genotype files
+as chr_1.hdf5, chr_2.hdf5, ..., chr_22.hdf5, then you can specify this in a command as:
+
+    ``--bedfiles chr_{1:22}.bed --impfiles chr_{1:22}.hdf5``
+
+Note that the bedfiles and imputed files should be matched by chromosome, so that the index '1' corresponds to chromosome 1 in both the bed files and the imputed parental genotype
+files, etc.
 
 To estimate direct, paternal, and maternal effects of the PGS, use the following command:
 
@@ -80,9 +87,10 @@ This uses a linear mixed model that has a random effect for mean differences bet
 paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
 The estimated effects and their standard errors are output to test_data/direct.pgs_effects.txt, with the effect names (direct, paternal, maternal, population) in the first column,
 their estimates in the second column, and their standard errors in the final column. The sampling variance-covariance matrix of direct, paternal, and maternal effects is output in test_data/direct.pgs_vcov.txt.
-Estimates of direct effect of the PGS should be equal to 1 in expectation since
-we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait. The estimated direct effect here should be within 2 standard errors
-of 1 approximately 95\% of the time. The parental effect estimates capture the correlation between the direct and indirect parental effects. The population effect estimate
+
+Estimates of the direct effect of the PGS should be equal to 1 in expectation since
+we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
+The parental effect estimates capture the correlation between the direct and indirect parental effects. The population effect estimate
 should be greater than 1, since this captures both the direct effect of the PGS, and the correlation between direct and indirect parental effects.
 
 If parental genotypes have been imputed from sibling data alone, then imputed paternal and maternal PGS are perfectly correlated, and the above regression on proband, paternal, and maternal
@@ -100,6 +108,7 @@ one command with the addition of the --fit_sib option:
 This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to test_data/direct_sib.pgs.txt.
 (If an individual has multiple genotyped siblings, the average of the siblings' PGS is used for the PGS of the sibling.)
 It outputs estimates of direct, indirect sibling, paternal, and maternal effects of the PGS to test_data/direct_sib.pgs_effects.txt and their sampling variance-covariance matrix to test_data/direct_sib.pgs_vcov.txt.
-Since indirect effects from siblings were zero in this simulation, the estimated sibling effect should be within 2 standard errors of zero approximately 95% of the time. Note that the standard error for the direct
-effect estimate increases: this is due both to a drop in sample size since only those probands with genotyped siblings are included, and due to the fact that adding the sibling effect to the regression
-decreases the independent information on the direct effect of the PGS.
+Since indirect effects from siblings were zero in this simulation, the estimated sibling effect should be close to zero.
+
+Note that the standard error for the direct effect estimate increases: this is due both to a drop in sample size since only those probands with genotyped siblings are included, and due to the fact that adding the sibling effect to the regression
+decreases the independent information on the direct effect.

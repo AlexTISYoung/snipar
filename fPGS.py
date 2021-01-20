@@ -73,7 +73,6 @@ if __name__ == '__main__':
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
-        G = get_gts_matrix(pargts_list[0],gts_list[0],p.snp_ids,sib = args.fit_sib)
         pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib, compute_controls = args.compute_controls)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
