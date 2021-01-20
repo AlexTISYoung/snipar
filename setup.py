@@ -40,10 +40,9 @@ setup(name='sibreg',
             'Cython==0.29.21',
             'scipy==1.2.3',
             'pysnptools==0.4.11',
-            'networkx==2.2', 'Cython==0.29.21'],
-      install_requires=[
-            'h5py==2.10.0',            
-        ],
+            'networkx==2.2',
+            'h5py==2.10.0',
+            ],
       tests_require=['pytest'],
       extras_require={
             'test': ['numdifftools'],
