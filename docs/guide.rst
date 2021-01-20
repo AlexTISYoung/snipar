@@ -3,23 +3,21 @@ Guide
 
 **Introduction**
 
-SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed sibling and parental genotypes,
-and for performing robust GWAS using the resulting imputed parental genotypes
+SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed genotypes in a nuclear family,
+and for performing family based genome-wide association and polygenic score analyses using the resulting imputed parental genotypes.
 
 In the main SNIPar directory, there is a script for
 imputing missing parental genotypes:
 
 --'impute_runner.py'(:doc:`impute_runner`)
-    imputes the expected genotype of the missing parent(s) given observed sibling genotypes, IBD sharing
-    between siblings, and observed parental genotypes
+    imputes the expected genotype of the missing parent(s) given observed offspring genotypes, IBD sharing
+    between offspring, and observed parental genotypes
 
 The script outputs expected genotypes of missing parents, which are used as input for the fGWAS.py
-script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use. For imputation
-from siblings, the script takes advantage of inferred IBD segments to infer which parental alleles have been
-observed in the siblings. The script takes IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
+script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use.  The script takes IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
 format as input.
 
-All of the above scripts require either provision of a pedigree file or the script will construct a pedigree for you if you
+All of the above scripts require either provision of a pedigree file, or the script will construct a pedigree for you if you
 provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information. Providing
 the script with KING output is recommended.
 
@@ -32,7 +30,7 @@ Siblings are identified through individuals that have the same FID.
 
 We recommend working through the (:doc:`tutorial`) to get an idea of the workflow required for a full analysis.
 
-The robust GWAS is performed using the sibreg module (:class:`sibreg.model`), which consists of a linear model for the mean along
+The family based GWAS is performed using the sibreg module (:class:`sibreg.model`), which consists of a linear model for the mean along
 with a vector of class labels that allows for correlations within-class. (The correlations within-class result
 from modelling mean differences between classes as independent, normally distributed random effects.) For
 the GWAS applications, the classes are the families given by the pedigree file, i.e. the siblings within a family.

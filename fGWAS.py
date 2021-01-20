@@ -66,23 +66,31 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
 
     return par_status, gt_indices, fam_labels
 
-def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True):
+def make_gts_matrix(gts,imp_gts,par_status,gt_indices,mean_normalise = True, parsum = False):
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
-    G = np.zeros((N,3,gts.shape[1]),np.float32)
+    if parsum:
+        gdim = 2
+    else:
+        gdim = 3
+    G = np.zeros((N,gdim,gts.shape[1]),np.float32)
     # Proband genotypes
     G[:,0,:] = gts[gt_indices[:,0],:]
     # Paternal genotypes
     G[par_status[:,0]==0,1,:] = gts[gt_indices[par_status[:,0]==0,1],:]
     G[par_status[:, 0] == 1, 1, :] = imp_gts[gt_indices[par_status[:, 0] == 1, 1], :]
     # Maternal genotypes
-    G[par_status[:, 1] == 0, 2, :] = gts[gt_indices[par_status[:, 1] == 0, 2], :]
-    G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
+    if parsum:
+        G[par_status[:, 1] == 0, 1, :] += gts[gt_indices[par_status[:, 1] == 0, 2], :]
+        G[par_status[:, 1] == 1, 1, :] += imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
+    else:
+        G[par_status[:, 1] == 0, 2, :] = gts[gt_indices[par_status[:, 1] == 0, 2], :]
+        G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
     # NAs and mean normalise
     G = ma.array(G,mask=np.isnan(G))
     if mean_normalise:
-        for i in range(3):
+        for i in range(gdim):
             G[:,i,:] = G[:,i,:] - ma.mean(G[:,i,:],axis=0)
     G = G.transpose(2,0,1)
     return G
@@ -104,6 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
+    parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -146,7 +155,13 @@ if __name__ == '__main__':
     ### Genotype file ###
     gts_f = Bed(args.gts+'.bed',count_A1 = True)
     # Read .bim file
-    obs_sid = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S'))
+    obs_sid = convert_str_array(np.loadtxt(args.gts+'.bim',dtype='S20'))
+    # Remove duplicates
+    sid_count = np.unique(obs_sid[:,1],return_counts = True)
+    duplicate_ids = set(sid_count[0][sid_count[1]>1])
+    if len(duplicate_ids)>0:
+        print(str(len(duplicate_ids))+' duplicated SNP ids will be removed from observed genotypes')
+        obs_sid = obs_sid[np.array([x not in duplicate_ids for x in obs_sid[:,1]]),:]
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
     gts_id_dict = make_id_dict(gts_ids)
@@ -186,6 +201,7 @@ if __name__ == '__main__':
         if imp_sid[i] in obs_sid_dict:
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
+    obs_sid_index = obs_sid_index[in_obs_sid]
     sid = obs_sid[obs_sid_index,:]
     if np.sum(in_obs_sid) == 0:
         ValueError('No SNPs in common between imputed and observed genotypes')
@@ -223,7 +239,7 @@ if __name__ == '__main__':
         ValueError('No family label from pedigree for some individuals')
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
-    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices)
+    G = make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = args.parsum)
     del gts
     del imp_gts
     # Fill NAs
@@ -248,7 +264,7 @@ if __name__ == '__main__':
     for label in L.keys():
         label_indices = null_model.label_indices[label]
         y[label_indices] = np.dot(L[label],y[label_indices])
-        for i in range(3):
+        for i in range(G.shape[2]):
             G[:,label_indices,i] = np.dot(G[:,label_indices,i],L[label].T)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
@@ -263,13 +279,19 @@ if __name__ == '__main__':
     print('Writing output to '+args.outprefix+'.hdf5')
     outfile = h5py.File(args.outprefix+'.hdf5','w')
     outfile['bim'] = encode_str_array(sid)
-    X_length = 3
+    if args.parsum:
+        X_length = 2
+        outcols = np.array(['direct','avg_parental'])
+    else:
+        X_length = 3
+        outcols = np.array(['direct','paternal','maternal'])
     outfile.create_dataset('estimate_covariance',(sid.shape[0],X_length,X_length),dtype = 'f',chunks = True, compression = 'gzip', compression_opts=9)
     outfile.create_dataset('estimate', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile.create_dataset('estimate_ses', (sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile['estimate'][:] = alpha
+    outfile['estimate_cols'] = encode_str_array(outcols)
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2

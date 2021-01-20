@@ -2,7 +2,7 @@ import numpy as np
 import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.optimize import fmin_l_bfgs_b
-import h5py
+import h5py, code
 
 class model(object):
     """Define a linear model with within-class correlations.
@@ -452,7 +452,7 @@ def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
     else:
         return ids, ids_fams, gts_fams
 
-def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
+def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
@@ -475,10 +475,13 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True):
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
         G_sib[i,:] = G_sib[i,:]/float(n_i)
-    return gtarray(G_sib,ids)
+    if return_famsizes:
+        return [gtarray(G_sib, ids),fam_counts,fam_sums]
+    else:
+        return gtarray(G_sib,ids)
 
 
-def find_par_gts(pheno_ids,ped,gts_id_dict,fams = None):
+def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
     # Whether mother and father have observed/imputed genotypes
     par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
     par_status[:] = -1
@@ -486,13 +489,12 @@ def find_par_gts(pheno_ids,ped,gts_id_dict,fams = None):
     gt_indices = np.zeros((pheno_ids.shape[0],3),dtype=int)
     gt_indices[:] = -1
     ## Build dictionaries
-    ## Where each individual is in the pedigree
+    # Where each individual is in the pedigree
     ped_dict = make_id_dict(ped,1)
-    if fams is not None:
-        # Where the imputed data is for each family
-        fam_dict = make_id_dict(fams)
-        # Store family ID of each individual
-    fam_labels = np.zeros((pheno_ids.shape[0]),dtype='U')
+    # Where the imputed data is for each family
+    fam_dict = make_id_dict(fams)
+    # Store family ID of each individual
+    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=fams.dtype)
     # Find status and find indices
     for i in range(0,pheno_ids.shape[0]):
         # Find index in genotypes
@@ -511,18 +513,16 @@ def find_par_gts(pheno_ids,ped,gts_id_dict,fams = None):
                 gt_indices[i, 2] = gts_id_dict[ped_i[3]]
                 par_status[i,1] = 0
             # If parent not observed, look for imputation
-            if fams is not None:
-                if ped_i[0] in fam_dict:
-                    imp_index = fam_dict[ped_i[0]]
-                    # Check if this is imputation of father, or mother, or both
-                    if ped_i[4] == 'False':
-                        gt_indices[i,1] = imp_index
-                        par_status[i,0] = 1
-                    if ped_i[5] == 'False':
-                        gt_indices[i, 2] = imp_index
-                        par_status[i, 1] = 1
+            if ped_i[0] in fam_dict:
+                imp_index = fam_dict[ped_i[0]]
+                # Check if this is imputation of father, or mother, or both
+                if ped_i[4] == 'False':
+                    gt_indices[i,1] = imp_index
+                    par_status[i,0] = 1
+                if ped_i[5] == 'False':
+                    gt_indices[i, 2] = imp_index
+                    par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
-
 
 def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     if np.min(gt_indices)<0:
@@ -542,21 +542,35 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices):
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
+def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False, compute_controls = False):
     ####### Find parental status #######
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
-    # Get families
-    fams = convert_str_array(np.array(par_gts_f['families']))
     # Get pedigree
     ped = convert_str_array(np.array(par_gts_f['pedigree']))
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    ped = ped[np.logical_not(controls),:]
+    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib)]
+    if compute_controls:
+        G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib))
+        G.append(
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
+                                     ids=ids, sib=sib))
+        G.append(
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
+                                     ids=ids, sib=sib))
+        return G
+    else:
+        return G[0]
+
+
+def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids,ids = None, sib = False):
+    # Get families
+    fams = convert_str_array(np.array(par_gts_f['families']))
     ### Genotype file ###
     bim = gts_f.split('.bed')[0] + '.bim'
-    gts_f = Bed(gts_f)
+    gts_f = Bed(gts_f,count_A1=True)
     alleles = np.loadtxt(bim, dtype='U')[:,4:6]
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:,1]
@@ -571,7 +585,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
 
     ### Find parental status
     print('Checking for observed/imputed parental genotypes')
-    par_status, gt_indices, fam_labels = find_par_gts(ids,ped,gts_id_dict, fams = fams)
+    par_status, gt_indices, fam_labels = find_par_gts(ids,ped,fams,gts_id_dict)
     # Find which individuals can be used
     none_missing = np.min(par_status, axis=1)
     none_missing = none_missing >= 0
@@ -594,7 +608,8 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     print('Matching observed and imputed SNPs')
     # Match SNPs from imputed and observed and restrict to those in list
     snp_set = set(snp_ids)
-    imp_sid = convert_str_array(np.array(par_gts_f['sid']))
+    imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
+    imp_sid = imp_bim[:,1]    
     obs_sid = gts_f.sid
     obs_sid_dict = make_id_dict(obs_sid)
     in_obs_sid = np.zeros((imp_sid.shape[0]),dtype=bool)
@@ -620,7 +635,7 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     gts_ids = gts_f.iid[observed_indices,1]
     gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
-    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, gts_id_dict, fams = fams)
+    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
@@ -633,13 +648,17 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids,ids = None, sib = False):
     del imp_gts
     return gtarray(G,ids,sid, alleles = alleles, fams = fam_labels, par_status = par_status)
 
-def compute_pgs(par_gts_f,gts_f,pgs, sib = False):
-    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib)
+
+def compute_pgs(par_gts_f,gts_f,pgs, sib = False, compute_controls = False):
+    G = get_gts_matrix(par_gts_f,gts_f,pgs.snp_ids, sib = sib, compute_controls = compute_controls)
     if sib:
         cols = np.array(['proband','sibling','paternal','maternal'])
     else:
         cols = np.array(['proband','paternal','maternal'])
-    return pgs.compute(G,cols)
+    if compute_controls:
+        return [pgs.compute(x,cols) for x in G]
+    else:
+        return pgs.compute(G,cols)
 
 def fit_null_model(y,X,fam_labels,tau_init):
     # Optimize null model
@@ -660,4 +679,5 @@ def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
     print('Residual variance estimate: ' + str(round(optim['sigma2'],4)))
     alpha = rmodel.alpha_mle(optim['tau'],optim['sigma2'],compute_cov = True)
     return alpha
+
 
