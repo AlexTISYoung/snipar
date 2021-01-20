@@ -57,7 +57,7 @@ def fit_models(y,G):
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
 
-def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, N_L):
+def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs):
     print('Writing output to ' + outprefix + '.hdf5')
     outfile = h5py.File(outprefix + '.hdf5', 'w')
     outbim = np.column_stack((G.chrom,G.sid,G.pos,G.alleles))
@@ -80,7 +80,8 @@ def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau,
     outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2
     outfile['tau'] = tau
-    outfile['N_L'] = N_L
+    outfile['N'] = G.gts.shape[1]
+    outfile['NAs'] = NAs
     outfile['freqs'] = G.freqs
     outfile.close()
 
@@ -115,7 +116,7 @@ if __name__ == '__main__':
     print(str(G.shape[2])+' SNPs that pass MAF and missingness filters')
     #### Fill NAs ####
     print('Imputing missing values with population frequencies')
-    N_L = G.fill_NAs()
+    NAs = G.fill_NAs()
     #### Match phenotype ####
     y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
@@ -132,4 +133,4 @@ if __name__ == '__main__':
     print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
     ### Save output ###
-    write_output(G, args.outprefix, args.parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, N_L)
+    write_output(G, args.outprefix, args.parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs)

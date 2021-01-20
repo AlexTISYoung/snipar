@@ -368,13 +368,13 @@ class gtarray(object):
         if not self.mean_normalised:
             self.mean_normalise()
         if self.ndim == 2:
-            N_L = np.sum(np.logical_not(self.gts.mask), axis=0)
+            NAs = np.sum(self.gts.mask, axis=0)
         elif self.ndim == 3:
-            N_L = np.sum(np.logical_not(self.gts.mask[:,0,:]), axis=0)
+            NAs = np.sum(self.gts.mask[:,:,:],axis=(0,1))
         self.gts[self.gts.mask] = 0
         self.gts.mask = False
         self.has_NAs = False
-        return N_L
+        return NAs
 
 
     def add(self,garray):
