@@ -314,7 +314,7 @@ class gtarray(object):
         else:
             self.has_NAs = False
 
-    def freqs(self):
+    def compute_freqs(self):
         if self.ndim == 2:
             self.freqs = ma.mean(self.gts,axis=0)/2.0
         elif self.ndim == 3:
@@ -322,7 +322,7 @@ class gtarray(object):
 
     def filter_snps(self, min_maf = 0, max_missing = 0):
         if self.freqs is None:
-            self.freqs()
+            self.compute_freqs()
         if self.ndim == 2:
             missingness = ma.mean(self.gts.mask,axis=0)
         elif self.ndim == 3:
