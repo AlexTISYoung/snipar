@@ -326,7 +326,7 @@ class gtarray(object):
         if self.ndim == 2:
             missingness = ma.mean(self.gts.mask,axis=0)
         elif self.ndim == 3:
-            missingness = ma.mean(self.gts.mask[:,0,:],axis = 0)
+            missingness = ma.mean(self.gts.mask,axis = (0,1))
         freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
         print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
         missingness_pass = 100 * missingness < max_missing
@@ -367,10 +367,7 @@ class gtarray(object):
     def fill_NAs(self):
         if not self.mean_normalised:
             self.mean_normalise()
-        if self.ndim == 2:
-            NAs = np.sum(self.gts.mask, axis=0)
-        elif self.ndim == 3:
-            NAs = np.sum(self.gts.mask[:,:,:],axis=(0,1))
+        NAs = np.sum(self.gts.mask, axis=0)
         self.gts[self.gts.mask] = 0
         self.gts.mask = False
         self.has_NAs = False
