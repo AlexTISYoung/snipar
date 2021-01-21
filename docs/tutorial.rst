@@ -66,7 +66,7 @@ matrices and standard errors.
 The script can also estimate indirect sibling effects for each SNP. For example, to estimate direct, sibling, and average parental effects (which could be done using parental genotypes
 imputed from sibling genotypes alone), use:
 
-``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum_sib --parsum --fit_sib``
+    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum_sib --parsum --fit_sib``
 
 In addition to family based GWAS, SNIPar provides a script (fPGS.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 and for performing family based polygenic score analyses. Here, we give an example of how to use this script. The script computes a PGS

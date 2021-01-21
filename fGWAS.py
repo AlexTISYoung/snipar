@@ -4,31 +4,7 @@ import h5py, argparse, os, time, code
 import numpy as np
 import numpy.ma as ma
 
-def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
-    pheno = Pheno(phenofile, missing=missing_char).read()
-    y = np.array(pheno.val)
-    pheno_ids = np.array(pheno.iid)[:,1]
-    if y.ndim == 1:
-        pass
-    elif y.ndim == 2:
-        y = y[:, phen_index - 1]
-    else:
-        raise (ValueError('Incorrect dimensions of phenotype array'))
-    # Remove y NAs
-    y_not_nan = np.logical_not(np.isnan(y))
-    if np.sum(y_not_nan) < y.shape[0]:
-        y = y[y_not_nan]
-        pheno_ids = pheno_ids[y_not_nan]
-    print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
-    return y, pheno_ids
 
-def match_phenotype(G,y,pheno_ids):
-    in_G_dict = np.array([x in G.id_dict for x in pheno_ids])
-    y = y[in_G_dict]
-    pheno_ids = pheno_ids[in_G_dict]
-    pheno_id_dict = make_id_dict(pheno_ids)
-    y = y[[pheno_id_dict[x] for x in G.ids]]
-    return y
 
 def fit_null_model(y,fam_labels,tau_init = 1):
     null_model = model(y, np.ones((y.shape[0], 1)), fam_labels)
@@ -109,7 +85,7 @@ if __name__ == '__main__':
     args=parser.parse_args()
 
     ######### Read Phenotype ########
-    y , pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+    y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
     # Check for empty fam labels

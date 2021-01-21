@@ -245,7 +245,7 @@ def simulate(n,alpha,sigma2,tau):
     return model(y,X,labels)
 
 class gtarray(object):
-    def __init__(self,garray,ids, sid = None, id_index = 0, alleles = None, pos = None, chrom = None, fams= None, par_status = None):
+    def __init__(self, garray, ids, sid = None, id_index = 0, alleles=None, pos=None, chrom=None, fams=None, par_status=None):
         if type(garray) == np.ndarray or type(garray)==np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -347,6 +347,23 @@ class gtarray(object):
             self.alleles = self.alleles[filter_pass]
         if self.chrom is not None:
             self.chrom = self.chrom[filter_pass]
+
+    def filter_ids(self,keep_ids):
+        in_ids = np.array([x in self.id_dict for x in keep_ids])
+        n_filtered = np.sum(in_ids)
+        if n_filtered==0:
+            raise(ValueError('No individuals would be left after filtering'))
+        else:
+            print('After filtering, '+str(n_filtered)+' individuals remain')
+            indices = np.array([self.id_dict[x] for x in keep_ids[in_ids]])
+            if self.ndim == 2:
+                self.gts = self.gts[indices, :]
+            elif self.ndim == 3:
+                self.gts = self.gts[indices, :, :]
+            self.ids = self.ids[indices]
+            self.id_dict = make_id_dict(self.ids)
+            self.shape = self.gts.shape
+
 
     def mean_normalise(self):
         if not self.mean_normalised:
@@ -655,71 +672,88 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
         return G[0]
 
 
-def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, parsum = False):
-    # Get families
-    fams = convert_str_array(np.array(par_gts_f['families']))
-    ### Genotype file ###
-    bim = gts_f.split('.bed')[0] + '.bim'
-    gts_f = Bed(gts_f,count_A1=True)
-    alleles = np.loadtxt(bim, dtype='U', usecols = (4,5))
-    pos = np.loadtxt(bim, dtype=int, usecols = 3)
-    chromosome = np.loadtxt(bim, dtype = int, usecols = 0)
-    # get ids of genotypes and make dict
-    gts_ids = gts_f.iid[:,1]
+def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
+    # Made dictionary for observed genotypes
     gts_id_dict = make_id_dict(gts_ids)
+    # If IDs not provided, use all individuals with observed genotypes
     if ids is None:
         ids = gts_ids
-    # Find mean of siblings
+    # Find individuals with siblings
     if sib:
-        ids = find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = True)
-        print('Found '+str(ids.shape[0])+' individuals with genotyped siblings')
+        ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
+        print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
     ### Find parental status
     print('Checking for observed/imputed parental genotypes')
-    par_status, gt_indices, fam_labels = find_par_gts(ids,ped,fams,gts_id_dict)
+    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     # Find which individuals can be used
     none_missing = np.min(par_status, axis=1)
     none_missing = none_missing >= 0
     N = np.sum(none_missing)
-    if N==0:
+    if N == 0:
         raise ValueError(
             'No individuals with phenotype observations and complete observed/imputed genotype observations')
-    print(str(N)+' individuals with phenotype observations and complete observed/imputed genotypes observations')
+    print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
     # Take those that can be used
-    gt_indices = gt_indices[none_missing,:]
-    par_status = par_status[none_missing,:]
+    gt_indices = gt_indices[none_missing, :]
+    par_status = par_status[none_missing, :]
     ids = ids[none_missing]
-    ## Read genotypes
-    observed_indices = np.sort(np.unique(np.hstack((gt_indices[:,0],
-                                  gt_indices[par_status[:,0]==0,1],
-                                  gt_indices[par_status[:,1]==0,2]))))
-    # Get imputed indices
-    imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:,0]==1,1],
-                                  gt_indices[par_status[:,1]==1,2]))))
-    print('Matching observed and imputed SNPs')
+    # Find indices of individuals and their parents in observed genotypes
+    observed_indices = np.sort(np.unique(np.hstack((gt_indices[:, 0],
+                                                    gt_indices[par_status[:, 0] == 0, 1],
+                                                    gt_indices[par_status[:, 1] == 0, 2]))))
+    # Get indices of imputed parents
+    imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:, 0] == 1, 1],
+                                               gt_indices[par_status[:, 1] == 1, 2]))))
+    # Return ids with imputed/observed parents
+    return ids, observed_indices, imp_indices
+
+
+def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None):
     # Match SNPs from imputed and observed and restrict to those in list
     if snp_ids is None:
         snp_ids = gts_f.sid
+    # Get bim info
+    alleles = np.loadtxt(bim, dtype='U', usecols=(4, 5))
+    pos = np.loadtxt(bim, dtype=int, usecols=3)
+    chromosome = np.loadtxt(bim, dtype=int, usecols=0)
     # Remove duplicate ids
-    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts = True)
-    snp_set = set(snp_ids[snp_indices[snp_counts==1]])
+    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
+    snp_set = set(snp_ids[snp_indices[snp_counts == 1]])
+    if len(snp_set) < snp_ids.shape[0]:
+        print(str(snp_ids.shape[0]-len(snp_set))+' SNPs with duplicate IDs removed')
     # Read and match SNP ids
     imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
-    imp_sid = imp_bim[:,1]    
+    imp_sid = imp_bim[:, 1]
     obs_sid = gts_f.sid
     obs_sid_dict = make_id_dict(obs_sid)
-    in_obs_sid = np.zeros((imp_sid.shape[0]),dtype=bool)
-    obs_sid_index = np.zeros((imp_sid.shape[0]),dtype=int)
-    for i in range(0,imp_sid.shape[0]):
+    in_obs_sid = np.zeros((imp_sid.shape[0]), dtype=bool)
+    obs_sid_index = np.zeros((imp_sid.shape[0]), dtype=int)
+    for i in range(0, imp_sid.shape[0]):
         if imp_sid[i] in obs_sid_dict and imp_sid[i] in snp_set:
             in_obs_sid[i] = True
             obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
     if np.sum(in_obs_sid) == 0:
-        raise ValueError('No SNPs with non-duplicated IDs in common between imputed, observed, and PGS')
+        raise ValueError('No SNPs in common between imputed and observed data')
     obs_sid_index = obs_sid_index[in_obs_sid]
     sid = imp_sid[in_obs_sid]
-    alleles = alleles[obs_sid_index,:]
+    alleles = alleles[obs_sid_index, :]
     chromosome = chromosome[obs_sid_index]
     pos = pos[obs_sid_index]
+    return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
+
+def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False):
+    ### Genotype file ###
+    bim = gts_f.split('.bed')[0] + '.bim'
+    gts_f = Bed(gts_f,count_A1=True)
+    # get ids of genotypes and make dict
+    gts_ids = gts_f.iid[:, 1]
+    # Get families with imputed parental genotypes
+    fams = convert_str_array(np.array(par_gts_f['families']))
+    ### Find ids with observed/imputed parents and indices of those in observed/imputed data
+    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
+    ### Match observed and imputed SNPs ###
+    print('Matching observed and imputed SNPs')
+    chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids)
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')
     if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
@@ -750,8 +784,7 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
         G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
     del gts
     del imp_gts
-    return gtarray(G,ids,sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
-
+    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 def compute_pgs(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
     G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls)
@@ -784,4 +817,59 @@ def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
     alpha = rmodel.alpha_mle(optim['tau'],optim['sigma2'],compute_cov = True)
     return alpha
 
+def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
+    """Read a phenotype file and remove missing values.
 
+    Args:
+        phenofile : :class:`str`
+            path to plain text phenotype file with columns FID, IID, phenotype1, phenotype2, ...
+        missing_char : :class:`str`
+            The character that denotes a missing phenotype value; 'NA' by default.
+        phen_index : :class:`int`
+           The index of the phenotype (counting from 1) if multiple phenotype columns present in phenofile
+
+    Returns:
+        y : :class:`~numpy:numpy.array`
+            vector of non-missing phenotype values from specified column of phenofile
+        pheno_ids: :class:`~numpy:numpy.array`
+            corresponding vector of individual IDs (IID)
+    """
+    pheno = Pheno(phenofile, missing=missing_char).read()
+    y = np.array(pheno.val)
+    pheno_ids = np.array(pheno.iid)[:,1]
+    if y.ndim == 1:
+        pass
+    elif y.ndim == 2:
+        y = y[:, phen_index - 1]
+    else:
+        raise (ValueError('Incorrect dimensions of phenotype array'))
+    # Remove y NAs
+    y_not_nan = np.logical_not(np.isnan(y))
+    if np.sum(y_not_nan) < y.shape[0]:
+        y = y[y_not_nan]
+        pheno_ids = pheno_ids[y_not_nan]
+    print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
+    return y, pheno_ids
+
+def match_phenotype(G,y,pheno_ids):
+    """Read a phenotype file and remove missing values.
+
+    Args:
+        G : :class:`gtarray`
+            genotype array to match phenotype to
+        y : :class:`~numpy:numpy.array`
+            vector of phenotype values
+        pheno_ids: :class:`~numpy:numpy.array`
+            vector of individual IDs corresponding to phenotype vector, y
+
+    Returns:
+       y : :class:`~numpy:numpy.array`
+            vector of phenotype values matched by individual IDs to the genotype array
+
+    """
+    in_G_dict = np.array([x in G.id_dict for x in pheno_ids])
+    y = y[in_G_dict]
+    pheno_ids = pheno_ids[in_G_dict]
+    pheno_id_dict = make_id_dict(pheno_ids)
+    y = y[[pheno_id_dict[x] for x in G.ids]]
+    return y
