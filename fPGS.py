@@ -1,6 +1,5 @@
-from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse
+import argparse
 import pandas as pd
 
 def pgs_write(pg,filename,scale_PGS = False):
@@ -135,10 +134,10 @@ if __name__ == '__main__':
             pg.gts = pg.gts / np.std(pg.gts[gt_indices, 0])
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
-        alpha_imp = get_alpha_mle(y,pg.gts , pg.fams, add_intercept = True)
+        alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = get_alpha_mle(y, pg.gts[:, 0], pg.fams, add_intercept=True)
+        alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]

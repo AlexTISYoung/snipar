@@ -1,18 +1,11 @@
-from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse, os, time, code
+import argparse
 import numpy as np
-import numpy.ma as ma
-
-
-
-def fit_null_model(y,fam_labels,tau_init = 1):
-    null_model = model(y, np.ones((y.shape[0], 1)), fam_labels)
-    sigma_2_init = np.var(y) * tau_init / (1 + args.tau_init)
-    null_optim = null_model.optimize_model(np.array([sigma_2_init, args.tau_init]))
-    return null_model, null_optim['sigma2'], null_optim['tau']
 
 def transform_phenotype(inv_root,y, fam_indices):
+    """
+    Transform phenotype based on inverse square root of phenotypic covariance matrix
+    """
     # Mean normalise phenotype
     y = y - np.mean(y)
     # Transform by family
@@ -25,6 +18,9 @@ def transform_phenotype(inv_root,y, fam_indices):
     return y
 
 def fit_models(y,G):
+    """
+    Perform repeated OLS to estimate SNP effects and sampling variance-covariance in transformed model
+    """
     G.gts = G.gts.transpose(2,0,1)
     XTX = np.einsum('...ij,...ik', G.gts, G.gts)
     XTY = np.einsum('...ij,i',G.gts,y)
@@ -34,6 +30,9 @@ def fit_models(y,G):
     return alpha, alpha_cov, alpha_ses
 
 def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs):
+    """
+    Write fitted SNP effects and other parameters to output HDF5 file.
+    """
     print('Writing output to ' + outprefix + '.hdf5')
     outfile = h5py.File(outprefix + '.hdf5', 'w')
     outbim = np.column_stack((G.chrom,G.sid,G.pos,G.alleles))
@@ -103,7 +102,8 @@ if __name__ == '__main__':
     y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
     print('Estimating variance components')
-    null_model, sigma2, tau = fit_null_model(y,G.fams, tau_init = args.tau_init)
+    null_model, sigma2, tau  = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
+                                                                           tau_init = args.tau_init, return_fixed = False)
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
     ##### Transform genotypes and phenotypes ######

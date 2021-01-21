@@ -245,7 +245,35 @@ def simulate(n,alpha,sigma2,tau):
     return model(y,X,labels)
 
 class gtarray(object):
-    def __init__(self, garray, ids, sid = None, id_index = 0, alleles=None, pos=None, chrom=None, fams=None, par_status=None):
+    """Define a genotype or PGS array that stores individual IDs, family IDs, and SNP information.
+
+    Args:
+        garray : :class:`~numpy:numpy.array`
+            2 or 3 dimensional numpy array of genotypes/PGS values. First dimension is individuals. For a 2 dimensional array, the second dimension is SNPs or PGS values.
+            For a 3 dimensional array, the second dimension indexes the individual and his/her relatives' genotypes (for example: proband, paternal, and maternal); and
+            the third dimension is the SNPs.
+        ids : :class:`~numpy:numpy.array`
+            vector of individual IDs
+        sid : :class:`~numpy:numpy.array`
+            vector of SNP ids, equal in length size of last dimension of array
+        alleles : :class:`~numpy:numpy.array`
+            [L x 2] matrix of ref and alt alleles for the SNPs. L must match size of sid
+        pos : :class:`~numpy:numpy.array`
+            vector of SNP positions; must match size of sid
+        chrom : :class:`~numpy:numpy.array`
+            vector of SNP chromosomes; must match size of sid
+        fams : :class:`~numpy:numpy.array`
+            vector of family IDs; must match size of ids
+        par_status : :class:`~numpy:numpy.array'
+             [N x 2] numpy matrix that records whether parents have observed or imputed genotypes/PGS, where N matches size of ids.
+             The first column is for the father of that individual; the second column is for the mother of that individual.
+             If the parent is neither observed nor imputed, the value is -1; if observed, 0; and if imputed, 1.
+
+    Returns:
+        G : :class:`sibreg.gtarray`
+
+    """
+    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, fams=None, par_status=None):
         if type(garray) == np.ndarray or type(garray)==np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -259,7 +287,7 @@ class gtarray(object):
             raise ValueError('Genotypes must be a numpy ndarray')
         if garray.shape[0] == ids.shape[0]:
             self.ids = ids
-            self.id_dict = make_id_dict(ids, col = id_index)
+            self.id_dict = make_id_dict(ids)
         else:
             raise ValueError('Shape of genotypes and ids does not match')
         if sid is not None:
@@ -274,22 +302,35 @@ class gtarray(object):
             else:
                 raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
         if alleles is not None:
-            if alleles.shape[0] == garray.shape[2]:
-                self.alleles = alleles
+            if self.sid is not None:
+                if alleles.shape[0] == self.sid.shape[2]:
+                    self.alleles = alleles
+                else:
+                    raise ValueError('Size of alleles does not match size of genotypes')
             else:
-                raise ValueError('Size of alleles does not match size of genotypes')
+                raise(ValueError('Must provide SNP ids'))
         else:
             self.alleles = None
         if pos is not None:
-            if pos.shape[0] == garray.shape[2]:
-                self.pos = pos
+            if self.sid is not None:
+                if pos.shape[0] == self.sid.shape[2]:
+                    self.pos = pos
+                else:
+                    raise ValueError('Size of position vector does not match size of genotypes')
             else:
-                raise ValueError('Size of position vector does not match genotype array')
+                raise(ValueError('Must provide SNP ids'))
+        else:
+            self.pos = None
         if chrom is not None:
-            if chrom.shape[0] == garray.shape[2]:
-                self.chrom = chrom
+            if self.sid is not None:
+                if chrom.shape[0] == self.sid.shape[2]:
+                    self.chrom = chrom
+                else:
+                    raise ValueError('Size of position vector does not match size of genotypes')
             else:
-                raise ValueError('Size of chromosome vector does not match genotype array')
+                raise(ValueError('Must provide SNP ids'))
+        else:
+            self.chrom = None
 
         if fams is not None:
             if fams.shape[0] == ids.shape[0] and fams.ndim==1:
@@ -315,12 +356,18 @@ class gtarray(object):
             self.has_NAs = False
 
     def compute_freqs(self):
+        """
+        Computes the frequencies of the SNPs. Stored in self.freqs.
+        """
         if self.ndim == 2:
             self.freqs = ma.mean(self.gts,axis=0)/2.0
         elif self.ndim == 3:
             self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
 
     def filter_snps(self, min_maf = 0, max_missing = 0):
+        """
+        Filter SNPs based on having minor allele frequency (MAF) greater than min_maf, and have % missing observations less than max_missing.
+        """
         if self.freqs is None:
             self.compute_freqs()
         if self.ndim == 2:
@@ -349,6 +396,9 @@ class gtarray(object):
             self.chrom = self.chrom[filter_pass]
 
     def filter_ids(self,keep_ids):
+        """
+        Keep only individuals with ids given by keep_ids
+        """
         in_ids = np.array([x in self.id_dict for x in keep_ids])
         n_filtered = np.sum(in_ids)
         if n_filtered==0:
@@ -366,6 +416,9 @@ class gtarray(object):
 
 
     def mean_normalise(self):
+        """
+        This normalises the SNPs/PGS columns to have mean-zero.
+        """
         if not self.mean_normalised:
             if self.gts.ndim == 2:
                 self.gts = self.gts - ma.mean(self.gts,axis=0)
@@ -375,6 +428,9 @@ class gtarray(object):
             self.mean_normalised = True
 
     def scale(self):
+        """
+        This normalises the SNPs/PGS columns to have variance 1.
+        """
         if self.gts.ndim == 2:
             self.gts = self.gts/ma.std(self.gts, axis=0)
         elif self.gts.ndim == 3:
@@ -382,6 +438,9 @@ class gtarray(object):
                 self.gts[:, i, :] = self.gts[:, i, :]/ma.std(self.gts[:, i, :], axis=0)
 
     def fill_NAs(self):
+        """
+        This normalises the SNP columns to have mean-zero, then fills in NA values with zero.
+        """
         if not self.mean_normalised:
             self.mean_normalise()
         NAs = np.sum(self.gts.mask, axis=0)
@@ -392,6 +451,9 @@ class gtarray(object):
 
 
     def add(self,garray):
+        """
+        Adds another gtarray of the same dimension to this array and returns the sum. It matches IDs before summing.
+        """
         if type(garray)==gtarray:
             pass
         else:
@@ -429,6 +491,10 @@ class gtarray(object):
         return gtarray(add_gts,ids_out,self.sid,alleles = self.alleles, fams = self.fams[self_index])
 
     def diagonalise(self,inv_root):
+        """
+        This will transform the genotype array based on the inverse square root of the phenotypic covariance matrix
+        from the family based linear mixed model.
+        """
         if self.fams is None:
             raise(ValueError('Family labels needed for diagonalization'))
         if not self.mean_normalised:
@@ -455,6 +521,20 @@ class gtarray(object):
         self.fam_indices = fam_indices
 
 class pgs(object):
+    """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
+
+    Args:
+        snp_ids : :class:`~numpy:numpy.array`
+            vector of SNP ids
+        snp_ids : :class:`~numpy:numpy.array`
+            vector of weights of equal length to snp_ids
+        alleles : :class:`~numpy:numpy.array`
+            [L x 2] matrix of ref and alt alleles for the SNPs. L must match size of snp_ids
+
+    Returns:
+        pgs : :class:`sibreg.pgs`
+
+    """
     def __init__(self,snp_ids,weights,alleles):
         if snp_ids.shape[0] == weights.shape[0] and alleles.shape[0] == weights.shape[0] and alleles.shape[1]==2:
             self.snp_ids = snp_ids
@@ -465,6 +545,25 @@ class pgs(object):
             raise ValueError('All inputs must have the same dimension')
 
     def compute(self,garray, cols = None):
+        """Compute polygenic score values from a given genotype array. Finds the SNPs in the genotype array
+        that have weights in the pgs and matching alleles, and computes the PGS based on these SNPs and the
+        weights after allele-matching.
+
+
+        Args:
+            garray : :class:`sbreg.gtarray`
+                genotype array to compute PGS values for
+            cols : :class:`numpy:numpy.array`
+                names to give the columns in the output gtarray
+
+        Returns:
+            pg : :class:`sibreg.gtarray`
+                2d gtarray with PGS values. If a 3d gtarray is input, then each column corresponds to
+                the second dimension on the input gtarray (for example, individual, paternal, maternal PGS).
+                If a 2d gtarray is input, then there will be only one column in the output gtarray. The
+                names given in 'cols' are stored in 'sid' attribute of the output.
+
+        """
         if type(garray) == gtarray:
             garray.fill_NAs()
         else:
@@ -506,6 +605,9 @@ class pgs(object):
         return gtarray(pgs_val, garray.ids, sid = cols, fams = garray.fams)
 
 def make_id_dict(x,col=0):
+    """
+    Make a dictionary that maps from the values in the given column (col) to their row-index in the input array
+    """
     if len(x.shape)>1:
         x = x[:,col]
     id_dict = {}
@@ -514,24 +616,28 @@ def make_id_dict(x,col=0):
     return id_dict
 
 def convert_str_array(x):
+    """
+    Convert an ascii array to unicode array (UTF-8)
+    """
     x_shape = x.shape
     x = x.flatten()
     x_out = np.array([y.decode('UTF-8') for y in x])
     return x_out.reshape(x_shape)
 
-def encode_str_array(x):
-    x_shape = x.shape
-    x = x.flatten()
-    x_out = np.array([y.encode('ascii') for y in x])
-    return x_out.reshape(x_shape)
 
 def encode_str_array(x):
+    """
+    Encode a unicode array as an ascii array
+    """
     x_shape = x.shape
     x = x.flatten()
     x_out = np.array([y.encode('ascii') for y in x])
     return x_out.reshape(x_shape)
 
 def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
+    """
+    Used in get_gts_matrix and get_fam_means to find the individuals in ids that have genotyped siblings.
+    """
     # Find genotyped sibships of size > 1
     ped_dict = make_id_dict(ped, 1)
     ids_in_ped = np.array([x in ped_dict for x in gts_ids])
@@ -552,6 +658,11 @@ def find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = False):
         return ids, ids_fams, gts_fams
 
 def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
+    """
+    Used in get_gts_matrix to find the mean genotype in each sibship (family) for each SNP or for a PGS.
+    The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
+    If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
+    """
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
@@ -581,6 +692,13 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
 
 
 def find_par_gts(pheno_ids, ped, fams, gts_id_dict):
+    """
+    Used in get_gts_matrix to find whether individuals have imputed or observed parental genotypes, and to
+    find the indices of the observed/imputed parents in the observed/imputed genotype arrays.
+    'par_status' codes whether an individual has parents that are observed or imputed or neither.
+    'gt_indices' records the relevant index of the parent in the observed/imputed genotype arrays
+    'fam_labels' records the family of the individual based on the pedigree
+    """
     # Whether mother and father have observed/imputed genotypes
     par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
     par_status[:] = -1
@@ -624,6 +742,11 @@ def find_par_gts(pheno_ids, ped, fams, gts_id_dict):
     return par_status, gt_indices, fam_labels
 
 def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
+    """
+    Used in get_gts_matrix to construct the family based genotype matrix given
+    observed/imputed genotypes. 'gt_indices' has the indices in the observed/imputed genotype arrays;
+    and par_status codes whether the parents are observed (0) or imputed (1).
+    """
     if np.min(gt_indices)<0:
         raise(ValueError('Missing genotype index'))
     N = gt_indices.shape[0]
@@ -648,6 +771,36 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
 
 
 def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False):
+    """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
+    observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
+
+    Args:
+        par_gts_f : :class:`str`
+            path to HDF5 file with imputed parental genotypes
+        gts_f : :class:`str`
+            path to bed file with observed genotypes
+        snp_ids : :class:`numpy.ndarray`
+            If provided, only obtains the subset of SNPs specificed that are present in both imputed and observed genotypes
+        ids : :class:`numpy.ndarray`
+            If provided, only obtains the ids with observed genotypes and imputed/observed parental genotypes (and observed sibling genotypes if sib=True)
+        sib : :class:`bool`
+            Retrieve genotypes for individuals with at least one genotyped sibling along with the average of their siblings' genotypes and observed/imputed parental genotypes. Default False.
+        compute_controls : :class:`bool`
+            Compute polygenic scores for control families (families with observed parental genotypes set to missing). Default False.
+        parsum : :class:`bool`
+            Return the sum of maternal and paternal observed/imputed genotypes rather than separate maternal/paternal genotypes. Default False.
+
+    Returns:
+        G : :class:`sibreg.gtarray`
+            Genotype array for the subset of genotyped individuals with complete imputed/obsereved parental genotypes. The array is [N x k x L], where
+            N is the number of individuals; k depends on whether sib=True and whether parsum=True; and  L is the number of SNPs. If sib=False and parsum=False,
+            then k=3 and this axis indexes individual's genotypes, individual's father's imputed/observed genotypes, individual's mother's imputed/observed genotypes.
+            If sib=True and parsum=False, then k=4, and this axis indexes the individual, the sibling, the paternal, and maternal genotypes in that order. If parsum=True and sib=False,
+            then k=2, and this axis indexes the individual and sum of paternal and maternal genotypes; etc.
+            If compute_controls=True, then a list is returned, where the first element is as above, and the following elements give equivalent genotyping arrays for control families where the mother has been set
+            to missing, the father has been set to missing, and both parents have been set to missing.
+
+    """
     ####### Find parental status #######
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
@@ -673,6 +826,11 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
 
 
 def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
+    """
+    Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
+    It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
+    and the indices of the imputed parental genotypes for those individuals.
+    """
     # Made dictionary for observed genotypes
     gts_id_dict = make_id_dict(gts_ids)
     # If IDs not provided, use all individuals with observed genotypes
@@ -709,6 +867,12 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
 
 
 def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None):
+    """
+    Used in get_gts_matrix_given_ped to match observed and imputed SNPs and return SNP information on shared SNPs.
+    Removes SNPs that have duplicated SNP ids.
+    in_obs_sid contains the SNPs in the imputed genotypes that are present in the observed SNPs
+    obs_sid_index contains the index in the observed SNPs of the common SNPs
+    """
     # Match SNPs from imputed and observed and restrict to those in list
     if snp_ids is None:
         snp_ids = gts_f.sid
@@ -742,6 +906,9 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None):
     return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 
 def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False):
+    """
+    Used in get_gts_matrix: see get_gts_matrix for documentation
+    """
     ### Genotype file ###
     bim = gts_f.split('.bed')[0] + '.bim'
     gts_f = Bed(gts_f,count_A1=True)
@@ -787,6 +954,26 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 def compute_pgs(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
+    """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
+
+    Args:
+        par_gts_f : :class:`str`
+            path to HDF5 file with imputed parental genotypes
+        gts_f : :class:`str`
+            path to bed file with observed genotypes
+        pgs : :class:`sibreg.pgs`
+            the PGS, defined by the weights for a set of SNPs and the alleles of those SNPs
+        sib : :class:`bool`
+            Compute the PGS for genotyped individuals with at least one genotyped sibling and observed/imputed parental genotypes. Default False.
+        compute_controls : :class:`bool`
+            Compute polygenic scores for control families (families with observed parental genotypes set to missing). Default False.
+
+    Returns:
+        pg : :class:`sibreg.gtarray`
+            Return the polygenic score as a genotype array with columns: individual's PGS, mean of their siblings' PGS, observed/imputed paternal PGS,
+            observed/imputed maternal PGS
+
+    """
     G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls)
     if sib:
         cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
@@ -797,25 +984,44 @@ def compute_pgs(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
     else:
         return pgs.compute(G,cols)
 
-def fit_null_model(y,X,fam_labels,tau_init):
-    # Optimize null model
+
+def fit_sibreg_model(y, X, fam_labels, add_intercept=False, tau_init=1, return_model=True, return_vcomps=True, return_fixed=True):
+    """Compute the MLE for the fixed effects in a family-based linear mixed model.
+
+    Args:
+        y : :class:`~numpy:numpy.array`
+            vector of phenotype values
+        X: :class:`~numpy:numpy.array`
+            regression design matrix for fixed effects
+        fam_labels : :class:`~numpy:numpy.array`
+            vector of family labels: residual correlations in y are modelled between family members (that share a fam_label)
+        add_intercept : :class:`bool`
+            whether to add an intercept to the fixed effect design matrix
+
+    Returns:
+       model : :class:`sibreg.model`
+            the sibreg model object, if return_model=True
+       vcomps: :class:`float`
+            the MLEs for the variance parameters: sigma2 (residual variance) and tau (ratio between sigma2 and family variance), if return_vcomps=True
+       alpha : :class:`~numpy:numpy.array`
+            MLE of fixed effects, if return_fixed=True
+       alpha_cov : :class:`~numpy:numpy.array`
+            sampling variance-covariance matrix for MLE of fixed effects, if return_fixed=True
+
+    """
+    # Optimize  model
     sigma_2_init = np.var(y)*tau_init/(1+tau_init)
-    null_model = model(y, X, fam_labels)
+    null_model = model(y, X, fam_labels, add_intercept=add_intercept)
     null_optim = null_model.optimize_model(np.array([sigma_2_init,tau_init]))
-    null_alpha = null_model.alpha_mle(null_optim['tau'],null_optim['sigma2'],compute_cov = True)
-    # Return values
-    return null_optim['sigma2'], null_optim['tau'], null_alpha
-
-
-def get_alpha_mle(y,pgs,fam_labels, add_intercept = False):
-    # Initialise var pars
-    sigma_2_init = np.var(y) / 2.0
-    rmodel = model(y, pgs, fam_labels, add_intercept = add_intercept)
-    optim = rmodel.optimize_model(np.array([sigma_2_init,1]))
-    print('Family variance estimate: '+str(round(optim['sigma2']/optim['tau'],4)))
-    print('Residual variance estimate: ' + str(round(optim['sigma2'],4)))
-    alpha = rmodel.alpha_mle(optim['tau'],optim['sigma2'],compute_cov = True)
-    return alpha
+    # Create return list
+    return_list = []
+    if return_model:
+        return_list.append(null_model)
+    if return_vcomps:
+        return_list += [null_optim['sigma2'], null_optim['tau']]
+    if return_fixed:
+        return_list += null_model.alpha_mle(null_optim['tau'], null_optim['sigma2'], compute_cov=True)
+    return return_list
 
 def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
     """Read a phenotype file and remove missing values.
@@ -852,7 +1058,7 @@ def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
     return y, pheno_ids
 
 def match_phenotype(G,y,pheno_ids):
-    """Read a phenotype file and remove missing values.
+    """Match a phenotype to a genotype array by individual IDs.
 
     Args:
         G : :class:`gtarray`
