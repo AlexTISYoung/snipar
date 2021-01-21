@@ -57,17 +57,22 @@ def fit_models(y,G):
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
 
-def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs):
+def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs):
     print('Writing output to ' + outprefix + '.hdf5')
     outfile = h5py.File(outprefix + '.hdf5', 'w')
     outbim = np.column_stack((G.chrom,G.sid,G.pos,G.alleles))
     outfile['bim'] = encode_str_array(outbim)
+    X_length = 1
+    outcols = ['direct']
+    if sib:
+        X_length += 1
+        outcols.append('sib')
     if parsum:
-        X_length = 2
-        outcols = np.array(['direct', 'avg_parental'])
+        X_length += 1
+        outcols.append('avg_parental')
     else:
-        X_length = 3
-        outcols = np.array(['direct', 'paternal', 'maternal'])
+        X_length += 2
+        outcols = outcols + ['paternal','maternal']
     outfile.create_dataset('estimate_covariance', (G.sid.shape[0], X_length, X_length), dtype='f', chunks=True,
                            compression='gzip', compression_opts=9)
     outfile.create_dataset('estimate', (G.sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
@@ -75,7 +80,7 @@ def write_output(G, outprefix, parsum, alpha, alpha_ses, alpha_cov, sigma2, tau,
     outfile.create_dataset('estimate_ses', (G.sid.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile['estimate'][:] = alpha
-    outfile['estimate_cols'] = encode_str_array(outcols)
+    outfile['estimate_cols'] = encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2
@@ -93,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
     parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
+    parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -105,7 +111,7 @@ if __name__ == '__main__':
     ######### Read Phenotype ########
     y , pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum)
+    G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
@@ -133,4 +139,4 @@ if __name__ == '__main__':
     print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
     ### Save output ###
-    write_output(G, args.outprefix, args.parsum, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs)
+    write_output(G, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs)

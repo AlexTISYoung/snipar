@@ -563,7 +563,7 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
         return gtarray(G_sib,ids)
 
 
-def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
+def find_par_gts(pheno_ids, ped, fams, gts_id_dict):
     # Whether mother and father have observed/imputed genotypes
     par_status = np.zeros((pheno_ids.shape[0],2),dtype=int)
     par_status[:] = -1
@@ -584,7 +584,7 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
             gt_indices[i,0] = gts_id_dict[pheno_ids[i]]
         # Find index in pedigree
         if pheno_ids[i] in ped_dict:
-            ped_i = ped[ped_dict[pheno_ids[i]],:]
+            ped_i = ped[ped_dict[pheno_ids[i]], :]
             fam_labels[i] = ped_i[0]
             # Check for observed father
             if ped_i[2] in gts_id_dict:
@@ -598,10 +598,10 @@ def find_par_gts(pheno_ids,ped,fams,gts_id_dict):
             if ped_i[0] in fam_dict:
                 imp_index = fam_dict[ped_i[0]]
                 # Check if this is imputation of father, or mother, or both
-                if ped_i[4] == 'False':
-                    gt_indices[i,1] = imp_index
-                    par_status[i,0] = 1
-                if ped_i[5] == 'False':
+                if ped_i[4] == 'False' and not par_status[i,0] == 0:
+                    gt_indices[i, 1] = imp_index
+                    par_status[i, 0] = 1
+                if ped_i[5] == 'False' and not par_status[i,0] == 0:
                     gt_indices[i, 2] = imp_index
                     par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
@@ -618,7 +618,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
     # Proband genotypes
     G[:,0,:] = gts[gt_indices[:,0],:]
     # Paternal genotypes
-    G[par_status[:,0]==0,1,:] = gts[gt_indices[par_status[:,0]==0,1],:]
+    G[par_status[:, 0] == 0, 1 ,:] = gts[gt_indices[par_status[:, 0] == 0, 1], :]
     G[par_status[:, 0] == 1, 1, :] = imp_gts[gt_indices[par_status[:, 0] == 1, 1], :]
     # Maternal genotypes
     if parsum:
@@ -639,15 +639,17 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f, snp_ids = snp_ids,ids = ids, sib = sib, parsum = parsum)]
+    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
+                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum)]
     if compute_controls:
-        G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f, snp_ids,ids = ids, sib = sib))
+        G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
+                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
         G.append(
-            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
-                                     ids=ids, sib=sib))
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
         G.append(
-            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f, snp_ids,
-                                     ids=ids, sib=sib))
+            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
         return G
     else:
         return G[0]
@@ -667,12 +669,10 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
     gts_id_dict = make_id_dict(gts_ids)
     if ids is None:
         ids = gts_ids
-
     # Find mean of siblings
     if sib:
         ids = find_individuals_with_sibs(ids,ped,gts_ids, return_ids_only = True)
         print('Found '+str(ids.shape[0])+' individuals with genotyped siblings')
-
     ### Find parental status
     print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids,ped,fams,gts_id_dict)
@@ -739,22 +739,22 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
-        G = np.zeros((ids.shape[0],4,gts.shape[1]),dtype = np.float32)
-        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = parsum)
+        G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
+        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
         G[:,1,:] = get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     else:
-        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum = parsum)
+        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
     del gts
     del imp_gts
-    return gtarray(G,ids,sid, alleles = alleles, pos = pos, chrom = chromosome, fams = fam_labels, par_status = par_status)
+    return gtarray(G,ids,sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 
-def compute_pgs(par_gts_f,gts_f,pgs, sib = False, compute_controls = False):
-    G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib = sib, compute_controls = compute_controls)
+def compute_pgs(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
+    G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls)
     if sib:
-        cols = np.array(['proband','sibling','paternal','maternal'])
+        cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
     else:
-        cols = np.array(['proband','paternal','maternal'])
+        cols = np.array(['proband', 'paternal', 'maternal'])
     if compute_controls:
         return [pgs.compute(x,cols) for x in G]
     else:

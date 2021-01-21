@@ -16,7 +16,7 @@ chance of having a genotyped sibling.
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
+    ``python impute_runner.py test_data/sample.segments.gz --unphased_genotypes_address test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
@@ -25,7 +25,7 @@ means the imputation will run on 4 threads.
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
+    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -53,7 +53,7 @@ If the imputation has been performed from siblings alone, then the regression on
 co-linear. This is because the imputation is the same for paternal and maternal genotypes. In this case, the regression should be performed
 onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the --parsum option to the script:
 
-    ``python fGWAS.py test_data/sample1 test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum --parsum``
+    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum --parsum``
 
 This will output estimates of direct and average parental (average of maternal and paternal) effects, along with sampling covariance
 matrices and standard errors.
