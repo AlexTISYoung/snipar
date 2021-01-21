@@ -16,7 +16,7 @@ chance of having a genotyped sibling.
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py test_data/sample.segments.gz --unphased_genotypes_address test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
+    ``python impute_runner.py test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
@@ -40,12 +40,17 @@ Now we have estimated locus specific summary statistics. To compare to the true 
 
 This should print estimates of the bias of the effect estimates, with output something like this:
 
-    ``Bias for direct genetic effects: -0.0634; S.E. 0.035``
-    ``Bias for paternal  effects: -0.0749; S.E. 0.0535``
-    ``Bias for maternal effects: 0.0267; S.E. 0.0465``
-    ``Bias for population effects as estimates of direct effects: 0.4334; S.E. 0.0416``
+    ``Bias for direct genetic effects: -0.0582; S.E. 0.0375``
 
-If everything has worked, the bias estimates for direct, paternal and maternal effects should not be statistically significantly different from zero (with high probability).
+    ``Bias for paternal  effects: 0.0308; S.E. 0.0614``
+
+    ``Bias for maternal effects: 0.058; S.E. 0.0597``
+
+    ``Bias for average parental effects: 0.0177; S.E. 0.049``
+
+    ``Bias for population effects as estimates of direct effects: 0.4561; S.E. 0.0413``
+
+If everything has worked, the bias estimates for direct, paternal, maternal, and average parental effects should not be statistically significantly different from zero (with high probability).
 Population effects, which are estimated by univariate regression of individual's phenotypes onto their genotypes as in standard GWAS,
 here are biased estimates of direct effects, since population effects include both direct and indirect parental effects.
 
@@ -57,6 +62,11 @@ onto proband and sum of imputed paternal and maternal genotypes. This can be ach
 
 This will output estimates of direct and average parental (average of maternal and paternal) effects, along with sampling covariance
 matrices and standard errors.
+
+The script can also estimate indirect sibling effects for each SNP. For example, to estimate direct, sibling, and average parental effects (which could be done using parental genotypes
+imputed from sibling genotypes alone), use:
+
+``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum_sib --parsum --fit_sib``
 
 In addition to family based GWAS, SNIPar provides a script (fPGS.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 and for performing family based polygenic score analyses. Here, we give an example of how to use this script. The script computes a PGS

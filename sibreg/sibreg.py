@@ -739,8 +739,12 @@ def get_gts_matrix_given_ped(ped,par_gts_f,gts_f,snp_ids = None,ids = None, sib 
     print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
-        G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
-        G[:,np.array([0,2,3]),:] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+        if parsum:
+            G = np.zeros((ids.shape[0], 3, gts.shape[1]), dtype=np.float32)
+            G[:, np.array([0, 2]), :] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+        else:
+            G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
+            G[:,np.array([0,2,3]),:] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
         G[:,1,:] = get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     else:
         G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
