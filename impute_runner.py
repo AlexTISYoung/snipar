@@ -20,10 +20,10 @@ Args:
         This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
         Each line states an IBD segment between a pair on individuals. This can be generated using King software
 
-    --phased_genotypes_address : str
+    --bgen : str
         Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
-    --unphased_genotypes_address : str
+    --bed : str
         Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     bim : str
@@ -159,9 +159,9 @@ if __name__ == "__main__":
     parser.add_argument('ibd',
                         type=str,
                         help='IBD file')                        
-    parser.add_argument('--phased_genotypes_address',
+    parser.add_argument('--bgen',
                         type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
-    parser.add_argument('--unphased_genotypes_address',
+    parser.add_argument('--bed',
                         type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
     parser.add_argument('--from_chr',
                         type=int,                        
@@ -215,7 +215,7 @@ if __name__ == "__main__":
                         help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
 
     args=parser.parse_args()
-    if args.phased_genotypes_address is None and args.unphased_genotypes_address is None:
+    if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
         
     #fids starting with _ are reserved for control
@@ -240,11 +240,11 @@ if __name__ == "__main__":
     else:
         chromosomes = [None]
 
-    if (args.unphased_genotypes_address and "~" in args.unphased_genotypes_address) or (args.phased_genotypes_address and "~" in args.phased_genotypes_address) or (args.output_address and "~" in args.output_address):
+    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.output_address and "~" in args.output_address):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
-    if args.phased_genotypes_address:
+    if args.bgen:
         print("SEEN")
         if args.to_chr is None or args.from_chr is None:
             raise Exception("Chromosome range should be specified with unphased genotype")
@@ -254,8 +254,8 @@ if __name__ == "__main__":
             return a.replace(b, c)
         return None
     inputs = [{"pedigree": pedigree,
-            "phased_address": none_tansform(args.phased_genotypes_address, "~", str(chromosome)),
-            "unphased_address": none_tansform(args.unphased_genotypes_address, "~", str(chromosome)),
+            "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
+            "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "ibd_pd": ibd_pd,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
