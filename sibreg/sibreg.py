@@ -303,7 +303,7 @@ class gtarray(object):
                 raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
         if alleles is not None:
             if self.sid is not None:
-                if alleles.shape[0] == self.sid.shape[2]:
+                if alleles.shape[0] == self.sid.shape[0]:
                     self.alleles = alleles
                 else:
                     raise ValueError('Size of alleles does not match size of genotypes')
@@ -313,7 +313,7 @@ class gtarray(object):
             self.alleles = None
         if pos is not None:
             if self.sid is not None:
-                if pos.shape[0] == self.sid.shape[2]:
+                if pos.shape[0] == self.sid.shape[0]:
                     self.pos = pos
                 else:
                     raise ValueError('Size of position vector does not match size of genotypes')
@@ -323,7 +323,7 @@ class gtarray(object):
             self.pos = None
         if chrom is not None:
             if self.sid is not None:
-                if chrom.shape[0] == self.sid.shape[2]:
+                if chrom.shape[0] == self.sid.shape[0]:
                     self.chrom = chrom
                 else:
                     raise ValueError('Size of position vector does not match size of genotypes')
