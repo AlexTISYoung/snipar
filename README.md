@@ -28,6 +28,8 @@ python 3.7
 
 Packages:
 
+- h5py
+- bgen-reader
 - numpy
 - scipy
 - pysnptools
