@@ -1,6 +1,5 @@
-from pysnptools.snpreader import Bed, Pheno
 from sibreg.sibreg import *
-import h5py, argparse
+import argparse
 import pandas as pd
 
 def pgs_write(pg,filename,scale_PGS = False):
@@ -73,7 +72,6 @@ if __name__ == '__main__':
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
-        G = get_gts_matrix(pargts_list[0],gts_list[0],p.snp_ids,sib = args.fit_sib)
         pg = compute_pgs(pargts_list[0],gts_list[0],p, sib = args.fit_sib, compute_controls = args.compute_controls)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
@@ -109,27 +107,14 @@ if __name__ == '__main__':
 
     if args.phenofile is not None:
         print('Fitting PGS for '+str(args.phenofile))
-        pheno = Pheno(args.phenofile, missing=args.missing_char).read()
-        # pheno = Pheno('phenotypes/eduyears_resid.ped', missing='NA').read()
-        y = np.array(pheno.val)
-        pheno_ids = np.array(pheno.iid)[:,1]
-        if y.ndim == 1:
-            pass
-        elif y.ndim == 2:
-            y = y[:, args.phen_index - 1]
-        else:
-            raise ValueError('Incorrect dimensions of phenotype array')
-        # Remove y NAs
-        y_not_nan = np.logical_not(np.isnan(y))
-        if np.sum(y_not_nan) < y.shape[0]:
-            y = y[y_not_nan]
-            pheno_ids = pheno_ids[y_not_nan]
+        # Read phenotype
+        y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
-        in_pgs = np.array([x in pg.id_dict for x in pheno_ids])
-        y = y[in_pgs]
-        pheno_ids = pheno_ids[in_pgs]
-        gt_indices = np.array([pg.id_dict[x] for x in pheno_ids])
-        print('Final sample size: '+str(gt_indices.shape[0]))
+        # Remove individuals without phenotype observations from PGS
+        pg.filter_ids(pheno_ids)
+        # Match phenotype to PGS
+        y = match_phenotype(pg, y, pheno_ids)
+        print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
         # Parental sum
         if args.parsum:
             if 'maternal' in pg.sid and 'paternal' in pg.sid:
@@ -149,10 +134,10 @@ if __name__ == '__main__':
             pg.gts = pg.gts / np.std(pg.gts[gt_indices, 0])
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
-        alpha_imp = get_alpha_mle(y,pg.gts[gt_indices,:] , pg.fams[gt_indices], add_intercept = True)
+        alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = get_alpha_mle(y, pg.gts[gt_indices, 0], pg.fams[gt_indices], add_intercept=True)
+        alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]
