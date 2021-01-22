@@ -1,5 +1,6 @@
+=====
 Guide
-************
+=====
 
 **Introduction**
 
@@ -14,12 +15,12 @@ imputing missing parental genotypes:
     between offspring, and observed parental genotypes
 
 The script outputs expected genotypes of missing parents, which are used as input for the fGWAS.py
-script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use.  The script takes IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
-format as input.
+script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use. The script takes un-phased genotypes in .bed format, and phased haplotypes in .bgen format. The imputation becomes more efficient when using phased haplotypes, at the cost of slower runtime. The script requires IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
+format as input, where IBD segments shared between first-degree relatives are used. This can be computed by using *--ibdseg --degree 1* options in KING. 
 
-All of the above scripts require either provision of a pedigree file, or the script will construct a pedigree for you if you
-provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information. Providing
-the script with KING output is recommended.
+The script will construct a pedigree for you if you
+provide it with the KING relatedness inference (output using the --related --degree 1 options) and age & sex information. Alternatively, a user-input pedigree can be provided. Providing
+the script with KING output is recommended since this ensures the pedigree is constructed in the correct way. 
 
 The pedigree file is a plain text file
 with header and columns: FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
@@ -30,15 +31,9 @@ Siblings are identified through individuals that have the same FID.
 
 We recommend working through the (:doc:`tutorial`) to get an idea of the workflow required for a full analysis.
 
-The family based GWAS is performed using the sibreg module (:class:`sibreg.model`), which consists of a linear model for the mean along
-with a vector of class labels that allows for correlations within-class. (The correlations within-class result
-from modelling mean differences between classes as independent, normally distributed random effects.) For
-the GWAS applications, the classes are the families given by the pedigree file, i.e. the siblings within a family.
+Family based GWAS is performed using the fGWAS.py script, which uses a linear mixed model with a random-effect that models correlations between individuals with the same family ID to estimate direct and indirect effects for genome-wide SNPs. 
 
-The documentation for the sibreg module (:doc:`sibreg`) contains information on how to define a :class:`sibreg.model`,
-how to optimise a :class:`sibreg.model`, how to predict from
-a :class:`sibreg.model`, and how to simulate a :class:`sibreg.model`. Note that to run the imputation and GWAS scripts it
-is not necessary for the user to interact directly with the sibreg module.
+Polygenic score analyses are performed using the fPGS.py script, which computes polygenic scores for individuals and their first degree relatives based on observed/imputed genotypes. It also estimates direct and indirect effects of the polygenic score in the linear mixed model. 
 
 ***Package Install Instructions**
 
@@ -48,6 +43,8 @@ python 3.7
 
 Packages:
 
+- h5py
+- bgen-reader
 - numpy
 - scipy
 - pysnptools
