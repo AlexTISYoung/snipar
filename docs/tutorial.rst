@@ -16,7 +16,7 @@ chance of having a genotyped sibling.
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py test_data/sample.segments.gz test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
+    ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
