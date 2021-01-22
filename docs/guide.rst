@@ -8,14 +8,12 @@ SNIPar (single nucleotide imputation of parents) is a python library for imputin
 and for performing family based genome-wide association and polygenic score analyses using the resulting imputed parental genotypes.
 
 In the main SNIPar directory, there is a script for
-imputing missing parental genotypes:
-
---'impute_runner.py'(:doc:`impute_runner`)
-    imputes the expected genotype of the missing parent(s) given observed offspring genotypes, IBD sharing
-    between offspring, and observed parental genotypes
+imputing missing parental genotypes (impute_runner.py). 
 
 The script outputs expected genotypes of missing parents, which are used as input for the fGWAS.py
-script that perform GWAS using the missing parental genotypes. See the tutorial for an example of use. The script takes un-phased genotypes in .bed format, and phased haplotypes in .bgen format. The imputation becomes more efficient when using phased haplotypes, at the cost of slower runtime. The script requires IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
+script that perform family based GWAS using observed and imputed parental genotypes. 
+
+The impute_runner.py script takes un-phased genotypes in .bed format, and phased haplotypes in .bgen format. The imputation becomes more efficient when using phased haplotypes, at the cost of slower runtime. The script requires IBD segments in the KING (https://people.virginia.edu/~wc9c/KING/manual.html)
 format as input, where IBD segments shared between first-degree relatives are used. This can be computed by using *--ibdseg --degree 1* options in KING. 
 
 The script will construct a pedigree for you if you
@@ -29,7 +27,7 @@ Note that individuals are assumed to have unique individual IDS (IID).
 
 Siblings are identified through individuals that have the same FID.
 
-We recommend working through the (:doc:`tutorial`) to get an idea of the workflow required for a full analysis.
+We recommend working through the tutorial (https://github.com/AlexTISYoung/SNIPar/edit/master/docs/tutorial.rst) to get an idea of the workflow required for a full analysis.
 
 Family based GWAS is performed using the fGWAS.py script, which uses a linear mixed model with a random-effect that models correlations between individuals with the same family ID to estimate direct and indirect effects for genome-wide SNPs. 
 
