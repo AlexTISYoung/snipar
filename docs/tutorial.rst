@@ -1,6 +1,10 @@
+========
 Tutorial
-********
-Tutorial on performing imputing missing parental genotypes and performing family based GWAS and polygenic score analyses. Before working through the tutorial, please first install the package and run the tests.
+========
+Tutorial on imputing missing parental genotypes and performing family based GWAS and polygenic score analyses. Before working through the tutorial, please first install the package and run the tests (see `github <https://github.com/AlexTISYoung/SNIPar>`_).
+
+Generating test data
+--------------------
 
 To generate the test data, in the main SNIPar directory, run:
 
@@ -14,6 +18,9 @@ The genotype data has been simulated so that there are 3000 independent families
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
 chance of having a genotyped sibling.
 
+Imputing missing parental genotypes
+-----------------------------------
+
 To impute the missing parental genotypes, type:
 
     ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
@@ -22,6 +29,9 @@ The script constructs a pedigree from the output of KING's relatedness inference
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
 from the sibling and observed parental genotypes in test_data/sample1.bed. The imputed parental genotypes are in a HDF5 file test_data/sample1.hdf5. The --threads 4 argument
 means the imputation will run on 4 threads.
+
+Family based GWAS
+-----------------
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
@@ -32,7 +42,20 @@ them to perform, for each SNP, a joint regression onto the proband's genotype, t
 (imputed) genotype. This is done using a random effects model that models phenotypic correlations between siblings,
 where sibling relations are inferred from the pedigree stored in the output of the imputation script: test_data/sample1.hdf5. The 'family variance estimate'
 output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance.
-The effects and their sampling variance-covariance matrices are output in test_data/h2_quad_0.8.hdf5 and are given with respect to the first allele in the .bim file.
+The effects and their sampling variance-covariance matrices are output in test_data/h2_quad_0.8.hdf5 and are given with respect to the first allele in the input .bim file. The contents of HDF5 file can be read into Python (using `h5py <https://www.h5py.org>`_) and R (using `rhdf5 <https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html>`_) easily. 
+
+The output contains different datasets:
+
+1. *estimate*, the estimated SNP effect, where each row gives a SNP, and each column gives an effect
+2. *bim*, equivalent to the bim file for plink, recording the information on each SNP
+3. *estimate_cols*, gives the names of the effects estimate for each SNP: direct, paternal, maternal, etc.
+4. *estimate_ses*, the standard errors for the effect estimates in *estimate*
+5. *estimate_covariance*, 3 dimensional array with sampling variance-covariance matrices for each SNP's estimated effects, with SNPs indexed by the first axis
+6. *freqs*, frequencies of the effect alleles
+7. *sigma2*, maximum likelihood estimate of the residual variance in the null model
+8. *tau*, maximum likelihood estimate of the ratio between the residual variance and family variance
+9. *N*, the sample size
+10. *NAs*, the number of missing values for each of SNPs, given for each relative in the regression (individual, father, mother, etc.)
 
 Now we have estimated locus specific summary statistics. To compare to the true effects, run
 
@@ -50,27 +73,29 @@ This should print estimates of the bias of the effect estimates, with output som
 
     ``Bias for population effects as estimates of direct effects: 0.4561; S.E. 0.0413``
 
-If everything has worked, the bias estimates for direct, paternal, maternal, and average parental effects should not be statistically significantly different from zero (with high probability).
-Population effects, which are estimated by univariate regression of individual's phenotypes onto their genotypes as in standard GWAS,
+The bias estimates for direct, paternal, maternal, and average parental effects should not be statistically significantly different from zero (with high probability). Population effects (which are estimated by univariate regression of individuals' phenotypes onto their genotypes -- as in standard GWAS)
 here are biased estimates of direct effects, since population effects include both direct and indirect parental effects.
 
-If the imputation has been performed from siblings alone, then the regression onto proband, imputed paternal, and imputed maternal becomes
+If the imputation has been performed from siblings alone, then the regression onto proband (focal, phenotyped individual), imputed paternal, and imputed maternal becomes
 co-linear. This is because the imputation is the same for paternal and maternal genotypes. In this case, the regression should be performed
 onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the --parsum option to the script:
 
     ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum --parsum``
 
-This will output estimates of direct and average parental (average of maternal and paternal) effects, along with sampling covariance
-matrices and standard errors.
+This will output estimates of direct and average parental (average of maternal and paternal) effects.
 
 The script can also estimate indirect sibling effects for each SNP. For example, to estimate direct, sibling, and average parental effects (which could be done using parental genotypes
-imputed from sibling genotypes alone), use:
+imputed from sibling genotypes alone, for example), use:
 
     ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum_sib --parsum --fit_sib``
 
+
+Polygenic score analyses
+------------------------
+
 In addition to family based GWAS, SNIPar provides a script (fPGS.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
-and for performing family based polygenic score analyses. Here, we give an example of how to use this script. The script computes a PGS
-from weights provided in LD-pred format. The true direct genetic effects for the simulated trait are given as PGS weights in this format
+and for performing family based polygenic score analyses. Here, we give some examples of how to use this script. The script computes a PGS
+from weights provided in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format . The true direct genetic effects for the simulated trait are given as PGS weights in this format
 in test_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file with a header and columns 'chrom' (chromosome), 'pos' (position), 'sid' (SNP ID), 'nt1' (allele 1),
 'nt2' (allele 2), 'raw_beta' (raw effect estimates), 'ldpred_beta' (LD-pred adjusted weight). The script uses as weights the 'ldpred_beta' column.
 
