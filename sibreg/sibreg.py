@@ -395,7 +395,7 @@ class gtarray(object):
         if self.chrom is not None:
             self.chrom = self.chrom[filter_pass]
 
-    def filter_ids(self,keep_ids):
+    def filter_ids(self,keep_ids, verbose=True):
         """
         Keep only individuals with ids given by keep_ids
         """
@@ -404,7 +404,8 @@ class gtarray(object):
         if n_filtered==0:
             raise(ValueError('No individuals would be left after filtering'))
         else:
-            print('After filtering, '+str(n_filtered)+' individuals remain')
+            if verbose:
+                print('After filtering, '+str(n_filtered)+' individuals remain')
             indices = np.array([self.id_dict[x] for x in keep_ids[in_ids]])
             if self.ndim == 2:
                 self.gts = self.gts[indices, :]
@@ -1079,3 +1080,10 @@ def match_phenotype(G,y,pheno_ids):
     pheno_id_dict = make_id_dict(pheno_ids)
     y = y[[pheno_id_dict[x] for x in G.ids]]
     return y
+
+def read_covariates(covar, missing_char = 'NA'):
+    covar = Pheno(covar, missing=missing_char).read()
+    X = np.array(covar.val)
+    X = gtarray(X, ids=np.array(covar.iid)[:,1])
+    X.fill_NAs()
+    return X

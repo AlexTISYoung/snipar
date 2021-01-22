@@ -2,12 +2,16 @@ from sibreg.sibreg import *
 import argparse
 import numpy as np
 
-def transform_phenotype(inv_root,y, fam_indices):
+def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
-    Transform phenotype based on inverse square root of phenotypic covariance matrix
+    Transform phenotype based on inverse square root of phenotypic covariance matrix.
+    If the null model included covariates, the fitted mean is removed rather than the overall mean
     """
     # Mean normalise phenotype
-    y = y - np.mean(y)
+    if null_mean is None:
+        y = y - np.mean(y)
+    else:
+        y = y - null_mean
     # Transform by family
     for fam in fam_indices.keys():
         famsize = fam_indices[fam].shape[0]
@@ -29,7 +33,7 @@ def fit_models(y,G):
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
 
-def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs):
+def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs, null_alpha = None):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -63,6 +67,10 @@ def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2,
     outfile['N'] = G.gts.shape[1]
     outfile['NAs'] = NAs
     outfile['freqs'] = G.freqs
+    if null_alpha is not None:
+        null_ses = np.sqrt(np.diag(null_alpha[1]))
+        null_out = np.column_stack((null_alpha[0],null_ses))
+        outfile['covariate_estimates'] = null_out
     outfile.close()
 
 ######### Command line arguments #########
@@ -74,17 +82,25 @@ if __name__ == '__main__':
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
     parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
     parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
-    parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
-                        default=1)
+    parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)',default=0.01)
-    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
+    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
+    parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
+                        default=1)
+    parser.add_argument('--output_covar_ests',action='store_true',help='Output null model estimates of covariate fixed effects (default False)',default=False)
     args=parser.parse_args()
 
     ######### Read Phenotype ########
     y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+    ######## Read covariates ########
+    if args.covar is not None:
+        print('Reading covariates')
+        covariates = read_covariates(args.covar, missing_char=args.missing_char)
+        # Match to pheno ids
+        covariates.filter_ids(pheno_ids)
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
     # Check for empty fam labels
@@ -102,17 +118,31 @@ if __name__ == '__main__':
     y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
     print('Estimating variance components')
-    null_model, sigma2, tau  = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
-                                                                           tau_init = args.tau_init, return_fixed = False)
+    if args.covar is not None:
+        # Match covariates #
+        covariates.filter_ids(G.ids, verbose=False)
+        null_model, sigma2, tau, null_alpha, null_alpha_cov = fit_sibreg_model(y, covariates.gts, G.fams, add_intercept=True,
+                                                   tau_init=args.tau_init)
+
+    else:
+        null_model, sigma2, tau  = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
+                                                                               tau_init = args.tau_init, return_fixed = False)
     print('Family variance estimate: '+str(round(sigma2/tau,4)))
     print('Residual variance estimate: ' + str(round(sigma2,4)))
     ##### Transform genotypes and phenotypes ######
     print('Transforming genotypes and phenotypes')
     L = null_model.sigma_inv_root(tau, sigma2)
     G.diagonalise(L)
-    y = transform_phenotype(L, y, G.fam_indices)
+    if args.covar is None:
+        y = transform_phenotype(L, y, G.fam_indices)
+    else:
+        null_mean = null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]])
+        y = transform_phenotype(L, y, G.fam_indices, null_mean)
     ### Fit models for SNPs ###
     print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
     ### Save output ###
-    write_output(G, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs)
+    if args.output_covar_ests and args.covar is not None:
+        write_output(G, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs, [null_alpha,null_alpha_cov])
+    else:
+        write_output(G, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov, sigma2, tau, NAs)
