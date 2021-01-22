@@ -23,7 +23,8 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king --agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
+    ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king`` 
+    ``--agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
@@ -78,16 +79,8 @@ here are biased estimates of direct effects, since population effects include bo
 
 If the imputation has been performed from siblings alone, then the regression onto proband (focal, phenotyped individual), imputed paternal, and imputed maternal becomes
 co-linear. This is because the imputation is the same for paternal and maternal genotypes. In this case, the regression should be performed
-onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the --parsum option to the script:
-
-    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum --parsum``
-
-This will output estimates of direct and average parental (average of maternal and paternal) effects.
-
-The script can also estimate indirect sibling effects for each SNP. For example, to estimate direct, sibling, and average parental effects (which could be done using parental genotypes
-imputed from sibling genotypes alone, for example), use:
-
-    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8_parsum_sib --parsum --fit_sib``
+onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the *--parsum* option to the script. 
+The script can also estimate indirect sibling effects for each SNP by providing the *--fit_sib* option. 
 
 
 Polygenic score analyses
@@ -101,7 +94,8 @@ in test_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file w
 
 To compute the PGS from the true direct effects, use the following command:
 
-    ``python fPGS.py test_data/direct --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5 --weights test_data/h2_quad_0.8.direct_weights.txt``
+    ``python fPGS.py test_data/direct --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5`` 
+    ``--weights test_data/h2_quad_0.8.direct_weights.txt``
 
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
 It outputs the PGS to test_data/direct.pgs.txt, which is a white-space delimited text file with columns FID (family ID, shared between siblings), IID (individual ID),
@@ -129,16 +123,13 @@ The parental effect estimates capture the correlation between the direct and ind
 should be greater than 1, since this captures both the direct effect of the PGS, and the correlation between direct and indirect parental effects.
 
 If parental genotypes have been imputed from sibling data alone, then imputed paternal and maternal PGS are perfectly correlated, and the above regression on proband, paternal, and maternal
-PGS becomes co-linear. To deal with this, add the --parsum option to the above command, which will estimate the average parental effect rather than separate maternal and paternal effects of the PGS:
-
-   ``python fPGS.py test_data/direct_avg_parental --pgs test_data/direct.pgs.txt --phenofile test_data/h2_quad_0.8.ped --parsum``
-
-This outputs estimates of direct and average parental effects to test_data/direct_avg_parental.pgs_effects.txt, and their sampling variance-covariance matrix to test_data/direct_avg_parental.pgs_vcov.txt.
+PGS becomes co-linear. To deal with this, add the --parsum option to the above command, which will estimate the average parental effect rather than separate maternal and paternal effects of the PGS.
 
 It is also possible to estimate indirect effects from siblings. We can compute the PGS for genotyped individuals with genotyped siblings and estimate direct, indirect sibling, paternal and maternal effects in
 one command with the addition of the --fit_sib option:
 
-   ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5 --weights test_data/h2_quad_0.8.direct_weights.txt --phenofile test_data/h2_quad_0.8.ped --fit_sib``
+   ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5``
+   ``--weights test_data/h2_quad_0.8.direct_weights.txt --phenofile test_data/h2_quad_0.8.ped --fit_sib``
 
 This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to test_data/direct_sib.pgs.txt.
 (If an individual has multiple genotyped siblings, the average of the siblings' PGS is used for the PGS of the sibling.)
