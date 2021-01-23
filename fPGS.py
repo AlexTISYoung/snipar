@@ -1,5 +1,6 @@
 from sibreg.sibreg import *
 import argparse
+from os import path
 import pandas as pd
 
 def pgs_write(pg,filename,scale_PGS = False):
@@ -14,27 +15,31 @@ def pgs_write(pg,filename,scale_PGS = False):
     np.savetxt(filename, pg_out, fmt='%s')
     return None
 
-def parse_filelist(filenames):
-    if '{' and '}' in filenames:
-            pargts = filenames.split('{')
-            par_prefix = pargts[0]
-            par_suffix = filenames.split('}')[1]
-            par_index = pargts[1].split('}')[0]
-            par_index = [int(x) for x in par_index.split(':')]
-            parfiles = []
-            for i in range(par_index[0],par_index[1]+1):
-                parfiles.append(par_prefix+str(i)+par_suffix)
+def parse_filelist(bedfiles, impfiles):
+    bed_files = []
+    imp_files = []
+    if '~' in bedfiles and impfiles:
+        bed_ixes = bedfiles.split('~')
+        imp_ixes = impfiles.split('~')
+        for i in range(1,23):
+            bedfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.bed'
+            impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
+            if path.exists(bedfile) and path.exists(impfile):
+                bed_files.append(bedfile)
+                imp_files.append(impfile)
+        print(str(len(imp_files))+' matched bedfiles and imputed files found')
     else:
-        parfiles = [filenames]
-    return np.array(parfiles)
+        bed_files = [bedfiles+'.bed']
+        imp_files = [impfiles+'.hdf5']
+    return np.array(bed_files), np.array(imp_files)
 
 
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('outprefix',type=str,help='Prefix for computed PGS file and/or regression results files')
-    parser.add_argument('--bedfiles',type=str,help='Path to bed files with observed genotypes, using {start:end} syntax for multiple chromosomes', default = None)
-    parser.add_argument('--impfiles', type=str, help='Path to hdf5 files with imputed parental genotypes, using {start:end} syntax for multiple chromosomes', default = None)
+    parser.add_argument('--bedfiles',type=str,help='Address of .bed files with observed genotypes (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--impfiles', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
     parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
     parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
@@ -66,8 +71,7 @@ if __name__ == '__main__':
 
         ###### Compute PGS ########
         G_list = []
-        gts_list = parse_filelist(args.bedfiles)
-        pargts_list =  parse_filelist(args.impfiles)
+        gts_list, pargts_list = parse_filelist(args.bedfiles, args.impfiles)
         if not gts_list.shape[0] == pargts_list.shape[0]:
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')

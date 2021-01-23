@@ -76,8 +76,8 @@ def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2,
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('gts',type=str,help='Path to bed file with sibling genotypes')
-    parser.add_argument('pargts', type=str, help='Path to HDF5 file with imputed parental genotypes')
+    parser.add_argument('bed',type=str,help='Bed file with observed genotypes (without .bed suffix).')
+    parser.add_argument('pargts', type=str, help='HDF5 file with imputed parental genotypes (without .hdf5 suffix)')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
     parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
@@ -102,7 +102,7 @@ if __name__ == '__main__':
         # Match to pheno ids
         covariates.filter_ids(pheno_ids)
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts, args.gts, ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
+    G = get_gts_matrix(args.pargts, args.bed+'.bed', ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
