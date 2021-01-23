@@ -36,7 +36,7 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1.bed test_data/sample1.hdf5 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
+    ``python fGWAS.py test_data/sample1 test_data/sample1 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -94,7 +94,7 @@ in test_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file w
 
 To compute the PGS from the true direct effects, use the following command:
 
-    ``python fPGS.py test_data/direct --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5`` 
+    ``python fPGS.py test_data/direct --bedfiles test_data/sample1 --impfiles test_data/sample1``
     ``--weights test_data/h2_quad_0.8.direct_weights.txt``
 
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
@@ -103,10 +103,9 @@ proband (PGS of individual with given IID), maternal (observed or imputed PGS of
 The script also supports bed files and imputed files split by chromosome. If you had bed files as chr_1.bed, chr_2.bed, ..., chr_22.bed; and imputed parental genotype files
 as chr_1.hdf5, chr_2.hdf5, ..., chr_22.hdf5, then you can specify this in a command as:
 
-    ``--bedfiles chr_{1:22}.bed --impfiles chr_{1:22}.hdf5``
+    ``--bedfiles chr_~ --impfiles chr_~``
 
-Note that the bedfiles and imputed files should be matched by chromosome, so that the index '1' corresponds to chromosome 1 in both the bed files and the imputed parental genotype
-files, etc.
+The script looks for all files that match the path given with '~' replaced by 1,2,...,22: chr_1.bed & chr_1.hdf5, chr_2.bed & chr_2.hdf5, etc.
 
 To estimate direct, paternal, and maternal effects of the PGS, use the following command:
 
@@ -128,7 +127,7 @@ PGS becomes co-linear. To deal with this, add the --parsum option to the above c
 It is also possible to estimate indirect effects from siblings. We can compute the PGS for genotyped individuals with genotyped siblings and estimate direct, indirect sibling, paternal and maternal effects in
 one command with the addition of the --fit_sib option:
 
-   ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1.bed --impfiles test_data/sample1.hdf5``
+   ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1 --impfiles test_data/sample1``
    ``--weights test_data/h2_quad_0.8.direct_weights.txt --phenofile test_data/h2_quad_0.8.ped --fit_sib``
 
 This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to test_data/direct_sib.pgs.txt.

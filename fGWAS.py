@@ -102,7 +102,7 @@ if __name__ == '__main__':
         # Match to pheno ids
         covariates.filter_ids(pheno_ids)
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts, args.bed+'.bed', ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
+    G = get_gts_matrix(args.pargts+'.hdf5', args.bed+'.bed', ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
