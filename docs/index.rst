@@ -12,7 +12,7 @@ Welcome to SNIPar's documentation!
    
    tutorial
    guide
-   sibreg
+   sibreg.sibreg
    sibreg.bin
 
 Indices and tables
