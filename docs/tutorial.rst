@@ -24,6 +24,7 @@ Imputing missing parental genotypes
 To impute the missing parental genotypes, type:
 
     ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king`` 
+    
     ``--agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
@@ -95,6 +96,7 @@ in test_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file w
 To compute the PGS from the true direct effects, use the following command:
 
     ``python fPGS.py test_data/direct --bedfiles test_data/sample1 --impfiles test_data/sample1``
+    
     ``--weights test_data/h2_quad_0.8.direct_weights.txt``
 
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
@@ -128,6 +130,7 @@ It is also possible to estimate indirect effects from siblings. We can compute t
 one command with the addition of the --fit_sib option:
 
    ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1 --impfiles test_data/sample1``
+   
    ``--weights test_data/h2_quad_0.8.direct_weights.txt --phenofile test_data/h2_quad_0.8.ped --fit_sib``
 
 This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to test_data/direct_sib.pgs.txt.
