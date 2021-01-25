@@ -11,7 +11,7 @@ setup(name='sibreg',
       author='Alexander I. Young',
       author_email='alextisyoung@gmail.com',
       license='MIT',
-      scripts=['sibreg/bin/sGWAS.py'],
+      scripts=['fGWAS.py, fPGS.py, impute_runner.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
