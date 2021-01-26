@@ -59,25 +59,6 @@ def makeDmat(S, M):
     return Dmat
 
 @njit
-def makeSnew_vec(S, M):
-
-    '''
-    Makes a vector of S and a scalar value M
-    into a vector of Snew = Dmat @ Si @ Dmat
-    for each Si in S
-    '''
-    
-    Snew_mat = np.zeros_like(S)
-
-    for idx in prange(len(S)):
-        Si = S[idx]
-        Dmat = makeDmat(Si, M)
-        Snew = Dmat @ Si @ Dmat
-        Snew_mat[idx] = Snew
-        
-    return Snew_mat
-
-@njit
 def standardize_mat(V, S, M):
     '''
     Standardizes V and S matrices by constructing
@@ -389,25 +370,26 @@ def get_hessian(V, z, S, l, u, f, M):
     return H
 
 
-    
 def Vinit(z, S, l, M):
     '''
     Get initial estimate to start
     solver from
     '''
-    
-    # compile function
-    _ = makeSnew_vec(S[0:2], M)
-    
-    # actual run should be much faster
-    Snew_mat = makeSnew_vec(S, M)
-        
-    Snew = np.average(Snew_mat, axis=0, weights = 1/l)
+
+    S_hat = np.average(S, axis = 0, weights = 1/l)
+    Dmat = makeDmat(S_hat, M)       
+    Snew = Dmat @ S_hat @ Dmat
     z_var = np.cov(z.T, aweights = 1/l)
     l_bar = np.mean(l)
-    v1 = (z_var[0, 0] - 1)/l_bar
-    v2 = (z_var[1, 1] - 1)/l_bar
-    r = (z_var[0, 1] - Snew[0, 1])/(l_bar * np.sqrt(v1 * v2))
+
+    sigma1sq = S_hat[0, 0] * M
+    sigma1 = np.sqrt(sigma1sq)
+    sigma2sq = S_hat[1, 1] * M
+    sigma2 = np.sqrt(sigma2sq)
+
+    v1 = (z_var[0, 0] - 1) * sigma1sq/l_bar
+    v2 = (z_var[1, 1] - 1) * sigma2sq/l_bar
+    r = (z_var[0, 1] - Snew[0, 1]) * (sigma1 * sigma2)/(l_bar * np.sqrt(v1 * v2))
 
     est_init = np.array([v1, v2, r])
     return est_init
@@ -540,9 +522,9 @@ class sibreg():
                 print("Making Method of Moments Guess")
                 
             est_init = Vinit(z, S, u, M)
-            print(f"Initial estimate: {est_init}")
         
         # exporting for potential later reference
+        print(f"Initial estimate: {est_init}")
         self.est_init = est_init
         
         rlimit = (-1, 1) if rbounds else (None, None)
@@ -581,7 +563,8 @@ class sibreg():
 
 def jkse_core(indices,
              model,
-             full_est):
+             full_est,
+             rbounds = True):
     
     '''
     This runs the core estimation
@@ -605,7 +588,8 @@ def jkse_core(indices,
                     f = f,
                     M = M,
                     printout = False,
-                    est_init = full_est)
+                    est_init = full_est,
+                    rbounds = rbounds)
     
     
     output_matrix = np.array([output['v1'], output['v2'], output['r']])
@@ -618,7 +602,8 @@ def jkse(model,
         full_est_params,
         blocksize = 1,
         printinfo = False,
-        num_procs = 2):
+        num_procs = 2,
+        rbounds = True):
     
     '''
     This runs the whole block jackknife 
@@ -634,7 +619,7 @@ def jkse(model,
     # store full parameter estimate as array
     full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
     
-    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est)
+    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est, rbounds = rbounds)
     
     num_procs = num_procs
     pool = mp.Pool(num_procs)
