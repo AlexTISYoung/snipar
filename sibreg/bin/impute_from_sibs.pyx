@@ -796,6 +796,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int[:, :] agreement_counts = np.ones([number_of_threads, number_of_snps], dtype=np.dtype("i"))
     cdef int half_window_c = half_window
     cdef float ibd_threshold_c = ibd_threshold
+    cdef long counter_ibd0 = 0
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -857,6 +858,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                 snp_ibd1[this_thread, len_snp_ibd1,1] = j
                                 len_snp_ibd1 = len_snp_ibd1 + 1
                             if ibd_type == 0:
+                                counter_ibd0 += 1
                                 snp_ibd0[this_thread, len_snp_ibd0,0] = i
                                 snp_ibd0[this_thread, len_snp_ibd0,1] = j
                                 len_snp_ibd0 = len_snp_ibd0 + 1
@@ -897,6 +899,11 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          len_snp_ibd2)
             snp = snp+1
     destroy()
+    total_snps = number_of_fams * number_of_snps
+    ratio_ibd0 = <float>counter_ibd0/total_snps
+    logging.info("with chromosome " + str(chromosome)+": ibd0 ratio is"+str(ratio_ibd0))
+    if ratio_ibd0>0.5:
+         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
@@ -907,4 +914,5 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             f["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
             f["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
+            f["counter_ibd0"] = counter_ibd0
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)
