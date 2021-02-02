@@ -283,7 +283,8 @@ cdef float impute_snp_from_offsprings(int snp,
             sib2 = sib_indexes[snp_ibd0[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])
         result = result/len_snp_ibd0
-        
+        if result>4 or result <0:
+            result = nan_float
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
@@ -498,6 +499,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
 
         if counter > 0:
             result = result/counter - gp
+            if result>2 or result<0:
+                result = nan_float
         else:
             result = nan_float
 
