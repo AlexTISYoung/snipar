@@ -613,7 +613,7 @@ def jkse(model,
     nblocks = int(np.ceil(model.z.shape[0]/blocksize))
     
     # construct blocks of indices
-    indices = list(range(1, model.z.shape[0]))
+    indices = list(range(model.z.shape[0]))
     index_blocks = [indices[i * blocksize:(i + 1) * blocksize] for i in range((len(indices) + blocksize - 1) // blocksize )]
     
     # store full parameter estimate as array
