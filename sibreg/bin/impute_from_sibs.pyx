@@ -283,7 +283,7 @@ cdef float impute_snp_from_offsprings(int snp,
             sib2 = sib_indexes[snp_ibd0[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])
         result = result/len_snp_ibd0
-
+        
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
@@ -858,10 +858,11 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                 snp_ibd1[this_thread, len_snp_ibd1,1] = j
                                 len_snp_ibd1 = len_snp_ibd1 + 1
                             if ibd_type == 0:
-                                counter_ibd0 += 1
                                 snp_ibd0[this_thread, len_snp_ibd0,0] = i
                                 snp_ibd0[this_thread, len_snp_ibd0,1] = j
                                 len_snp_ibd0 = len_snp_ibd0 + 1
+                if len_snp_ibd0>0:
+                    counter_ibd0 += 1
             else :
                 sib1_index = sibs_index[this_thread, 0]
                 if not isnan(c_unphased_gts[sib1_index, snp]):
