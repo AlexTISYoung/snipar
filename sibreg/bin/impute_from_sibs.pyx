@@ -391,7 +391,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         float
             Imputed missing parent. NAN if all the children are NAN in this SNP.
 
-    """
+    """    
 
     cdef float result
     cdef float additive
@@ -546,7 +546,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             elif gp == 1 and ((gs1 == 1 and gs2 == 2) or (gs1 == 2 and gs2 == 1)):
                 additive = f*(1-f)/(f*(1-f) + 0.5*f**2) + f**2/(f*(1-f) + 0.5*f**2)
                 counter +=1
-
+            
             elif gp == 1 and (gs1 == 2 and gs2 == 2):
                 additive = 2
                 counter +=1
@@ -569,8 +569,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             result = result/counter
         else:            
             result = nan_float
-    
-    
+        
+
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
         result = 0
@@ -615,7 +615,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                     counter += 1
 
             result += additive
-            
+
         if counter > 0:
             result = result/counter
         else:
@@ -801,6 +801,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long counter_ibd0 = 0
     reset()
+    #TODO make it prange
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
