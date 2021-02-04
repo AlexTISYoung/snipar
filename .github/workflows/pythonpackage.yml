@@ -7,9 +7,7 @@ on:
   push:
     branches: 
     - master
-    - python3 
-    - sibreg_pyx
-    - update_interface
+    - phased_testing
   pull_request:
     branches: [ master ]
 
