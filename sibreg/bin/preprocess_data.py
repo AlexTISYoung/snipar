@@ -15,7 +15,7 @@ import logging
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
-from bgen_reader import read_bgen
+from bgen_reader import open_bgen, read_bgen
 class Person:
     """Just a simple data structure representing individuals
 
@@ -281,7 +281,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")        
+    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")      
     logging.info("with chromosomes " + str(chromosomes)+": " + "loading and transforming ibd file ...")
     ibd["Chr"] = ibd["Chr"].astype(int)
     ibd = ibd.astype(str)
@@ -321,22 +321,19 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             pos = gts_f.pos[:, 2]
             sid = gts_f.sid
     if phased_address:
-        bgen = read_bgen(phased_address+".bgen", verbose=False)
-        gts_ids = np.array([[None, id] for id in bgen["samples"]])
+        bgen = open_bgen(phased_address+".bgen", verbose=False)
+        gts_ids = np.array([[None, id] for id in bgen.samples])
         pos = np.array(bim["coordinate"][start: end])
         sid = np.array(bim["id"][start: end])
         pop_size = len(gts_ids)
-        whole_genotype = []
-        for genotype in bgen["genotype"][start: end]:
-            computed = genotype.compute()
-            probs = computed["probs"] 
-            genomes = np.array([(None, None)]*pop_size)
-            genomes[probs[:,0] > 0.99, 0] = 1.
-            genomes[probs[:,1] > 0.99, 0] = 0.
-            genomes[probs[:,2] > 0.99, 1] = 1.
-            genomes[probs[:,3] > 0.99, 1] = 0.
-            whole_genotype.append(genomes)
-        phased_gts = np.array(whole_genotype).transpose(1,0,2).astype(np.intc)
+        probs= bgen.read((slice(0, pop_size),slice(start, end)))        
+        phased_gts = np.zeros((probs.shape[0], probs.shape[1], 2))
+        phased_gts[:] = np.nan
+        phased_gts[probs[:,:,0] > 0.99, 0] = 1
+        phased_gts[probs[:,:,1] > 0.99, 0] = 0
+        phased_gts[probs[:,:,2] > 0.99, 0] = 1
+        phased_gts[probs[:,:,3] > 0.99, 0] = 0        
+        phased_gts = phased_gts.transpose(1,0,2).astype(np.intc)
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
 
