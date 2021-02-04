@@ -268,7 +268,7 @@ if __name__ == "__main__":
             }
             for chromosome in chromosomes]
             
-    pool = Pool(args.processes)
-    logging.info("staring process pool")
-    consumed_time = pool.map(run_imputation, inputs)
-    logging.info("imputation time: "+str(np.sum(consumed_time)))
+    with Pool(args.processes) as pool:
+        logging.info("staring process pool")
+        consumed_time = pool.map(run_imputation, inputs)
+        logging.info("imputation time: "+str(np.sum(consumed_time)))
