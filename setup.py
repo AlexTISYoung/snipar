@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages, Extension
 from setuptools import dist
-dist.Distribution().fetch_build_eggs(['numpy==1.19.0', 'Cython==0.29.21'])
+dist.Distribution().fetch_build_eggs(['numpy==1.19.3', 'Cython==0.29.21'])
 import numpy
 #from Cython.Build import cythonize
 setup(name='sibreg',
@@ -28,14 +28,14 @@ setup(name='sibreg',
 
             # Specify the Python versions you support here. In particular, ensure
             # that you indicate whether you support Python 2, Python 3 or both.
-            'Programming Language :: Python :: 2.7',
+            'Programming Language :: Python :: 3.9',
       ],
       keywords='statistics genetics',
       packages=['sibreg', 'sibreg.bin'],
-      setup_requires=['pytest-runner', 'numpy>=1.19.0', 'Cython>=0.29.21'],
+      setup_requires=['pytest-runner', 'numpy>=1.19.3', 'Cython>=0.29.21'],
       install_requires=[
-            'bgen_reader>=4.0.4',
-            'numpy>=1.19.0',
+            'bgen_reader==4.0.7',
+            'numpy>=1.19.3',
             'pandas>=1.1.1',
             'Cython>=0.29.21',
             'scipy>=1.2.3',
