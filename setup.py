@@ -34,7 +34,7 @@ setup(name='sibreg',
       packages=['sibreg', 'sibreg.bin'],
       setup_requires=['pytest-runner', 'numpy>=1.19.0', 'Cython>=0.29.21'],
       install_requires=[
-            'bgen_reader>=4.0.4',
+            'bgen_reader==4.0.7',
             'numpy>=1.19.0',
             'pandas>=1.1.1',
             'Cython>=0.29.21',
