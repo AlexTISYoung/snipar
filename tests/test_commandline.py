@@ -23,7 +23,7 @@ class TestCommanline(unittest.TestCase):
                    "test_data/sample.segments.gz",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
-                   "--to_chr", "2",
+                   "--to_chr", "3",
                    "--pedigree", "test_data/sample.ped",
                    "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
