@@ -60,6 +60,9 @@ cdef extern from * nogil:
     void destroy()
     void report(int mod, char* pre_message_info, int total)
 
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
 cdef void get_IBD(int[:] hap1,
                   int[:] hap2,
                   int length,
@@ -67,10 +70,10 @@ cdef void get_IBD(int[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement):
+                  int[:] agreement) nogil:
     """Inferes IBD status between two haplotypes. For the location i, it checks [i-half_window, i+half_window] size, if they are the same on more than threshold portiona of the locations, it's IBD.
     Agreement, agreement_count, agreement percentage will contain the inffered IBDs, number of similarities in the window and its percentage for all the locations respectively.
-asdasd
+
     Args:
         hap1 : int[:]
             First haplotype
@@ -183,7 +186,7 @@ cdef float impute_snp_from_offsprings(int snp,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2):
+                      int len_snp_ibd2) nogil:
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
     If phased_gts is not NULL, it tries to do the imputation with that first and if it's not usable, it falls back to unphased data.
 
@@ -335,7 +338,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      ):
+                      ) nogil:
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value
     
     If returns Nan if there are no sibling pairs that can be children of the existing parent.
@@ -801,9 +804,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long counter_ibd0 = 0
     reset()
-    #TODO make it prange
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
-    for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
@@ -817,7 +819,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
-            
+
             if single_parent[index]:
                 for i in range(0, sib_count[index]):
                     get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
