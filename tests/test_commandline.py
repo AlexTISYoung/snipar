@@ -4,7 +4,7 @@ from tests.test_imputation import imputation_test
 
 class TestCommanline(unittest.TestCase):
     p_value_threshold = 0.01
-    def test_impute_runner_with_pedigree(self):
+    def test_impute_runner_with_unphased_pedigree(self):
         command = ["python",
                    "impute_runner.py",
                    "test_data/sample.segments.gz",
@@ -16,14 +16,33 @@ class TestCommanline(unittest.TestCase):
                    ]
         subprocess.check_call(command)
     
-    def test_impute_runner_with_pedigree_control(self):
+    def test_impute_runner_with_unphased_pedigree_control(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
                    "test_data/sample.segments.gz",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
-                   "--to_chr", "3",
+                   "--to_chr", "2",
+                   "--pedigree", "test_data/sample.ped",
+                   "--output_address", "outputs/tmp/test_sample_imputed~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1],
+                imputed_prefix = "outputs/tmp/test_sample_imputed",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+    def test_impute_runner_with_phased_pedigree_control(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.segments.gz",
+                   "--bgen", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "2",
                    "--pedigree", "test_data/sample.ped",
                    "--output_address", "outputs/tmp/test_sample_imputed~",
                    ]
@@ -35,7 +54,7 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
-    def test_impute_runner_with_king(self):
+    def test_impute_runner_with_unphased_king(self):
         command = ["python",
                    "impute_runner.py",
                    "test_data/sample.segments.gz",
@@ -48,7 +67,7 @@ class TestCommanline(unittest.TestCase):
                    ]
         subprocess.check_call(command)
 
-    def test_impute_runner_with_king_control(self):
+    def test_impute_runner_with_unphased_king_control(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
@@ -69,7 +88,7 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
 
-    def test_impute_runner_with_pedigree_control_multithread(self):
+    def test_impute_runner_with_unphased_pedigree_control_multithread(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
@@ -89,7 +108,7 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
-    def test_impute_runner_with_pedigree_control_multiprocess(self):
+    def test_impute_runner_with_unphased_pedigree_control_multiprocess(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
@@ -109,7 +128,7 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
-    def test_impute_runner_with_pedigree_control_notilda(self):
+    def test_impute_runner_with_unphased_pedigree_control_notilda(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
