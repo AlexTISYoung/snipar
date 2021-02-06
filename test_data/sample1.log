@@ -1,25 +1,28 @@
-PLINK v1.90b6.16 64-bit (19 Feb 2020)
+PLINK v2.00a2.3LM 64-bit Intel (24 Jan 2020)
 Options in effect:
-  --bfile outputs/tmp/t__t
+  --bgen test_data/sample1.bgen ref-last
   --make-bed
   --out test_data/sample1
-  --remove outputs/tmp/t__t_remove.txt
+  --oxford-single-chr 1
+  --sample test_data/sample1.sample
 
-Hostname: genetics3
-Working directory: /disk/genetics4/ukb/moeen/sibreg
-Start time: Fri Jun  5 19:24:14 2020
+Hostname: g03
+Working directory: /disk/genetics4/ukb/moeen/SNIPar
+Start time: Fri Feb  5 20:14:15 2021
 
-Random number seed: 1591399454
-1031774 MB RAM detected; reserving 515887 MB for main workspace.
-1000 variants loaded from .bim file.
-12000 people (12000 males, 0 females) loaded from .fam.
---remove: 8005 people remaining.
-Using 1 thread (no multithreaded calculations invoked).
-Before main variant filters, 0 founders and 8005 nonfounders present.
-Calculating allele frequencies... done.
-1000 variants and 8005 people pass filters and QC.
-Note: No phenotypes present.
---make-bed to test_data/sample1.bed + test_data/sample1.bim +
-test_data/sample1.fam ... done.
+Random number seed: 1612574055
+257670 MiB RAM detected; reserving 128835 MiB for main workspace.
+Using up to 48 threads (change this with --threads).
+--bgen: 1000 variants detected, format v1.2.
+12000 samples imported from .sample file to test_data/sample1-temporary.psam .
+--bgen: test_data/sample1-temporary.pgen + test_data/sample1-temporary.pvar
+written.
+12000 samples (0 females, 0 males, 12000 ambiguous; 12000 founders) loaded from
+test_data/sample1-temporary.psam.
+1000 variants loaded from test_data/sample1-temporary.pvar.
+Note: No phenotype data present.
+Writing test_data/sample1.fam ... done.
+Writing test_data/sample1.bim ... done.
+Writing test_data/sample1.bed ... done.
 
-End time: Fri Jun  5 19:24:14 2020
+End time: Fri Feb  5 20:14:16 2021

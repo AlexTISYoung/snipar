@@ -1,4 +1,4 @@
-python example/simulate_pop.py 1000 0.5 3000  1000 1000 0.5 "outputs/tmp/t__t"
+python example/simulate_pop_hap.py 1000 0.5 3000  1000 1000 0.5 "outputs/tmp/t__t"
 python -c 'import pandas as pd;
 from sibreg.bin.preprocess_data import create_pedigree;
 ped = pd.read_csv("outputs/tmp/t__t_fams.ped", sep = " ");
@@ -44,9 +44,12 @@ king = pd.read_csv("test_data/sample.king", sep = "\t")
 new_king = king[king["ID1"].isin(new_result["IID"]) | king["ID2"].isin(new_result["IID"])]
 new_king.to_csv("test_data/pedigree_creation_sample.king", sep="\t", index=False)
 '
-plink/plink --file outputs/tmp/t__t --make-bed --out outputs/tmp/t__t
-plink/plink --bfile outputs/tmp/t__t --remove outputs/tmp/t__t_remove.txt --make-bed --out test_data/sample1
-python example/simulate_trait_quad.py outputs/tmp/t__t.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0.5
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g outputs/tmp/t__t.haps -s outputs/tmp/t__t.sample -og test_data/sample1.bgen -os test_data/sample1.sample -filetype shapeit_haplotypes -ofiletype bgen
+plink/plink2 --bgen test_data/sample1.bgen ref-last --sample test_data/sample1.sample --make-bed --out test_data/sample1 --oxford-single-chr 1
+python example/simulate_trait_quad.py test_data/sample1.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0.5
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample1.bgen -s test_data/sample1.sample -og test_data/sample1_reduced.bgen -os test_data/sample1_reduced.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t_remove.txt
+plink/plink2 --bgen test_data/sample1_reduced.bgen ref-last --sample test_data/sample1_reduced.sample --make-bed --out test_data/sample1_reduced --oxford-single-chr 1
 cp test_data/sample1.bed test_data/sample2.bed 
 cp test_data/sample1.bim test_data/sample2.bim 
 cp test_data/sample1.fam test_data/sample2.fam
+cp test_data/sample1.bgen test_data/sample2.bgen
