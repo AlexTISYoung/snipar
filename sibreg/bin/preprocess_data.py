@@ -331,9 +331,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         phased_gts[:] = np.nan
         phased_gts[probs[:,:,0] > 0.99, 0] = 1
         phased_gts[probs[:,:,1] > 0.99, 0] = 0
-        phased_gts[probs[:,:,2] > 0.99, 0] = 1
-        phased_gts[probs[:,:,3] > 0.99, 0] = 0        
-        phased_gts = phased_gts.transpose(1,0,2).astype(np.intc)
+        phased_gts[probs[:,:,2] > 0.99, 1] = 1
+        phased_gts[probs[:,:,3] > 0.99, 1] = 0
+        #TODO fix nan and intc
+        phased_gts = phased_gts.astype(np.intc)
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
 
