@@ -55,6 +55,8 @@ if __name__ == '__main__':
     Specifies if one wants to estimate block Jack Knife Standard errors
     ''')
     parser.set_defaults(jkse=False)
+    parser.set_argument('--jkse_nblocks', type = int, default = 200,
+                    help = "Number of blocks for block jack knife SE estimation.")
     parser.add_argument('--jkse_blocksize', type = int, help = "Block Size for Block Jackknife Standard Errors.")
     parser.set_defaults(jkse_blocksize=1000)
     parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
@@ -273,6 +275,9 @@ if __name__ == '__main__':
         
     if args.jkse:
         
+        nblocks_blocksize = np.ceil(zval.shape[0]/n_blocks)
+        blocksize = args.jkse_blocksize if args.jkse_nblocks is None else nblocks_blocksize
+
         print(f"Jack Knife Block Sizes = {args.jkse_blocksize}")
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
