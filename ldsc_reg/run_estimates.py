@@ -278,11 +278,11 @@ if __name__ == '__main__':
         nblocks_blocksize = np.ceil(zval.shape[0]/n_blocks)
         blocksize = args.jkse_blocksize if args.jkse_nblocks is None else nblocks_blocksize
 
-        print(f"Jack Knife Block Sizes = {args.jkse_blocksize}")
+        print(f"Jack Knife Block Sizes = {blocksize}")
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
         
-        jkse = ld.jkse(model, output_matrix, blocksize = args.jkse_blocksize, num_procs=args.jkse_cores,
+        jkse = ld.jkse(model, output_matrix, blocksize = blocksize, num_procs=args.jkse_cores,
                         rbounds = args.rbounds)
 
         print(f"Block Jack Knife Standard Errors: {jkse}")
