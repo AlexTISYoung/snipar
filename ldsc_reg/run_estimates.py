@@ -162,11 +162,16 @@ if __name__ == '__main__':
                         'se' : se.tolist(),
                         "S" : S.tolist()})
 
-
+    
+    # cleaning data
     zdata['CHR'] = zdata['CHR'].astype(int)
     zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype('int')
+    
+    # sorting by chromosome
+    zdata = zdata.sort_values(by = ['CHR']).reset_index(drop = True)
+    zdata['ordering'] = zdata.index
     
     
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
@@ -190,9 +195,10 @@ if __name__ == '__main__':
     ldcolnames = ["CHR", "SNP", "BP", "L2"]
     ldscores= ld.read_ldscores(ldscore_path, ldcolnames)
     # ldscores['BP'] = ldscores['BP'].astype('int')
-
+    
     # Merging LD scores with main Data Frame
     main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
+    main_df = main_df.sort_values(by = ['ordering'])
 
     # dropping NAs
     main_df = main_df.dropna()
