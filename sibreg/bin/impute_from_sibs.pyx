@@ -26,7 +26,9 @@ from cython.parallel import prange
 cimport openmp
 from libc.stdio cimport printf
 from libc.time cimport time, ctime, time_t
+from config import nan_integer as python_integer_nan
 cdef float nan_float = np.nan
+cdef float nan_integer = python_integer_nan
 
 cdef extern from * nogil:
     r"""
@@ -63,8 +65,8 @@ cdef extern from * nogil:
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef void get_IBD(int[:] hap1,
-                  int[:] hap2,
+cdef void get_IBD(signed char[:] hap1,
+                  signed char[:] hap2,
                   int length,
                   int half_window,
                   double threshold,
@@ -139,14 +141,18 @@ cdef int get_hap_index(int i, int j) nogil:
 
 cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
+        Returns False if any of them is nan
     """
-    if (parent == 2) and (child > 0):
+    if parent == nan_integer or child == nan_integer:
+        return False
+    
+    if (parent == 2) and (2 >= child > 0):
         return True
 
-    if parent == 1:
+    if parent == 1 and (2 >= child >= 0):
         return True
     
-    if (parent == 0) and (child < 2):
+    if (parent == 0) and (0 <= child < 2):
         return True
 
     return False
@@ -181,8 +187,8 @@ cdef float impute_snp_from_offsprings(int snp,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
-                      int[:, :, :] phased_gts,
-                      int[:, :] unphased_gts,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
@@ -331,8 +337,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
-                      int[:, :, :] phased_gts,
-                      int[:, :] unphased_gts,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
                       int[:, :, :] parent_offspring_hap_IBDs,
                       int len_snp_ibd0,
@@ -773,8 +779,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     #iid_to_bed_index
     cdef cmap[cstring, int] c_iid_to_bed_index = iid_to_bed_index
     #unphased_gts
-    cdef int[:, :] c_unphased_gts = unphased_gts
-    cdef int[:, :, :] c_phased_gts = phased_gts
+    cdef signed char[:, :] c_unphased_gts = unphased_gts
+    cdef signed char[:, :, :] c_phased_gts = phased_gts
     cdef int number_of_snps = c_unphased_gts.shape[1]
     #ibd
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
@@ -839,8 +845,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                         sib2_index = sibs_index[this_thread, j]
                         sib1_id = fams[index][i]
                         sib2_id = fams[index][j]
-                        sib1_gene_isnan = isnan(c_unphased_gts[sib1_index, snp])
-                        sib2_gene_isnan = isnan(c_unphased_gts[sib2_index, snp])
+                        sib1_gene_isnan = (c_unphased_gts[sib1_index, snp] == nan_integer)
+                        sib2_gene_isnan = (c_unphased_gts[sib2_index, snp] == nan_integer)
                         ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
                         if sib1_gene_isnan  and sib2_gene_isnan:
                             continue
@@ -871,7 +877,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     counter_ibd0 += 1
             else :
                 sib1_index = sibs_index[this_thread, 0]
-                if not isnan(c_unphased_gts[sib1_index, snp]):
+                if not (c_unphased_gts[sib1_index, snp] == nan_integer):
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1

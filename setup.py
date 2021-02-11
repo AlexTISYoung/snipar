@@ -17,7 +17,7 @@ setup(name='sibreg',
             #   3 - Alpha
             #   4 - Beta
             #   5 - Production/Stable
-            'Development Status :: 3 - Alpha',
+            'Development Status :: 4 - Beta',
 
             # Indicate who your project is intended for
             'Intended Audience :: Science/Research',
@@ -39,7 +39,7 @@ setup(name='sibreg',
             'pandas>=1.1.1',
             'Cython>=0.29.21',
             'scipy>=1.2.3',
-            'pysnptools>=0.4.11',
+            'pysnptools==0.4.11',
             'networkx>=2.2',
             'h5py>=2.10.0',
             ],

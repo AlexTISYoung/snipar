@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen, read_bgen
+from config import nan_integer
 class Person:
     """Just a simple data structure representing individuals
 
@@ -313,11 +314,17 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
         gts_ids = gts_f.iid[ids_in_ped]
         if end is not None:
-            unphased_gts = gts_f[ids_in_ped , start:end].read().val.astype(np.intc)
+            unphased_gts = gts_f[ids_in_ped , start:end].read().val
+            nanmask = np.isnan(unphased_gts)
+            unphased_gts = unphased_gts.astype(np.int8)
+            unphased_gts[nanmask] = nan_integer
             pos = gts_f.pos[start:end, 2]
             sid = gts_f.sid[start:end]
         else:
-            unphased_gts = gts_f[ids_in_ped, :].read().val.astype(np.intc)
+            unphased_gts = gts_f[ids_in_ped, :].read().val
+            nanmask = np.isnan(unphased_gts)
+            unphased_gts = unphased_gts.astype(np.int8)
+            unphased_gts[nanmask] = nan_integer
             pos = gts_f.pos[:, 2]
             sid = gts_f.sid
     if phased_address:
@@ -334,9 +341,37 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         phased_gts[probs[:,:,2] > 0.99, 1] = 1
         phased_gts[probs[:,:,3] > 0.99, 1] = 0
         #TODO fix nan and intc
-        phased_gts = phased_gts.astype(np.intc)
+        nanmask = np.isnan(phased_gts)
+        phased_gts = phased_gts.astype(np.int8)
+        phased_gts[nanmask] = nan_integer
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
+            nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
+            phased_gts[nanmask] = nan_integer
+    unphased_gts_greater2 = unphased_gts>2
+    num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
+    if num_unphased_gts_greater2>0:
+        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are greater than 2 in {num_unphased_gts_greater2} locations. Converted to NaN")  
+        unphased_gts[unphased_gts_greater2] = nan_integer
+        
+    unphased_gts_less0 = unphased_gts<0
+    num_unphased_gts_less0 = np.sum(unphased_gts_less0)
+    if num_unphased_gts_less0>0:
+        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
+        unphased_gts[unphased_gts_less0] = nan_integer
+
+    if phased_gts:    
+        phased_gts_less0 = phased_gts<0
+        num_phased_gts_less0 = np.sum(phased_gts_less0)
+        if num_phased_gts_less0>0:
+            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are less than 0 in {num_phased_gts_less0} locations. Converted to NaN")  
+            phased_gts[phased_gts_less0] = nan_integer
+        
+        phased_gts_greater1 = phased_gts>1
+        num_phased_gts_greater1 = np.sum(phased_gts_greater1)
+        if num_phased_gts_greater1>0:
+            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
+            phased_gts[phased_gts_greater1] = nan_integer
 
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
