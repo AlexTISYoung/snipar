@@ -315,16 +315,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         gts_ids = gts_f.iid[ids_in_ped]
         if end is not None:
             unphased_gts = gts_f[ids_in_ped , start:end].read().val
-            nanmask = np.isnan(unphased_gts)
-            unphased_gts = unphased_gts.astype(np.int8)
-            unphased_gts[nanmask] = nan_integer
             pos = gts_f.pos[start:end, 2]
             sid = gts_f.sid[start:end]
         else:
-            unphased_gts = gts_f[ids_in_ped, :].read().val
-            nanmask = np.isnan(unphased_gts)
-            unphased_gts = unphased_gts.astype(np.int8)
-            unphased_gts[nanmask] = nan_integer
+            unphased_gts = gts_f[ids_in_ped, :].read().val            
             pos = gts_f.pos[:, 2]
             sid = gts_f.sid
     if phased_address:
@@ -341,9 +335,6 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         phased_gts[probs[:,:,2] > 0.99, 1] = 1
         phased_gts[probs[:,:,3] > 0.99, 1] = 0
         #TODO fix nan and intc
-        nanmask = np.isnan(phased_gts)
-        phased_gts = phased_gts.astype(np.int8)
-        phased_gts[nanmask] = nan_integer
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
@@ -360,7 +351,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
         unphased_gts[unphased_gts_less0] = nan_integer
 
-    if phased_gts:    
+    if phased_gts:
         phased_gts_less0 = phased_gts<0
         num_phased_gts_less0 = np.sum(phased_gts_less0)
         if num_phased_gts_less0>0:
@@ -372,7 +363,15 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         if num_phased_gts_greater1>0:
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
             phased_gts[phased_gts_greater1] = nan_integer
-
+    
+    freqs = np.nanmean(unphased_gts,axis=0)/2.0
+    nanmask = np.isnan(unphased_gts) 
+    unphased_gts = unphased_gts.astype(np.int8)
+    unphased_gts[nanmask] = nan_integer    
+    if phased_gts:
+        nanmask = np.isnan(phased_gts)
+        phased_gts = phased_gts.astype(np.int8)
+        phased_gts[nanmask] = nan_integer    
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
@@ -382,4 +381,4 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     bim_columns = selected_bim.columns
     hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
     pos = pos.astype(int)
-    return sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict
+    return sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, freqs, hdf5_output_dict

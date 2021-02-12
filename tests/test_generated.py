@@ -57,7 +57,7 @@ class TestGenerated(unittest.TestCase):
 		#writing parents only
 		os.system('plink/plink --noweb --bfile outputs/tmp/generated --keep outputs/tmp/generated_parents.txt --make-bed --out outputs/tmp/generated_parents')
 		ibd = pd.read_csv("outputs/tmp/generated.segments.gz", sep = "\t")
-		sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(sibs,
+		sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, freqs, hdf5_output_dict = prepare_data(sibs,
 																													None,
 																													"outputs/tmp/generated_sibs",
 																													ibd)

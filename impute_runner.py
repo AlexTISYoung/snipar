@@ -143,10 +143,10 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, chromosome = chromosome)
+    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, freqs, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, chromosome = chromosome)
     pos = pos.astype(int)
     start_time = time.time()
-    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     end_time = time.time()
     return (end_time-start_time)
 
@@ -267,7 +267,7 @@ if __name__ == "__main__":
             "chromosome":chromosome,
             }
             for chromosome in chromosomes]
-            
+    #TODO output more information about the imputation inside the hdf5 filehf
     with Pool(args.processes) as pool:
         logging.info("staring process pool")
         consumed_time = pool.map(run_imputation, inputs)
