@@ -488,7 +488,8 @@ class sibreg():
               neg_logll_grad_func = neglike_wrapper,
               est_init = None,
               printout = True,
-              rbounds = True):
+              rbounds = True,
+              hipreci = False):
         
         """
         Solves the ldsc problem of infering the V matrix
@@ -524,21 +525,25 @@ class sibreg():
             est_init = Vinit(z, S, u, M)
         
         # exporting for potential later reference
-        print(f"Initial estimate: {est_init}")
+        if printout == True:
+            print(f"Initial estimate: {est_init}")
+            
         self.est_init = est_init
         
         rlimit = (-1, 1) if rbounds else (None, None)
-
+        
+        ftol = 1e-20 if hipreci else 2.220446049250313e-09
+        
         result = minimize(
-            neg_logll_grad_func, 
-            est_init,
-            jac = True,
-            args = (z, S, l, u, f, M),
-            bounds = [(1e-6, None), (1e-6, None), rlimit],
-            method = 'L-BFGS-B'
-            # options = {'ftol' : 1e-20}
-            
-        )
+                neg_logll_grad_func, 
+                est_init,
+                jac = True,
+                args = (z, S, l, u, f, M),
+                bounds = [(1e-6, None), (1e-6, None), rlimit],
+                method = 'L-BFGS-B',
+                options = {'ftol' : ftol}
+
+            )
 
         output = dict(
             v1 = result.x[0],
@@ -613,8 +618,8 @@ def jkse(model,
     nblocks = int(np.ceil(model.z.shape[0]/blocksize))
     
     # construct blocks of indices
-    indices = list(range(1, model.z.shape[0]))
-    index_blocks = [indices[i * blocksize:(i + 1) * blocksize] for i in range((len(indices) + blocksize - 1) // blocksize )]
+    indices = list(range(model.z.shape[0]))
+    index_blocks = [indices[i * blocksize:(i + 1) * blocksize - 1] for i in range((len(indices) + blocksize - 1) // blocksize )]
     
     # store full parameter estimate as array
     full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])

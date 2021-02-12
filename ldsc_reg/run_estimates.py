@@ -282,7 +282,7 @@ if __name__ == '__main__':
     if args.jkse:
         
         nblocks_blocksize = np.ceil(zval.shape[0]/n_blocks)
-        blocksize = args.jkse_blocksize if args.jkse_nblocks is None else nblocks_blocksize
+        blocksize = args.jkse_blocksize if args.jkse_nblocks is None else int(nblocks_blocksize)
 
         print(f"Jack Knife Block Sizes = {blocksize}")
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
