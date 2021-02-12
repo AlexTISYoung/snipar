@@ -49,7 +49,7 @@ class TestSibImpute(unittest.TestCase):
         self.assertEqual(expected_result, result, msg="dict translation is not working")
 
     def test_impute_snp_from_offsprings_unphased(self):
-        bed = np.array([[0],[1],[2]]).astype("i")
+        bed = np.array([[0],[1],[2]]).astype("b")
         snp_ibd0 = np.ones((10,2)).astype("i")
         snp_ibd1 = np.ones((10,2)).astype("i")
         snp_ibd2 = np.ones((10,2)).astype("i")
@@ -84,7 +84,7 @@ class TestSibImpute(unittest.TestCase):
                     self.assertAlmostEqual(result, (sibsum/2. + 2*f)/2, 4, msg = "problem with type2")
 
     def test_impute_snp_from_parent_offsprings_unphased(self):
-        bed = np.array([[0],[1],[2]]).astype("i")
+        bed = np.array([[0],[1],[2]]).astype("b")
         snp_ibd0 = np.ones((10,2)).astype("i")
         snp_ibd1 = np.ones((10,2)).astype("i")
         snp_ibd2 = np.ones((10,2)).astype("i")
@@ -173,8 +173,8 @@ class TestSibImpute(unittest.TestCase):
     def test_get_IBD(self):
         length = 1000
         half_window = 100
-        hap1 = np.array([1 for i in range(1000)]).astype("i")
-        hap2 = np.array([1 for i in range(1000)]).astype("i")
+        hap1 = np.array([1 for i in range(1000)]).astype("b")
+        hap2 = np.array([1 for i in range(1000)]).astype("b")
         agreement_count = np.array([0 for i in range(1000)]).astype("i")
         agreement_percentage = np.array([0. for i in range(1000)])
         agreement = np.array([0 for i in range(1000)]).astype("i")
@@ -193,14 +193,14 @@ class TestSibImpute(unittest.TestCase):
         for i in range(length):
             self.assertAlmostEqual(agreement_percentage[i], 1.)
 
-        hap1 = np.array([i//500 for i in range(1000)]).astype("i")
-        hap2 = np.array([i//500 for i in range(1000)]).astype("i")
+        hap1 = np.array([i//500 for i in range(1000)]).astype("b")
+        hap2 = np.array([i//500 for i in range(1000)]).astype("b")
         get_IBD(hap1, hap2, length, half_window, 0.5, agreement_count, agreement_percentage, agreement)
         for i in range(length):
             self.assertEqual(agreement[i], 1)
         
-        hap1 = np.array([i//500 for i in range(1000)]).astype("i")
-        hap2 = np.array([1 for i in range(1000)]).astype("i")
+        hap1 = np.array([i//500 for i in range(1000)]).astype("b")
+        hap2 = np.array([1 for i in range(1000)]).astype("b")
         get_IBD(hap1, hap2, length, half_window, 0.9999, agreement_count, agreement_percentage, agreement)
 
         for i in range(500+half_window):

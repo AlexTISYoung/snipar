@@ -351,7 +351,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
         unphased_gts[unphased_gts_less0] = nan_integer
 
-    if phased_gts:
+    if not phased_gts is None:
         phased_gts_less0 = phased_gts<0
         num_phased_gts_less0 = np.sum(phased_gts_less0)
         if num_phased_gts_less0>0:
@@ -368,7 +368,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     nanmask = np.isnan(unphased_gts) 
     unphased_gts = unphased_gts.astype(np.int8)
     unphased_gts[nanmask] = nan_integer    
-    if phased_gts:
+    if not phased_gts is None:
         nanmask = np.isnan(phased_gts)
         phased_gts = phased_gts.astype(np.int8)
         phased_gts[nanmask] = nan_integer    
