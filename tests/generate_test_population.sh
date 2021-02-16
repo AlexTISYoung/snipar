@@ -1,4 +1,4 @@
-python example/simulate_pop.py 1000 0.5 3000  1000 1000 0.5 "outputs/tmp/t__t"
+python example/simulate_pop.py 1000 0.5 300 100 100 0.5 "outputs/tmp/t__t"
 python -c 'import pandas as pd;
 from sibreg.bin.preprocess_data import create_pedigree;
 ped = pd.read_csv("outputs/tmp/t__t_fams.ped", sep = " ");
