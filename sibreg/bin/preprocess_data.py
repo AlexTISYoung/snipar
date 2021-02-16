@@ -334,7 +334,6 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         phased_gts[probs[:,:,1] > 0.99, 0] = 0
         phased_gts[probs[:,:,2] > 0.99, 1] = 1
         phased_gts[probs[:,:,3] > 0.99, 1] = 0
-        #TODO fix nan and intc
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)

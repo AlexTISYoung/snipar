@@ -306,7 +306,6 @@ cdef float impute_snp_from_offsprings(int snp,
                 additive = f
             elif sibsum==1:
                 additive = 1+f
-                #TODO figure out whether this is true this should be 1.5+f
             elif sibsum==2:
                 additive = 1+2*f
             elif sibsum==3:
@@ -797,6 +796,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef cstring sib1_id, sib2_id
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
+    imputed_par_gts[:] = np.nan
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
     byte_chromosome = chromosome.encode("ASCII")
     cdef char* chromosome_c = byte_chromosome
@@ -809,6 +809,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int half_window_c = half_window
     cdef float ibd_threshold_c = ibd_threshold
     cdef long counter_ibd0 = 0
+    cdef long counter_nonnan_input = 0
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -881,6 +882,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1
+            if not(len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2==0):
+                counter_nonnan_input +=1
             if single_parent[index]:
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
@@ -916,7 +919,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     ratio_ibd0 = <float>counter_ibd0/total_snps
     logging.info("with chromosome " + str(chromosome)+": ibd0 ratio is"+str(ratio_ibd0))
     if ratio_ibd0>0.5:
-         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
+        logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
+    output_nan_count = np.sum(np.isnan(imputed_par_gts))
+    expected_nan_count = imputed_par_gts.size-counter_nonnan_input
+    non_expected = (output_nan_count-expected_nan_count)
+    non_expected_ratio = non_expected/imputed_par_gts.size
+    logging.info("with chromosome " + str(chromosome)+f": imputation is nan in {non_expected} locations where it shouldn't have been because of inconsistencies in the data. That is {non_expected_ratio*100:.3f}% of the loci.")
+    logging.info("with chromosome " + str(chromosome)+f": expected nan: {expected_nan_count}, actual_nan: {output_nan_count}")
+    if non_expected_ratio > 0.01:
+        logging.warning("Too much inconsistencies in the data")        
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
