@@ -584,7 +584,7 @@ def jkse_core(indices,
     l = model.l[mask]
     u = model.u[mask]
     f = model.f[mask] if model.f is not None else model.f
-    M = model.M
+    M = model.z[mask].shape[0]
     
     output, _ = model.solve(z = z,
                     S = S,
@@ -638,7 +638,7 @@ def jkse(model,
     jknife_var = np.diag(jknife_cov)
     jknife_se = np.sqrt(jknife_var)
 
-    return jknife_se  
+    return jknife_se, estimates_jk
     
 
 #  == Reading LD scores == #
