@@ -77,10 +77,10 @@ cdef void get_IBD(signed char[:] hap1,
     Agreement, agreement_count, agreement percentage will contain the inffered IBDs, number of similarities in the window and its percentage for all the locations respectively.
 
     Args:
-        hap1 : int[:]
+        hap1 : signed char[:]
             First haplotype
 
-        hap2 : int[:]
+        hap2 : signed char[:]
             Second haplotype
 
         length : int
@@ -89,13 +89,13 @@ cdef void get_IBD(signed char[:] hap1,
         half_window : int
             For each location i, the IBD inference is restricted to [i-half_window, i+half_window] segment
 
-        threshold : float
+        threshold : double
             We have an IBD segment if agreement_percentage is more than threshold
 
         agreement_count : int[:]
             For each location i, it's number of the time haplotypes agree with each other in the [i-half_window, i+half_window] window
 
-        agreement_percentage : float[:]
+        agreement_percentage : double[:]
             For each location i, it's the ratio of agreement between haplotypes in [i-half_window, i+half_window] window
 
         agreement : int[:]
@@ -140,8 +140,12 @@ cdef int get_hap_index(int i, int j) nogil:
     0/0
 
 cdef char is_possible_child(int child, int parent) nogil:
-    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
-        Returns False if any of them is nan
+    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype. Returns False if any of them is nan
+        Args:
+            child : int
+            parent : int
+
+        Returns: char
     """
     if parent == nan_integer or child == nan_integer:
         return False
@@ -215,10 +219,10 @@ cdef float impute_snp_from_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        phased_gts : int[:,:,:]
+        phased_gts : signed char[:,:,:]
             A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
 
-        unphased_gts : int[:,:]
+        unphased_gts : signed char[:,:]
             A two-dimensional array containing genotypes for all individuals and SNPs respectively.
         
         sib_hap_IBDs: int[:, :, :]
@@ -370,10 +374,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        phased_gts : int[:,:,:]
+        phased_gts : signed char[:,:,:]
             A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
 
-        unphased_gts : int[:,:]
+        unphased_gts : signed char[:,:]
             A two-dimensional array containing genotypes for all individuals and SNPs respectively.
 
         sib_hap_IBDs: int[:, :, :]
@@ -401,15 +405,15 @@ cdef float impute_snp_from_parent_offsprings(int snp,
 
     """    
 
-    cdef float result
-    cdef float additive
+    cdef double result
+    cdef double additive
     cdef int gs1, gs2
-    cdef float sibsum = 0
+    cdef double sibsum = 0
     cdef int sib1, sib2, pair_index, counter, sib_index1, sib_index2, hap_index
     cdef int sibs_h00, sibs_h01, sibs_h10, sibs_h11, sibship_shared_allele_sib1, sibship_shared_allele_sib2
     cdef int parent_sib1_h00, parent_sib1_h01, parent_sib1_h10, parent_sib1_h11, parent_offspring1_shared_allele_parent, parent_offspring1_shared_allele_offspring
     cdef int parent_sib2_h00, parent_sib2_h01, parent_sib2_h10, parent_sib2_h11, parent_offspring2_shared_allele_parent, parent_offspring2_shared_allele_offspring
-    cdef float gp = unphased_gts[parent, snp]
+    cdef int gp = unphased_gts[parent, snp]
     if phased_gts != None:
         #having phased data does not matter with IBD state 0
         if len_snp_ibd0==0 and len_snp_ibd1>0:
@@ -698,11 +702,14 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         iid_to_bed_index : str->int
             A dictionary mapping IIDs of people to their location in the bed file.
 
-        phased_gts : numpy.array
+        phased_gts : numpy.array[signed char]
             Numpy array containing the phased genotype data. Axes are individulas and SNPS respectively.
+            It's elements should be 0 or 1 except NaN values which should be equal to nan_integer specified in the config.
 
-        unphased_gts : numpy.array
+        unphased_gts : numpy.array[signed char]
             Numpy array containing the unphased genotype data from a bed file. Axes are individulas, SNPS and haplotype number respectively.
+            It's elements should be 0 or 1 except NaN values which should be equal to nan_integer specified in the config.
+
 
         ibd : pandas.Dataframe
             A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
@@ -716,6 +723,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
 
         chromosome: str
             Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
+
+        freqs: list[float]
+            Min allele frequency for all the SNPs present in the genotypes in that order.
 
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
@@ -796,7 +806,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef cstring sib1_id, sib2_id
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
-    imputed_par_gts[:] = np.nan
+    imputed_par_gts[:] = nan_float
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
     byte_chromosome = chromosome.encode("ASCII")
     cdef char* chromosome_c = byte_chromosome

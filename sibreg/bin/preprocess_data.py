@@ -220,10 +220,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
         
         phased_address : str
-            Address of the bed file (does not inlude '.bed').
+            Address of the phased bgen file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
 
-        phased_address : str
-            Address of the phased bgen file (does not inlude '.bgen').
+        unphased_address : str
+            Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
         
         ibd : pd.DataFrame
             A pandas dataframe containing IBD statuses for all SNPs.
@@ -242,14 +242,34 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     Returns:
         tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
             Returns the data required for the imputation. This data is a tuple of multiple objects.
-                sibships: A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
+                sibships: pandas.DataFrame
+                    A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
                     It only contains families that have more than one child or only one parent.
-                iid_to_bed_index: A str->int dictionary mapping IIDs of people to their location in bed file.
-                gts: Numpy array containing the genotype data from the bed file.
-                ibd: A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
+
+                iid_to_bed_index: str->int
+                    A str->int dictionary mapping IIDs of people to their location in bed file.
+
+                phased_gts: np.array[signed char], optional
+                    A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
+
+                unphased_gts: np.array[signed char]
+                    A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+                ibd: pandas.DataFrame
+                    A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
                     Each segment consists of a start, an end, and an IBD status. The segment list is flattened meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
-                pos: A numpy array with the position of each SNP in the order of appearance in gts.
-                hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
+
+                pos: np.array
+                    A numpy array with the position of each SNP in the order of appearance in gts.
+
+                chromosomes: str
+                    A string containing all the chromosomes present in the data.
+
+                freqs: np.array[float]
+                    Min allele frequency for all the SNPs present in the genotypes in that order.
+
+                hdf5_output_dict: dict
+                    A  dictionary whose values will be written in the imputation output under its keys.
     """    
     logging.info("For file "+str(phased_address)+";"+str(unphased_address)+": Finding which chromosomes")
     if unphased_address:

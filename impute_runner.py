@@ -99,8 +99,12 @@ def run_imputation(data):
                 pedigree: pd.Dataframe
                     The standard pedigree table
 
-                bed_address: str
-                    Address of the bed file.
+                unphased_address: str, optional
+                    Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
+                
+                phased_address: str, optional
+                    Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+
 
                 ibd_pd: pd.Dataframe
                     IBD segments table in King format. Only needs to contain information about this chromosome
