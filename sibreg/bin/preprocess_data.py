@@ -331,16 +331,25 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     unphased_gts = None
     if unphased_address:
         gts_f = Bed(unphased_address+".bed",count_A1 = True)
+        logging.info("with chromosomes " + str(chromosomes)+": " + "opened unphased file ...")
         ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
+        logging.info("with chromosomes " + str(chromosomes)+": " + "loaded ids ...")
         gts_ids = gts_f.iid[ids_in_ped]
+        logging.info("with chromosomes " + str(chromosomes)+": " + "restrict to ids ...")
         if end is not None:
             unphased_gts = gts_f[ids_in_ped , start:end].read().val
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded genotypes ...")
             pos = gts_f.pos[start:end, 2]
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded pos ...")
             sid = gts_f.sid[start:end]
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded sid ...")
         else:
             unphased_gts = gts_f[ids_in_ped, :].read().val            
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded genotypes ...")
             pos = gts_f.pos[:, 2]
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded pos ...")
             sid = gts_f.sid
+            logging.info("with chromosomes " + str(chromosomes)+": " + "loaded sid ...")
     if phased_address:
         bgen = open_bgen(phased_address+".bgen", verbose=False)
         gts_ids = np.array([[None, id] for id in bgen.samples])
