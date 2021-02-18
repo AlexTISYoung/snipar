@@ -13,7 +13,7 @@ do
         -l "${path2ldscreg}/multigen_sim/05012020/${runno}_pop.log" \
         --jkse \
         --jkse_blocksize 1000 \
-        --jkse_cores 24 \
+        --jkse_cores 48 \
         -maf 1
 
 

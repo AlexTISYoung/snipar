@@ -288,7 +288,8 @@ if __name__ == '__main__':
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
         
-        jkse, delvals = ld.jkse(model, output_matrix, blocksize = blocksize, num_procs=args.jkse_cores,
+        initguess = {'v1' : phvar/2, 'v2' : phvar/2, 'r' : 0.0} #output_matrix
+        jkse, delvals = ld.jkse(model, initguess, blocksize = blocksize, num_procs=args.jkse_cores,
                         rbounds = args.rbounds)
 
         print(f"Block Jack Knife Standard Errors: {jkse}")
