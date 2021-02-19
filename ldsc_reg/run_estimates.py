@@ -283,7 +283,8 @@ if __name__ == '__main__':
         if args.jkse_nblocks is not None:
             nblocks_blocksize = np.ceil(zval.shape[0]/args.jkse_nblocks)
             blocksize = int(nblocks_blocksize)
-        elif args.jkse_blocksize is not None:
+        elif args.jkse_blocksize is not None and args.jkse_nblocks is None:
+            # need nblocks to always override blocksize option
             blocksize = int(args.jkse_blocksize)
             
 
