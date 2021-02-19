@@ -304,7 +304,7 @@ if __name__ == '__main__':
         
 
         if args.logfile is not None:
-            logging.info(f"Jack Knife Block Sizes = {args.jkse_blocksize}")
+            logging.info(f"Jack Knife Block Sizes = {blocksize}")
             logging.info(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
             logging.info(f"Block Jack Knife Standard Errors: {jkse}")
             logging.info(f"Estimation time with Block Jack Knife Standard Error Estimation: {estimationTime_jkse}")
