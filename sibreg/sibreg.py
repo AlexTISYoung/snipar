@@ -3,6 +3,7 @@ import numpy.ma as ma
 from pysnptools.snpreader import Bed, Pheno
 from scipy.optimize import fmin_l_bfgs_b
 import h5py, code
+from bgen_reader import open_bgen
 
 class model(object):
     """Define a linear model with within-class correlations.
@@ -355,6 +356,8 @@ class gtarray(object):
         else:
             self.has_NAs = False
 
+        self.info = None
+
     def compute_freqs(self):
         """
         Computes the frequencies of the SNPs. Stored in self.freqs.
@@ -364,22 +367,9 @@ class gtarray(object):
         elif self.ndim == 3:
             self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
 
-    def filter_snps(self, min_maf = 0, max_missing = 0):
-        """
-        Filter SNPs based on having minor allele frequency (MAF) greater than min_maf, and have % missing observations less than max_missing.
-        """
-        if self.freqs is None:
-            self.compute_freqs()
-        if self.ndim == 2:
-            missingness = ma.mean(self.gts.mask,axis=0)
-        elif self.ndim == 3:
-            missingness = ma.mean(self.gts.mask,axis = (0,1))
-        freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
-        print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
-        missingness_pass = 100 * missingness < max_missing
-        print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
-        filter_pass = np.logical_and(freqs_pass, missingness_pass)
-        self.freqs = self.freqs[filter_pass]
+    def filter(self,filter_pass):
+        if self.freqs is not None:
+            self.freqs = self.freqs[filter_pass]
         if self.ndim == 2:
             self.gts = self.gts[:,filter_pass]
         elif self.ndim == 3:
@@ -394,6 +384,44 @@ class gtarray(object):
             self.alleles = self.alleles[filter_pass]
         if self.chrom is not None:
             self.chrom = self.chrom[filter_pass]
+
+    def filter_maf(self, min_maf = 0.01):
+        """
+        Filter SNPs based on having minor allele frequency (MAF) greater than min_maf, and have % missing observations less than max_missing.
+        """
+        if self.freqs is None:
+            self.compute_freqs()
+        freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
+        print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
+        self.filter(freqs_pass)
+        return self.sid[np.logical_not(freqs_pass)]
+
+    def filter_missingness(self, max_missing = 5):
+        if self.ndim == 2:
+            missingness = ma.mean(self.gts.mask,axis=0)
+        elif self.ndim == 3:
+            missingness = ma.mean(self.gts.mask,axis = (0,1))
+        missingness_pass = 100 * missingness < max_missing
+        print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
+        self.filter(missingness_pass)
+        return self.sid[np.logical_not(missingness_pass)]
+
+    def compute_info(self):
+        if self.freqs is None:
+            self.compute_freqs()
+        if self.ndim == 2:
+            self.variances = np.var(self.gts, axis=0)
+        elif self.ndim==3:
+            self.variances = np.var(self.gts[:,0,:], axis=0)
+        self.info = self.variances/(2.0*self.freqs*(1-self.freqs))
+
+    def filter_info(self, min_info = 0.99):
+        if self.info is None:
+            self.compute_info()
+        info_pass = self.info > min_info
+        print(str(self.info.shape[0] - np.sum(info_pass)) + ' SNPs with INFO <' + str(min_info))
+        self.filter(info_pass)
+        return self.sid[np.logical_not(info_pass)]
 
     def filter_ids(self,keep_ids, verbose=True):
         """
@@ -810,20 +838,39 @@ def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compu
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
-                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum)]
-    if compute_controls:
-        G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
-                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
-        G.append(
-            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
-        G.append(
-            get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                  snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
-        return G
-    else:
-        return G[0]
+    # Identify if bed or bgen
+    gt_filetype = gts_f.split('.')[1]
+    # Compute genotype matrices
+    if gt_filetype == 'bed':
+        G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum)]
+        if compute_controls:
+            G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            G.append(
+                get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            G.append(
+                get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            return G
+        else:
+            return G[0]
+    elif gt_filetype == 'bgen':
+        G = [get_gts_matrix_given_ped_bgen(ped[np.logical_not(controls),:],par_gts_f,gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum)]
+        if compute_controls:
+            G.append(get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            G.append(
+                get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            G.append(
+                get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum))
+            return G
+        else:
+            return G[0]
 
 
 def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
@@ -953,6 +1000,101 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     del gts
     del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+
+def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False):
+    """
+    Used in get_gts_matrix: see get_gts_matrix for documentation
+    """
+    ### Genotype file ###
+    gts_f = open_bgen(gts_f)
+    # get ids of genotypes and make dict
+    gts_ids = gts_f.samples
+    # Get families with imputed parental genotypes
+    fams = convert_str_array(np.array(par_gts_f['families']))
+    ### Find ids with observed/imputed parents and indices of those in observed/imputed data
+    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
+    ### Match observed and imputed SNPs ###
+    print('Matching observed and imputed SNPs')
+    chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=snp_ids)
+    # Read imputed parental genotypes
+    print('Reading imputed parental genotypes')
+    if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
+        imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
+        imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
+    else:
+        imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
+        imp_gts = imp_gts[imp_indices,:]
+    fams = fams[imp_indices]
+    # Read observed genotypes
+    print('Reading observed genotypes')
+    gts = np.sum(gts_f.read((observed_indices,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+    gts_ids = gts_ids[observed_indices]
+    gts_id_dict = make_id_dict(gts_ids)
+    # Find indices in reduced data
+    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
+    print('Constructing family based genotype matrix')
+    ### Make genotype design matrix
+    if sib:
+        if parsum:
+            G = np.zeros((ids.shape[0], 3, gts.shape[1]), dtype=np.float32)
+            G[:, np.array([0, 2]), :] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+        else:
+            G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
+            G[:,np.array([0,2,3]),:] = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+        G[:,1,:] = get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
+    else:
+        G = make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+    del gts
+    del imp_gts
+    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+
+
+def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None):
+    """
+    Used in get_gts_matrix_given_ped to match observed and imputed SNPs and return SNP information on shared SNPs.
+    Removes SNPs that have duplicated SNP ids.
+    in_obs_sid contains the SNPs in the imputed genotypes that are present in the observed SNPs
+    obs_sid_index contains the index in the observed SNPs of the common SNPs
+    """
+    # Match SNPs from imputed and observed and restrict to those in list
+    if snp_ids is None:
+        snp_ids = gts_f.ids
+    # Get bim info
+    alleles = np.array([x.split(',') for x in gts_f.allele_ids])
+    pos = np.array(gts_f.positions)
+    chromosome = np.array(gts_f.chromosomes)
+    # Remove duplicate ids
+    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
+    snp_set = set(snp_ids[snp_indices[snp_counts == 1]])
+    if len(snp_set) < snp_ids.shape[0]:
+        print(str(snp_ids.shape[0]-len(snp_set))+' SNPs with duplicate IDs removed')
+    ## Read and match SNP ids
+    imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
+    # Find relevant column for SNP ids in imputed data
+    imp_bim_cols = convert_str_array(np.array(par_gts_f['bim_columns']))
+    if 'rsid' in imp_bim_cols:
+        id_col = np.where('rsid'==imp_bim_cols)[0][0]
+    elif 'id' in imp_bim_cols:
+        id_col = np.where('id'==imp_bim_cols)[0][0]
+    else:
+        raise(ValueError('Could not find SNP ids in imputed parental genotypes'))
+    imp_sid = imp_bim[:, id_col]
+    obs_sid = gts_f.ids
+    obs_sid_dict = make_id_dict(obs_sid)
+    in_obs_sid = np.zeros((imp_sid.shape[0]), dtype=bool)
+    obs_sid_index = np.zeros((imp_sid.shape[0]), dtype=int)
+    for i in range(0, imp_sid.shape[0]):
+        if imp_sid[i] in obs_sid_dict and imp_sid[i] in snp_set:
+            in_obs_sid[i] = True
+            obs_sid_index[i] = obs_sid_dict[imp_sid[i]]
+    if np.sum(in_obs_sid) == 0:
+        raise ValueError('No SNPs in common between imputed and observed data')
+    obs_sid_index = obs_sid_index[in_obs_sid]
+    sid = imp_sid[in_obs_sid]
+    alleles = alleles[obs_sid_index, :]
+    chromosome = chromosome[obs_sid_index]
+    pos = pos[obs_sid_index]
+    return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 
 def compute_pgs(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.

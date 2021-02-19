@@ -135,9 +135,12 @@ if __name__ == '__main__':
         if args.scale_phen:
             y = y/np.std(y)
         if args.scale_pgs:
-            pg.gts = pg.gts / np.std(pg.gts[gt_indices, 0])
+            pg.gts = pg.gts / np.std(pg.gts[:, 0])
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
+        print('Phenotype vector shape: '+str(y.shape))
+        print('PGS shape: '+str(pg.gts.shape))
+        print('family labels shape: '+str(pg.fams.shape))
         alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
