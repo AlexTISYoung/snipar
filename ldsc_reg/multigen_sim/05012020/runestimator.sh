@@ -12,7 +12,6 @@ do
         -ldsc "/disk/genetics/ukb/alextisyoung/haplotypes/simulated_pops_large/from_chr1_to_chr23_start0_endNone_run0_p0-0_ab_corr0-5_vb0-25_length2/ldscores/*[0-9].l2.ldscore.gz" \
         -l "${path2ldscreg}/multigen_sim/05012020/${runno}_pop.log" \
         --jkse \
-        --jkse_blocksize 1000 \
         --jkse_cores 48 \
         -maf 1
 
@@ -23,7 +22,6 @@ do
         -l "${path2ldscreg}/multigen_sim/05012020/${runno}_avgparental.log" \
         -e "direct_plus_averageparental" \
         --jkse \
-        --jkse_blocksize 1000 \
         --jkse_cores 48 \
         -maf 1
 

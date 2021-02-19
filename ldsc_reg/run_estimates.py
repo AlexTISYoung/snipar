@@ -58,7 +58,6 @@ if __name__ == '__main__':
     parser.add_argument('--jkse_nblocks', type = int, default = 200,
                     help = "Number of blocks for block jack knife SE estimation.")
     parser.add_argument('--jkse_blocksize', type = int, help = "Block Size for Block Jackknife Standard Errors.")
-    parser.set_defaults(jkse_blocksize=1000)
     parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
     parser.set_defaults(jkse_cores = 2)
     
