@@ -6,6 +6,7 @@ Options in effect:
   --oxford-single-chr 1
   --sample test_data/sample1.sample
 
+<<<<<<< HEAD
 Hostname: g03
 Working directory: /disk/genetics4/ukb/moeen/sibreg
 Start time: Tue Feb 16 14:45:26 2021
@@ -26,3 +27,23 @@ Writing test_data/sample1.bim ... done.
 Writing test_data/sample1.bed ... done.
 
 End time: Tue Feb 16 14:45:27 2021
+=======
+Hostname: g01
+Working directory: /disk/homedirs/nber/harij/snipar/SNIPar
+Start time: Thu Jul 23 06:47:03 2020
+
+Random number seed: 1595501223
+257670 MB RAM detected; reserving 128835 MB for main workspace.
+1000 variants loaded from .bim file.
+12000 people (12000 males, 0 females) loaded from .fam.
+--remove: 7999 people remaining.
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 0 founders and 7999 nonfounders present.
+Calculating allele frequencies... done.
+1000 variants and 7999 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to test_data/sample1.bed + test_data/sample1.bim +
+test_data/sample1.fam ... done.
+
+End time: Thu Jul 23 06:47:03 2020
+>>>>>>> 18c63705a2564dd88556d3cd60f5a71aef1111d0
