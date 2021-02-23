@@ -249,9 +249,7 @@ def neg_logll_grad(V, z, S, l, u, M):
     -Gvec = dxd numpy matrix
     """
 
-    # Unflatten V into a matrix
-    N = len(S)
-    
+    # initialize some values
     G = np.zeros((3))
     log_ll = 0.0
 
