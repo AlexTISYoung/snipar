@@ -737,7 +737,7 @@ def find_par_gts(pheno_ids, ped, fams, gts_id_dict):
                 if ped_i[4] == 'False' and not par_status[i,0] == 0:
                     gt_indices[i, 1] = imp_index
                     par_status[i, 0] = 1
-                if ped_i[5] == 'False' and not par_status[i,0] == 0:
+                if ped_i[5] == 'False' and not par_status[i,1] == 0:
                     gt_indices[i, 2] = imp_index
                     par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
