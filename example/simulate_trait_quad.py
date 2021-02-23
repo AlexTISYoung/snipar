@@ -33,6 +33,9 @@ for i in range(0,gts_ids.shape[0]):
 gts = gts_f.read().val
 gts = np.array(gts)
 
+# Read bim
+bim = np.loadtxt(args.gts.split('.bed')[0]+'.bim',dtype=str)
+
 # Find parents
 ped = convert_str_array(np.loadtxt(args.ped,dtype='S'))
 ped = ped[1:ped.shape[0],:]
@@ -88,12 +91,26 @@ y = A*a_factor+np.sqrt(1-args.h2quad)*e
 yout = np.hstack((ped_out,np.array(y,dtype=str).reshape((y.shape[0],1))))
 np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
 
+b = b*a_factor
+
 # Write effects
 if args.no_sib:
-    b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),
-                       np.array(b[:,1]*a_factor,dtype=str),np.array(b[:,2]*a_factor,dtype=str)))
+    b_out = np.vstack((np.array(b[:,0],dtype=str),
+                       np.array(b[:,1],dtype=str),np.array(b[:,2],dtype=str)))
 else:
-    b_out = np.vstack((np.array(b[:,0]*a_factor,dtype=str),np.array(b[:,1]*a_factor,dtype=str),
-                       np.array(b[:,2]*a_factor,dtype=str),np.array(b[:,3]*a_factor,dtype=str)))
+    b_out = np.vstack((np.array(b[:,0],dtype=str),np.array(b[:,1],dtype=str),
+                       np.array(b[:,2],dtype=str),np.array(b[:,3],dtype=str)))
 b_out = b_out.T
 np.savetxt(args.outprefix+'.effects.txt',b_out,fmt='%s')
+
+# Write direct effect weights
+bim_out = bim[:,[0,3,1,4,5]]
+dout = open(args.outprefix+'.direct_weights.txt','w')
+dout.write('chrom\tpos\tsid\tnt1\tnt2\traw_beta\tldpred_beta\n')
+for i in range(b.shape[0]):
+    doutline = 'chrom'+bim_out[i,0]+'\t'+bim_out[i,1]+'\t'+bim_out[i,2]+'\t'+bim_out[i,3]+\
+              '\t'+bim_out[i,4]+'\t'+str(b[i,0])+'\t'+str(b[i,0])
+    if i<(b.shape[0]-1):
+        doutline += '\n'
+    dout.write(doutline)
+dout.close()

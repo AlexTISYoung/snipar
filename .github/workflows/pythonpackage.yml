@@ -7,9 +7,7 @@ on:
   push:
     branches: 
     - master
-    - python3 
-    - sibreg_pyx
-    - update_interface
+    - phased_testing
   pull_request:
     branches: [ master ]
 
@@ -18,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.6]
+        python-version: [3.7]
 
     steps:
     - uses: actions/checkout@v2

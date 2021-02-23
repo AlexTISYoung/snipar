@@ -3,7 +3,7 @@ from libcpp.string cimport string as cstring
 from libcpp.pair cimport pair as cpair
 cimport numpy as cnp
 from libcpp.vector cimport vector
-
+from libc.stdlib cimport malloc, free
 
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
@@ -11,28 +11,44 @@ cdef int get_IBD_type(cstring id1,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil
 
 cdef float impute_snp_from_offsprings(int snp, 
-                                    int[:, :] snp_ibd0,
-                                    int[:, :] snp_ibd1,
-                                    int[:, :] snp_ibd2,
-                                    float f,
-                                    double[:, :] bed,
-                                    int len_snp_ibd0,
-                                    int len_snp_ibd1,
-                                    int len_snp_ibd2) nogil
+                      int[:] sib_indexes,
+                      int[:, :] snp_ibd0,
+                      int[:, :] snp_ibd1,
+                      int[:, :] snp_ibd2,
+                      float f,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
+                      int[:, :, :] sib_hap_IBDs,                      
+                      int len_snp_ibd0,
+                      int len_snp_ibd1,
+                      int len_snp_ibd2) nogil
 
 
 cdef float impute_snp_from_parent_offsprings(int snp,
-                                            int parent,
-                                            int[:, :] snp_ibd0,
-                                            int[:, :] snp_ibd1,
-                                            int[:, :] snp_ibd2,
-                                            float f,
-                                            double[:, :] bed,
-                                            int len_snp_ibd0,
-                                            int len_snp_ibd1,
-                                            int len_snp_ibd2,
-                                            ) nogil
+                      int parent,
+                      int[:] sib_indexes,
+                      int[:, :] snp_ibd0,
+                      int[:, :] snp_ibd1,
+                      int[:, :] snp_ibd2,
+                      float f,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
+                      int[:, :, :] sib_hap_IBDs,
+                      int[:, :, :] parent_offspring_hap_IBDs,
+                      int len_snp_ibd0,
+                      int len_snp_ibd1,
+                      int len_snp_ibd2,
+                      ) nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
 
 cdef char is_possible_child(int child, int parent) nogil
+
+cdef void get_IBD(signed char[:] hap1,
+                  signed char[:] hap2,
+                  int length,
+                  int half_window,
+                  double threshold,
+                  int[:] agreement_count,
+                  double[:] agreement_percentage,
+                  int[:] agreement) nogil
