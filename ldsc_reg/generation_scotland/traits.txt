@@ -1,7 +1,0 @@
-3 HDL
-4 FEV1
-5 Height
-6 BMI
-8 cognition
-13 neuroticism
-14 education
