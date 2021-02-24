@@ -104,62 +104,44 @@ if __name__ == '__main__':
     # reading in  data
     filenames = args.path2file
 
-    files = glob.glob(filenames)
+    zdata = pd.DataFrame(
+        columns = ['CHR', 'SNP', 'BP' ,'N',
+                    "f" ,"A1", "A2" , 'theta', 
+                    'se', "S" ]
+    )
+    for chromosome in range(1, 23):
+        file = f"{filenames}/chr_{chromosome}.hdf5"
+        print("Reading in file: ", file)
+        hf = h5py.File(file, 'r')
+        metadata = hf.get("bim")[()]
+        chromosome = metadata[:, 0]
+        snp = metadata[:, 1]
+        bp = metadata[:, 3]
+        A1 = metadata[:, 4]
+        A2 = metadata[:, 5]
+        theta  = hf.get('estimate')[()]
+        se  = hf.get('estimate_ses')[()]
+        N = hf.get('N_L')[()]
+        S = hf.get('estimate_covariance')[()]
+        f = hf.get('freqs')[()]
 
-    file = files[0]
-    print("Reading in file: ", file)
-    hf = h5py.File(file, 'r')
-    metadata = hf.get("bim")[()]
-    chromosome = metadata[:, 0]
-    snp = metadata[:, 1]
-    bp = metadata[:, 3]
-    theta  = hf.get('estimate')[()]
-    se  = hf.get('estimate_ses')[()]
-    N = hf.get('N_L')[()]
-    S = hf.get('estimate_covariance')[()]
-    f = hf.get('freqs')[()]
+        # Constructing dataframe of data
+        zdata_toappend = pd.DataFrame({'CHR' : chromosome,
+                'SNP' : snp,
+                'BP' : bp,
+                'N' : N,
+                "f" : f,
+                "A1" : A1,
+                "A2" : A2,
+                'theta' : theta.tolist(),
+                'se' : se.tolist(),
+                "S" : S.tolist()})
 
-    # normalizing S
+        zdata = zdata.append(zdata_toappend)
+    
     sigma2 = hf.get('sigma2')[()]
     tau = hf.get('tau')[()]
     phvar = sigma2+sigma2/tau
-
-    if len(files) > 1:
-        for file in files[1:]:
-            print("Reading in file: ", file)
-            hf = h5py.File(file, 'r')
-            metadata = hf.get("bim")[()]
-            chromosome_file = metadata[:, 0]  
-            snp_file = metadata[:, 1]
-            bp_file = metadata[:, 3]
-            theta_file  = hf.get('estimate')[()]
-            se_file  = hf.get('estimate_ses')[()]
-            S_file = hf.get('estimate_covariance')[()]
-            f_file = hf.get('freqs')[()]
-            N_file = hf.get('N_L')[()]
-
-            # normalizing S
-            sigma2 = hf.get('sigma2')[()]
-            tau = hf.get('tau')[()]
-
-            chromosome = np.append(chromosome, chromosome_file, axis = 0)
-            snp = np.append(snp, snp_file, axis = 0)
-            bp = np.append(bp, bp_file, axis = 0)
-            theta = np.append(theta, theta_file, axis = 0)
-            se = np.append(se, se_file, axis = 0)
-            S = np.append(S, S_file, axis = 0)
-            f = np.append(f, f_file, axis = 0)
-            N = np.append(N, N_file, axis = 0)
-
-    # Constructing dataframe of data
-    zdata = pd.DataFrame({'CHR' : chromosome,
-                        'SNP' : snp,
-                        'BP' : bp,
-                        'N' : N,
-                        "f" : f,
-                        'theta' : theta.tolist(),
-                        'se' : se.tolist(),
-                        "S" : S.tolist()})
 
     
     # cleaning data
