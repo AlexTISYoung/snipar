@@ -249,9 +249,8 @@ def neg_logll_grad(V, z, S, l, u, M):
     -Gvec = dxd numpy matrix
     """
 
-    # Unflatten V into a matrix
+    # initialize some values
     N = len(S)
-    
     G = np.zeros((3))
     log_ll = 0.0
 
@@ -520,7 +519,6 @@ class sibreg():
         if est_init is None:
             if printout == True:
                 print("No initial guess provided.")
-                print("Making Method of Moments Guess")
                 
             est_init = Vinit(z, S, u, M)
         
@@ -530,8 +528,7 @@ class sibreg():
             
         self.est_init = est_init
         
-        rlimit = (-1, 1) if rbounds else (None, None)
-        
+        rlimit = (-1, 1) if rbounds else (None, None)      
         ftol = 1e-20 if hipreci else 2.220446049250313e-09
         
         result = minimize(
