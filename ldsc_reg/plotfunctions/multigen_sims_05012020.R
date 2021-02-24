@@ -93,7 +93,7 @@ ggplot() +
                    aes(v1_invhse, color = "Inverse Hessian")) +
     geom_density(data = pop,
                  aes(v1_jkse, color = "Block Jack Knife")) +
-    geom_density(data = ldsc_estimates %>% filter(effect_estimated == "Population"), 
+    geom_density(data = ldsc_estimates %>% filter(effect_estimated == "Population"),
                aes(h2_dir_se, color = "LDSC Block Jack Knife")) +
     geom_vline(aes(xintercept = true_sd_h21_pop_snipar, linetype = "SNIPar - True SD")) +
     geom_vline(aes(xintercept = true_sd_h21_pop_ldsc, linetype = "LDSC - True SD")) +
