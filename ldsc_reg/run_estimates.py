@@ -175,11 +175,7 @@ if __name__ == '__main__':
     ldscore_path = args.ldsc_scores
     ldcolnames = ["CHR", "SNP", "BP", "L2"]
     ldscores= ld.read_ldscores(ldscore_path, ldcolnames)
-    # ldscores['BP'] = ldscores['BP'].astype('int')
-    
-    # Merging LD scores with main Data Frame
-    main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
-    main_df = main_df.sort_values(by = ['ordering'])
+    ldscores['BP'] = ldscores['BP'].astype('int')
 
     # dropping NAs
     main_df = main_df.dropna()
@@ -191,7 +187,8 @@ if __name__ == '__main__':
         main_df = main_df.dropna()
 
     maindata_n_message = f"Number of Observations after merging LD-Scores and dropping NAs: {main_df.shape[0]}"
-    
+    main_df = main_df.sort_values(by=['CHR', 'BP_x'])
+
     print(maindata_n_message)
     if args.logfile is not None:
         logging.info(maindata_n_message)
