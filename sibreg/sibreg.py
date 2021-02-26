@@ -1000,7 +1000,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
-def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False):
+def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -1014,7 +1014,7 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
     ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
     ### Match observed and imputed SNPs ###
     print('Matching observed and imputed SNPs')
-    chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=snp_ids)
+    chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')
     if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
@@ -1048,7 +1048,7 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 
-def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None):
+def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None, start=0, end=None):
     """
     Used in get_gts_matrix_given_ped to match observed and imputed SNPs and return SNP information on shared SNPs.
     Removes SNPs that have duplicated SNP ids.
@@ -1058,6 +1058,9 @@ def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None):
     # Match SNPs from imputed and observed and restrict to those in list
     if snp_ids is None:
         snp_ids = gts_f.ids
+        if end is None:
+            end = snp_ids.shape[0]
+        snp_ids = snp_ids[start:end]
     # Get bim info
     alleles = np.array([x.split(',') for x in gts_f.allele_ids])
     pos = np.array(gts_f.positions)
