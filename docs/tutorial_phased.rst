@@ -23,22 +23,21 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes, type:
 
-    ``python impute_runner.py test_data/sample.segments.gz --bed test_data/sample1 --king test_data/sample.king`` 
+    ``python impute_runner.py test_data/sample.segments.gz --bgen test_data/sample1 --king test_data/sample.king``
     
-    ``--agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4``
+    ``--agesex test_data/sample.agesex --output_address test_data/sample1 --threads 4 --from_chr 1 --to_chr 2``
 
 The script constructs a pedigree from the output of KING's relatedness inference (test_data/sample.king),
 and age and sex information (test_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in test_data/sample.segments.gz are used to impute missing parental genotypes
 from the sibling and observed parental genotypes in test_data/sample1.bed. The imputed parental genotypes are in a HDF5 file test_data/sample1.hdf5. The --threads 4 argument
 means the imputation will run on 4 threads.
 
-
 Family based GWAS
 -----------------
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8 --bed test_data/sample1``
+    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8 --bgen test_data/sample1 --min_info 0``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -96,7 +95,7 @@ in test_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file w
 
 To compute the PGS from the true direct effects, use the following command:
 
-    ``python fPGS.py test_data/direct --bedfiles test_data/sample1 --impfiles test_data/sample1``
+    ``python fPGS.py test_data/direct --bgenfiles test_data/sample1 --impfiles test_data/sample1``
     
     ``--weights test_data/h2_quad_0.8.direct_weights.txt``
 

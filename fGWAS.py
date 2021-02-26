@@ -76,21 +76,25 @@ def write_output(G, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2,
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('bed',type=str,help='Bed file with observed genotypes (without .bed suffix).')
     parser.add_argument('pargts', type=str, help='HDF5 file with imputed parental genotypes (without .hdf5 suffix)')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
     parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
+    parser.add_argument('--bed',type=str,help='Bed file with observed genotypes (without .bed suffix).',default=None)
+    parser.add_argument('--bgen',type=str,help='bgen file with observed genotypes (without .bgen suffix).',default=None)
     parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
     parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
     parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
-    parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)',default=0.01)
-    parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)',default=5)
-    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
+    parser.add_argument('--start',type=int,help='Start index of the SNPs to use in the observed genotype file, counting from zero',default = 0)
+    parser.add_argument('--end',type=int,help='End index of SNPs in the observed genotype file. The script will use SNPs with indices in the range [start,end-1], indexing from zero.', default=None)
+    parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
+    parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
+    parser.add_argument('--min_info',type=float,help='Ignore SNPs with imputation INFO score below this threshold (default 0.99)', default=0.99)
+    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
-    parser.add_argument('--output_covar_ests',action='store_true',help='Output null model estimates of covariate fixed effects (default False)',default=False)
+    parser.add_argument('--output_covar_ests',action='store_true',help='Output null model estimates of covariate fixed effects (default False)', default=False)
     args=parser.parse_args()
 
     ######### Read Phenotype ########
@@ -101,16 +105,31 @@ if __name__ == '__main__':
         covariates = read_covariates(args.covar, missing_char=args.missing_char)
         # Match to pheno ids
         covariates.filter_ids(pheno_ids)
+    ######## Check for bed/bgen #######
+    if args.bed is None and args.bgen is None:
+        raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
+    if args.bed is not None and args.bgen is not None:
+        raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
+    if args.bed is not None:
+        gts_f = args.bed+'.bed'
+    elif args.bgen is not None:
+        gts_f = args.bgen+'.bgen'
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts+'.hdf5', args.bed+'.bed', ids = pheno_ids, parsum = args.parsum, sib=args.fit_sib)
+    G = get_gts_matrix(args.pargts+'.hdf5', gts_f, ids=pheno_ids, parsum=args.parsum, sib=args.fit_sib, start=args.start, end=args.end)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
     #### Filter SNPs ####
-    print('Filtering based on MAF and missingness')
-    G.filter_snps(args.min_maf, args.max_missing)
-    print(str(G.shape[2])+' SNPs that pass MAF and missingness filters')
+    print('Filtering based on MAF')
+    G.filter_maf(args.min_maf)
+    if args.bed is not None:
+        print('Filtering based on missingness')
+        G.filter_missingness(args.max_missing)
+    if args.bgen is not None:
+        print('Filtering based on imputation INFO')
+        G.filter_info(args.min_info)
+    print(str(G.shape[2])+' SNPs that pass filters')
     #### Fill NAs ####
     print('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
