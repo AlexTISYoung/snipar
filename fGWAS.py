@@ -86,6 +86,8 @@ if __name__ == '__main__':
     parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
+    parser.add_argument('--start',type=int,help='Start index of the SNPs to use in the observed genotype file, counting from zero',default = 0)
+    parser.add_argument('--end',type=int,help='End index of SNPs in the observed genotype file. The script will use SNPs with indices in the range [start,end-1], indexing from zero.', default=None)
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
     parser.add_argument('--min_info',type=float,help='Ignore SNPs with imputation INFO score below this threshold (default 0.99)', default=0.99)
@@ -113,7 +115,7 @@ if __name__ == '__main__':
     elif args.bgen is not None:
         gts_f = args.bgen+'.bgen'
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(args.pargts+'.hdf5', gts_f, ids=pheno_ids, parsum=args.parsum, sib=args.fit_sib)
+    G = get_gts_matrix(args.pargts+'.hdf5', gts_f, ids=pheno_ids, parsum=args.parsum, sib=args.fit_sib, start=args.start, end=args.end)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
