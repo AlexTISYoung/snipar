@@ -88,7 +88,7 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
     parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
-    parser.add_argument('--min_info',type=float,help='Ignore SNPs with imputation INFO score below this threshold', default=0.99)
+    parser.add_argument('--min_info',type=float,help='Ignore SNPs with imputation INFO score below this threshold (default 0.99)', default=0.99)
     parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
@@ -109,9 +109,9 @@ if __name__ == '__main__':
     if args.bed is not None and args.bgen is not None:
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
     if args.bed is not None:
-        gts_f = args.gts_f+'.bed'
+        gts_f = args.bed+'.bed'
     elif args.bgen is not None:
-        gts_f = args.gts_f+'.bgen'
+        gts_f = args.bgen+'.bgen'
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(args.pargts+'.hdf5', gts_f, ids=pheno_ids, parsum=args.parsum, sib=args.fit_sib)
     # Check for empty fam labels

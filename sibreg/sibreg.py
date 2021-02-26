@@ -394,7 +394,6 @@ class gtarray(object):
         freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
         print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
         self.filter(freqs_pass)
-        return self.sid[np.logical_not(freqs_pass)]
 
     def filter_missingness(self, max_missing = 5):
         if self.ndim == 2:
@@ -404,7 +403,6 @@ class gtarray(object):
         missingness_pass = 100 * missingness < max_missing
         print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
         self.filter(missingness_pass)
-        return self.sid[np.logical_not(missingness_pass)]
 
     def compute_info(self):
         if self.freqs is None:
@@ -421,7 +419,6 @@ class gtarray(object):
         info_pass = self.info > min_info
         print(str(self.info.shape[0] - np.sum(info_pass)) + ' SNPs with INFO <' + str(min_info))
         self.filter(info_pass)
-        return self.sid[np.logical_not(info_pass)]
 
     def filter_ids(self,keep_ids, verbose=True):
         """
@@ -442,7 +439,6 @@ class gtarray(object):
             self.ids = self.ids[indices]
             self.id_dict = make_id_dict(self.ids)
             self.shape = self.gts.shape
-
 
     def mean_normalise(self):
         """
@@ -765,7 +761,7 @@ def find_par_gts(pheno_ids, ped, fams, gts_id_dict):
                 if ped_i[4] == 'False' and not par_status[i,0] == 0:
                     gt_indices[i, 1] = imp_index
                     par_status[i, 0] = 1
-                if ped_i[5] == 'False' and not par_status[i,0] == 0:
+                if ped_i[5] == 'False' and not par_status[i,1] == 0:
                     gt_indices[i, 2] = imp_index
                     par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
