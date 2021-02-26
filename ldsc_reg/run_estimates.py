@@ -178,16 +178,24 @@ if __name__ == '__main__':
     ldscores['BP'] = ldscores['BP'].astype('int')
 
     # dropping NAs
-    main_df = main_df.dropna()
+    main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
 
-    if main_df.shape[0] == 0:
+    if main_df.shape[0] > 0:
+        assert np.all(main_df.BP_x == main_df.BP_y)
+        main_df = main_df.drop('BP_y', axis = 1)
+        main_df = main_df.rename(columns = {'BP_x' : 'BP'})
+        main_df = main_df.dropna()
+    elif main_df.shape[0] == 0:
         print("No matches while matching LD-score data with main dataset using RSID.")
         print("Trying to match with BP.")
         main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "BP"])
+        assert np.all(main_df.SNP_x == main_df.SNP_y)
+        main_df = main_df.drop('SNP_y', axis = 1)
+        main_df = main_df.rename(columns = {'SNP_x' : 'SNP'})
         main_df = main_df.dropna()
 
     maindata_n_message = f"Number of Observations after merging LD-Scores and dropping NAs: {main_df.shape[0]}"
-    main_df = main_df.sort_values(by=['CHR', 'BP_x'])
+    main_df = main_df.sort_values(by=['CHR', 'BP'])
 
     print(maindata_n_message)
     if args.logfile is not None:
@@ -260,12 +268,16 @@ if __name__ == '__main__':
     if args.jkse:
         
         if args.jkse_nblocks is not None:
-            args.jkse_nblocks = 200
             nblocks_blocksize = np.ceil(zval.shape[0]/args.jkse_nblocks)
             blocksize = int(nblocks_blocksize)
         elif args.jkse_blocksize is not None and args.jkse_nblocks is None:
             # need nblocks to always override blocksize option
             blocksize = int(args.jkse_blocksize)
+        else:
+            nblocks = 200
+            nblocks_blocksize = np.ceil(zval.shape[0]/nblocks)
+            blocksize = int(nblocks_blocksize)
+
             
 
         print(f"Jack Knife Block Sizes = {blocksize}")
