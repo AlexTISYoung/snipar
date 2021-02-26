@@ -795,7 +795,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
     return G
 
 
-def get_gts_matrix(par_gts_f,gts_f,snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None):
+def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
