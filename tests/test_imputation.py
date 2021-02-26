@@ -103,5 +103,3 @@ def imputation_test(chromosomes,
     code.interact(local=locals())
     #TODO compute z correctly(find the correct sd)
     return (coef_o, coef_pm), (z_o, z_pm), (p_value_o, p_value_pm)
-
-print(imputation_test([1],'imp','sample'))
