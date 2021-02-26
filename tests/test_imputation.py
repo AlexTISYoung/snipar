@@ -100,6 +100,5 @@ def imputation_test(chromosomes,
     q_pm = norm.cdf(z_pm)
     p_value_pm = min(q_pm, 1-q_pm)
     print(covs_pm, coef_pm, z_pm, p_value_pm)
-    code.interact(local=locals())
     #TODO compute z correctly(find the correct sd)
     return (coef_o, coef_pm), (z_o, z_pm), (p_value_o, p_value_pm)
