@@ -223,8 +223,8 @@ if __name__ == '__main__':
     alleles = np.zeros((snp_ids.shape[0],2),dtype=str)
     pos = np.zeros((snp_ids.shape[0]),dtype=int)
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
-    ## Process batches of SNPs
-    # Fit null model in first batch
+    ##############  Process batches of SNPs ##############
+    ######## Fit null model in first batch ############
     print('Estimating models')
     batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
                    snp_ids[batch_bounds[0, 0]:batch_bounds[0, 1]],
@@ -241,23 +241,12 @@ if __name__ == '__main__':
     alpha[batch_indices,:] = batch_alpha
     alpha_cov[batch_indices,:,:] = batch_alpha_cov
     alpha_ses[batch_indices,:] = batch_alpha_ses
+    ########### Process remaining batches ###########
     for i in range(1,batch_bounds.shape[0]):
         batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
-            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]],
-                                                                                                           y, pheno_ids,
-                                                                                                           args.pargts,
-                                                                                                           gts_f,
-                                                                                                           fit_null=False,
-                                                                                                           tau=tau,
-                                                                                                           sigma2=sigma2,
-                                                                                                           null_alpha=null_alpha,
-                                                                                                           covar=args.covar,
-                                                                                                           parsum=args.parsum,
-                                                                                                           fit_sib=args.fit_sib,
-                                                                                                           max_missing=args.max_missing,
-                                                                                                           min_maf=args.min_maf,
-                                                                                                           min_info=args.min_info,
-                                                                                                           tau_init=args.tau_init)
+            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], y, pheno_ids, args.pargts, gts_f, fit_null=False,
+            tau=tau, sigma2=sigma2, null_alpha=null_alpha, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
+            max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init)
         # Fill in SNP info
         chrom[batch_bounds[i, 0]:batch_bounds[i, 1]] = batch_chrom
         pos[batch_bounds[i, 0]:batch_bounds[i, 1]] = batch_pos
@@ -268,6 +257,6 @@ if __name__ == '__main__':
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses
-    ### Save output ###
+    ######## Save output #########
     write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
                  sigma2, tau, freqs)
