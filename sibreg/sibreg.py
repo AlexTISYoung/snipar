@@ -1015,7 +1015,7 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
     ### Genotype file ###
-    gts_f = open_bgen(gts_f)
+    gts_f = open_bgen(gts_f, verbose=verbose)
     # get ids of genotypes and make dict
     gts_ids = gts_f.samples
     # Get families with imputed parental genotypes
