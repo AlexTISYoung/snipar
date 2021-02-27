@@ -872,7 +872,7 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
             return G[0]
 
 
-def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
+def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = False):
     """
     Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
     It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
@@ -897,7 +897,8 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False):
     if N == 0:
         raise ValueError(
             'No individuals with phenotype observations and complete observed/imputed genotype observations')
-    print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
+    if verbose:
+        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
     # Take those that can be used
     gt_indices = gt_indices[none_missing, :]
     par_status = par_status[none_missing, :]
@@ -955,7 +956,7 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None, start=0
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None):
+def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -969,7 +970,8 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
     ### Match observed and imputed SNPs ###
-    print('Matching observed and imputed SNPs')
+    if verbose:
+        print('Matching observed and imputed SNPs')
     chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids, start=start, end=end)
     # Read imputed parental genotypes
     print('Reading imputed parental genotypes')

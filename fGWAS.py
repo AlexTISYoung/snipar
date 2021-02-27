@@ -91,7 +91,8 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
     G.compute_freqs()
     chrom, pos, alleles, freqs = G.chrom,  G.pos, G.alleles, G.freqs
     #### Filter SNPs ####
-    print('Filtering based on MAF')
+    if verbose:
+        print('Filtering based on MAF')
     G.filter_maf(min_maf)
     gt_filetype = gts_f.split('.')[1]
     if gt_filetype=='bed':
@@ -128,7 +129,8 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
         print('Family variance estimate: '+str(round(sigma2/tau,4)))
         print('Residual variance estimate: ' + str(round(sigma2,4)))
     ##### Transform genotypes and phenotypes ######
-    print('Transforming genotypes and phenotypes')
+    if verbose:
+        print('Transforming genotypes and phenotypes')
     if tau is None or sigma2 is None:
         raise(ValueError('Must provide variance components if not fitting null model'))
     L = null_model.sigma_inv_root(tau, sigma2)
