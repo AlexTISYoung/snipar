@@ -886,9 +886,11 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = Fal
     # Find individuals with siblings
     if sib:
         ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
-        print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
+        if verbose:
+            print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
     ### Find parental status
-    print('Checking for observed/imputed parental genotypes')
+    if verbose:
+        print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     # Find which individuals can be used
     none_missing = np.min(par_status, axis=1)
@@ -974,7 +976,8 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
         print('Matching observed and imputed SNPs')
     chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids, start=start, end=end)
     # Read imputed parental genotypes
-    print('Reading imputed parental genotypes')
+    if verbose:
+        print('Reading imputed parental genotypes')
     if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
         imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
         imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
@@ -983,13 +986,15 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
         imp_gts = imp_gts[imp_indices,:]
     fams = fams[imp_indices]
     # Read observed genotypes
-    print('Reading observed genotypes')
+    if verbose:
+        print('Reading observed genotypes')
     gts = gts_f[observed_indices, obs_sid_index].read().val
     gts_ids = gts_f.iid[observed_indices,1]
     gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
-    print('Constructing family based genotype matrix')
+    if verbose:
+        print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
         if parsum:
@@ -1005,7 +1010,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
-def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None):
+def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -1018,10 +1023,12 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
     ### Match observed and imputed SNPs ###
-    print('Matching observed and imputed SNPs')
+    if verbose:
+        print('Matching observed and imputed SNPs')
     chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
     # Read imputed parental genotypes
-    print('Reading imputed parental genotypes')
+    if verbose:
+        print('Reading imputed parental genotypes')
     if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
         imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
         imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
@@ -1030,13 +1037,15 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
         imp_gts = imp_gts[imp_indices,:]
     fams = fams[imp_indices]
     # Read observed genotypes
-    print('Reading observed genotypes')
+    if verbose:
+        print('Reading observed genotypes')
     gts = np.sum(gts_f.read((observed_indices,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
     gts_ids = gts_ids[observed_indices]
     gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
-    print('Constructing family based genotype matrix')
+    if verbose:
+        print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
         if parsum:
