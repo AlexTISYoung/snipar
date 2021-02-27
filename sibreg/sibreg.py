@@ -1108,7 +1108,7 @@ def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None, start=0
     obs_sid_index = obs_sid_index[in_obs_sid]
     sid = imp_sid[in_obs_sid]
     alleles = alleles[obs_sid_index, :]
-    chromosome = chromosome[obs_sid_index]
+    chromosome = imp_bim[in_obs_sid,0]
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 

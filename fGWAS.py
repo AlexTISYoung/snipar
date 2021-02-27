@@ -219,7 +219,7 @@ if __name__ == '__main__':
     alpha_cov[:] = np.nan
     alpha_ses = np.zeros((snp_ids.shape[0],alpha_dim),dtype=np.float32)
     alpha_ses[:] = np.nan
-    chrom = np.zeros((snp_ids.shape[0]),dtype=int)
+    chrom = np.zeros((snp_ids.shape[0]),dtype=str)
     alleles = np.zeros((snp_ids.shape[0],2),dtype=str)
     pos = np.zeros((snp_ids.shape[0]),dtype=int)
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
@@ -232,7 +232,7 @@ if __name__ == '__main__':
                    fit_null=True, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
                    max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init)
     # Fill in SNP info
-    chrom[batch_bounds[0,0]:batch_bounds[0,1]] = batch_chrom
+    chrom[batch_bounds[0,0]:batch_bounds[0,1]] = np.array(batch_chrom,dtype=str)
     pos[batch_bounds[0,0]:batch_bounds[0,1]] = batch_pos
     alleles[batch_bounds[0,0]:batch_bounds[0,1],:] = batch_alleles
     freqs[batch_bounds[0,0]:batch_bounds[0,1]] = batch_freqs
