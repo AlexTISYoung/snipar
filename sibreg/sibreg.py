@@ -385,23 +385,25 @@ class gtarray(object):
         if self.chrom is not None:
             self.chrom = self.chrom[filter_pass]
 
-    def filter_maf(self, min_maf = 0.01):
+    def filter_maf(self, min_maf = 0.01, verbose=False):
         """
         Filter SNPs based on having minor allele frequency (MAF) greater than min_maf, and have % missing observations less than max_missing.
         """
         if self.freqs is None:
             self.compute_freqs()
         freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
-        print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
+        if verbose:
+            print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
         self.filter(freqs_pass)
 
-    def filter_missingness(self, max_missing = 5):
+    def filter_missingness(self, max_missing = 5, verbose=False):
         if self.ndim == 2:
             missingness = ma.mean(self.gts.mask,axis=0)
         elif self.ndim == 3:
             missingness = ma.mean(self.gts.mask,axis = (0,1))
         missingness_pass = 100 * missingness < max_missing
-        print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
+        if verbose:
+            print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
         self.filter(missingness_pass)
 
     def compute_info(self):
@@ -413,14 +415,15 @@ class gtarray(object):
             self.variances = np.var(self.gts[:,0,:], axis=0)
         self.info = self.variances/(2.0*self.freqs*(1-self.freqs))
 
-    def filter_info(self, min_info = 0.99):
+    def filter_info(self, min_info = 0.99, verbose=False):
         if self.info is None:
             self.compute_info()
         info_pass = self.info > min_info
-        print(str(self.info.shape[0] - np.sum(info_pass)) + ' SNPs with INFO <' + str(min_info))
+        if verbose:
+            print(str(self.info.shape[0] - np.sum(info_pass)) + ' SNPs with INFO <' + str(min_info))
         self.filter(info_pass)
 
-    def filter_ids(self,keep_ids, verbose=True):
+    def filter_ids(self,keep_ids, verbose=False):
         """
         Keep only individuals with ids given by keep_ids
         """

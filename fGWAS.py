@@ -70,7 +70,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
 
 def compute_batch_boundaries(snp_ids,batch_size):
     nsnp = snp_ids.shape[0]
-    n_blocks = np.ceil(float(nsnp)/float(batch_size))
+    n_blocks = np.int(np.ceil(float(nsnp)/float(batch_size)))
     block_bounds = np.zeros((n_blocks,2),dtype=int)
     start = 0
     for i in range(n_blocks-1):
@@ -78,9 +78,10 @@ def compute_batch_boundaries(snp_ids,batch_size):
         block_bounds[i,1] = start+batch_size
         start += batch_size
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
+    return block_bounds
 
 def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=None, sigma2=None, null_alpha=None, covar=None, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1):
+                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1, verbose = False):
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib)
     # Check for empty fam labels
@@ -94,19 +95,24 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
     G.filter_maf(min_maf)
     gt_filetype = gts_f.split('.')[1]
     if gt_filetype=='bed':
-        print('Filtering based on missingness')
+        if verbose:
+            print('Filtering based on missingness')
         G.filter_missingness(max_missing)
     if gt_filetype=='bgen':
-        print('Filtering based on imputation INFO')
+        if verbose:
+            print('Filtering based on imputation INFO')
         G.filter_info(min_info)
-    print(str(G.shape[2])+' SNPs that pass filters')
+    if verbose:
+        print(str(G.shape[2])+' SNPs that pass filters')
     #### Fill NAs ####
-    print('Imputing missing values with population frequencies')
+    if verbose:
+        print('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
     #### Match phenotype ####
     y = match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
-    print('Estimating variance components')
+    if fit_null:
+        print('Estimating variance components')
     if covar is not None and fit_null:
         # Match covariates #
         covariates.filter_ids(G.ids, verbose=False)
@@ -118,8 +124,9 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
                                                                                tau_init = tau_init, return_fixed = False)
     else:
         null_model = model(y, np.ones((y.shape[0], 1)), G.fams)
-    print('Family variance estimate: '+str(round(sigma2/tau,4)))
-    print('Residual variance estimate: ' + str(round(sigma2,4)))
+    if fit_null:
+        print('Family variance estimate: '+str(round(sigma2/tau,4)))
+        print('Residual variance estimate: ' + str(round(sigma2,4)))
     ##### Transform genotypes and phenotypes ######
     print('Transforming genotypes and phenotypes')
     if tau is None or sigma2 is None:
@@ -132,7 +139,8 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
         null_mean = null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]])
         y = transform_phenotype(L, y, G.fam_indices, null_mean)
     ### Fit models for SNPs ###
-    print('Estimating SNP effects')
+    if verbose:
+        print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
     return chrom, pos, alleles, freqs, G.sid, alpha, alpha_cov, alpha_ses, sigma2, tau, null_alpha
 
@@ -192,10 +200,10 @@ if __name__ == '__main__':
     non_duplicate = set(unique_snps[counts==1])
     if np.sum(counts>1)>0:
         print('Removing '+str(np.sum(counts>1))+' duplicate SNP ids')
-    snp_ids = snp_ids[np.array(x in non_duplicate for x in snp_ids)]
+    snp_ids = snp_ids[np.array([x in non_duplicate for x in snp_ids])]
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
-    batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
+    batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size*1000)
     print('Using '+str(batch_bounds.shape[0])+' batches')
     alpha_dim = 3
     if args.fit_sib:
@@ -215,6 +223,7 @@ if __name__ == '__main__':
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
     ## Process batches of SNPs
     # Fit null model in first batch
+    print('Estimating models')
     batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
                    snp_ids[batch_bounds[0, 0]:batch_bounds[0, 1]],
                    y, pheno_ids, args.pargts, gts_f,
@@ -231,18 +240,18 @@ if __name__ == '__main__':
     alpha_cov[batch_indices,:,:] = batch_alpha_cov
     alpha_ses[batch_indices,:] = batch_alpha_ses
     for i in range(1,batch_bounds.shape[0]):
-        batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(y, pheno_ids,
+        batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
+            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]],
+                                                                                                           y, pheno_ids,
                                                                                                            args.pargts,
                                                                                                            gts_f,
                                                                                                            fit_null=False,
                                                                                                            tau=tau,
                                                                                                            sigma2=sigma2,
-                                                                                                           null_alpha = null_alpha,
+                                                                                                           null_alpha=null_alpha,
                                                                                                            covar=args.covar,
                                                                                                            parsum=args.parsum,
                                                                                                            fit_sib=args.fit_sib,
-                                                                                                           start=batch_bounds[i, 0],
-                                                                                                           end=batch_bounds[i, 1],
                                                                                                            max_missing=args.max_missing,
                                                                                                            min_maf=args.min_maf,
                                                                                                            min_info=args.min_info,
@@ -259,4 +268,4 @@ if __name__ == '__main__':
         alpha_ses[batch_indices, :] = batch_alpha_ses
     ### Save output ###
     write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
-                 sigma2, tau)
+                 sigma2, tau, freqs)
