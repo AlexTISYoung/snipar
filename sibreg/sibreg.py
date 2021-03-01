@@ -868,7 +868,8 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
             return G
         else:
             return G[0]
-
+    else:
+        raise(ValueError('Unknown filetype for observed genotypes file: '+str(gts_f)))
 
 def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = False):
     """

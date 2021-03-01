@@ -205,7 +205,10 @@ if __name__ == '__main__':
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
     batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size*1000)
-    print('Using '+str(batch_bounds.shape[0])+' batches')
+    if batch_bounds.shape[0] == 1:
+        print('Using 1 batch')
+    else:
+        print('Using '+str(batch_bounds.shape[0])+' batches')
     alpha_dim = 3
     if args.fit_sib:
         alpha_dim += 1
