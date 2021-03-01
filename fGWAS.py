@@ -186,7 +186,7 @@ if __name__ == '__main__':
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
     if args.bed is not None:
         gts_f = args.bed+'.bed'
-        snp_ids = np.loadtxt(args.bed+'.bim',dtype=str,usecols=1)
+        snp_ids = np.loadtxt(args.bed+'.bim', dtype=str, usecols=1)
     elif args.bgen is not None:
         gts_f = args.bgen+'.bgen'
         bgen = open_bgen(gts_f, verbose=False)
@@ -256,7 +256,7 @@ if __name__ == '__main__':
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses
-        print('Done batch '+str(i+1)+'out of '+str(batch_bounds.shape[0]))
+        print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
     write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
                  sigma2, tau, freqs)

@@ -837,10 +837,8 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    # Identify if bed or bgen
-    gt_filetype = gts_f.split('.')[1]
     # Compute genotype matrices
-    if gt_filetype == 'bed':
+    if gts_f[(len(gts_f)-4):len(gts_f)] == '.bed':
         G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
                                       snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end)]
         if compute_controls:
@@ -855,7 +853,7 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
             return G
         else:
             return G[0]
-    elif gt_filetype == 'bgen':
+    elif gts_f[(len(gts_f)-5):len(gts_f)]  == '.bgen':
         G = [get_gts_matrix_given_ped_bgen(ped[np.logical_not(controls),:],par_gts_f,gts_f,
                                       snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end)]
         if compute_controls:
