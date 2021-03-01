@@ -129,7 +129,7 @@ PGS becomes co-linear. To deal with this, add the --parsum option to the above c
 It is also possible to estimate indirect effects from siblings. We can compute the PGS for genotyped individuals with genotyped siblings and estimate direct, indirect sibling, paternal and maternal effects in
 one command with the addition of the --fit_sib option:
 
-   ``python fPGS.py test_data/direct_sib --bedfiles test_data/sample1 --impfiles test_data/sample1``
+   ``python fPGS.py test_data/direct_sib --bgenfiles test_data/sample1 --impfiles test_data/sample1``
    
    ``--weights test_data/h2_quad_0.8.direct_weights.txt --phenofile test_data/h2_quad_0.8.ped --fit_sib``
 
