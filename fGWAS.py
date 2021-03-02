@@ -221,8 +221,8 @@ if __name__ == '__main__':
     alpha_cov[:] = np.nan
     alpha_ses = np.zeros((snp_ids.shape[0],alpha_dim),dtype=np.float32)
     alpha_ses[:] = np.nan
-    chrom = np.zeros((snp_ids.shape[0]),dtype=str)
-    alleles = np.zeros((snp_ids.shape[0],2),dtype=str)
+    chrom = np.zeros((snp_ids.shape[0]),dtype='<U20')
+    alleles = np.zeros((snp_ids.shape[0],2),dtype='<U20')
     pos = np.zeros((snp_ids.shape[0]),dtype=int)
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
     ##############  Process batches of SNPs ##############
