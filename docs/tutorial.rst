@@ -59,8 +59,8 @@ To use the .bgen file instead, type:
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
 the frequency of the A1 allele, then summary statistics for each type of effect. For each effect, we give the
-effective N for each SNP; this differs from the actual N due to the fact that there is differing amounts of information
-for each type of effect, and due to relatedness in the sample. We give the effect estimate as in the column
+effective N for each SNP; this differs from the actual N due to the fact that there are differing amounts of information
+for each type of effect, and due to relatedness in the sample. We give the effect estimate in the first column for each effect, the column
 'effect_Beta', where 'effect' can be direct, paternal, etc; this is followed by the standard error, the Z-score,
 and the negative log10 P-value for a non-zero effect. In addition to effects directly estimated by the script,
 we also output the average parental effect estimate (estimate of the average of maternal and paternal effects),
