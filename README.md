@@ -14,7 +14,7 @@ Compute polygenic scores for probands, siblings, and parents from SNP weights us
 
 # Documentation
 
-It is recommended to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
+It is recommended to work through the tutorial: https://github.com/AlexTISYoung/SNIPar/blob/master/docs/tutorial.rst
 
 and read the guide: https://snipar.readthedocs.io/en/latest/guide.html
 
