@@ -2,6 +2,8 @@ from sibreg.sibreg import *
 import argparse, h5py
 import numpy as np
 from bgen_reader import open_bgen
+from scipy.stats import chi2
+from math import log10
 
 def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
@@ -38,8 +40,8 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
-    print('Writing output to ' + outprefix + '.hdf5')
-    outfile = h5py.File(outprefix + '.hdf5', 'w')
+    print('Writing output to ' + outprefix + '.sumstats.hdf5')
+    outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
     outfile['bim'] = encode_str_array(outbim)
     X_length = 1
@@ -68,6 +70,77 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     outfile['freqs'] = freqs
     outfile.close()
 
+def outarray_effect(est, ses, freqs, vy):
+    N_effective = vy/(2*freqs*(1-freqs)*np.power(ses,2))
+    Z = est/ses
+    P = -log10(np.exp(1))*chi2.logsf(np.power(Z,2),1)
+    array_out = np.column_stack((N_effective,est,ses,Z,P))
+    array_out = np.round(array_out, decimals=4)
+    array_out[:,0] = np.round(array_out[:,0], 0)
+    return array_out
+
+def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigma2, tau, freqs):
+    outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
+    header = ['chromosome','SNP','pos','A1','A2','freq']
+    # Which effects to estimate
+    effects = ['direct']
+    if sib:
+        effects.append('sib')
+    if not parsum:
+        effects += ['paternal','maternal']
+    effects += ['avg_parental','population']
+    effects = np.array(effects)
+    if not parsum:
+        paternal_index = np.where(effects=='paternal')[0][0]
+        maternal_index = np.where(effects=='maternal')[0][0]
+    avg_par_index = np.where(effects=='avg_parental')[0][0]
+    population_index = avg_par_index+1
+    # Get transform matrix
+    A = np.zeros((len(effects),alpha.shape[1]))
+    A[0:alpha.shape[1],0:alpha.shape[1]] = np.identity(alpha.shape[1])
+    if not parsum:
+        A[alpha.shape[1]:(alpha.shape[1]+2), :] = 0.5
+        A[alpha.shape[1], 0] = 0
+        A[alpha.shape[1]+1, 0] = 1
+    else:
+        A[alpha.shape[1], :] = 0.5
+        A[alpha.shape[1], 0] = 1
+    # Transform effects
+    alpha = alpha.dot(A.T)
+    alpha_ses_out = np.zeros((alpha.shape[0],A.shape[0]))
+    corrs = ['r_direct_avg_parental','r_direct_population']
+    if sib:
+        corrs.append('r_direct_sib')
+    if not parsum:
+        corrs.append('r_paternal_maternal')
+    ncor = len(corrs)
+    alpha_corr_out = np.zeros((alpha.shape[0],ncor))
+    for i in range(alpha_cov.shape[0]):
+        alpha_cov_i = A.dot(alpha_cov[i,:,:].dot(A.T))
+        alpha_ses_out[i,:] = np.sqrt(np.diag(alpha_cov_i))
+        # Direct to average parental
+        alpha_corr_out[i,0] = alpha_cov_i[0,avg_par_index]/(alpha_ses_out[i,0]*alpha_ses_out[i,avg_par_index])
+        # Direct to population
+        alpha_corr_out[i,1] = alpha_cov_i[0,population_index]/(alpha_ses_out[i,0]*alpha_ses_out[i,population_index])
+        # Direct to sib
+        if sib:
+            alpha_corr_out[i,2] = alpha_cov_i[0,1]/(alpha_ses_out[i,0]*alpha_ses_out[i,1])
+        # Paternal to maternal
+        if not parsum:
+            alpha_corr_out[i,ncor-1] = alpha_cov_i[paternal_index,maternal_index]/(alpha_ses_out[i,maternal_index]*alpha_ses_out[i,paternal_index])
+    # Create output array
+    vy = (1+1/tau)*sigma2
+    outstack = [outbim]
+    for i in range(len(effects)):
+        outstack.append(outarray_effect(alpha[:,i],alpha_ses_out[:,i],freqs,vy))
+        header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10(P)']
+    outstack.append(np.round(alpha_corr_out,3))
+    header += corrs
+    # Output array
+    outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
+    print('Writing text output to '+outprefix+'.sumstats.gz')
+    np.savetxt(outprefix+'.sumstats.gz',outarray,fmt='%s')
+
 def compute_batch_boundaries(snp_ids,batch_size):
     nsnp = snp_ids.shape[0]
     n_blocks = np.int(np.ceil(float(nsnp)/float(batch_size)))
@@ -81,9 +154,9 @@ def compute_batch_boundaries(snp_ids,batch_size):
     return block_bounds
 
 def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=None, sigma2=None, null_alpha=None, covar=None, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1, verbose = False):
+                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib)
+    G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
@@ -151,9 +224,9 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('pargts', type=str, help='HDF5 file with imputed parental genotypes (without .hdf5 suffix)')
     parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
-    parser.add_argument('outprefix',type=str,help='Location to output association statistic hdf5 file')
     parser.add_argument('--bed',type=str,help='Bed file with observed genotypes (without .bed suffix).',default=None)
     parser.add_argument('--bgen',type=str,help='bgen file with observed genotypes (without .bgen suffix).',default=None)
+    parser.add_argument('--outprefix', type=str, help='Location to output association statistic hdf5 file. Outputs text output to outprefix.sumstats.gz and HDF5 output to outprefix.sumstats.hdf5', default='')
     parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
     parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
     parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
@@ -169,6 +242,8 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument('--output_covar_ests',action='store_true',help='Output null model estimates of covariate fixed effects (default False)', default=False)
     parser.add_argument('--batch_size',type=int,help='Batch size of SNPs in thousands to load at a time (reduce to reduce memory requirements)',default=100)
+    parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
+    parser.add_argument('--no_txt_out',action='store_true',help='Suppress text output of summary statistics',default=False)
     args=parser.parse_args()
 
     ######### Read Phenotype ########
@@ -209,11 +284,11 @@ if __name__ == '__main__':
         print('Using 1 batch')
     else:
         print('Using '+str(batch_bounds.shape[0])+' batches')
-    alpha_dim = 3
+    alpha_dim = 2
     if args.fit_sib:
         alpha_dim += 1
-    elif args.parsum:
-        alpha_dim = alpha_dim-1
+    if not args.parsum:
+        alpha_dim += 1
     # Create output files
     alpha = np.zeros((snp_ids.shape[0],alpha_dim),dtype=np.float32)
     alpha[:] = np.nan
@@ -231,7 +306,7 @@ if __name__ == '__main__':
                    snp_ids[batch_bounds[0, 0]:batch_bounds[0, 1]],
                    y, pheno_ids, args.pargts, gts_f,
                    fit_null=True, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
-                   max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init)
+                   max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init, print_sample_info=True)
     # Fill in SNP info
     chrom[batch_bounds[0,0]:batch_bounds[0,1]] = np.array(batch_chrom,dtype=str)
     pos[batch_bounds[0,0]:batch_bounds[0,1]] = batch_pos
@@ -261,5 +336,9 @@ if __name__ == '__main__':
         alpha_ses[batch_indices, :] = batch_alpha_ses
         print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
-    write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
-                 sigma2, tau, freqs)
+    if not args.no_hdf5_out:
+        write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
+                     sigma2, tau, freqs)
+    if not args.no_txt_out:
+        write_txt_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_cov,
+                     sigma2, tau, freqs)
