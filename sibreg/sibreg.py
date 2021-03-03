@@ -798,7 +798,7 @@ def make_gts_matrix(gts,imp_gts,par_status,gt_indices, parsum = False):
     return G
 
 
-def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None):
+def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
@@ -840,31 +840,39 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
     # Compute genotype matrices
     if gts_f[(len(gts_f)-4):len(gts_f)] == '.bed':
         G = [get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end)]
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                      print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                              print_sample_info = print_sample_info))
             G.append(
                 get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                         print_sample_info = print_sample_info))
             G.append(
                 get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                         print_sample_info = print_sample_info))
             return G
         else:
             return G[0]
     elif gts_f[(len(gts_f)-5):len(gts_f)]  == '.bgen':
         G = [get_gts_matrix_given_ped_bgen(ped[np.logical_not(controls),:],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end)]
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                           print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                                   print_sample_info = print_sample_info))
             G.append(
                 get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                              print_sample_info = print_sample_info))
             G.append(
                 get_gts_matrix_given_ped_bgen(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end))
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+                                              print_sample_info = print_sample_info))
             return G
         else:
             return G[0]
@@ -957,7 +965,7 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None, start=0
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False):
+def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -969,7 +977,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     # Get families with imputed parental genotypes
     fams = convert_str_array(np.array(par_gts_f['families']))
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
-    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
+    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib, verbose=print_sample_info)
     ### Match observed and imputed SNPs ###
     if verbose:
         print('Matching observed and imputed SNPs')
@@ -1009,7 +1017,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
-def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False):
+def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -1020,7 +1028,7 @@ def get_gts_matrix_given_ped_bgen(ped, par_gts_f, gts_f, snp_ids=None, ids=None,
     # Get families with imputed parental genotypes
     fams = convert_str_array(np.array(par_gts_f['families']))
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
-    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib)
+    ids, observed_indices, imp_indices = get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib, verbose=print_sample_info)
     ### Match observed and imputed SNPs ###
     if verbose:
         print('Matching observed and imputed SNPs')
