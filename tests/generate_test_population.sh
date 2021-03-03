@@ -45,7 +45,7 @@ new_king.to_csv("test_data/pedigree_creation_sample.king", sep="\t", index=False
 '
 /disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g outputs/tmp/t__t.haps -s outputs/tmp/t__t.sample -og test_data/sample1.bgen -os test_data/sample1.sample -filetype shapeit_haplotypes -ofiletype bgen
 plink/plink2 --bgen test_data/sample1.bgen ref-last --sample test_data/sample1.sample --make-bed --out test_data/sample1 --oxford-single-chr 1
-python example/simulate_trait_quad.py test_data/sample1.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0
+python example/simulate_trait_quad.py test_data/sample1.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0.5
 /disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample1.bgen -s test_data/sample1.sample -og test_data/sample1_reduced.bgen -os test_data/sample1_reduced.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t_remove.txt
 plink/plink2 --bgen test_data/sample1_reduced.bgen ref-last --sample test_data/sample1_reduced.sample --make-bed --out test_data/sample1_reduced --oxford-single-chr 1
 cp test_data/sample1.bed test_data/sample2.bed
