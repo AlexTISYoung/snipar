@@ -133,7 +133,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     outstack = [outbim]
     for i in range(len(effects)):
         outstack.append(outarray_effect(alpha[:,i],alpha_ses_out[:,i],freqs,vy))
-        header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10(P)']
+        header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10_P']
     outstack.append(np.round(alpha_corr_out,3))
     header += corrs
     # Output array

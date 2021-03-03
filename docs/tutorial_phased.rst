@@ -37,7 +37,7 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped test_data/h2_quad_0.8 --bgen test_data/sample1 --min_info 0``
+    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bgen test_data/sample1 --min_info 0``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -61,7 +61,7 @@ The output contains different datasets:
 
 Now we have estimated locus specific summary statistics. To compare to the true effects, run
 
-    ``python example/estimate_sim_effects.py test_data/h2_quad_0.8.hdf5 test_data/h2_quad_0.8.effects.txt``
+    ``python example/estimate_sim_effects.py test_data/h2_quad_0.8.sumstats.hdf5 test_data/h2_quad_0.8.effects.txt``
 
 This should print estimates of the bias of the effect estimates, with output something like this:
 
