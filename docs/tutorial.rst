@@ -3,19 +3,15 @@ Tutorial
 ========
 Tutorial on imputing missing parental genotypes and performing family based GWAS and polygenic score analyses. Before working through the tutorial, please first install the package and run the tests (see `github <https://github.com/AlexTISYoung/SNIPar>`_).
 
-Generating test data
+Test data
 --------------------
-
-To generate the test data, in the main SNIPar directory, run:
-
-    ``bash tests/generate_test_population.sh``
 
 In the test_data/ directory, the file h2_quad_0.8.ped is a simulated trait with direct, paternal, and maternal effects, where 80% of the phenotypic
 variance is explained by the combined direct, paternal and maternal effects of the SNPs; and the
 pairwise correlations between the direct, paternal, and maternal effects is 0.5. The phenotype file is test_data/h2_quad_0.8.ped.
 
-The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
-1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
+The genotype data has been simulated so that there are 300 independent families, where 100 have two siblings but no parents genotyped,
+100 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 100 have both parents genotyped and a 50%
 chance of having a genotyped sibling.
 
 Imputing missing parental genotypes
