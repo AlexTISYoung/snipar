@@ -16,6 +16,26 @@ class TestCommanline(unittest.TestCase):
                    ]
         subprocess.check_call(command)
     
+    def test_impute_runner_with_unphased_pedigree_chunks_control(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.segments.gz",
+                   "--bed", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--pedigree", "test_data/sample.ped",
+                   "--chunks", "7",
+                   "--output_address", "outputs/tmp/test_impute_runner_with_unphased_pedigree_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1],
+                imputed_prefix = "outputs/tmp/test_impute_runner_with_unphased_pedigree_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
     def test_impute_runner_with_unphased_pedigree_control(self):
         command = ["python",
                    "impute_runner.py",
@@ -43,6 +63,26 @@ class TestCommanline(unittest.TestCase):
                    "--bgen", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
+                   "--pedigree", "test_data/sample.ped",
+                   "--output_address", "outputs/tmp/test_impute_runner_with_phased_pedigree_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1, 2],
+                imputed_prefix = "outputs/tmp/test_impute_runner_with_phased_pedigree_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+    def test_impute_runner_with_phased_pedigree_chunks_control(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.segments.gz",
+                   "--bgen", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--chunks", "7",
                    "--pedigree", "test_data/sample.ped",
                    "--output_address", "outputs/tmp/test_impute_runner_with_phased_pedigree_control~",
                    ]
