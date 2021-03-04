@@ -189,7 +189,6 @@ if __name__ == '__main__':
         print("No matches while matching LD-score data with main dataset using RSID.")
         print("Trying to match with BP.")
         main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "BP"])
-        assert np.all(main_df.SNP_x == main_df.SNP_y)
         main_df = main_df.drop('SNP_y', axis = 1)
         main_df = main_df.rename(columns = {'SNP_x' : 'SNP'})
         main_df = main_df.dropna()
