@@ -312,7 +312,6 @@ if __name__ == "__main__":
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
     if args.bgen:
-        print("SEEN")
         if args.to_chr is None or args.from_chr is None:
             raise Exception("Chromosome range should be specified with unphased genotype")
 
