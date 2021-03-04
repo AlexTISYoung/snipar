@@ -9,7 +9,7 @@ import scipy.stats
 from numba import jit, njit, prange, int64, float64
 import multiprocessing as mp
 from functools import partial
-
+import tqdm
 
 @njit
 def normalize_S(S, norm):
@@ -625,7 +625,7 @@ def jkse(model,
     
     num_procs = num_procs
     pool = mp.Pool(num_procs)
-    estimates_jk = pool.map(jkse_toparallelize, index_blocks)
+    estimates_jk = list(tqdm.tqdm(pool.imap(jkse_toparallelize, index_blocks), total=len(index_blocks)))
     estimates_jk = np.array(estimates_jk)
     
     pseudovalues = nblocks * full_est - (nblocks - 1) * estimates_jk
