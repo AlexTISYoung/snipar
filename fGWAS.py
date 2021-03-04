@@ -75,7 +75,7 @@ def outarray_effect(est, ses, freqs, vy):
     Z = est/ses
     P = -log10(np.exp(1))*chi2.logsf(np.power(Z,2),1)
     array_out = np.column_stack((N_effective,est,ses,Z,P))
-    array_out = np.round(array_out, decimals=4)
+    array_out = np.round(array_out, decimals=6)
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
@@ -103,8 +103,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
         A[alpha.shape[1], 0] = 0
         A[alpha.shape[1]+1, 0] = 1
     else:
-        A[alpha.shape[1], :] = 0.5
-        A[alpha.shape[1], 0] = 1
+        A[alpha.shape[1], :] = 1
     # Transform effects
     alpha = alpha.dot(A.T)
     alpha_ses_out = np.zeros((alpha.shape[0],A.shape[0]))
@@ -134,7 +133,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     for i in range(len(effects)):
         outstack.append(outarray_effect(alpha[:,i],alpha_ses_out[:,i],freqs,vy))
         header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10_P']
-    outstack.append(np.round(alpha_corr_out,3))
+    outstack.append(np.round(alpha_corr_out,6))
     header += corrs
     # Output array
     outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
