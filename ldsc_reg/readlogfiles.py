@@ -13,13 +13,13 @@ def read_log(path, runname):
     nobs_final = int(re.findall(r'\d+', results[10])[0])
     transform_effect = results[11].split(':')[1].replace(r' ', '')[:-1]
     
-    estimates = eval(re.sub('Estimates:', '', results[13])[:-1])
+    estimates = eval(re.sub('Estimates:', '', results[14])[:-1])
     h2_dir = estimates['v1']
     h2_indir = estimates['v2']
     r = estimates['r']
     
-    se = re.findall(r'\d+.\d+', 
-                re.sub('Standard Errors:', '', results[14])[:-1]
+    se = re.findall(r'(\d+.\d+|nan)', 
+                re.sub('Standard Errors:', '', results[15])[:-1]
                 .strip()
                 .strip('[')
                 .strip(']'))
@@ -29,19 +29,19 @@ def read_log(path, runname):
     
     
     solver_output = ''
-    for output in results[15:24]:
+    for output in results[16:25]:
         solver_output += output
         
-    estimation_time_prejk = re.sub('Estimation time:', '', results[24][:-1]).strip().split(':')
+    estimation_time_prejk = re.sub('Estimation time:', '', results[25][:-1]).strip().split(':')
     estimation_time_prejk = f"{estimation_time_prejk[0]} hours, {estimation_time_prejk[1]} minutes, {estimation_time_prejk[2]} seconds"
     
     # If jkse is done
-    if len(results) == 29:
-        jk_blocksizes = int(re.findall(r'\d+', results[25])[0])
-        jk_ncores = int(re.findall(r'\d+', results[26])[0])
+    if len(results) == 30:
+        jk_blocksizes = int(re.findall(r'\d+', results[26])[0])
+        jk_ncores = int(re.findall(r'\d+', results[27])[0])
         
-        jkse = re.findall(r'\d+.\d+', 
-                re.sub('Standard Errors:', '', results[27])[:-1]
+        jkse = re.findall(r'(\d+.\d+|nan)', 
+                re.sub('Standard Errors:', '', results[28])[:-1]
                 .strip()
                 .strip('[')
                 .strip(']'))
@@ -49,7 +49,7 @@ def read_log(path, runname):
         h2_indir_jkse = float(jkse[1])
         r_jkse = float(jkse[2])
         
-        estimation_time_postjk = re.findall(r'\d+', results[28])
+        estimation_time_postjk = re.findall(r'\d+', results[29])
         estimation_time_postjk = f"{estimation_time_postjk[0]} hours, {estimation_time_postjk[1]} minutes, {estimation_time_postjk[2]} seconds"
     else:
         jk_blocksizes = ""
@@ -93,7 +93,7 @@ def read_log(path, runname):
         index = [0]
     )
         
-        return outdf
+    return outdf
     
     
 def read_all_files(files, runnames):
@@ -108,9 +108,9 @@ def read_all_files(files, runnames):
     paths = glob.glob(files)
     for path, name in zip(paths, runnames):
         df_path = read_log(path, name)
-        dfout = dfout.append(df_path).reset_index()
+        dfout = dfout.append(df_path)
         
-    return dfout
+    return dfout.reset_index(drop = True)
 
     
 
@@ -129,13 +129,14 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
     
-    runnames = [item.strip() for item in args.runnames.split(',')]
-    if runnnames == len(glob.glob(filenames)):
-        dfout = read_all_files(args.filenames,
-                              args.runnames)
+    if args.runnames is not None:
+        runnames = [item.strip() for item in args.runnames.split(',')]
     else:
-        dfout = read_all_files(args.filenames,
-                              args.filenames)
+        runnames = glob.glob(args.filenames)
+
+    
+    dfout = read_all_files(args.filenames,
+                         runnames)
     
     dfout.to_csv(args.outpath,
                 index = False)

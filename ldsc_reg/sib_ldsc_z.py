@@ -109,6 +109,70 @@ def Vmat2V(Vmat, M):
 
     return np.array([v1, v2, r])
 
+@njit
+def modified_cholesky(G):
+    
+    '''
+    Modified cholesky decomp based on 
+    Gill et al Gill and Murray (1974)
+    '''
+    
+    n = G.shape[0]
+    Gnorm = np.linalg.norm(G, np.inf)
+    
+    R = np.eye(n)
+    E = np.zeros((n, n))
+    
+    eps = np.finfo(np.float64).eps
+    gamm = np.max(np.abs(np.diag(G)))
+    delta = max([eps * Gnorm, eps])
+    
+    
+    # algorithm
+    for j in range(n):
+        theta_j = 0
+        
+        
+        for i in range(n):
+            
+            summ = 0
+            for k in range(j):
+                summ += R[k,i] * R[k,j]
+        
+            R[i,j] = (G[i,j] - summ)/R[i,i]
+            
+            if G[i, j] - summ > theta_j:
+                theta_j = G[i, j] - summ
+            
+            if i > j:
+                R[i, j] = 0.0
+        
+        summ = 0
+        
+        for k in range(j):
+            summ += R[k, j] ** 2
+        
+        phi_j = G[j,j] - summ
+        
+        if (j+2) <= n:
+            xi_j = max(np.abs(G[j+1:, j]))
+        else:
+            xi_j = np.abs(G[n-1, j])
+        
+        
+        beta_j = np.sqrt(max([gamm, xi_j/n, eps]))
+        
+        if delta >= max([np.abs(phi_j), (theta_j**2)/beta_j**2]):
+            E[j, j] = delta - phi_j
+        elif np.abs(phi_j) >= max([(delta**2)/(beta_j**2), delta]):
+            E[j,j] = np.abs(phi_j) - phi_j
+        elif ((theta_j**2)/(beta_j**2)) >= max([delta, np.abs(phi_j)]):
+            E[j,j] = ((theta_j**2)/(beta_j**2)) - phi_j
+              
+        R[j, j] = np.sqrt(G[j, j] - summ + E[j, j])
+        
+    return R.T @ R
+
 
 @njit(fastmath = True)
 def _log_ll(V, z, S, l, N):
@@ -131,8 +195,9 @@ def _log_ll(V, z, S, l, N):
     logll = scalar
     """
     Vmat = V2Vmat(V, N)
-
+    Vmat = modified_cholesky(Vmat)
     Vnew, Snew = standardize_mat(Vmat, S, N)
+
     Sigma = Snew + l * Vnew
     logdet = np.linalg.slogdet(Sigma)
 
@@ -161,6 +226,8 @@ def _grad_ll_v(V, z, S, l, N):
     """
 
     Vmat = V2Vmat(V, N)
+    Vmat = modified_cholesky(Vmat)
+
     d = S.shape[0]
 
     Vnew, Snew = standardize_mat(Vmat, S, N)
@@ -393,6 +460,8 @@ def Vinit(z, S, l, M):
     est_init = np.array([v1, v2, r])
     return est_init
 
+
+
 class sibreg():
     
     def __init__(self, S, z = None, l = None, u = None,  f = None, M = None):
@@ -566,7 +635,7 @@ class sibreg():
 def jkse_core(indices,
              model,
              full_est,
-             rbounds = True):
+             rbounds = False):
     
     '''
     This runs the core estimation
@@ -605,7 +674,7 @@ def jkse(model,
         blocksize = 1,
         printinfo = False,
         num_procs = 2,
-        rbounds = True):
+        rbounds = False):
     
     '''
     This runs the whole block jackknife 
@@ -757,3 +826,6 @@ def theta2z(theta, S, M):
         zval[i, :] = Dmat @ theta[i, :]
 
     return zval
+
+
+

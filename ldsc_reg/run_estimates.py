@@ -60,10 +60,14 @@ if __name__ == '__main__':
     parser.add_argument('--jkse_blocksize', type = int, help = "Block Size for Block Jackknife Standard Errors.")
     parser.add_argument('--jkse_cores', type = int, help = "Number of cores to use for block Jack Knife standard errors.")
     parser.set_defaults(jkse_cores = 2)
-    
+    parser.add_argument('--rbound-jkse', dest = "rbounds_jkse", action='store_true')
+    parser.add_argument('--no-rbound-jkse', dest = "rbounds_jkse", action = 'store_false')
+
     parser.add_argument('-maf', '--maf-thresh', dest = "maf", type = float, help = """The threshold of minor allele frequency. All SNPs below this threshold
                                                                         are dropped. Default is 5 percent. Set number as the percentage i.e. 5 instead of 0.05""")
     parser.set_defaults(maf = 5.0)
+    parser.add_argument('--print-delete-values', dest = 'store_delvals', action = 'store_true',
+    help = 'Option to save jack knife delete values. Saves to same location as log file.')
     args=parser.parse_args()
     
     
@@ -282,10 +286,17 @@ if __name__ == '__main__':
         print(f"Jack Knife Block Sizes = {blocksize}")
         print(f"Number of cores being used for Jack Knife: {args.jkse_cores}")
         print("Estimating Block Jackknife Standard Errors...")
+
+        # rbounds
+        rbounds_jkse = args.rbounds if args.rbounds_jkse is None else args.rbounds_jkse
         
         initguess = {'v1' : phvar/2, 'v2' : phvar/2, 'r' : 0.0} #output_matrix
         jkse, delvals = ld.jkse(model, initguess, blocksize = blocksize, num_procs=args.jkse_cores,
-                        rbounds = args.rbounds)
+                        rbounds = rbounds_jkse)
+
+        if args.store_delvals:
+            if args.logfile is not None:
+                np.savetxt(f"{args.logfile}.txt", delvals)
 
         print(f"Block Jack Knife Standard Errors: {jkse}")
         
