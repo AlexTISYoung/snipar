@@ -5,21 +5,30 @@ import re
 import argparse
 
 
+def index_containing_substring(the_list, substring):
+    for i, s in enumerate(the_list):
+        if substring in s:
+              return i
+    return -1
+
+
 def read_log(path, runname):
 
     with open(path, 'r') as f:
         results = f.readlines()
         
-    nobs_final = int(re.findall(r'\d+', results[10])[0])
-    transform_effect = results[11].split(':')[1].replace(r' ', '')[:-1]
+    start_idx = index_containing_substring(results, "Start time:")
+        
+    nobs_final = int(re.findall(r'\d+', results[start_idx+3])[0])
+    transform_effect = results[start_idx+4].split(':')[1].replace(r' ', '')[:-1]
     
-    estimates = eval(re.sub('Estimates:', '', results[14])[:-1])
+    estimates = eval(re.sub('Estimates:', '', results[start_idx+6])[:-1])
     h2_dir = estimates['v1']
     h2_indir = estimates['v2']
     r = estimates['r']
     
     se = re.findall(r'(\d+.\d+|nan)', 
-                re.sub('Standard Errors:', '', results[15])[:-1]
+                re.sub('Standard Errors:', '', results[start_idx+7])[:-1]
                 .strip()
                 .strip('[')
                 .strip(']'))
@@ -32,16 +41,16 @@ def read_log(path, runname):
     for output in results[16:25]:
         solver_output += output
         
-    estimation_time_prejk = re.sub('Estimation time:', '', results[25][:-1]).strip().split(':')
+    estimation_time_prejk = re.sub('Estimation time:', '', results[start_idx+17][:-1]).strip().split(':')
     estimation_time_prejk = f"{estimation_time_prejk[0]} hours, {estimation_time_prejk[1]} minutes, {estimation_time_prejk[2]} seconds"
     
     # If jkse is done
-    if len(results) == 30:
-        jk_blocksizes = int(re.findall(r'\d+', results[26])[0])
-        jk_ncores = int(re.findall(r'\d+', results[27])[0])
+    if len(results) > start_idx +17:
+        jk_blocksizes = int(re.findall(r'\d+', results[start_idx + 18])[0])
+        jk_ncores = int(re.findall(r'\d+', results[start_idx + 19])[0])
         
         jkse = re.findall(r'(\d+.\d+|nan)', 
-                re.sub('Standard Errors:', '', results[28])[:-1]
+                re.sub('Standard Errors:', '', results[start_idx + 20])[:-1]
                 .strip()
                 .strip('[')
                 .strip(']'))
@@ -49,7 +58,7 @@ def read_log(path, runname):
         h2_indir_jkse = float(jkse[1])
         r_jkse = float(jkse[2])
         
-        estimation_time_postjk = re.findall(r'\d+', results[29])
+        estimation_time_postjk = re.findall(r'\d+', results[start_idx + 21])
         estimation_time_postjk = f"{estimation_time_postjk[0]} hours, {estimation_time_postjk[1]} minutes, {estimation_time_postjk[2]} seconds"
     else:
         jk_blocksizes = ""

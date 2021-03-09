@@ -195,7 +195,7 @@ def _log_ll(V, z, S, l, N):
     logll = scalar
     """
     Vmat = V2Vmat(V, N)
-    Vmat = modified_cholesky(Vmat)
+    # Vmat = modified_cholesky(Vmat)
     Vnew, Snew = standardize_mat(Vmat, S, N)
 
     Sigma = Snew + l * Vnew
@@ -226,7 +226,7 @@ def _grad_ll_v(V, z, S, l, N):
     """
 
     Vmat = V2Vmat(V, N)
-    Vmat = modified_cholesky(Vmat)
+    # Vmat = modified_cholesky(Vmat)
 
     d = S.shape[0]
 
