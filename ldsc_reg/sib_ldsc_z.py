@@ -195,7 +195,6 @@ def _log_ll(V, z, S, l, N):
     logll = scalar
     """
     Vmat = V2Vmat(V, N)
-    # Vmat = modified_cholesky(Vmat)
     Vnew, Snew = standardize_mat(Vmat, S, N)
 
     Sigma = Snew + l * Vnew
@@ -226,7 +225,6 @@ def _grad_ll_v(V, z, S, l, N):
     """
 
     Vmat = V2Vmat(V, N)
-    # Vmat = modified_cholesky(Vmat)
 
     d = S.shape[0]
 
@@ -557,7 +555,8 @@ class sibreg():
               est_init = None,
               printout = True,
               rbounds = True,
-              hipreci = False):
+              hipreci = False,
+              hess = True):
         
         """
         Solves the ldsc problem of infering the V matrix
@@ -622,11 +621,12 @@ class sibreg():
         self.output = output
 
         # Getting Inverse Hessian
-        H = get_hessian(result.x, z, S, l, u, f, M)
-        invH = np.linalg.inv(H)
-        std_err_mat = np.sqrt(invH)
-        
-        output["std_err_mat"] = std_err_mat
+        if hess:
+            H = get_hessian(result.x, z, S, l, u, f, M)
+            invH = np.linalg.inv(H)
+            std_err_mat = np.sqrt(invH)
+            
+            output["std_err_mat"] = std_err_mat
         
         return output, result 
 
@@ -635,7 +635,7 @@ class sibreg():
 def jkse_core(indices,
              model,
              full_est,
-             rbounds = False):
+             rbounds = True):
     
     '''
     This runs the core estimation
@@ -660,7 +660,8 @@ def jkse_core(indices,
                     M = M,
                     printout = False,
                     est_init = full_est,
-                    rbounds = rbounds)
+                    rbounds = rbounds,
+                    hess = False)
     
     
     output_matrix = np.array([output['v1'], output['v2'], output['r']])
@@ -674,7 +675,7 @@ def jkse(model,
         blocksize = 1,
         printinfo = False,
         num_procs = 2,
-        rbounds = False):
+        rbounds = True):
     
     '''
     This runs the whole block jackknife 

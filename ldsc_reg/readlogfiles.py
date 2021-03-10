@@ -14,6 +14,8 @@ def index_containing_substring(the_list, substring):
 
 def read_log(path, runname):
 
+    print(f"Run Name: {runname}")
+
     with open(path, 'r') as f:
         results = f.readlines()
         
@@ -45,7 +47,8 @@ def read_log(path, runname):
     estimation_time_prejk = f"{estimation_time_prejk[0]} hours, {estimation_time_prejk[1]} minutes, {estimation_time_prejk[2]} seconds"
     
     # If jkse is done
-    if len(results) > start_idx +17:
+    if len(results) > start_idx + 18:
+
         jk_blocksizes = int(re.findall(r'\d+', results[start_idx + 18])[0])
         jk_ncores = int(re.findall(r'\d+', results[start_idx + 19])[0])
         
