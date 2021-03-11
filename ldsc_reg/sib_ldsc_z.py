@@ -89,6 +89,8 @@ def V2Vmat(V, M):
 
     Vmat = (1/M) * np.array([[v1, r * np.sqrt(v1 * v2)], [r * np.sqrt(v1 * v2), v2]])
 
+    Vmat = modified_cholesky(Vmat)
+
     return Vmat
 
 @njit 
@@ -195,6 +197,7 @@ def _log_ll(V, z, S, l, N):
     logll = scalar
     """
     Vmat = V2Vmat(V, N)
+    # Vmat = modified_cholesky(Vmat)
     Vnew, Snew = standardize_mat(Vmat, S, N)
 
     Sigma = Snew + l * Vnew
@@ -225,6 +228,8 @@ def _grad_ll_v(V, z, S, l, N):
     """
 
     Vmat = V2Vmat(V, N)
+    # Vmat = modified_cholesky(Vmat)
+    V = Vmat2V(Vmat, N)
 
     d = S.shape[0]
 
@@ -652,7 +657,7 @@ def jkse_core(indices,
     f = model.f[mask] if model.f is not None else model.f
     M = model.z[mask].shape[0]
     
-    output, _ = model.solve(z = z,
+    output, result = model.solve(z = z,
                     S = S,
                     l = l,
                     u = u,
@@ -665,7 +670,11 @@ def jkse_core(indices,
     
     
     output_matrix = np.array([output['v1'], output['v2'], output['r']])
-    
+    solver_success = result.success
+
+    if solver_success == False:
+        print("Warning: Solver didn't succeed in JKSE run.")
+
     return output_matrix
 
     
