@@ -779,10 +779,10 @@ def transform_estimates(effect_estimated,
     - population (1 dimensional)
     - direct_plus_averageparental (2 dimensional)
     - direct_plus_population (2 dimensional)
-    - full (3 dimensional)
-
-    Assumes input data is 3 dimensional
+    - full - passes estiamtes as is
     '''
+
+
     if effect_estimated == "population":
         # == Keeping population effect == #
         Sdir = np.empty(len(S))
@@ -819,7 +819,26 @@ def transform_estimates(effect_estimated,
         theta = theta.reshape((theta.shape[0], 2))
     elif effect_estimated == "full":
         pass
+    elif effect_estimated == "avgparental_to_population":
+        tmatrix = np.array([[1.0, 1.0],
+                            [0.0, 1.0]])
+        Sdir = np.empty((len(S), 2, 2))
+        for i in range(len(S)):
+            Sdir[i] = tmatrix.T @ S[i] @ tmatrix
 
+        S = Sdir.reshape((len(S), 2, 2))
+        theta = theta @ tmatrix
+        theta = theta.reshape((theta.shape[0], 2))
+    elif effect_estimated == "population_to_avgparental":
+        tmatrix = np.array([[1.0, -1.0],
+                            [0.0, 1.0]])
+        Sdir = np.empty((len(S), 2, 2))
+        for i in range(len(S)):
+            Sdir[i] = tmatrix.T @ S[i] @ tmatrix
+
+        S = Sdir.reshape((len(S), 2, 2))
+        theta = theta @ tmatrix
+        theta = theta.reshape((theta.shape[0], 2))
 
     return S, theta
 

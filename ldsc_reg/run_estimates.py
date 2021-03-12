@@ -45,8 +45,9 @@ if __name__ == '__main__':
                                                         If left blank no log file will be saved.''')
     parser.add_argument('-e', '--effect_transform', type = str, help ='''
                                                             How to convert the 3 dimensional data
-                                                            into 2 dimensions. Options are direct_plus_population and
-                                                            direct_plus_averageparental. Default is direct_plus_population.''')
+                                                            into 2 dimensions. Options are direct_plus_population,
+                                                            direct_plus_averageparental, full and population. 
+                                                            Default is direct_plus_population.''')
     parser.add_argument('--rbound', dest = "rbounds", action='store_true')
     parser.add_argument('--no-rbound', dest = "rbounds", action = 'store_false')
     parser.set_defaults(rbounds=True)
@@ -92,8 +93,7 @@ if __name__ == '__main__':
     print(args_call)
     if args.logfile is not None:
         logging.info(f"Call: \n {args_call}")
-    
-    
+
     
     startTime = datetime.datetime.now()
     
@@ -107,41 +107,70 @@ if __name__ == '__main__':
     print("Reading in Data")
     # reading in  data
     filenames = args.path2file
+    files = glob.glob(filenames)
 
-    zdata = pd.DataFrame(
-        columns = ['CHR', 'SNP', 'BP' ,'N',
-                    "f" ,"A1", "A2" , 'theta', 
-                    'se', "S" ]
-    )
-    for chromosome in range(1, 23):
-        file = f"{filenames}/chr_{chromosome}.hdf5"
-        print("Reading in file: ", file)
-        hf = h5py.File(file, 'r')
-        metadata = hf.get("bim")[()]
-        chromosome = metadata[:, 0]
-        snp = metadata[:, 1]
-        bp = metadata[:, 3]
-        A1 = metadata[:, 4]
-        A2 = metadata[:, 5]
-        theta  = hf.get('estimate')[()]
-        se  = hf.get('estimate_ses')[()]
-        N = hf.get('N_L')[()]
-        S = hf.get('estimate_covariance')[()]
-        f = hf.get('freqs')[()]
+    file = files[0]
+    print("Reading in file: ", file)
+    hf = h5py.File(file, 'r')
+    metadata = hf.get("bim")[()]
+    chromosome = metadata[:, 0]
+    snp = metadata[:, 1]
+    bp = metadata[:, 3]
+    A1 = metadata[:, 4]
+    A2 = metadata[:, 5]
+    theta  = hf.get('estimate')[()]
+    se  = hf.get('estimate_ses')[()]
+    N = hf.get('N_L')[()]
+    S = hf.get('estimate_covariance')[()]
+    f = hf.get('freqs')[()]
 
-        # Constructing dataframe of data
-        zdata_toappend = pd.DataFrame({'CHR' : chromosome,
-                'SNP' : snp,
-                'BP' : bp,
-                'N' : N,
-                "f" : f,
-                "A1" : A1,
-                "A2" : A2,
-                'theta' : theta.tolist(),
-                'se' : se.tolist(),
-                "S" : S.tolist()})
+    # normalizing S
+    sigma2 = hf.get('sigma2')[()]
+    tau = hf.get('tau')[()]
+    phvar = sigma2+sigma2/tau
 
-        zdata = zdata.append(zdata_toappend)
+    if len(files) > 1:
+        for file in files[1:]:
+            print("Reading in file: ", file)
+            hf = h5py.File(file, 'r')
+            metadata = hf.get("bim")[()]
+            chromosome_file = metadata[:, 0]  
+            snp_file = metadata[:, 1]
+            bp_file = metadata[:, 3]
+            A1_file = metadata[:, 4]
+            A2_file = metadata[:, 5]
+            theta_file  = hf.get('estimate')[()]
+            se_file  = hf.get('estimate_ses')[()]
+            S_file = hf.get('estimate_covariance')[()]
+            f_file = hf.get('freqs')[()]
+            N_file = hf.get('N_L')[()]
+
+            # normalizing S
+            sigma2 = hf.get('sigma2')[()]
+            tau = hf.get('tau')[()]
+
+            chromosome = np.append(chromosome, chromosome_file, axis = 0)
+            snp = np.append(snp, snp_file, axis = 0)
+            bp = np.append(bp, bp_file, axis = 0)
+            A1 = np.append(A1, A1_file, axis = 0)
+            A2 = np.append(A2, A2_file, axis = 0)
+            theta = np.append(theta, theta_file, axis = 0)
+            se = np.append(se, se_file, axis = 0)
+            S = np.append(S, S_file, axis = 0)
+            f = np.append(f, f_file, axis = 0)
+            N = np.append(N, N_file, axis = 0)
+
+    # Constructing dataframe of data
+    zdata = pd.DataFrame({'CHR' : chromosome,
+                        'SNP' : snp,
+                        'BP' : bp,
+                        'N' : N,
+                        "f" : f,
+                        "A1" : A1,
+                        "A2" : A2,
+                        'theta' : theta.tolist(),
+                        'se' : se.tolist(),
+                        "S" : S.tolist()})
     
     sigma2 = hf.get('sigma2')[()]
     tau = hf.get('tau')[()]
@@ -153,10 +182,6 @@ if __name__ == '__main__':
     zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype('int')
-    
-    # sorting by chromosome
-    zdata = zdata.sort_values(by = ['CHR']).reset_index(drop = True)
-    zdata['ordering'] = zdata.index
     
     
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
@@ -185,7 +210,11 @@ if __name__ == '__main__':
     main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
 
     if main_df.shape[0] > 0:
-        assert np.all(main_df.BP_x == main_df.BP_y)
+        bp_align = np.all(main_df.BP_x == main_df.BP_y)
+        print(f"All BPs align: {bp_align}")
+
+        if not bp_align:
+            print(f"WARNING: {main_df.BP_x != main_df.BP_y).sum()} BPs don't match between data and reference LD sample.")
         main_df = main_df.drop('BP_y', axis = 1)
         main_df = main_df.rename(columns = {'BP_x' : 'BP'})
         main_df = main_df.dropna()
