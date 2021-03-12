@@ -4,6 +4,7 @@ import numpy as np
 from bgen_reader import open_bgen
 from scipy.stats import chi2
 from math import log10
+from pysnptools.snpreader import Bed
 
 def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
@@ -240,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                         default=1)
     parser.add_argument('--output_covar_ests',action='store_true',help='Output null model estimates of covariate fixed effects (default False)', default=False)
-    parser.add_argument('--batch_size',type=int,help='Batch size of SNPs in thousands to load at a time (reduce to reduce memory requirements)',default=100)
+    parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
     parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
     parser.add_argument('--no_txt_out',action='store_true',help='Suppress text output of summary statistics',default=False)
     args=parser.parse_args()
@@ -260,11 +261,20 @@ if __name__ == '__main__':
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
     if args.bed is not None:
         gts_f = args.bed+'.bed'
-        snp_ids = np.loadtxt(args.bed+'.bim', dtype=str, usecols=1)
+        bed = Bed(gts_f,count_A1 = True)
+        snp_ids = bed.sid
+        pos = bed.pos[:,2]
+        chrom = bed.pos[:,0]
+        alleles = np.loadtxt(args.bed+'.bim',dtype=str,usecols=(4,5))
     elif args.bgen is not None:
         gts_f = args.bgen+'.bgen'
         bgen = open_bgen(gts_f, verbose=False)
         snp_ids = bgen.ids
+        pos = np.array(bgen.positions)
+        chrom = np.array(bgen.chromosomes)
+        # If chromosomse unknown, set to zero
+        chrom[[len(x)==0 for x in chrom]] = 0
+        alleles = np.array([x.split(',') for x in bgen.allele_ids])
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' variants in '+gts_f)
     if args.end is not None:
@@ -278,7 +288,7 @@ if __name__ == '__main__':
     snp_ids = snp_ids[np.array([x in non_duplicate for x in snp_ids])]
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
-    batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size*1000)
+    batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
     if batch_bounds.shape[0] == 1:
         print('Using 1 batch')
     else:
@@ -295,10 +305,8 @@ if __name__ == '__main__':
     alpha_cov[:] = np.nan
     alpha_ses = np.zeros((snp_ids.shape[0],alpha_dim),dtype=np.float32)
     alpha_ses[:] = np.nan
-    chrom = np.zeros((snp_ids.shape[0]),dtype='<U20')
-    alleles = np.zeros((snp_ids.shape[0],2),dtype='<U20')
-    pos = np.zeros((snp_ids.shape[0]),dtype=int)
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
+    freqs[:] = np.nan
     ##############  Process batches of SNPs ##############
     ######## Fit null model in first batch ############
     batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
@@ -306,16 +314,12 @@ if __name__ == '__main__':
                    y, pheno_ids, args.pargts, gts_f,
                    fit_null=True, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
                    max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init, print_sample_info=True)
-    # Fill in SNP info
-    chrom[batch_bounds[0,0]:batch_bounds[0,1]] = np.array(batch_chrom,dtype=str)
-    pos[batch_bounds[0,0]:batch_bounds[0,1]] = batch_pos
-    alleles[batch_bounds[0,0]:batch_bounds[0,1],:] = batch_alleles
-    freqs[batch_bounds[0,0]:batch_bounds[0,1]] = batch_freqs
     # Fill in fitted SNPs
     batch_indices = np.array([snp_dict[x] for x in batch_snps])
     alpha[batch_indices,:] = batch_alpha
     alpha_cov[batch_indices,:,:] = batch_alpha_cov
     alpha_ses[batch_indices,:] = batch_alpha_ses
+    freqs[batch_indices] = batch_freqs
     print('Done batch 1 out of '+str(batch_bounds.shape[0]))
     ########### Process remaining batches ###########
     for i in range(1,batch_bounds.shape[0]):
@@ -323,16 +327,12 @@ if __name__ == '__main__':
             snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], y, pheno_ids, args.pargts, gts_f, fit_null=False,
             tau=tau, sigma2=sigma2, null_alpha=null_alpha, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
             max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init)
-        # Fill in SNP info
-        chrom[batch_bounds[i, 0]:batch_bounds[i, 1]] = batch_chrom
-        pos[batch_bounds[i, 0]:batch_bounds[i, 1]] = batch_pos
-        alleles[batch_bounds[i, 0]:batch_bounds[i, 1], :] = batch_alleles
-        freqs[batch_bounds[i, 0]:batch_bounds[i, 1]] = batch_freqs
         # Fill in fitted SNPs
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses
+        freqs[batch_indices] = batch_freqs
         print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
     if not args.no_hdf5_out:

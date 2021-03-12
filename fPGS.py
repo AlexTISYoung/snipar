@@ -1,7 +1,6 @@
 from sibreg.sibreg import *
 import argparse
 from os import path
-import pandas as pd
 
 def pgs_write(pg,filename,scale_PGS = False):
     if scale_PGS:
@@ -42,6 +41,11 @@ if __name__ == '__main__':
     parser.add_argument('--bgenfiles',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--impfiles', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
+    parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
+    parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
+    parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='nt1')
+    parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='nt2')
+    parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
     parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
     parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
     parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
@@ -64,13 +68,18 @@ if __name__ == '__main__':
             raise ValueError('Weights provided but no imputed parental genotypes provided')
         print('Computing PGS from weights file')
         ####### Read PGS #######
-        weights = pd.read_csv(args.weights, delimiter='\t')
-        w_sid = np.array(weights.loc[:, 'sid'], dtype='U')
-        print('Read weights for '+str(w_sid.shape[0])+' SNPs')
-        beta = np.array(weights.loc[:, 'ldpred_beta'])
-        a1 = np.array(weights.loc[:, 'nt1'], dtype='U')
-        a2 = np.array(weights.loc[:, 'nt2'], dtype='U')
-        p = pgs(w_sid,beta,np.vstack((a1,a2)).T)
+        if args.sep is None:
+            weights = np.loadtxt(args.weights,dtype=str)
+        else:
+            weights = np.loadtxt(args.weight,dtype=args.sep)
+        colnames = weights[0,:]
+        weights = weights[1:weights.shape[0],:]
+        print('Read weights for '+str(weights.shape[0])+' variants')
+        beta = np.array(weights[:,np.where(colnames==args.beta_col)[0][0]],dtype=np.float64)
+        allele_indices = np.array([np.where(colnames==args.A1)[0][0],np.where(colnames==args.A2)[0][0]])
+        p = pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
+                beta,
+                weights[:,allele_indices])
 
         ###### Compute PGS ########
         G_list = []
