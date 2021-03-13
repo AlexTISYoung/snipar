@@ -278,13 +278,20 @@ if __name__ == '__main__':
     print('Found '+str(snp_ids.shape[0])+' variants in '+gts_f)
     if args.end is not None:
         snp_ids = snp_ids[args.start:args.end]
+        pos = pos[args.start:args.end]
+        chrom = chrom[args.start:args.end]
+        alleles = alleles[args.start:args.end]
         print('Using SNPs with indices from '+str(args.start)+' to '+str(args.end))
     # Remove duplicates
     unique_snps, counts = np.unique(snp_ids, return_counts=True)
     non_duplicate = set(unique_snps[counts==1])
     if np.sum(counts>1)>0:
         print('Removing '+str(np.sum(counts>1))+' duplicate SNP ids')
-    snp_ids = snp_ids[np.array([x in non_duplicate for x in snp_ids])]
+        not_duplicated = np.array([x in non_duplicate for x in snp_ids])
+        snp_ids = snp_ids[not_duplicated]
+        pos = pos[not_duplicated]
+        chrom = chrom[not_duplicated]
+        alleles = alleles[not_duplicated,:]
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
     batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
