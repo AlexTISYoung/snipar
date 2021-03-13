@@ -162,7 +162,6 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
     if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
     G.compute_freqs()
-    chrom, pos, alleles, freqs = G.chrom,  G.pos, G.alleles, G.freqs
     #### Filter SNPs ####
     if verbose:
         print('Filtering based on MAF')
@@ -217,7 +216,7 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
     if verbose:
         print('Estimating SNP effects')
     alpha, alpha_cov, alpha_ses = fit_models(y,G)
-    return chrom, pos, alleles, freqs, G.sid, alpha, alpha_cov, alpha_ses, sigma2, tau, null_alpha
+    return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses, sigma2, tau, null_alpha
 
 ######### Command line arguments #########
 if __name__ == '__main__':
