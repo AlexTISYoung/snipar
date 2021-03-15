@@ -214,7 +214,7 @@ if __name__ == '__main__':
         print(f"All BPs align: {bp_align}")
 
         if not bp_align:
-            print(f"WARNING: {main_df.BP_x != main_df.BP_y).sum()} BPs don't match between data and reference LD sample.")
+            print(f"WARNING: {(main_df.BP_x != main_df.BP_y).sum()} BPs don't match between data and reference LD sample.")
         main_df = main_df.drop('BP_y', axis = 1)
         main_df = main_df.rename(columns = {'BP_x' : 'BP'})
         main_df = main_df.dropna()
