@@ -69,6 +69,23 @@ if __name__ == '__main__':
     parser.set_defaults(maf = 5.0)
     parser.add_argument('--print-delete-values', dest = 'store_delvals', action = 'store_true',
     help = 'Option to save jack knife delete values. Saves to same location as log file.')
+
+    # names of variable names
+    parser.add_argument('-bim', default = "bim", type = str, help = "Name of bim column")
+    parser.add_argument('-bim_chromosome', default = 0, type = int, help = "Column index of Chromosome in BIM variable")
+    parser.add_argument('-bim_snp', default = 1, type = int, help = "Column index of SNPID (RSID) in BIM variable")
+    parser.add_argument('-bim_bp', default = 3, type = int, help = "Column index of BP in BIM variable")
+    parser.add_argument('-bim_a1', default = 4, type = int, help = "Column index of Chromosome in A1 variable")
+    parser.add_argument('-bim_a2', default = 5, type = int, help = "Column index of Chromosome in A2 variable")
+
+    parser.add_argument('-estimate', default = "estimate", type = str, help = "Name of estimate column")
+    parser.add_argument('-estimate_ses', default = "estimate_ses", type = str, help = "Name of estimate_ses column")
+    parser.add_argument('-estimate_covariance', default = "estimate_covariance", type = str, help = "Name of estimate_covariance column")
+    parser.add_argument('-freqs', default = "freqs", type = str, help = "Name of freqs column")
+
+    parser.add_argument('-sigma2', default = "sigma2", type = str, help = "Name of sigma2 column")
+    parser.add_argument('-tau', default = "tau", type = str, help = "Name of tau column")
+
     args=parser.parse_args()
     
     
@@ -112,42 +129,38 @@ if __name__ == '__main__':
     file = files[0]
     print("Reading in file: ", file)
     hf = h5py.File(file, 'r')
-    metadata = hf.get("bim")[()]
-    chromosome = metadata[:, 0]
-    snp = metadata[:, 1]
-    bp = metadata[:, 3]
-    A1 = metadata[:, 4]
-    A2 = metadata[:, 5]
-    theta  = hf.get('estimate')[()]
-    se  = hf.get('estimate_ses')[()]
-    N = hf.get('N_L')[()]
-    S = hf.get('estimate_covariance')[()]
-    f = hf.get('freqs')[()]
+    metadata = hf.get(args.bim)[()]
+    chromosome = metadata[:, args.bim_chromosome]
+    snp = metadata[:, args.bim_snp]
+    bp = metadata[:, args.bim_bp]
+    A1 = metadata[:, args.bim_a1]
+    A2 = metadata[:, args.bim_a2]
+    theta  = hf.get(args.estimate)[()]
+    se  = hf.get(args.estimate_ses)[()]
+    N = hf.get(args.N_L)[()]
+    S = hf.get(args.estimate_covariance)[()]
+    f = hf.get(args.freqs)[()]
 
     # normalizing S
-    sigma2 = hf.get('sigma2')[()]
-    tau = hf.get('tau')[()]
+    sigma2 = hf.get(args.sigma2)[()]
+    tau = hf.get(args.tau)[()]
     phvar = sigma2+sigma2/tau
 
     if len(files) > 1:
         for file in files[1:]:
             print("Reading in file: ", file)
             hf = h5py.File(file, 'r')
-            metadata = hf.get("bim")[()]
-            chromosome_file = metadata[:, 0]  
-            snp_file = metadata[:, 1]
-            bp_file = metadata[:, 3]
-            A1_file = metadata[:, 4]
-            A2_file = metadata[:, 5]
-            theta_file  = hf.get('estimate')[()]
-            se_file  = hf.get('estimate_ses')[()]
-            S_file = hf.get('estimate_covariance')[()]
-            f_file = hf.get('freqs')[()]
-            N_file = hf.get('N_L')[()]
-
-            # normalizing S
-            sigma2 = hf.get('sigma2')[()]
-            tau = hf.get('tau')[()]
+            metadata = hf.get(args.bim)[()]
+            chromosome_file = metadata[:, args.bim_chromosome]  
+            snp_file = metadata[:, args.bim_snp]
+            bp_file = metadata[:, args.bim_bp]
+            A1_file = metadata[:, args.bim_a1]
+            A2_file = metadata[:, args.bim_a2]
+            theta_file  = hf.get(args.estimate)[()]
+            se_file  = hf.get(args.estimate_ses)[()]
+            S_file = hf.get(args.estimate_covariance)[()]
+            f_file = hf.get(args.freqs)[()]
+            N_file = hf.get(args.N_L)[()]
 
             chromosome = np.append(chromosome, chromosome_file, axis = 0)
             snp = np.append(snp, snp_file, axis = 0)
