@@ -412,6 +412,13 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
             phased_gts[nanmask] = nan_integer
+    _, indexes = np.unique(sid, return_index=True)
+    indexes = np.sort(indexes)
+    sid = sid[indexes]
+    pos = pos[indexes]
+    unphased_gts = unphased_gts[:, indexes]
+    if phased_gts:
+        phased_gts = phased_gts[:, indexes, :]
     pos = pos.astype(int)
     unphased_gts_greater2 = unphased_gts>2
     num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
@@ -447,9 +454,9 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         phased_gts = phased_gts.astype(np.int8)
         phased_gts[nanmask] = nan_integer
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    selected_bim = bim[bim["id"].isin(sid)]
+    selected_bim = bim[bim["id"].isin(sid)].iloc[indexes, :]
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns
-    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
+    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
     return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict

@@ -948,5 +948,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             f["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
             f["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
+            f["non_duplicates"] =  np.array(hdf5_output_dict["non_duplicates"], dtype=int)
+            #Todo automate this for all possible output_dicts
             f["counter_ibd0"] = counter_ibd0
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)
