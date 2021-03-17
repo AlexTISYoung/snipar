@@ -75,10 +75,10 @@ if __name__ == '__main__':
     parser.add_argument('-bim_chromosome', default = 0, type = int, help = "Column index of Chromosome in BIM variable")
     parser.add_argument('-bim_rsid', default = 1, type = int, help = "Column index of SNPID (RSID) in BIM variable")
 
-    parser.add_argument('--rsid_readfrombim', dest = "rsid_readfrombim", action = 'store_true', 
-                        help = '''If provided the variable bim_snp wont be used instead rsid's will be read
-                        from the same file name as the original data but suffixed with bim instead
-                        of hdf5.''')
+    parser.add_argument('--rsid_readfrombim', type = str, 
+                        help = '''Needs to be a comma seperated string of filename, BP-position, SNP-position.
+                        If provided the variable bim_snp wont be used instead rsid's will be read
+                        from the provided file set.''')
     parser.add_argument('-bim_bp', default = 3, type = int, help = "Column index of BP in BIM variable")
     parser.add_argument('-bim_a1', default = 4, type = int, help = "Column index of Chromosome in A1 variable")
     parser.add_argument('-bim_a2', default = 5, type = int, help = "Column index of Chromosome in A2 variable")
@@ -117,6 +117,13 @@ if __name__ == '__main__':
     if args.logfile is not None:
         logging.info(f"Call: \n {args_call}")
 
+
+    # rsid files
+    if args.rsid_readfrombim is not None:
+        rsid_parts = args.rsid_readfrombim.split(",")
+        rsidfiles = rsid_parts[0]
+        bppos = int(rsid_parts[1])
+        rsidpos = int(rsid_parts[2])
     
     startTime = datetime.datetime.now()
     
@@ -138,17 +145,14 @@ if __name__ == '__main__':
     metadata = hf.get(args.bim)[()]
     chromosome = metadata[:, args.bim_chromosome]
     bp = metadata[:, args.bim_bp]
-    if args.rsid_readfrombim:
-        snp = ld.return_rsid(file[:-4] + "bim",
-              bp,
-              2, 1)
+    if args.rsid_readfrombim is not None:
+        snp = np.zeros(bp.shape[0])
     else:
         snp = metadata[:, args.bim_rsid]
     A1 = metadata[:, args.bim_a1]
     A2 = metadata[:, args.bim_a2]
     theta  = hf.get(args.estimate)[()]
     se  = hf.get(args.estimate_ses)[()]
-    # N = hf.get(args.N)[()]
     S = hf.get(args.estimate_covariance)[()]
     f = hf.get(args.freqs)[()]
 
@@ -167,9 +171,7 @@ if __name__ == '__main__':
             chromosome_file = metadata[:, args.bim_chromosome]
             bp_file = metadata[:, args.bim_bp]
             if args.rsid_readfrombim:
-                snp_file = ld.return_rsid(file[:-4] + "bim",
-                    bp_file,
-                    2, 1)
+                snp_file = np.zeros(bp_file.shape[0])
             else:
                 snp_file = metadata[:, args.bim_rsid]
             A1_file = metadata[:, args.bim_a1]
@@ -178,7 +180,6 @@ if __name__ == '__main__':
             se_file  = hf.get(args.estimate_ses)[()]
             S_file = hf.get(args.estimate_covariance)[()]
             f_file = hf.get(args.freqs)[()]
-            # N_file = hf.get(args.N)[()]
 
             chromosome = np.append(chromosome, chromosome_file, axis = 0)
             snp = np.append(snp, snp_file, axis = 0)
@@ -189,15 +190,12 @@ if __name__ == '__main__':
             se = np.append(se, se_file, axis = 0)
             S = np.append(S, S_file, axis = 0)
             f = np.append(f, f_file, axis = 0)
-            # N = np.append(N, N_file, axis = 0)
-
             hf.close()
 
     # Constructing dataframe of data
     zdata = pd.DataFrame({'CHR' : chromosome,
                         'SNP' : snp,
                         'BP' : bp,
-                        # 'N' : N,
                         "f" : f,
                         "A1" : A1,
                         "A2" : A2,
@@ -205,11 +203,28 @@ if __name__ == '__main__':
                         'se' : se.tolist(),
                         "S" : S.tolist()})
     
+
     # cleaning data
     zdata['CHR'] = zdata['CHR'].astype(int)
-    zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
     zdata['BP'] = zdata['BP'].astype('int')
+
+    if args.rsid_readfrombim is not None:
+        rsidfiles = glob.glob(rsidfiles)
+        snps = pd.DataFrame(columns = ["BP", "rsid"])
+        for file in rsidfiles:
+            snp_i = ld.return_rsid(file, bppos, rsidpos)
+            snps = snps.append(snp_i, ignore_index = True)
+        
+        snps = snps.drop_duplicates(subset=['BP'])
+        zdata = zdata.merge(snps, how = "left", on = "BP")
+        zdata = zdata.rename(columns = {"SNP" : "SNP_old"})
+        zdata = zdata.rename(columns = {"rsid" : "SNP"})
+    else:
+        # cleaning SNPs
+        zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
+
+
     
     
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
@@ -220,6 +235,7 @@ if __name__ == '__main__':
     
     # dropping obs based on MAF
     zdata = zdata[zdata['f'] >= args.maf/100.0]
+    zdata = zdata[zdata['f'] <= 1-(args.maf/100.0)]
     
     zdata_n_message = f"Number of Observations before merging LD-Scores, after removing low MAF SNPs: {zdata.shape[0]}"
     
