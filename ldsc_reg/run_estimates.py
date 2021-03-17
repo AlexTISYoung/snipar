@@ -73,13 +73,19 @@ if __name__ == '__main__':
     # names of variable names
     parser.add_argument('-bim', default = "bim", type = str, help = "Name of bim column")
     parser.add_argument('-bim_chromosome', default = 0, type = int, help = "Column index of Chromosome in BIM variable")
-    parser.add_argument('-bim_snp', default = 1, type = int, help = "Column index of SNPID (RSID) in BIM variable")
+    parser.add_argument('-bim_rsid', default = 1, type = int, help = "Column index of SNPID (RSID) in BIM variable")
+
+    parser.add_argument('--rsid_readfrombim', dest = "rsid_readfrombim", action = 'store_true', 
+                        help = '''If provided the variable bim_snp wont be used instead rsid's will be read
+                        from the same file name as the original data but suffixed with bim instead
+                        of hdf5.''')
     parser.add_argument('-bim_bp', default = 3, type = int, help = "Column index of BP in BIM variable")
     parser.add_argument('-bim_a1', default = 4, type = int, help = "Column index of Chromosome in A1 variable")
     parser.add_argument('-bim_a2', default = 5, type = int, help = "Column index of Chromosome in A2 variable")
 
     parser.add_argument('-estimate', default = "estimate", type = str, help = "Name of estimate column")
     parser.add_argument('-estimate_ses', default = "estimate_ses", type = str, help = "Name of estimate_ses column")
+    parser.add_argument('-N', default = "N_L", type = str, help = "Name of N column")
     parser.add_argument('-estimate_covariance', default = "estimate_covariance", type = str, help = "Name of estimate_covariance column")
     parser.add_argument('-freqs', default = "freqs", type = str, help = "Name of freqs column")
 
@@ -131,13 +137,18 @@ if __name__ == '__main__':
     hf = h5py.File(file, 'r')
     metadata = hf.get(args.bim)[()]
     chromosome = metadata[:, args.bim_chromosome]
-    snp = metadata[:, args.bim_snp]
     bp = metadata[:, args.bim_bp]
+    if args.rsid_readfrombim:
+        snp = ld.return_rsid(file[:-4] + "bim",
+              bp,
+              2, 1)
+    else:
+        snp = metadata[:, args.bim_rsid]
     A1 = metadata[:, args.bim_a1]
     A2 = metadata[:, args.bim_a2]
     theta  = hf.get(args.estimate)[()]
     se  = hf.get(args.estimate_ses)[()]
-    N = hf.get(args.N_L)[()]
+    # N = hf.get(args.N)[()]
     S = hf.get(args.estimate_covariance)[()]
     f = hf.get(args.freqs)[()]
 
@@ -145,22 +156,29 @@ if __name__ == '__main__':
     sigma2 = hf.get(args.sigma2)[()]
     tau = hf.get(args.tau)[()]
     phvar = sigma2+sigma2/tau
+    
+    hf.close()
 
     if len(files) > 1:
         for file in files[1:]:
             print("Reading in file: ", file)
             hf = h5py.File(file, 'r')
             metadata = hf.get(args.bim)[()]
-            chromosome_file = metadata[:, args.bim_chromosome]  
-            snp_file = metadata[:, args.bim_snp]
+            chromosome_file = metadata[:, args.bim_chromosome]
             bp_file = metadata[:, args.bim_bp]
+            if args.rsid_readfrombim:
+                snp_file = ld.return_rsid(file[:-4] + "bim",
+                    bp_file,
+                    2, 1)
+            else:
+                snp_file = metadata[:, args.bim_rsid]
             A1_file = metadata[:, args.bim_a1]
             A2_file = metadata[:, args.bim_a2]
             theta_file  = hf.get(args.estimate)[()]
             se_file  = hf.get(args.estimate_ses)[()]
             S_file = hf.get(args.estimate_covariance)[()]
             f_file = hf.get(args.freqs)[()]
-            N_file = hf.get(args.N_L)[()]
+            # N_file = hf.get(args.N)[()]
 
             chromosome = np.append(chromosome, chromosome_file, axis = 0)
             snp = np.append(snp, snp_file, axis = 0)
@@ -171,24 +189,21 @@ if __name__ == '__main__':
             se = np.append(se, se_file, axis = 0)
             S = np.append(S, S_file, axis = 0)
             f = np.append(f, f_file, axis = 0)
-            N = np.append(N, N_file, axis = 0)
+            # N = np.append(N, N_file, axis = 0)
+
+            hf.close()
 
     # Constructing dataframe of data
     zdata = pd.DataFrame({'CHR' : chromosome,
                         'SNP' : snp,
                         'BP' : bp,
-                        'N' : N,
+                        # 'N' : N,
                         "f" : f,
                         "A1" : A1,
                         "A2" : A2,
                         'theta' : theta.tolist(),
                         'se' : se.tolist(),
                         "S" : S.tolist()})
-    
-    sigma2 = hf.get('sigma2')[()]
-    tau = hf.get('tau')[()]
-    phvar = sigma2+sigma2/tau
-
     
     # cleaning data
     zdata['CHR'] = zdata['CHR'].astype(int)

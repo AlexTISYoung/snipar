@@ -857,4 +857,22 @@ def theta2z(theta, S, M):
     return zval
 
 
-
+def return_rsid(file, bps, bp_pos, rsid_pos):
+    '''
+    Given a bim file, return a numpy array of rsids
+    '''
+    bimfile = pd.read_csv(file, sep = " ",
+                          header = None)
+    
+    bimfile = bimfile.loc[:, [bp_pos, rsid_pos]]
+    bimfile = bimfile.rename(columns = {rsid_pos : "rsid", bp_pos : "bp"})
+    
+    bps = pd.DataFrame({"bp" : bps.astype(int),
+                       "order" : range(1, len(bps) + 1)})
+                       
+    bps = bps.drop_duplicates(subset=['bp'])
+    bps = bps.merge(bimfile, on = "bp", how = "left")
+    bps = bps.sort_values("order")
+    rsid = bps.loc[:, "rsid"].values
+    
+    return rsid
