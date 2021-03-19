@@ -857,11 +857,11 @@ def theta2z(theta, S, M):
     return zval
 
 
-def return_rsid(file, bp_pos, rsid_pos):
+def return_rsid(file, bp_pos, rsid_pos, filesep):
     '''
     Given a bim file, return a numpy array of rsids
     '''
-    bimfile = pd.read_csv(file, sep = " ",
+    bimfile = pd.read_csv(file, sep = filesep,
                           header = None)
     
     bimfile = bimfile.loc[:, [bp_pos, rsid_pos]]

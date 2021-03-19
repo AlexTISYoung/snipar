@@ -76,7 +76,7 @@ if __name__ == '__main__':
     parser.add_argument('-bim_rsid', default = 1, type = int, help = "Column index of SNPID (RSID) in BIM variable")
 
     parser.add_argument('--rsid_readfrombim', type = str, 
-                        help = '''Needs to be a comma seperated string of filename, BP-position, SNP-position.
+                        help = '''Needs to be a comma seperated string of filename, BP-position, SNP-position, seperator.
                         If provided the variable bim_snp wont be used instead rsid's will be read
                         from the provided file set.''')
     parser.add_argument('-bim_bp', default = 3, type = int, help = "Column index of BP in BIM variable")
@@ -124,6 +124,7 @@ if __name__ == '__main__':
         rsidfiles = rsid_parts[0]
         bppos = int(rsid_parts[1])
         rsidpos = int(rsid_parts[2])
+        file_sep = str(rsid_parts[3])
     
     startTime = datetime.datetime.now()
     
@@ -193,40 +194,29 @@ if __name__ == '__main__':
             hf.close()
 
     # Constructing dataframe of data
-    zdata = pd.DataFrame({'CHR' : chromosome,
-                        'SNP' : snp,
-                        'BP' : bp,
+    zdata = pd.DataFrame({'CHR' : chromosome.astype(int),
+                        'SNP' : snp.astype(str),
+                        'BP' : bp.astype(int),
                         "f" : f,
-                        "A1" : A1,
-                        "A2" : A2,
+                        "A1" : A1.astype(str),
+                        "A2" : A2.astype(str),
                         'theta' : theta.tolist(),
                         'se' : se.tolist(),
                         "S" : S.tolist()})
     
 
-    # cleaning data
-    zdata['CHR'] = zdata['CHR'].astype(int)
-    zdata['BP'] = zdata['BP'].astype(str).str.replace("b'", "").str[:-1]
-    zdata['BP'] = zdata['BP'].astype('int')
-
     if args.rsid_readfrombim is not None:
         rsidfiles = glob.glob(rsidfiles)
         snps = pd.DataFrame(columns = ["BP", "rsid"])
         for file in rsidfiles:
-            snp_i = ld.return_rsid(file, bppos, rsidpos)
+            snp_i = ld.return_rsid(file, bppos, rsidpos, file_sep)
             snps = snps.append(snp_i, ignore_index = True)
         
         snps = snps.drop_duplicates(subset=['BP'])
         zdata = zdata.merge(snps, how = "left", on = "BP")
         zdata = zdata.rename(columns = {"SNP" : "SNP_old"})
         zdata = zdata.rename(columns = {"rsid" : "SNP"})
-    else:
-        # cleaning SNPs
-        zdata['SNP'] = zdata['SNP'].astype(str).str.replace("b'", "").str[:-1]
 
-
-    
-    
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
     
     print(zdata_n_message)
