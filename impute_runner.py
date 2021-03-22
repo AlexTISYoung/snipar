@@ -164,14 +164,18 @@ def run_imputation(data):
 
     if chunks > 1:
         for i in range(chunks):
+            logging.info(f"imputing chunk {i+1}/{chunks}...")
             chunk_output_address = f"{output_address}_chunk{i}"
             interval = ((end-start+chunks-1)//chunks)
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
             phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
             imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+            logging.info(f"imputing chunk {i}/{chunks} done")
         
         #Merging chunks one by one and then removing the outputs
+        logging.info("merging chunks...")
+        logging.info(f"merging chunks 1/{chunks}...")
         chunk_output_address = f"{output_address}_chunk{0}.hdf5"
         with h5py.File(chunk_output_address, "r") as hf:
             imputed_par_gts = np.array(hf['imputed_par_gts'])
@@ -185,6 +189,7 @@ def run_imputation(data):
             non_duplicates = np.array(hf["non_duplicates"])
         os.remove(chunk_output_address)
         for i in range(1, chunks):
+            logging.info(f"merging chunks {i+1}/{chunks}...")
             chunk_output_address = f"{output_address}_chunk{i}.hdf5"
             with h5py.File(chunk_output_address, "r") as hf:
                 new_imputed_par_gts = np.array(hf['imputed_par_gts'])
@@ -199,6 +204,7 @@ def run_imputation(data):
                 bim_values = np.vstack((bim_values, new_bim_values))
                 counter_ibd0 = counter_ibd0+new_counter_ibd0
             os.remove(chunk_output_address)
+        logging.info(f"writing results of the merge")
         #Writing the merged output
         with h5py.File(f"{output_address}.hdf5", "w") as hf:
             hf.create_dataset('imputed_par_gts', imputed_par_gts.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
@@ -210,6 +216,7 @@ def run_imputation(data):
             hf["pedigree"] =  pedigree
             hf["counter_ibd0"] = counter_ibd0
             hf["non_duplicates"] = non_duplicates
+        logging.info(f"merging chunks done")
     elif chunks == 1:
         phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end)
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
