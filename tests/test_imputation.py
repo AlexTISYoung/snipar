@@ -22,11 +22,11 @@ def imputation_test(chromosomes,
             parental_status = np.array(f["parental_status"])
             ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
+            non_duplicates = np.array(f["non_duplicates"])
+            if start is not None:
+                non_duplicates = non_duplicates+start
         expected = Bed(expected_prefix+str(chromosome)+".bed", count_A1 = True)
-        if start is not None and end is not None:
-            expected_gts = expected[:, start:end].read().val
-        else:
-            expected_gts = expected.read().val
+        expected_gts = expected[:, non_duplicates].read().val
         expected_ids = expected.iid
         iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,1])}
         #fids of control families start with _

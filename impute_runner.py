@@ -182,6 +182,7 @@ def run_imputation(data):
             bim_values = np.array(hf["bim_values"])
             pedigree = np.array(hf["pedigree"])
             counter_ibd0 = np.array(hf["counter_ibd0"])
+            non_duplicates = np.array(hf["non_duplicates"])
         os.remove(chunk_output_address)
         for i in range(1, chunks):
             chunk_output_address = f"{output_address}_chunk{i}.hdf5"
@@ -190,8 +191,11 @@ def run_imputation(data):
                 new_pos = np.array(hf['pos'])
                 new_bim_values = np.array(hf["bim_values"])
                 new_counter_ibd0 = np.array(hf["counter_ibd0"])
+                new_non_duplicates = np.array(hf["non_duplicates"])
+                new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
                 imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
                 pos = np.hstack((pos, new_pos))
+                non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
                 bim_values = np.vstack((bim_values, new_bim_values))
                 counter_ibd0 = counter_ibd0+new_counter_ibd0
             os.remove(chunk_output_address)
@@ -205,6 +209,7 @@ def run_imputation(data):
             hf["bim_values"] = bim_values
             hf["pedigree"] =  pedigree
             hf["counter_ibd0"] = counter_ibd0
+            hf["non_duplicates"] = non_duplicates
     elif chunks == 1:
         phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end)
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)

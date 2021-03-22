@@ -417,7 +417,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     sid = sid[indexes]
     pos = pos[indexes]
     unphased_gts = unphased_gts[:, indexes]
-    if phased_gts:
+    if not phased_gts is None:
         phased_gts = phased_gts[:, indexes, :]
     pos = pos.astype(int)
     unphased_gts_greater2 = unphased_gts>2
