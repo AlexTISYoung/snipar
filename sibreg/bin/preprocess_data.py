@@ -300,8 +300,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = 
         ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
     else:
         ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-
-    ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    #TODO cancel or generalize this
+    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
+        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    ibd["IBDType"] = ibd["IBDType"].astype(int)
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
     ibd= ibd.merge(temp, on="StartSNP")
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
