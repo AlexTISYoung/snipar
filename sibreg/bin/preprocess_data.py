@@ -300,8 +300,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = 
         ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
     else:
         ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-
-    ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    #TODO cancel or generalize this
+    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
+        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    ibd["IBDType"] = ibd["IBDType"].astype(int)
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
     ibd= ibd.merge(temp, on="StartSNP")
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
@@ -381,6 +383,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         logging.info(f"with chromosomes {chromosomes} loaded ids ...")
         gts_ids = gts_f.iid[ids_in_ped]
         logging.info(f"with chromosomes {chromosomes} restrict to ids ...")
+        all_sids = gts_f.sid
         if end is not None:
             unphased_gts = gts_f[ids_in_ped , start:end].read().val
             logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
@@ -399,6 +402,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         bgen = open_bgen(phased_address+".bgen", verbose=False)
         gts_ids = np.array([[None, id] for id in bgen.samples])
         pos = np.array(bim["coordinate"][start: end])
+        all_sids = np.array(bim["id"])
         sid = np.array(bim["id"][start: end])
         pop_size = len(gts_ids)
         probs= bgen.read((slice(0, pop_size),slice(start, end)))        
@@ -412,6 +416,14 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
             phased_gts[nanmask] = nan_integer
+    _, indexes = np.unique(all_sids, return_index=True)
+    indexes = np.sort(indexes)
+    indexes = indexes[(indexes>=start) & (indexes<end)]-start
+    sid = sid[indexes]
+    pos = pos[indexes]
+    unphased_gts = unphased_gts[:, indexes]
+    if not phased_gts is None:
+        phased_gts = phased_gts[:, indexes, :]
     pos = pos.astype(int)
     unphased_gts_greater2 = unphased_gts>2
     num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
@@ -447,9 +459,9 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         phased_gts = phased_gts.astype(np.int8)
         phased_gts[nanmask] = nan_integer
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    selected_bim = bim[bim["id"].isin(sid)]
+    selected_bim = bim.iloc[indexes+start, :]
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns
-    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
+    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
     return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict
