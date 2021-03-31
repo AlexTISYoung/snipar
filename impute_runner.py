@@ -153,7 +153,7 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, args.bim, chromosome = chromosome)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
