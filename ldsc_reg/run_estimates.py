@@ -278,7 +278,7 @@ if __name__ == '__main__':
     if args.mfiles is not None:
         Mfiles = args.mfiles
         Mcolnames = ["M", "CHR"]
-        nloci = ld.read_mfiles(Mfilepath, Mcolnames)
+        nloci = ld.read_mfiles(Mfiles, Mcolnames)
         M = nloci['M'].sum()
     else:
         M = len(S)
