@@ -442,6 +442,7 @@ class gtarray(object):
             self.ids = self.ids[indices]
             self.id_dict = make_id_dict(self.ids)
             self.shape = self.gts.shape
+            self.fams = self.fams[indices]
 
     def mean_normalise(self):
         """
