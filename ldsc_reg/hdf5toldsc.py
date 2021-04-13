@@ -316,11 +316,22 @@ if __name__ == '__main__':
     )
 
     if args.merge_alleles is not None:
+        print(f"N obs before merging alleles: {dfout.shape[0]}")
+        ii = np.array([True for i in range(len(dfout))])
+        old = ii.sum()
         merge_alleles = pd.read_csv(args.merge_alleles, sep = "\t")
-        dfout = dfout.merge(merge_alleles, how = "inner", on = "SNP")
-        dfout = dfout.drop(["A1_x", "A2_x"], axis = 1)
-        dfout = dfout.rename(columns = {"A1_y" : "A1", "A2_y" : "A2"})
+        ii = dfout.SNP.isin(merge_alleles.SNP)
+        drops = old - ii.sum()
+        if ii.sum() == 0:
+            pass
+        dfout = dfout[ii].reset_index(drop=True)
+        print(f"N obs after merging alleles: {dfout.shape[0]}")
 
+
+    dfout = dfout.dropna()
+    new_obs = dfout.shape[0]
+
+    print(f"Number of observations dropped due to NAs: {zdata.shape[0] - new_obs}")
 
     dfout.to_csv(
         args.out,
