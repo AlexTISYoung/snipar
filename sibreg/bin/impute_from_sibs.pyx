@@ -27,6 +27,82 @@ cimport openmp
 from libc.stdio cimport printf
 from libc.time cimport time, ctime, time_t
 cdef float nan_float = np.nan
+#[gp1,gp2,gs]
+cdef double[:,:,:] prob_offspring_on_parent = np.array(
+[[[1.0, 0.0, 0.0],
+ [0.5, 0.5, 0.0],
+ [0.0, 1.0, 0.0],],
+
+[[0.5, 0.5, 0.0],
+ [0.25, 0.5, 0.25],
+ [0.0, 0.5, 0.5],],
+ 
+[[0.0, 1.0, 0.0],
+ [0.0, 0.5, 0.5],
+ [0.0, 0.0, 1.0],],]
+ )
+
+
+cdef double get_probability_of_both_parents_conditioned_on_offsprings(int snp,
+                                                             int gp1,
+                                                             int gp2,
+                                                             int[:] sib_indexes,
+                                                             int sib_count,
+                                                             int[:,:] unphased_gts,
+                                                             double[:] parent_genotype_prob) nogil:
+    cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
+    cdef double denumerator = 0.
+    cdef int flag, gs, _gp1, _gp2, index
+    cdef double tmp
+    flag = 0
+    for index in range(sib_count):
+        gs = unphased_gts[sib_indexes[index], snp]
+        if not isnan(gs):
+            numerator = numerator*prob_offspring_on_parent[gp1, gp2, gs]
+            flag = 1
+    if flag==0:
+        return nan_float
+    for _gp1 in range(3):
+        for _gp2 in range(3):
+            tmp = 1
+            for index in range(sib_count):
+                gs = unphased_gts[sib_indexes[index], snp]
+                tmp = tmp*prob_offspring_on_parent[_gp1, _gp2, gs]
+            denumerator = denumerator+tmp*parent_genotype_prob[_gp1]*parent_genotype_prob[_gp2]
+    if denumerator==0:
+        return nan_float
+    return numerator/denumerator
+
+
+cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(int snp,
+                                                                        int gp1,
+                                                                        int gp2,
+                                                                        int[:] sib_indexes,
+                                                                        int sib_count,
+                                                                        int[:,:] unphased_gts,
+                                                                        double[:] parent_genotype_prob) nogil:
+    cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
+    cdef double denumerator = 0
+    cdef int flag, gs, _gp2, index
+    cdef double tmp
+    flag = 0
+    for index in range(sib_count):
+        gs = unphased_gts[sib_indexes[index], snp]
+        if not isnan(gs):
+            numerator = numerator*prob_offspring_on_parent[gp1, gp2, gs]
+            flag = 1
+    if flag==0:
+        return nan_float
+    for _gp2 in range(3):
+        tmp = 1
+        for index in range(sib_count):
+            gs = unphased_gts[sib_indexes[index], snp]
+            if not isnan(gs):
+                tmp = tmp*prob_offspring_on_parent[gp1, _gp2, gs]
+        denumerator = denumerator+tmp*parent_genotype_prob[gp1]*parent_genotype_prob[_gp2]
+    if denumerator==0:
+        return nan_float
+    return numerator/denumerator
 
 cdef extern from * nogil:
     r"""
@@ -60,6 +136,9 @@ cdef extern from * nogil:
     void destroy()
     void report(int mod, char* pre_message_info, int total)
 
+@cython.wraparound(False)
+@cython.boundscheck(False)
+@cython.cdivision(True)
 cdef void get_IBD(int[:] hap1,
                   int[:] hap2,
                   int length,
@@ -67,10 +146,10 @@ cdef void get_IBD(int[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement):
+                  int[:] agreement) nogil:
     """Inferes IBD status between two haplotypes. For the location i, it checks [i-half_window, i+half_window] size, if they are the same on more than threshold portiona of the locations, it's IBD.
     Agreement, agreement_count, agreement percentage will contain the inffered IBDs, number of similarities in the window and its percentage for all the locations respectively.
-asdasd
+
     Args:
         hap1 : int[:]
             First haplotype
@@ -174,16 +253,18 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
 @cython.cdivision(True)
 cdef float impute_snp_from_offsprings(int snp,
                       int[:] sib_indexes,
+                      int sib_count,
                       int[:, :] snp_ibd0,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
+                      double[:] parent_genotype_prob,
                       int[:, :, :] phased_gts,
                       int[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2):
+                      int len_snp_ibd2) nogil:
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
     If phased_gts is not NULL, it tries to do the imputation with that first and if it's not usable, it falls back to unphased data.
 
@@ -235,7 +316,7 @@ cdef float impute_snp_from_offsprings(int snp,
     cdef float result = nan_float
     cdef float additive
     cdef int sibsum = 0
-    cdef int counter, sib1, sib2, pair_index, sib_index1, sib_index2, hap_index, h00, h01, h10, h11, gs10, gs11, gs20, gs21
+    cdef int counter, sib1, sib2, pair_index, sib_index1, sib_index2, hap_index, h00, h01, h10, h11, gs10, gs11, gs20, gs21, gp1, gp2
 
 
     if phased_gts != None:
@@ -297,7 +378,6 @@ cdef float impute_snp_from_offsprings(int snp,
                 additive = f
             elif sibsum==1:
                 additive = 1+f
-                #TODO figure out whether this is true this should be 1.5+f
             elif sibsum==2:
                 additive = 1+2*f
             elif sibsum==3:
@@ -316,6 +396,12 @@ cdef float impute_snp_from_offsprings(int snp,
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])/2. + 2*f
         result = result/len_snp_ibd2
 
+    if isnan(result):
+        result = 0
+        for gp1 in range(3):
+            for gp2 in range(3):
+                result += (gp1+gp2)*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
+
     return result/2
 
 @cython.wraparound(False)
@@ -324,10 +410,12 @@ cdef float impute_snp_from_offsprings(int snp,
 cdef float impute_snp_from_parent_offsprings(int snp,
                       int parent,
                       int[:] sib_indexes,
+                      int sib_count,
                       int[:, :] snp_ibd0,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
+                      double[:] parent_genotype_prob,
                       int[:, :, :] phased_gts,
                       int[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
@@ -335,7 +423,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      ):
+                      ) nogil:
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value
     
     If returns Nan if there are no sibling pairs that can be children of the existing parent.
@@ -395,13 +483,13 @@ cdef float impute_snp_from_parent_offsprings(int snp,
 
     cdef float result
     cdef float additive
-    cdef int gs1, gs2
+    cdef int gs1, gs2, gp1
     cdef float sibsum = 0
     cdef int sib1, sib2, pair_index, counter, sib_index1, sib_index2, hap_index
     cdef int sibs_h00, sibs_h01, sibs_h10, sibs_h11, sibship_shared_allele_sib1, sibship_shared_allele_sib2
     cdef int parent_sib1_h00, parent_sib1_h01, parent_sib1_h10, parent_sib1_h11, parent_offspring1_shared_allele_parent, parent_offspring1_shared_allele_offspring
     cdef int parent_sib2_h00, parent_sib2_h01, parent_sib2_h10, parent_sib2_h11, parent_offspring2_shared_allele_parent, parent_offspring2_shared_allele_offspring
-    cdef float gp = unphased_gts[parent, snp]
+    cdef int gp = unphased_gts[parent, snp]
     if phased_gts != None:
         #having phased data does not matter with IBD state 0
         if len_snp_ibd0==0 and len_snp_ibd1>0:
@@ -452,6 +540,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                     #if the allele shared between offspring is not shared between those and the existing parent
                     result += phased_gts[sib_index2, snp, sibship_shared_allele_sib1]+f
                     counter+=1
+                # else:TODO
+                    # printf("here is the bug")
 
             if counter > 0:
                 return result/counter
@@ -620,6 +710,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             result = result/counter
         else:
             result = nan_float
+    if isnan(result):
+        result = 0
+        for gp1 in range(3):
+            result += (gp1)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp1, gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
 
     return result    
 
@@ -756,6 +850,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
     cdef int number_of_fams = sibships.shape[0]
     cdef cnp.ndarray[cnp.double_t, ndim=1]freqs = np.nanmean(unphased_gts,axis=0)/2.0
+    cdef double[:, :] parent_genotype_prob = np.hstack(((1-freqs.reshape(-1,1))**2, 2*freqs.reshape(-1,1)*(1-freqs.reshape(-1,1)), freqs.reshape(-1,1)**2))
     sibships["parent"] = sibships["FATHER_ID"]
     sibships["parent"][sibships["has_father"]] = sibships["FATHER_ID"][sibships["has_father"]]
     sibships["parent"][sibships["has_mother"]] = sibships["MOTHER_ID"][sibships["has_mother"]]
@@ -801,9 +896,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long counter_ibd0 = 0
     reset()
-    #TODO make it prange
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
-    for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
@@ -877,10 +971,12 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
                                                                                 sibs_index[this_thread, :],
+                                                                                sib_count[index],
                                                                                 snp_ibd0[this_thread,:,:],
                                                                                 snp_ibd1[this_thread,:,:],
                                                                                 snp_ibd2[this_thread,:,:],
                                                                                 freqs[snp],
+                                                                                parent_genotype_prob[snp,:],
                                                                                 c_phased_gts,
                                                                                 c_unphased_gts,
                                                                                 sib_hap_IBDs[this_thread,:,:,:],
@@ -892,10 +988,12 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             else:
                 imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp,
                                                                          sibs_index[this_thread, :],
+                                                                         sib_count[index],
                                                                          snp_ibd0[this_thread,:,:],
                                                                          snp_ibd1[this_thread,:,:],
                                                                          snp_ibd2[this_thread,:,:],
                                                                          freqs[snp],
+                                                                         parent_genotype_prob[snp,:],
                                                                          c_phased_gts,
                                                                          c_unphased_gts,
                                                                          sib_hap_IBDs[this_thread,:,:,:],

@@ -55,12 +55,13 @@ class TestSibImpute(unittest.TestCase):
         snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
+        parent_genotype_prob = np.array([(1-f)*(1-f), 2*f*(1-f), f*f])
         for i in range(3):
             for j in range(3):
                 for count in range(10):
                     snp_ibd0[count] = [i, j]
                     sib_indexes = np.array([0, 1, 2]).astype("i")
-                    result = np.array(impute_snp_from_offsprings(snp, sib_indexes, snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, count+1, 0, 0))
+                    result = np.array(impute_snp_from_offsprings(snp, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0))
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                     self.assertAlmostEqual(result, sibsum/2, 4, msg = "problem with type0")
 
@@ -69,7 +70,7 @@ class TestSibImpute(unittest.TestCase):
                 for count in range(10):
                     snp_ibd1[count] = [i, j]
                     sib_indexes = np.array([0, 1, 2]).astype("i")
-                    result = impute_snp_from_offsprings(snp, sib_indexes, snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, 0, count+1, 1)
+                    result = impute_snp_from_offsprings(snp, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1)
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
                     self.assertAlmostEqual(result, expected_results[int(sibsum)]/2, 4, msg = "problem with type1"+str((result, expected_results[int(sibsum)]))+str((i,j))+ str(sibsum))
@@ -79,7 +80,7 @@ class TestSibImpute(unittest.TestCase):
                 for count in range(10):
                     snp_ibd2[count] = [i, j]
                     sib_indexes = np.array([0, 1, 2]).astype("i")
-                    result = impute_snp_from_offsprings(snp, sib_indexes,  snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, 0, 0, count+1)
+                    result = impute_snp_from_offsprings(snp, sib_indexes,  3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1)
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
                     self.assertAlmostEqual(result, (sibsum/2. + 2*f)/2, 4, msg = "problem with type2")
 
@@ -90,6 +91,7 @@ class TestSibImpute(unittest.TestCase):
         snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
+        parent_genotype_prob = np.array([(1-f)*(1-f), 2*f*(1-f), f*f])
                   
         #first key is parent, second is sibs
         expected_result_IBD1 = [
@@ -140,7 +142,7 @@ class TestSibImpute(unittest.TestCase):
                             continue
                         sib_indexes = np.array([0, 1, 2]).astype("i")
                         snp_ibd0[count] = [i, j]
-                        result = impute_snp_from_parent_offsprings(snp, par, sib_indexes, snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, None, count+1, 1, 1)
+                        result = impute_snp_from_parent_offsprings(snp, par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, count+1, 1, 1)
                         sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                         expected = sibsum - par
                         if expected<0 or expected>2:
@@ -154,7 +156,7 @@ class TestSibImpute(unittest.TestCase):
                     for par in range(3):
                         sib_indexes = np.array([0, 1, 2]).astype("i")
                         snp_ibd1[count] = [i, j]
-                        result = impute_snp_from_parent_offsprings(snp,  par, sib_indexes, snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, None, 0, count+1, 1)
+                        result = impute_snp_from_parent_offsprings(snp,  par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, count+1, 1)
                         expected = expected_result_IBD1[par].get((i, j), np.nan)
                         if not np.isnan(result) or not np.isnan(expected):
                             self.assertAlmostEqual(result, expected, 4, msg = "problem with type1, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected,result = "+str((expected, result)))
@@ -166,7 +168,7 @@ class TestSibImpute(unittest.TestCase):
                     for par in range(3):
                         sib_indexes = np.array([0, 1, 2]).astype("i")
                         snp_ibd2[count] = [i, j]
-                        result = impute_snp_from_parent_offsprings(snp, par, sib_indexes, snp_ibd0, snp_ibd1, snp_ibd2, f, None, bed, None, None, 0, 0, count+1)
+                        result = impute_snp_from_parent_offsprings(snp, par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, 0, count+1)
                         expected = expected_result_IBD2[par].get((i, j), np.nan)
                         if not np.isnan(result) or not np.isnan(expected):
                             self.assertAlmostEqual(result, expected, 4, msg = "problem with type2, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected, result = "+str((expected, result)))

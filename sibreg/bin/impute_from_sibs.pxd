@@ -10,27 +10,31 @@ cdef int get_IBD_type(cstring id1,
                       int loc,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil
 
-cdef float impute_snp_from_offsprings(int snp, 
+cdef float impute_snp_from_offsprings(int snp,
                       int[:] sib_indexes,
+                      int sib_count,
                       int[:, :] snp_ibd0,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
+                      double[:] parent_genotype_prob,
                       int[:, :, :] phased_gts,
                       int[:, :] unphased_gts,
-                      int[:, :, :] sib_hap_IBDs,                      
+                      int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2)
+                      int len_snp_ibd2) nogil
 
 
 cdef float impute_snp_from_parent_offsprings(int snp,
                       int parent,
                       int[:] sib_indexes,
+                      int sib_count,
                       int[:, :] snp_ibd0,
                       int[:, :] snp_ibd1,
                       int[:, :] snp_ibd2,
                       float f,
+                      double[:] parent_genotype_prob,
                       int[:, :, :] phased_gts,
                       int[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
@@ -38,7 +42,7 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      )
+                      ) nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
 
@@ -51,4 +55,4 @@ cdef void get_IBD(int[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement)
+                  int[:] agreement)  nogil
