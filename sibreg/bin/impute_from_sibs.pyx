@@ -26,7 +26,9 @@ from cython.parallel import prange
 cimport openmp
 from libc.stdio cimport printf
 from libc.time cimport time, ctime, time_t
+from config import nan_integer as python_integer_nan
 cdef float nan_float = np.nan
+cdef float nan_integer = python_integer_nan
 #[gp1,gp2,gs]
 cdef double[:,:,:] prob_offspring_on_parent = np.array(
 [[[1.0, 0.0, 0.0],
@@ -139,8 +141,8 @@ cdef extern from * nogil:
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef void get_IBD(int[:] hap1,
-                  int[:] hap2,
+cdef void get_IBD(signed char[:] hap1,
+                  signed char[:] hap2,
                   int length,
                   int half_window,
                   double threshold,
@@ -151,10 +153,10 @@ cdef void get_IBD(int[:] hap1,
     Agreement, agreement_count, agreement percentage will contain the inffered IBDs, number of similarities in the window and its percentage for all the locations respectively.
 
     Args:
-        hap1 : int[:]
+        hap1 : signed char[:]
             First haplotype
 
-        hap2 : int[:]
+        hap2 : signed char[:]
             Second haplotype
 
         length : int
@@ -163,13 +165,13 @@ cdef void get_IBD(int[:] hap1,
         half_window : int
             For each location i, the IBD inference is restricted to [i-half_window, i+half_window] segment
 
-        threshold : float
+        threshold : double
             We have an IBD segment if agreement_percentage is more than threshold
 
         agreement_count : int[:]
             For each location i, it's number of the time haplotypes agree with each other in the [i-half_window, i+half_window] window
 
-        agreement_percentage : float[:]
+        agreement_percentage : double[:]
             For each location i, it's the ratio of agreement between haplotypes in [i-half_window, i+half_window] window
 
         agreement : int[:]
@@ -214,15 +216,23 @@ cdef int get_hap_index(int i, int j) nogil:
     0/0
 
 cdef char is_possible_child(int child, int parent) nogil:
-    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype.
+    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype. Returns False if any of them is nan
+        Args:
+            child : int
+            parent : int
+
+        Returns: char
     """
-    if (parent == 2) and (child > 0):
+    if parent == nan_integer or child == nan_integer:
+        return False
+    
+    if (parent == 2) and (2 >= child > 0):
         return True
 
-    if parent == 1:
+    if parent == 1 and (2 >= child >= 0):
         return True
     
-    if (parent == 0) and (child < 2):
+    if (parent == 0) and (0 <= child < 2):
         return True
 
     return False
@@ -259,8 +269,8 @@ cdef float impute_snp_from_offsprings(int snp,
                       int[:, :] snp_ibd2,
                       float f,
                       double[:] parent_genotype_prob,
-                      int[:, :, :] phased_gts,
-                      int[:, :] unphased_gts,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
@@ -287,10 +297,10 @@ cdef float impute_snp_from_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        phased_gts : int[:,:,:]
+        phased_gts : signed char[:,:,:]
             A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
 
-        unphased_gts : int[:,:]
+        unphased_gts : signed char[:,:]
             A two-dimensional array containing genotypes for all individuals and SNPs respectively.
         
         sib_hap_IBDs: int[:, :, :]
@@ -416,8 +426,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                       int[:, :] snp_ibd2,
                       float f,
                       double[:] parent_genotype_prob,
-                      int[:, :, :] phased_gts,
-                      int[:, :] unphased_gts,
+                      signed char[:, :, :] phased_gts,
+                      signed char[:, :] unphased_gts,
                       int[:, :, :] sib_hap_IBDs,
                       int[:, :, :] parent_offspring_hap_IBDs,
                       int len_snp_ibd0,
@@ -450,10 +460,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         f : float
             Minimum allele frequency for the SNP.
 
-        phased_gts : int[:,:,:]
+        phased_gts : signed char[:,:,:]
             A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
 
-        unphased_gts : int[:,:]
+        unphased_gts : signed char[:,:]
             A two-dimensional array containing genotypes for all individuals and SNPs respectively.
 
         sib_hap_IBDs: int[:, :, :]
@@ -481,10 +491,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
 
     """    
 
-    cdef float result
-    cdef float additive
+    cdef double result
+    cdef double additive
     cdef int gs1, gs2, gp1
-    cdef float sibsum = 0
+    cdef double sibsum = 0
     cdef int sib1, sib2, pair_index, counter, sib_index1, sib_index2, hap_index
     cdef int sibs_h00, sibs_h01, sibs_h10, sibs_h11, sibship_shared_allele_sib1, sibship_shared_allele_sib2
     cdef int parent_sib1_h00, parent_sib1_h01, parent_sib1_h10, parent_sib1_h11, parent_offspring1_shared_allele_parent, parent_offspring1_shared_allele_offspring
@@ -771,7 +781,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999):
+def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999):
     """Does the parent sum imputation for families in sibships and all the SNPs in unphased_gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -784,11 +794,14 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         iid_to_bed_index : str->int
             A dictionary mapping IIDs of people to their location in the bed file.
 
-        phased_gts : numpy.array
+        phased_gts : numpy.array[signed char]
             Numpy array containing the phased genotype data. Axes are individulas and SNPS respectively.
+            It's elements should be 0 or 1 except NaN values which should be equal to nan_integer specified in the config.
 
-        unphased_gts : numpy.array
+        unphased_gts : numpy.array[signed char]
             Numpy array containing the unphased genotype data from a bed file. Axes are individulas, SNPS and haplotype number respectively.
+            It's elements should be 0 or 1 except NaN values which should be equal to nan_integer specified in the config.
+
 
         ibd : pandas.Dataframe
             A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
@@ -802,6 +815,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
 
         chromosome: str
             Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
+
+        freqs: list[float]
+            Min allele frequency for all the SNPs present in the genotypes in that order.
 
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
@@ -865,8 +881,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     #iid_to_bed_index
     cdef cmap[cstring, int] c_iid_to_bed_index = iid_to_bed_index
     #unphased_gts
-    cdef int[:, :] c_unphased_gts = unphased_gts
-    cdef int[:, :, :] c_phased_gts = phased_gts
+    cdef signed char[:, :] c_unphased_gts = unphased_gts
+    cdef signed char[:, :, :] c_phased_gts = phased_gts
     cdef int number_of_snps = c_unphased_gts.shape[1]
     #ibd
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
@@ -883,6 +899,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef cstring sib1_id, sib2_id
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
+    imputed_par_gts[:] = nan_float
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
     byte_chromosome = chromosome.encode("ASCII")
     cdef char* chromosome_c = byte_chromosome
@@ -895,6 +912,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int half_window_c = half_window
     cdef float ibd_threshold_c = ibd_threshold
     cdef long counter_ibd0 = 0
+    cdef long counter_nonnan_input = 0
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -911,7 +929,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,0], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 1, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 2, :])
                     get_IBD(c_phased_gts[sibs_index[this_thread, i],:,1], c_phased_gts[sibs_index[this_thread, j],:,1], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], sib_hap_IBDs[this_thread, where, 3, :])
-            
+
             if single_parent[index]:
                 for i in range(0, sib_count[index]):
                     get_IBD(c_phased_gts[c_iid_to_bed_index[parents[index]],:,0], c_phased_gts[sibs_index[this_thread, i],:,0], number_of_snps, half_window_c, ibd_threshold_c, agreement_counts[this_thread, :], agreement_percentages[this_thread, :], parent_offspring_hap_IBDs[this_thread, i, 0, :])
@@ -931,8 +949,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                         sib2_index = sibs_index[this_thread, j]
                         sib1_id = fams[index][i]
                         sib2_id = fams[index][j]
-                        sib1_gene_isnan = isnan(c_unphased_gts[sib1_index, snp])
-                        sib2_gene_isnan = isnan(c_unphased_gts[sib2_index, snp])
+                        sib1_gene_isnan = (c_unphased_gts[sib1_index, snp] == nan_integer)
+                        sib2_gene_isnan = (c_unphased_gts[sib2_index, snp] == nan_integer)
                         ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
                         if sib1_gene_isnan  and sib2_gene_isnan:
                             continue
@@ -963,10 +981,12 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     counter_ibd0 += 1
             else :
                 sib1_index = sibs_index[this_thread, 0]
-                if not isnan(c_unphased_gts[sib1_index, snp]):
+                if not (c_unphased_gts[sib1_index, snp] == nan_integer):
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1
+            if not(len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2==0):
+                counter_nonnan_input +=1
             if single_parent[index]:
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
@@ -1006,7 +1026,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     ratio_ibd0 = <float>counter_ibd0/total_snps
     logging.info("with chromosome " + str(chromosome)+": ibd0 ratio is"+str(ratio_ibd0))
     if ratio_ibd0>0.5:
-         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
+        logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
+    output_nan_count = np.sum(np.isnan(imputed_par_gts))
+    expected_nan_count = imputed_par_gts.size-counter_nonnan_input
+    non_expected = (output_nan_count-expected_nan_count)
+    non_expected_ratio = non_expected/imputed_par_gts.size
+    logging.info("with chromosome " + str(chromosome)+f": imputation is nan in {non_expected} locations where it shouldn't have been because of inconsistencies in the data. That is {non_expected_ratio*100:.3f}% of the loci.")
+    logging.info("with chromosome " + str(chromosome)+f": expected nan: {expected_nan_count}, actual_nan: {output_nan_count}")
+    if non_expected_ratio > 0.01:
+        logging.warning("Too much inconsistencies in the data")        
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
@@ -1017,5 +1045,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             f["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
             f["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
             f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
+            f["non_duplicates"] =  np.array(hdf5_output_dict["non_duplicates"], dtype=int)
+            #Todo automate this for all possible output_dicts
             f["counter_ibd0"] = counter_ibd0
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)

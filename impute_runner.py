@@ -66,6 +66,9 @@ Args:
     --processes: int, optional
         Number of processes for imputation chromosomes. Each chromosome is done on one process.
 
+    --chunks: int, optional
+        Number of chunks load data in(each process).
+
     --output_compression: str, optional
         Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf.
 
@@ -99,8 +102,12 @@ def run_imputation(data):
                 pedigree: pd.Dataframe
                     The standard pedigree table
 
-                bed_address: str
-                    Address of the bed file.
+                unphased_address: str, optional
+                    Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
+                
+                phased_address: str, optional
+                    Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+
 
                 ibd_pd: pd.Dataframe
                     IBD segments table in King format. Only needs to contain information about this chromosome
@@ -108,6 +115,8 @@ def run_imputation(data):
                 output_address: str
                     The address to write the result of imputation on. The default value for output_address is 'parent_imputed_chr'.
 
+                chunks: int
+                    Number of chunks load data in(each process).
 
                 start: int, optional
                     This function can do the imputation on a slice of each chromosome. If specified, his is the start of that slice(it is inclusive).
@@ -130,6 +139,7 @@ def run_imputation(data):
         float
             time consumed byt the imputation.
     """
+    chunks = data["chunks"]
     pedigree = data["pedigree"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
@@ -143,10 +153,75 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, start, end, bim, chromosome = chromosome)
-    pos = pos.astype(int)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome)
+    number_of_snps = len(bim)
     start_time = time.time()
-    imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+    #Doing imputation chunk by chunk
+    if start is None:
+        start = 0
+    if end is None:
+        end = number_of_snps
+
+    if chunks > 1:
+        for i in range(chunks):
+            logging.info(f"imputing chunk {i+1}/{chunks}...")
+            chunk_output_address = f"{output_address}_chunk{i}"
+            interval = ((end-start+chunks-1)//chunks)
+            chunk_start = start+i*interval
+            chunk_end = min(start+(i+1)*interval, end)
+            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+            logging.info(f"imputing chunk {i}/{chunks} done")
+        
+        #Merging chunks one by one and then removing the outputs
+        logging.info("merging chunks...")
+        logging.info(f"merging chunks 1/{chunks}...")
+        chunk_output_address = f"{output_address}_chunk{0}.hdf5"
+        with h5py.File(chunk_output_address, "r") as hf:
+            imputed_par_gts = np.array(hf['imputed_par_gts'])
+            families = np.array(hf['families'])
+            parental_status = np.array(hf['parental_status'])
+            pos = np.array(hf['pos'])
+            bim_columns = np.array(hf["bim_columns"])
+            bim_values = np.array(hf["bim_values"])
+            pedigree = np.array(hf["pedigree"])
+            counter_ibd0 = np.array(hf["counter_ibd0"])
+            non_duplicates = np.array(hf["non_duplicates"])
+        os.remove(chunk_output_address)
+        for i in range(1, chunks):
+            logging.info(f"merging chunks {i+1}/{chunks}...")
+            chunk_output_address = f"{output_address}_chunk{i}.hdf5"
+            with h5py.File(chunk_output_address, "r") as hf:
+                new_imputed_par_gts = np.array(hf['imputed_par_gts'])
+                new_pos = np.array(hf['pos'])
+                new_bim_values = np.array(hf["bim_values"])
+                new_counter_ibd0 = np.array(hf["counter_ibd0"])
+                new_non_duplicates = np.array(hf["non_duplicates"])
+                new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
+                imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
+                pos = np.hstack((pos, new_pos))
+                non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
+                bim_values = np.vstack((bim_values, new_bim_values))
+                counter_ibd0 = counter_ibd0+new_counter_ibd0
+            os.remove(chunk_output_address)
+        logging.info(f"writing results of the merge")
+        #Writing the merged output
+        with h5py.File(f"{output_address}.hdf5", "w") as hf:
+            hf.create_dataset('imputed_par_gts', imputed_par_gts.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
+            hf['families'] = np.array(families, dtype='S')
+            hf['parental_status'] = parental_status
+            hf['pos'] = pos
+            hf["bim_columns"] = bim_columns
+            hf["bim_values"] = bim_values
+            hf["pedigree"] =  pedigree
+            hf["counter_ibd0"] = counter_ibd0
+            hf["non_duplicates"] = non_duplicates
+        logging.info(f"merging chunks done")
+    elif chunks == 1:
+        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+    else:
+        raise Exception("invalid chunks, chunks should be a positive integer")  
     end_time = time.time()
     return (end_time-start_time)
 
@@ -205,6 +280,10 @@ if __name__ == "__main__":
                         type=int,
                         default=1,
                         help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
+    parser.add_argument('--chunks',
+                        type=int,
+                        default=1,
+                        help='Number of chunks in each process')
     parser.add_argument('--output_compression',
                         type=str,
                         default=None,
@@ -245,7 +324,6 @@ if __name__ == "__main__":
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
     if args.bgen:
-        print("SEEN")
         if args.to_chr is None or args.from_chr is None:
             raise Exception("Chromosome range should be specified with unphased genotype")
 
@@ -262,12 +340,13 @@ if __name__ == "__main__":
             "end": args.end,
             "bim": args.bim,
             "threads": args.threads,
+            "chunks": args.chunks,
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
             }
             for chromosome in chromosomes]
-            
+    #TODO output more information about the imputation inside the hdf5 filehf
     with Pool(args.processes) as pool:
         logging.info("staring process pool")
         consumed_time = pool.map(run_imputation, inputs)

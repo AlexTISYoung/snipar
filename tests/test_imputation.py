@@ -1,11 +1,11 @@
-import h5py
+import h5py, code
 import numpy as np
 import pandas as pd
 from pysnptools.snpreader import Bed
 from scipy.stats import norm
 #testing the imputation result for whole genome
 def imputation_test(chromosomes,
-                   imputed_prefix = 'outputs/parent_imputed_chr',
+                   imputed_prefix = '',
                    expected_prefix = "../UKBioRDE_revision/data/tmp/filtered_ukb_chr",
                    start = None,
                    end = None
@@ -22,11 +22,11 @@ def imputation_test(chromosomes,
             parental_status = np.array(f["parental_status"])
             ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
+            non_duplicates = np.array(f["non_duplicates"])
+            if start is not None:
+                non_duplicates = non_duplicates+start
         expected = Bed(expected_prefix+str(chromosome)+".bed", count_A1 = True)
-        if start is not None and end is not None:
-            expected_gts = expected[:, start:end].read().val
-        else:
-            expected_gts = expected.read().val
+        expected_gts = expected[:, non_duplicates].read().val
         expected_ids = expected.iid
         iid_to_bed_index = {i:index for index, i in enumerate(expected_ids[:,1])}
         #fids of control families start with _
@@ -100,6 +100,6 @@ def imputation_test(chromosomes,
     q_pm = norm.cdf(z_pm)
     p_value_pm = min(q_pm, 1-q_pm)
     print(covs_pm, coef_pm, z_pm, p_value_pm)
-    
     #TODO compute z correctly(find the correct sd)
     return (coef_o, coef_pm), (z_o, z_pm), (p_value_o, p_value_pm)
+

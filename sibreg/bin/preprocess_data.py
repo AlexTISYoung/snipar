@@ -16,6 +16,7 @@ import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen, read_bgen
+from config import nan_integer
 class Person:
     """Just a simple data structure representing individuals
 
@@ -209,8 +210,8 @@ def add_control(pedigree):
     return pedigree
 
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, end=None, bim_address = None, chromosome = None):
-    """Processes the required data for the imputation and returns it.
+def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = None, chromosome = None):
+    """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
     
@@ -219,36 +220,44 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
         
         phased_address : str
-            Address of the bed file (does not inlude '.bed').
+            Address of the phased bgen file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
 
-        phased_address : str
-            Address of the phased bgen file (does not inlude '.bgen').
+        unphased_address : str
+            Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
         
         ibd : pd.DataFrame
             A pandas dataframe containing IBD statuses for all SNPs.
             This It has these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
             Each line states an IBD segment between a pair on individuals. This can be generated using King software.
 
-        start : int, optional
-            This function can be used for preparing a slice of a chromosome. This is the location of the start of the slice.
-
-        end : int, optional
-            This function can be used for preparing a slice of a chromosome. This is the location of the end of the slice.
-
         bim_address : str, optional
             Address of the bim file if it's different from the address of the bed file. Does not include '.bim'.
+        
+        chromosome: str, optional
+            Number of the chromosome that's going to be loaded.
 
     Returns:
         tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
             Returns the data required for the imputation. This data is a tuple of multiple objects.
-                sibships: A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
+                sibships: pandas.DataFrame
+                    A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
                     It only contains families that have more than one child or only one parent.
-                iid_to_bed_index: A str->int dictionary mapping IIDs of people to their location in bed file.
-                gts: Numpy array containing the genotype data from the bed file.
-                ibd: A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
+
+                ibd: pandas.DataFrame
+                    A pandas DataFrame with columns "ID1", "ID2", 'segment'. The segments column is a list of IBD segments between ID1 and ID2.
                     Each segment consists of a start, an end, and an IBD status. The segment list is flattened meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
-                pos: A numpy array with the position of each SNP in the order of appearance in gts.
-                hdf5_output_dict: A  dictionary whose values will be written in the imputation output under its keys.
+
+                bim: pandas.DataFrame
+                    A dataframe with these columns(dtype str): Chr id morgans coordinate allele1 allele2
+
+                chromosomes: str
+                    A string containing all the chromosomes present in the data.
+
+                ped_ids: set
+                    Set of ids of individuals with missing parents.
+
+                pedigree_output: np.array
+                    Pedigree with added parental status.
     """    
     logging.info("For file "+str(phased_address)+";"+str(unphased_address)+": Finding which chromosomes")
     if unphased_address:
@@ -266,8 +275,8 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         bim["Chr"] = chromosome
 
     chromosomes = bim["Chr"].unique()
-    logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data")
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading and filtering pedigree file ...")
+    logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
+    logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #keeping individuals with no parents
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
@@ -281,8 +290,8 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading bim file ...")      
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading and transforming ibd file ...")
+    logging.info(f"with chromosomes {chromosomes} loading bim file ...")      
+    logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
     ibd["Chr"] = ibd["Chr"].astype(int)
     ibd = ibd.astype(str)
     #Adding location of start and end of each
@@ -291,8 +300,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
     else:
         ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-
-    ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    #TODO cancel or generalize this
+    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
+        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    ibd["IBDType"] = ibd["IBDType"].astype(int)
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
     ibd= ibd.merge(temp, on="StartSNP")
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
@@ -305,25 +316,93 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
             result = result+el
         return result
     ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info("with chromosomes " + str(chromosomes)+": " + "loading genotype file ...")
+    logging.info(f"with chromosomes {chromosomes} loading genotype file ...")
+
+    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
+    pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
+    pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
+    return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
+
+def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None):
+    """ Processes the gts required data for the imputation and returns it.
+
+    Outputs for used for the imputation have ascii bytes instead of strings.
+
+    Args:
+        phased_address : str
+            Address of the phased bgen file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+
+        unphased_address : str
+            Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
+
+        bim: pandas.DataFrame
+            A dataframe with these columns(dtype str): Chr id morgans coordinate allele1 allele2
+
+        pedigree_output: np.array
+            Pedigree with added parental status.
+
+        ped_ids: set
+            Set of ids of individuals with missing parents.
+
+        start : int, optional
+            This function can be used for preparing a slice of a chromosome. This is the location of the start of the slice.
+
+        end : int, optional
+            This function can be used for preparing a slice of a chromosome. This is the location of the end of the slice.
+
+        chromosomes: str
+                    A string containing all the chromosomes present in the data.
+
+    Returns:
+        tuple(np.array[signed char], np.array[signed char], str->int, np.array[int], np.array[float], dict)
+            phased_gts: np.array[signed char], optional
+                A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
+
+            unphased_gts: np.array[signed char]
+                A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+            iid_to_bed_index: str->int
+                A str->int dictionary mapping IIDs of people to their location in bed file.
+
+            pos: np.array[int]
+                A numpy array with the position of each SNP in the order of appearance in gts.
+
+            freqs: np.array[float]
+                Min allele frequency for all the SNPs present in the genotypes in that order.
+
+            hdf5_output_dict: dict
+                A  dictionary whose values will be written in the imputation output under its keys.
+    """
+    logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
     phased_gts = None
     unphased_gts = None
     if unphased_address:
         gts_f = Bed(unphased_address+".bed",count_A1 = True)
+        logging.info(f"with chromosomes {chromosomes} opened unphased file ...")
         ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
+        logging.info(f"with chromosomes {chromosomes} loaded ids ...")
         gts_ids = gts_f.iid[ids_in_ped]
+        logging.info(f"with chromosomes {chromosomes} restrict to ids ...")
+        all_sids = gts_f.sid
         if end is not None:
-            unphased_gts = gts_f[ids_in_ped , start:end].read().val.astype(np.intc)
+            unphased_gts = gts_f[ids_in_ped , start:end].read().val
+            logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[start:end, 2]
+            logging.info(f"with chromosomes {chromosomes} loaded pos ...")
             sid = gts_f.sid[start:end]
+            logging.info(f"with chromosomes {chromosomes} loaded sid ...")
         else:
-            unphased_gts = gts_f[ids_in_ped, :].read().val.astype(np.intc)
+            unphased_gts = gts_f[ids_in_ped, :].read().val            
+            logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[:, 2]
+            logging.info(f"with chromosomes {chromosomes} loaded pos ...")
             sid = gts_f.sid
+            logging.info(f"with chromosomes {chromosomes} loaded sid ...")
     if phased_address:
         bgen = open_bgen(phased_address+".bgen", verbose=False)
         gts_ids = np.array([[None, id] for id in bgen.samples])
         pos = np.array(bim["coordinate"][start: end])
+        all_sids = np.array(bim["id"])
         sid = np.array(bim["id"][start: end])
         pop_size = len(gts_ids)
         probs= bgen.read((slice(0, pop_size),slice(start, end)))        
@@ -331,19 +410,58 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, start=None, en
         phased_gts[:] = np.nan
         phased_gts[probs[:,:,0] > 0.99, 0] = 1
         phased_gts[probs[:,:,1] > 0.99, 0] = 0
-        phased_gts[probs[:,:,2] > 0.99, 0] = 1
-        phased_gts[probs[:,:,3] > 0.99, 0] = 0        
-        phased_gts = phased_gts.transpose(1,0,2).astype(np.intc)
+        phased_gts[probs[:,:,2] > 0.99, 1] = 1
+        phased_gts[probs[:,:,3] > 0.99, 1] = 0
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
+            nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
+            phased_gts[nanmask] = nan_integer
+    _, indexes = np.unique(all_sids, return_index=True)
+    indexes = np.sort(indexes)
+    indexes = indexes[(indexes>=start) & (indexes<end)]-start
+    sid = sid[indexes]
+    pos = pos[indexes]
+    unphased_gts = unphased_gts[:, indexes]
+    if not phased_gts is None:
+        phased_gts = phased_gts[:, indexes, :]
+    pos = pos.astype(int)
+    unphased_gts_greater2 = unphased_gts>2
+    num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
+    if num_unphased_gts_greater2>0:
+        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are greater than 2 in {num_unphased_gts_greater2} locations. Converted to NaN")  
+        unphased_gts[unphased_gts_greater2] = nan_integer
+        
+    unphased_gts_less0 = unphased_gts<0
+    num_unphased_gts_less0 = np.sum(unphased_gts_less0)
+    if num_unphased_gts_less0>0:
+        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
+        unphased_gts[unphased_gts_less0] = nan_integer
 
+    if not phased_gts is None:
+        phased_gts_less0 = phased_gts<0
+        num_phased_gts_less0 = np.sum(phased_gts_less0)
+        if num_phased_gts_less0>0:
+            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are less than 0 in {num_phased_gts_less0} locations. Converted to NaN")  
+            phased_gts[phased_gts_less0] = nan_integer
+        
+        phased_gts_greater1 = phased_gts>1
+        num_phased_gts_greater1 = np.sum(phased_gts_greater1)
+        if num_phased_gts_greater1>0:
+            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
+            phased_gts[phased_gts_greater1] = nan_integer
+    
+    freqs = np.nanmean(unphased_gts,axis=0)/2.0
+    nanmask = np.isnan(unphased_gts) 
+    unphased_gts = unphased_gts.astype(np.int8)
+    unphased_gts[nanmask] = nan_integer    
+    if not phased_gts is None:
+        nanmask = np.isnan(phased_gts)
+        phased_gts = phased_gts.astype(np.int8)
+        phased_gts[nanmask] = nan_integer
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    logging.info("with chromosomes " + str(chromosomes)+": " + "initializing data done ...")
-    pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
-    pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
-    selected_bim = bim[bim["id"].isin(sid)]
+    selected_bim = bim.iloc[indexes+start, :]
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns
-    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output}
-    pos = pos.astype(int)
-    return sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, chromosomes, hdf5_output_dict
+    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
+    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
+    return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict
