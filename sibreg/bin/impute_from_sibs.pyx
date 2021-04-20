@@ -50,7 +50,7 @@ cdef double get_probability_of_both_parents_conditioned_on_offsprings(int snp,
                                                              int gp2,
                                                              int[:] sib_indexes,
                                                              int sib_count,
-                                                             int[:,:] unphased_gts,
+                                                             signed char [:,:] unphased_gts,
                                                              double[:] parent_genotype_prob) nogil:
     cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
     cdef double denumerator = 0.
@@ -59,7 +59,7 @@ cdef double get_probability_of_both_parents_conditioned_on_offsprings(int snp,
     flag = 0
     for index in range(sib_count):
         gs = unphased_gts[sib_indexes[index], snp]
-        if not isnan(gs):
+        if not (gs == nan_integer):
             numerator = numerator*prob_offspring_on_parent[gp1, gp2, gs]
             flag = 1
     if flag==0:
@@ -81,7 +81,7 @@ cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(i
                                                                         int gp2,
                                                                         int[:] sib_indexes,
                                                                         int sib_count,
-                                                                        int[:,:] unphased_gts,
+                                                                        signed char [:,:] unphased_gts,
                                                                         double[:] parent_genotype_prob) nogil:
     cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
     cdef double denumerator = 0
@@ -90,7 +90,7 @@ cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(i
     flag = 0
     for index in range(sib_count):
         gs = unphased_gts[sib_indexes[index], snp]
-        if not isnan(gs):
+        if not (gs == nan_integer):
             numerator = numerator*prob_offspring_on_parent[gp1, gp2, gs]
             flag = 1
     if flag==0:
@@ -99,7 +99,7 @@ cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(i
         tmp = 1
         for index in range(sib_count):
             gs = unphased_gts[sib_indexes[index], snp]
-            if not isnan(gs):
+            if not (gs == nan_integer):
                 tmp = tmp*prob_offspring_on_parent[gp1, _gp2, gs]
         denumerator = denumerator+tmp*parent_genotype_prob[gp1]*parent_genotype_prob[_gp2]
     if denumerator==0:
@@ -865,7 +865,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int max_sibs = np.max(sibships["sib_count"])
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
     cdef int number_of_fams = sibships.shape[0]
-    cdef cnp.ndarray[cnp.double_t, ndim=1]freqs = np.nanmean(unphased_gts,axis=0)/2.0
+    cdef cnp.ndarray[cnp.double_t, ndim=1] c_freqs = freqs#np.nanmean(unphased_gts,axis=0)/2.0
     cdef double[:, :] parent_genotype_prob = np.hstack(((1-freqs.reshape(-1,1))**2, 2*freqs.reshape(-1,1)*(1-freqs.reshape(-1,1)), freqs.reshape(-1,1)**2))
     sibships["parent"] = sibships["FATHER_ID"]
     sibships["parent"][sibships["has_father"]] = sibships["FATHER_ID"][sibships["has_father"]]
@@ -995,7 +995,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 snp_ibd0[this_thread,:,:],
                                                                                 snp_ibd1[this_thread,:,:],
                                                                                 snp_ibd2[this_thread,:,:],
-                                                                                freqs[snp],
+                                                                                c_freqs[snp],
                                                                                 parent_genotype_prob[snp,:],
                                                                                 c_phased_gts,
                                                                                 c_unphased_gts,
@@ -1012,7 +1012,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          snp_ibd0[this_thread,:,:],
                                                                          snp_ibd1[this_thread,:,:],
                                                                          snp_ibd2[this_thread,:,:],
-                                                                         freqs[snp],
+                                                                         c_freqs[snp],
                                                                          parent_genotype_prob[snp,:],
                                                                          c_phased_gts,
                                                                          c_unphased_gts,
