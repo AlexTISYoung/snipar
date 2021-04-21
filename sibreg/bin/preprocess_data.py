@@ -210,7 +210,7 @@ def add_control(pedigree):
     return pedigree
 
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = None, chromosome = None):
+def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = None, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -281,6 +281,8 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = 
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
+    #removing individual whose parents are nan
+    no_parent_pedigree = no_parent_pedigree[(no_parent_pedigree["MOTHER_ID"] != pedigree_nan) & (no_parent_pedigree["FATHER_ID"] != pedigree_nan)]
     no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
     ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family

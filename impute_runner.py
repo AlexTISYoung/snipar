@@ -152,8 +152,9 @@ def run_imputation(data):
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
+    pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -292,6 +293,10 @@ if __name__ == "__main__":
                         type=int,
                         default=None,
                         help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
+    parser.add_argument('--pedigree_nan',
+                        type=str,
+                        default='0',
+                        help='The value representing NaN in the pedigreee.')
 
     args=parser.parse_args()
     if args.bgen is None and args.bed is None:
@@ -344,6 +349,7 @@ if __name__ == "__main__":
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
+            "pedigree_nan":args.pedigree_nan,
             }
             for chromosome in chromosomes]
     #TODO output more information about the imputation inside the hdf5 filehf
