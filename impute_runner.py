@@ -186,7 +186,7 @@ def run_imputation(data):
             bim_columns = np.array(hf["bim_columns"])
             bim_values = np.array(hf["bim_values"])
             pedigree = np.array(hf["pedigree"])
-            counter_ibd0 = np.array(hf["counter_ibd0"])
+            ratio_ibd0 = np.array(hf["ratio_ibd0"])
             non_duplicates = np.array(hf["non_duplicates"])
         os.remove(chunk_output_address)
         for i in range(1, chunks):
@@ -196,14 +196,14 @@ def run_imputation(data):
                 new_imputed_par_gts = np.array(hf['imputed_par_gts'])
                 new_pos = np.array(hf['pos'])
                 new_bim_values = np.array(hf["bim_values"])
-                new_counter_ibd0 = np.array(hf["counter_ibd0"])
+                new_ratio_ibd0 = np.array(hf["ratio_ibd0"])
                 new_non_duplicates = np.array(hf["non_duplicates"])
                 new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
                 imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
                 pos = np.hstack((pos, new_pos))
                 non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
                 bim_values = np.vstack((bim_values, new_bim_values))
-                counter_ibd0 = counter_ibd0+new_counter_ibd0
+                ratio_ibd0 = np.hstack((ratio_ibd0, new_ratio_ibd0))
             os.remove(chunk_output_address)
         logging.info(f"writing results of the merge")
         #Writing the merged output
@@ -215,7 +215,7 @@ def run_imputation(data):
             hf["bim_columns"] = bim_columns
             hf["bim_values"] = bim_values
             hf["pedigree"] =  pedigree
-            hf["counter_ibd0"] = counter_ibd0
+            hf["ratio_ibd0"] = ratio_ibd0
             hf["non_duplicates"] = non_duplicates
         logging.info(f"merging chunks done")
     elif chunks == 1:
