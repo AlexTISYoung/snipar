@@ -27,7 +27,102 @@ def print_call(call):
             message += call[i] + " "
     
     return message[1:-1]
-           
+
+
+def read_hdf5(args):
+
+    # == Reading in data == #
+    print("Reading in Data")
+    # reading in  data
+    filenames = args.path2file
+    files = glob.glob(filenames)
+
+    file = files[0]
+    print("Reading in file: ", file)
+    hf = h5py.File(file, 'r')
+    metadata = hf.get(args.bim)[()]
+    chromosome = metadata[:, args.bim_chromosome]
+    bp = metadata[:, args.bim_bp]
+    if args.rsid_readfrombim is not None:
+        snp = np.zeros(bp.shape[0])
+    else:
+        snp = metadata[:, args.bim_rsid]
+    A1 = metadata[:, args.bim_a1]
+    A2 = metadata[:, args.bim_a2]
+    theta  = hf.get(args.estimate)[()]
+    se  = hf.get(args.estimate_ses)[()]
+    S = hf.get(args.estimate_covariance)[()]
+    f = hf.get(args.freqs)[()]
+
+    # normalizing S
+    sigma2 = hf.get(args.sigma2)[()]
+    tau = hf.get(args.tau)[()]
+    phvar = sigma2+sigma2/tau
+    
+    hf.close()
+
+    if len(files) > 1:
+        for file in files[1:]:
+            print("Reading in file: ", file)
+            hf = h5py.File(file, 'r')
+            metadata = hf.get(args.bim)[()]
+            chromosome_file = metadata[:, args.bim_chromosome]
+            bp_file = metadata[:, args.bim_bp]
+            if args.rsid_readfrombim:
+                snp_file = np.zeros(bp_file.shape[0])
+            else:
+                snp_file = metadata[:, args.bim_rsid]
+            A1_file = metadata[:, args.bim_a1]
+            A2_file = metadata[:, args.bim_a2]
+            theta_file  = hf.get(args.estimate)[()]
+            se_file  = hf.get(args.estimate_ses)[()]
+            S_file = hf.get(args.estimate_covariance)[()]
+            f_file = hf.get(args.freqs)[()]
+
+            chromosome = np.append(chromosome, chromosome_file, axis = 0)
+            snp = np.append(snp, snp_file, axis = 0)
+            bp = np.append(bp, bp_file, axis = 0)
+            A1 = np.append(A1, A1_file, axis = 0)
+            A2 = np.append(A2, A2_file, axis = 0)
+            theta = np.append(theta, theta_file, axis = 0)
+            se = np.append(se, se_file, axis = 0)
+            S = np.append(S, S_file, axis = 0)
+            f = np.append(f, f_file, axis = 0)
+            hf.close()
+
+    # Constructing dataframe of data
+    zdata = pd.DataFrame({'CHR' : chromosome.astype(float).astype(int),
+                        'SNP' : snp.astype(str),
+                        'BP' : bp.astype(float).astype(int),
+                        "f" : f,
+                        "A1" : A1.astype(str),
+                        "A2" : A2.astype(str),
+                        'theta' : theta.tolist(),
+                        'se' : se.tolist(),
+                        "S" : S.tolist()})
+    
+
+    if args.rsid_readfrombim is not None:
+        rsidfiles = glob.glob(rsidfiles)
+        snps = pd.DataFrame(columns = ["BP", "rsid"])
+        for file in rsidfiles:
+            snp_i = ld.return_rsid(file, bppos, rsidpos, file_sep)
+            snps = snps.append(snp_i, ignore_index = True)
+        
+        snps = snps.drop_duplicates(subset=['BP'])
+        zdata = zdata.merge(snps, how = "left", on = "BP")
+        zdata = zdata.rename(columns = {"SNP" : "SNP_old"})
+        zdata = zdata.rename(columns = {"rsid" : "SNP"})
+
+    return zdata
+
+def filter_maf(df, maf):
+
+    dfcopy = df.copy()
+    dfcopy = dfcopy[dfcopy['f'] >= maf/100.0]
+    dfcopy = dfcopy[dfcopy['f'] <= 1-(maf/100.0)]
+
+    return dfcopy
         
 
 if __name__ == '__main__':
@@ -133,89 +228,8 @@ if __name__ == '__main__':
     
     if args.logfile is not None:
         logging.info(f"Start time:  {startTime}")
-
-    # == Reading in data == #
-    print("Reading in Data")
-    # reading in  data
-    filenames = args.path2file
-    files = glob.glob(filenames)
-
-    file = files[0]
-    print("Reading in file: ", file)
-    hf = h5py.File(file, 'r')
-    metadata = hf.get(args.bim)[()]
-    chromosome = metadata[:, args.bim_chromosome]
-    bp = metadata[:, args.bim_bp]
-    if args.rsid_readfrombim is not None:
-        snp = np.zeros(bp.shape[0])
-    else:
-        snp = metadata[:, args.bim_rsid]
-    A1 = metadata[:, args.bim_a1]
-    A2 = metadata[:, args.bim_a2]
-    theta  = hf.get(args.estimate)[()]
-    se  = hf.get(args.estimate_ses)[()]
-    S = hf.get(args.estimate_covariance)[()]
-    f = hf.get(args.freqs)[()]
-
-    # normalizing S
-    sigma2 = hf.get(args.sigma2)[()]
-    tau = hf.get(args.tau)[()]
-    phvar = sigma2+sigma2/tau
-    
-    hf.close()
-
-    if len(files) > 1:
-        for file in files[1:]:
-            print("Reading in file: ", file)
-            hf = h5py.File(file, 'r')
-            metadata = hf.get(args.bim)[()]
-            chromosome_file = metadata[:, args.bim_chromosome]
-            bp_file = metadata[:, args.bim_bp]
-            if args.rsid_readfrombim:
-                snp_file = np.zeros(bp_file.shape[0])
-            else:
-                snp_file = metadata[:, args.bim_rsid]
-            A1_file = metadata[:, args.bim_a1]
-            A2_file = metadata[:, args.bim_a2]
-            theta_file  = hf.get(args.estimate)[()]
-            se_file  = hf.get(args.estimate_ses)[()]
-            S_file = hf.get(args.estimate_covariance)[()]
-            f_file = hf.get(args.freqs)[()]
-
-            chromosome = np.append(chromosome, chromosome_file, axis = 0)
-            snp = np.append(snp, snp_file, axis = 0)
-            bp = np.append(bp, bp_file, axis = 0)
-            A1 = np.append(A1, A1_file, axis = 0)
-            A2 = np.append(A2, A2_file, axis = 0)
-            theta = np.append(theta, theta_file, axis = 0)
-            se = np.append(se, se_file, axis = 0)
-            S = np.append(S, S_file, axis = 0)
-            f = np.append(f, f_file, axis = 0)
-            hf.close()
-
-    # Constructing dataframe of data
-    zdata = pd.DataFrame({'CHR' : chromosome.astype(int),
-                        'SNP' : snp.astype(str),
-                        'BP' : bp.astype(int),
-                        "f" : f,
-                        "A1" : A1.astype(str),
-                        "A2" : A2.astype(str),
-                        'theta' : theta.tolist(),
-                        'se' : se.tolist(),
-                        "S" : S.tolist()})
-    
-
-    if args.rsid_readfrombim is not None:
-        rsidfiles = glob.glob(rsidfiles)
-        snps = pd.DataFrame(columns = ["BP", "rsid"])
-        for file in rsidfiles:
-            snp_i = ld.return_rsid(file, bppos, rsidpos, file_sep)
-            snps = snps.append(snp_i, ignore_index = True)
-        
-        snps = snps.drop_duplicates(subset=['BP'])
-        zdata = zdata.merge(snps, how = "left", on = "BP")
-        zdata = zdata.rename(columns = {"SNP" : "SNP_old"})
-        zdata = zdata.rename(columns = {"rsid" : "SNP"})
+ 
+    zdata = read_hdf5(args)
 
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
     
@@ -224,8 +238,7 @@ if __name__ == '__main__':
         logging.info(zdata_n_message)
     
     # dropping obs based on MAF
-    zdata = zdata[zdata['f'] >= args.maf/100.0]
-    zdata = zdata[zdata['f'] <= 1-(args.maf/100.0)]
+    zdata = filter_maf(zdata, args.maf)
     
     zdata_n_message = f"Number of Observations before merging LD-Scores, after removing low MAF SNPs: {zdata.shape[0]}"
     
@@ -241,27 +254,26 @@ if __name__ == '__main__':
     ldscores['BP'] = ldscores['BP'].astype('int')
 
     # dropping NAs
-    main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "SNP"])
+    main_df = zdata.merge(ldscores, how = "inner", on = ["SNP"], suffixes = ["", "_ld"])
 
     if main_df.shape[0] > 0:
-        bp_align = np.all(main_df.BP_x == main_df.BP_y)
+        bp_align = np.all(main_df.BP == main_df.BP_ld)
         print(f"All BPs align: {bp_align}")
 
         if not bp_align:
-            print(f"WARNING: {(main_df.BP_x != main_df.BP_y).sum()} BPs don't match between data and reference LD sample.")
-        main_df = main_df.drop('BP_y', axis = 1)
-        main_df = main_df.rename(columns = {'BP_x' : 'BP'})
+            print(f"WARNING: {(main_df.BP != main_df.BP_ld).sum()} BPs don't match between data and reference LD sample.")
+        main_df = main_df.drop('BP_ld', axis = 1)
         main_df = main_df.dropna()
     elif main_df.shape[0] == 0:
         print("No matches while matching LD-score data with main dataset using RSID.")
         print("Trying to match with BP.")
-        main_df = zdata.merge(ldscores, how = "inner", on = ["CHR", "BP"])
+        main_df = zdata.merge(ldscores, how = "inner", on = ["BP"], suffixes = ["", "_ld"])
         main_df = main_df.drop('SNP_y', axis = 1)
         main_df = main_df.rename(columns = {'SNP_x' : 'SNP'})
         main_df = main_df.dropna()
 
     maindata_n_message = f"Number of Observations after merging LD-Scores and dropping NAs: {main_df.shape[0]}"
-    main_df = main_df.sort_values(by=['CHR', 'BP'])
+    main_df = main_df.sort_values(by=['CHR_ld', 'BP'])
 
     print(maindata_n_message)
     if args.logfile is not None:
@@ -307,7 +319,7 @@ if __name__ == '__main__':
                     u = u,
                     M = M) 
 
-    output_matrix, result = model.solve(est_init = np.array([phvar/2, phvar/2, 0.0]),
+    output_matrix, result = model.solve(est_init = np.array([0./2., 0./2., 0.0]),
                                         rbounds = args.rbounds)
     
     estimates = {'v1' : output_matrix['v1'],
