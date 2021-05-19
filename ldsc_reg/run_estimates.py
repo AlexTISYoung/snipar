@@ -103,6 +103,13 @@ def read_hdf5(args):
     
 
     if args.rsid_readfrombim is not None:
+
+        rsid_parts = args.rsid_readfrombim.split(",")
+        rsidfiles = rsid_parts[0]
+        bppos = int(rsid_parts[1])
+        rsidpos = int(rsid_parts[2])
+        file_sep = str(rsid_parts[3])
+
         rsidfiles = glob.glob(rsidfiles)
         snps = pd.DataFrame(columns = ["BP", "rsid"])
         for file in rsidfiles:
@@ -123,16 +130,92 @@ def filter_maf(df, maf):
     dfcopy = dfcopy[dfcopy['f'] <= 1-(maf/100.0)]
 
     return dfcopy
+
+
+def read_txt(args):
+    
+    indirect_effect = args.txt_effectin
+    dfin = pd.read_csv(args.path2file, delim_whitespace = True)
+    N = dfin.shape[0]
+    
+    theta = np.zeros((N, 2))
+    theta[:, 0] = np.array(dfin["direct_Beta"].tolist())
+    theta[:, 1] = np.array(dfin[f'{indirect_effect}_Beta'].tolist())   
+    
+    
+    se = np.zeros((N, 2))
+    se[:, 0] = np.array((dfin["direct_SE"]).tolist())
+    se[:, 1] = np.array((dfin[f'{indirect_effect}_SE']).tolist()) 
+    
+    S = np.zeros((N, 2, 2))
+    S[:, 0, 0] = np.array((dfin["direct_SE"]**2).tolist())
+    S[:, 1, 1] = np.array((dfin[f'{indirect_effect}_SE']**2).tolist()) 
+    
+    cov = dfin["direct_SE"] * dfin[f'{indirect_effect}_SE'] * dfin[f'r_direct_{indirect_effect}']
+    S[:, 0, 1] = np.array(cov.tolist()) 
+    
+    zdata = pd.DataFrame({'CHR' : dfin['chromosome'].astype(int),
+                    'SNP' : dfin['SNP'].astype(str),
+                    'BP' : dfin['pos'].astype(int),
+                    "f" : dfin['freq'],
+                    "A1" : dfin['A1'].astype(str),
+                    "A2" : dfin['A2'].astype(str),
+                    'theta' : theta.tolist(),
+                    'se' : se.tolist(),
+                    "S" : S.tolist()})
+    
+    if args.rsid_readfrombim is not None:
+
+        rsid_parts = args.rsid_readfrombim.split(",")
+        rsidfiles = rsid_parts[0]
+        bppos = int(rsid_parts[1])
+        rsidpos = int(rsid_parts[2])
+        file_sep = str(rsid_parts[3])
         
+        rsidfiles = glob.glob(rsidfiles)
+        snps = pd.DataFrame(columns = ["BP", "rsid"])
+        for file in rsidfiles:
+            snp_i = ld.return_rsid(file, bppos, rsidpos, file_sep)
+            snps = snps.append(snp_i, ignore_index = True)
+        
+        snps = snps.drop_duplicates(subset=['BP'])
+        zdata = zdata.merge(snps, how = "left", on = "BP")
+        zdata = zdata.rename(columns = {"SNP" : "SNP_old"})
+        zdata = zdata.rename(columns = {"rsid" : "SNP"})
+
+    
+    return zdata
+
+def read_file(args):
+
+    # what kind of file is it
+    reader = args.path2file.split(".")[-1]
+    print(reader)
+
+    if reader == "hdf5":
+        zdata = read_hdf5(args)
+    elif reader == "txt":
+        zdata = read_txt(args)
+    else:
+        raise Exception("Input file extension should either be hdf5 or txt")
+
+
+    return zdata
+    
 
 if __name__ == '__main__':
     # command line arguments
     parser=argparse.ArgumentParser()
     parser.add_argument('path2file', type=str, 
-                        help='''Path to hdf5 file with summary statistics. 
+                        help='''Path to hdf5 file or txt with summary statistics. 
                                                 Should include the file name.
                                                 In case of multiple files include glob character.
                                                 eg: /path/to/file/chr_*.hdf5''')
+    parser.add_argument('-effectin', '--txt-effectin', type = str, default = 'avg_parental',
+    help = '''
+    If input is a txt file, determines what the name of the indirect effect columns
+    are. For example can be avgparental or population. By default its avg_parental.
+    ''')
     parser.add_argument('-ldsc', '--ldsc_scores', type = str, required = True, help = '''Directory of LDSC scores.''')
     parser.add_argument('-m', '--mfiles', type = str, help = '''Directory of M files scores. If left blank M will be
                                                                 the number of observations''')
@@ -212,14 +295,6 @@ if __name__ == '__main__':
     if args.logfile is not None:
         logging.info(f"Call: \n {args_call}")
 
-
-    # rsid files
-    if args.rsid_readfrombim is not None:
-        rsid_parts = args.rsid_readfrombim.split(",")
-        rsidfiles = rsid_parts[0]
-        bppos = int(rsid_parts[1])
-        rsidpos = int(rsid_parts[2])
-        file_sep = str(rsid_parts[3])
     
     startTime = datetime.datetime.now()
     
@@ -228,8 +303,9 @@ if __name__ == '__main__':
     
     if args.logfile is not None:
         logging.info(f"Start time:  {startTime}")
- 
-    zdata = read_hdf5(args)
+    
+    
+    zdata = read_file(args)
 
     zdata_n_message = f"Number of Observations before merging LD-Scores, before removing low MAF SNPs: {zdata.shape[0]}"
     
@@ -319,8 +395,7 @@ if __name__ == '__main__':
                     u = u,
                     M = M) 
 
-    output_matrix, result = model.solve(est_init = np.array([0./2., 0./2., 0.0]),
-                                        rbounds = args.rbounds)
+    output_matrix, result = model.solve(rbounds = args.rbounds)
     
     estimates = {'v1' : output_matrix['v1'],
                 'v2' : output_matrix['v2'],

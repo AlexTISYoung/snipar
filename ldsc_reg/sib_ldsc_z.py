@@ -445,23 +445,19 @@ def Vinit(z, S, l, M):
     solver from
     '''
 
-    S_hat = np.average(S, axis = 0, weights = 1/l)
-    Dmat = makeDmat(S_hat, M)       
-    Snew = Dmat @ S_hat @ Dmat
-    z_var = np.cov(z.T, aweights = 1/l)
-    l_bar = np.mean(l)
+    Y = np.atleast_2d(z**2)
+    X = np.atleast_2d(l).T # making it a row vector
+    Pmat = np.linalg.inv(X.T @ X) @ X.T
 
-    sigma1sq = S_hat[0, 0] * M
-    sigma1 = np.sqrt(sigma1sq)
-    sigma2sq = S_hat[1, 1] * M
-    sigma2 = np.sqrt(sigma2sq)
+    v1_init = Pmat @ Y[:, 0]
+    v2_init = Pmat @ Y[:, 1]
+    cov_init = Pmat @ (z[:, 0] * z[:, 1])
 
-    v1 = (z_var[0, 0] - 1) * sigma1sq/l_bar
-    v2 = (z_var[1, 1] - 1) * sigma2sq/l_bar
-    r = (z_var[0, 1] - Snew[0, 1]) * (sigma1 * sigma2)/(l_bar * np.sqrt(v1 * v2))
+    r_init = cov_init/np.sqrt(v1_init * v2_init)
 
-    est_init = np.array([v1, v2, r])
-    return est_init
+    est_init = np.array([v1_init, v2_init, r_init])
+
+    return est_init.flatten()
 
 
 
@@ -587,8 +583,6 @@ class sibreg():
         M = self.M if M is None else M
 
         # == Solves our MLE problem == #
-        m = 3
-        
         if est_init is None:
             if printout == True:
                 print("No initial guess provided.")
@@ -598,8 +592,9 @@ class sibreg():
         # exporting for potential later reference
         if printout == True:
             print(f"Initial estimate: {est_init}")
-            
-        self.est_init = est_init
+        
+        if est_init is None:
+            est_init = Vinit(z, S, l, M)
         
         rlimit = (-1, 1) if rbounds else (None, None)      
         ftol = 1e-20 if hipreci else 2.220446049250313e-09
