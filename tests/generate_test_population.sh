@@ -1,54 +1,50 @@
-python example/simulate_pop.py 1000 0.5 3000 1000 1000 0.5 "outputs/tmp/t__t"
-python -c 'import pandas as pd;
+rm outputs/tmp/*
+rm test_data/*
+for i in {1..2}
+do
+python example/simulate_pop.py 1000 0.5 3000 1000 1000 0.5 "outputs/tmp/t__t${i}" --chrom ${i}
+python -c "import pandas as pd;
 from sibreg.bin.preprocess_data import create_pedigree;
-ped = pd.read_csv("outputs/tmp/t__t_fams.ped", sep = " ");
-remove = pd.read_csv("outputs/tmp/t__t_remove.txt", sep = " ", names = ["counter", "id"]);
-ped = ped[~ped["IID"].isin(remove["id"])];
-ped.to_csv("test_data/sample.ped", index = False, sep = " ");
-sibships = ped.groupby(["FID","FATHER_ID", "MOTHER_ID"]).agg({"IID":list}).reset_index();
-ids = set(ped["IID"].tolist());
+ped = pd.read_csv('outputs/tmp/t__t${i}_fams.ped', delim_whitespace=True);
+remove = pd.read_csv('outputs/tmp/t__t1_remove.txt', delim_whitespace=True, names = ['counter', 'id']);
+ped = ped[~ped['IID'].isin(remove['id'])];
+ped.to_csv('test_data/sample${i}.ped', index = False, sep = ' ');
+sibships = ped.groupby(['FID','FATHER_ID', 'MOTHER_ID']).agg({'IID':list}).reset_index();
+ids = set(ped['IID'].tolist());
 kinship = [];
 for index, row in sibships.iterrows():
-    for i in range(1,len(row["IID"])):
+    for i in range(1,len(row['IID'])):
         for j in range(i):
-            kinship.append([row["FID"], row["IID"][i], row["FID"], row["IID"][j], "FS"]);
+            kinship.append([row['FID'], row['IID'][i], row['FID'], row['IID'][j], 'FS']);
 for index, row in ped.iterrows():
-    if row["FATHER_ID"] in ids:
-        kinship.append([row["FID"], row["IID"], row["FID"], row["FATHER_ID"],"PO"]);
-    if row["MOTHER_ID"] in ids:
-        kinship.append([row["FID"], row["IID"], row["FID"], row["MOTHER_ID"],"PO"]);
-kinship_df = pd.DataFrame(kinship, columns = ["FID1", "ID1", "FID2", "ID2", "InfType"]);
-kinship_df.to_csv("test_data/sample.king", sep = "\t", index = False);
-agesex = ped.copy();
-agesex["is_father"] = agesex["IID"].isin(agesex["FATHER_ID"]);
-agesex["is_mother"] = agesex["IID"].isin(agesex["MOTHER_ID"]);
-agesex["sex"] = "F";
-agesex.loc[agesex["is_father"],"sex"] = "M";
-agesex["age"] = 10;
-agesex.loc[agesex["is_father"]|agesex["is_mother"],"age"] = 100;
-agesex.to_csv("test_data/sample.agesex", sep = " ", index = False);
-king_chr1 = pd.read_csv("outputs/tmp/t__t.segments.gz", sep = "\t");
-king_chr2 = king_chr1.copy();
-king_chr2["Chr"] = 2;
-king_chr12 = pd.concat([king_chr1, king_chr2]);
-king_chr12.to_csv("test_data/sample.segments.gz", sep = "\t", index = False);
-print(king_chr12);
-result = create_pedigree("test_data/sample.king",
-                           "test_data/sample.agesex",
-).sort_values(by=["FID", "IID"])
-selected_people = [str(i*60)+"_0" for i in range(100)] + [str(i*60)+"_1" for i in range(100)] + [str(i*60)+"_P" for i in range(100)] + [str(i*60)+"_M" for i in range(100)]#set(np.array([[row["IID"], row["FATHER_ID"], row["MOTHER_ID"]] for index, row in result.iterrows() if int(row["FID"])%20==0]).reshape((1,-1))[0])
-new_result = result[result["IID"].isin(selected_people)]
-new_result.to_csv("test_data/pedigree_creation_sample.ped", sep = " ", index = False)
-king = pd.read_csv("test_data/sample.king", sep = "\t")
-new_king = king[king["ID1"].isin(new_result["IID"]) | king["ID2"].isin(new_result["IID"])]
-new_king.to_csv("test_data/pedigree_creation_sample.king", sep="\t", index=False)
-'
-/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g outputs/tmp/t__t.haps -s outputs/tmp/t__t.sample -og test_data/sample1.bgen -os test_data/sample1.sample -filetype shapeit_haplotypes -ofiletype bgen
-plink/plink2 --bgen test_data/sample1.bgen ref-last --sample test_data/sample1.sample --make-bed --out test_data/sample1 --oxford-single-chr 1
-python example/simulate_trait_quad.py test_data/sample1.bed outputs/tmp/t__t_fams.ped 0.8 test_data/h2_quad_0.8 --no_sib --dncor 0.5
-/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample1.bgen -s test_data/sample1.sample -og test_data/sample1_reduced.bgen -os test_data/sample1_reduced.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t_remove.txt
-plink/plink2 --bgen test_data/sample1_reduced.bgen ref-last --sample test_data/sample1_reduced.sample --make-bed --out test_data/sample1_reduced --oxford-single-chr 1
-cp test_data/sample1.bed test_data/sample2.bed
-cp test_data/sample1.bim test_data/sample2.bim
-cp test_data/sample1.fam test_data/sample2.fam
-cp test_data/sample1.bgen test_data/sample2.bgen
+    if row['FATHER_ID'] in ids:
+        kinship.append([row['FID'], row['IID'], row['FID'], row['FATHER_ID'],'PO']);
+    if row['MOTHER_ID'] in ids:
+        kinship.append([row['FID'], row['IID'], row['FID'], row['MOTHER_ID'],'PO']);
+kinship_df = pd.DataFrame(kinship, columns = ['FID1', 'ID1', 'FID2', 'ID2', 'InfType']);
+kinship_df.to_csv('test_data/sample${i}.king', sep = '\t', index = False);
+"
+cp outputs/tmp/t__t${i}.agesex test_data/sample${i}.agesex
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g outputs/tmp/t__t${i}.haps -s outputs/tmp/t__t${i}.sample -og test_data/sample${i}.bgen -os test_data/sample${i}.sample -filetype shapeit_haplotypes -ofiletype bgen
+plink/plink2 --bgen test_data/sample${i}.bgen ref-last --sample test_data/sample${i}.sample --make-bed --out test_data/sample${i} --oxford-single-chr ${i}
+python example/simulate_trait_quad.py test_data/sample${i}.bed outputs/tmp/t__t${i}_fams.ped 0.8 test_data/h2_quad_0.8${i} --no_sib --dncor 0.5
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample${i}.bgen -s test_data/sample${i}.sample -og test_data/sample_reduced${i}.bgen -os test_data/sample_reduced${i}.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t${i}_remove.txt
+plink/plink2 --bgen test_data/sample_reduced${i}.bgen ref-last --sample test_data/sample_reduced${i}.sample --make-bed --out test_data/sample_reduced${i} --oxford-single-chr ${i}
+cp outputs/tmp/t__t${i}.segments.gz test_data/sample${i}.segments.gz
+cp outputs/tmp/t__t${i}allsegs.txt test_data/sample${i}allsegs.txt
+done
+
+cp test_data/sample1.agesex test_data/sample.agesex
+cp test_data/sample1.ped test_data/sample.ped
+cp test_data/sample1.king test_data/sample.king
+
+zcat test_data/sample1.segments.gz > outputs/tmp/sample.segments
+zcat test_data/sample2.segments.gz | tail -n +2 >> outputs/tmp/sample.segments
+gzip outputs/tmp/sample.segments
+cp outputs/tmp/sample.segments.gz test_data/
+
+cat test_data/sample1allsegs.txt > test_data/sampleallsegs.txt
+cat test_data/sample2allsegs.txt | tail -n +2 >> test_data/sampleallsegs.txt
+
+
+plink1 --bfile test_data/sample1 --bmerge test_data/sample2 --out test_data/sample1_2

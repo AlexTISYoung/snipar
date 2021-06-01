@@ -639,7 +639,7 @@ cdef int get_IBD_type(cstring id1,
                       cstring id2,
                       int loc,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil:
-    """Returns the IBD status of individuals with id1 and id2 in the SNP located at loc
+    """Returns the IBD status of individuals with id1 and id2 in the SNP located at loc. Returns nan_integer if ambiguous.
 
     Args:
         id1 : cstring
@@ -659,12 +659,12 @@ cdef int get_IBD_type(cstring id1,
 
     Returns:
         int
-            the IBD status of individuals with id1 and id2 in the SNP located at loc
+            the IBD status of individuals with id1 and id2 in the SNP located at loc. nan_integer if ambiguous.
 
     """
 
     #the value for ibd_dict is like this: [start1, end1, ibd_type1, start2, end2, ibd_type2,...]
-    cdef int result = 0
+    cdef int result = nan_integer
     cdef int index
     cdef cpair[cstring, cstring] key1
     cdef cpair[cstring, cstring] key2
@@ -681,7 +681,7 @@ cdef int get_IBD_type(cstring id1,
         segments = ibd_dict[key2]
 
     for index in range(segments.size()//3):
-        if segments[3*index] <= loc <= segments[3*index+1]:
+        if segments[3*index] <= loc < segments[3*index+1]:
             result = segments[3*index+2]
             break
 

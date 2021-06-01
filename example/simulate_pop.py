@@ -55,6 +55,7 @@ parser.add_argument('n_one_parent',type=int,help='Number of families to observe 
 parser.add_argument('p_sib_missing',type=float,help='Probability that one sibling is missing')
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
 parser.add_argument('--blocksize',type=int,help='Size of blocks without recombination (number of SNPs)', default=None)
+parser.add_argument('--chrom',type=str,help='Prefix for all snp ids', default="")
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -64,6 +65,7 @@ outprefix = args.outprefix
 n_sib_only = args.n_sib_only
 n_one_parent = args.n_one_parent
 p_sib_missing = args.p_sib_missing
+chrom = args.chrom
 fsize = 2
 if args.blocksize is None:
     blocksize = nsnp
@@ -140,6 +142,15 @@ kin_out.close()
 
 ibd = ibd[:,0,:]
 
+# Determine IBD segments assessed
+allsegs_out = open(args.outprefix+'allsegs.txt','w')
+allsegs_out.write('Segment\tChr\tStartMB\tStopMB\tLength\tN_SNP\tStartSNP\tStopSNP\n')
+# Ignore first and last SNP
+insegs = np.ones((nsnp),dtype=bool)
+insegs[[0,insegs.shape[0]-1]] = False
+allsegs_out.write(f'1\t{chrom}\t0\t1\t1\t'+str(nsnp-2)+f'\t{chrom}_rs1\t{chrom}_rs'+str(nsnp-2)+'\n')
+allsegs_out.close()
+
 # Convert IBD to KING format
 king_out = gzip.open(args.outprefix+'.segments.gz','wb')
 king_out.write(b'FID1\tID1\tFID2\tID2\tIBDType\tChr\tStartMB\tStopMB\tStartSNP\tStopSNP\tN_SNP\tLength\n')
@@ -148,27 +159,27 @@ for i in range(0,nfam):
     start_snps = []
     end_snps = []
     ibd_type = []
-    init_ibd = ibd[i,0]
+    init_ibd = ibd[i,1]
     if init_ibd>0:
-        start_snps.append('rs'+str(0))
-        ibd_type.append(ibd[i,0])
-    for j in range(0,ibd.shape[1]):
+        start_snps.append(f'{chrom}_rs'+str(1))
+        ibd_type.append(ibd[i,1])
+    for j in range(2,ibd.shape[1]-1):
         if not ibd[i,j]==init_ibd:
             if init_ibd>0:
-                end_snps.append('rs'+str(j-1))
+                end_snps.append(f'{chrom}_rs'+str(j-1))
             init_ibd = ibd[i,j]
             if init_ibd>0:
-                start_snps.append('rs'+str(j))
+                start_snps.append(f'{chrom}_rs'+str(j))
                 ibd_type.append(ibd[i,j])
     if init_ibd>0:
-        end_snps.append('rs'+str(j))
+        end_snps.append(f'{chrom}_rs'+str(j))
     # Write to file
     nseg = len(start_snps)
     if nseg>0:
         for s in range(0,nseg):
-            t = str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+'\t1\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0'
+            t = str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+f'\t{chrom}\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0'
             king_out.write(t.encode("ascii"))
-            if not i==(nfam-1) and s==(nseg-1):
+            if s==(nseg-1):
                 king_out.write(b'\n')
 king_out.close()
 
@@ -194,7 +205,7 @@ for i in range(0,nfam):
     haps_matrix[:,nhaps] = mother_gts[i, :, 1]
     nhaps += 1
 
-haps_snps = np.column_stack((['rs'+str(x) for x in range(nsnp)],['rs'+str(x) for x in range(nsnp)],
+haps_snps = np.column_stack(([chrom]*nsnp,[f'{chrom}_rs'+str(x) for x in range(nsnp)],
                              [str(x) for x in range(nsnp)],['A' for x in range(nsnp)],['G' for x in range(nsnp)]))
 
 haps_out = np.column_stack((haps_snps,haps_matrix))
