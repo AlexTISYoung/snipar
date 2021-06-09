@@ -37,7 +37,7 @@ class TestPedigree(unittest.TestCase):
         result = create_pedigree("test_data/pedigree_creation_sample.king",
                                    "test_data/sample.agesex",
         ).sort_values(by=['FID', "IID"])
-        expected = pd.read_csv("test_data/pedigree_creation_sample.ped", sep = " ").sort_values(by=['FID', "IID"])
+        expected = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"])
         result_graph = create_graph_from_pedigree(result)
         expected_graph = create_graph_from_pedigree(expected)
         print("here")
@@ -47,7 +47,7 @@ class TestPedigree(unittest.TestCase):
         self.assertTrue(equality)
     
     def test_add_control(self):
-        pedigree = pd.read_csv("test_data/sample.ped", sep = " ").sort_values(by=['FID', "IID"]).astype(str)
+        pedigree = pd.read_csv("test_data/sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
         controlled_pedigree = add_control(pedigree).astype(str)
         controlled_fams = [fid[3:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
         has_father = pedigree["FATHER_ID"].isin(pedigree["IID"])

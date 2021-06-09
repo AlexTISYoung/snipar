@@ -144,6 +144,7 @@ def run_imputation(data):
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     ibd_pd = data["ibd_pd"]
+    segs_pd = data["segs_pd"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -154,7 +155,7 @@ def run_imputation(data):
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, segs_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -308,7 +309,7 @@ if __name__ == "__main__":
         logging.info("creating pedigree ...")
         pedigree = create_pedigree(args.king, args.agesex)
     else:
-        pedigree = pd.read_csv(args.pedigree, sep = " ")
+        pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
     logging.info("pedigree loaded.")
 
     if args.c:
@@ -317,7 +318,8 @@ if __name__ == "__main__":
         logging.info("Control Added.")
     
     logging.info("Loading ibd ...")
-    ibd_pd = pd.read_csv(args.ibd, sep = "\t")
+    ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
+    segs_pd = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)
     logging.info("ibd loaded.")
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
@@ -340,10 +342,11 @@ if __name__ == "__main__":
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "ibd_pd": ibd_pd,
+            "segs_pd": segs_pd,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
-            "bim": args.bim,
+            "bim": none_tansform(args.bim, "~", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,

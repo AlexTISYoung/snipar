@@ -82,7 +82,7 @@ def create_pedigree(king_address, agesex_address):
 
     kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
     logging.info("loaded kinship file")
-    agesex = pd.read_csv(agesex_address, sep = " ")
+    agesex = pd.read_csv(agesex_address, delim_whitespace=True)
     agesex["IID"] = agesex["IID"].astype(str)
     agesex["FID"] = agesex["FID"].astype(str)
     logging.info("loaded agesex file")
@@ -209,8 +209,164 @@ def add_control(pedigree):
     pedigree = pedigree[['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']]
     return pedigree
 
+def preprocess_king(ibd, segs, bim, chromosomes, sibships):
+    if len(chromosomes)>1:
+        # ibd = ibd[ibd["Chr"].isin(chromosomes)][["Chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+        ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+    else:
+        # ibd = ibd[ibd["Chr"]==chromosomes[0]][["Chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+        ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
+    #TODO cancel or generalize this
+    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
+        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    ibd["IBDType"] = ibd["IBDType"].astype(int)
+    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
+    ibd= ibd.merge(temp, on="StartSNP")
+    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
+    ibd = ibd.merge(temp, on="StopSNP")
+    ibd['segment'] = ibd[['StartSNPLoc', 'StopSNPLoc', "IBDType"]].values.tolist()
+    # ibd = ibd.groupby(["Chr", "ID1", "ID2"]).agg({'segment':sorted}).reset_index()
+    ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':sorted}).reset_index()
+    if len(chromosomes)>1:
+        # segs = segs[segs["Chr"].isin(chromosomes)][["Chr", "StartSNP", "StopSNP"]]
+        segs = segs[segs["Chr"].isin(chromosomes)][["StartSNP", "StopSNP"]]
+    else:
+        # segs = segs[segs["Chr"]==chromosomes[0]][["Chr", "StartSNP", "StopSNP"]]
+        segs = segs[segs["Chr"]==chromosomes[0]][["StartSNP", "StopSNP"]]
+    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
+    segs= segs.merge(temp, on="StartSNP")
+    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
+    segs = segs.merge(temp, on="StopSNP")
+    # segs = segs[['Chr', 'StartSNPLoc', 'StopSNPLoc']].sort_values(['Chr', 'StartSNPLoc']).values.tolist()
+    segs = segs[['StartSNPLoc', 'StopSNPLoc']].sort_values('StartSNPLoc').values.tolist()
+    flatten_seg_as_ibd0 = []
+    for l in segs:
+        flatten_seg_as_ibd0 = flatten_seg_as_ibd0 + l + [0]
+    #TODO does this work with multichromosome in the ibd file? it won't work if snplocs are indexed from zero in each snp
+    all_ibd_segs = []
+    for index, row in ibd.iterrows():
+        id1, id2, segments = row["ID1"], row["ID2"], row["segment"]
+        seg_counter = 0
+        row_ibd0 = []        
+        start, end = segs[seg_counter]
+        prev_end = start
+        for seg_start, seg_end, ibd_type in segments:  
+            while seg_start>end:
+                if prev_end<end:
+                    row_ibd0.append([prev_end, end, 0])
+                if (seg_counter+1) < len(segs):
+                    seg_counter+=1
+                    start, end = segs[seg_counter]
+                    prev_end = start
+                else:
+                    raise Exception("this segments starts after all meaningfull segments")
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = None, chromosome = None, pedigree_nan = '0'):
+            if seg_start<start:
+                raise Exception("segment starts sooner than it should")
+
+            if seg_start>prev_end:
+                row_ibd0.append([prev_end, seg_start, 0])
+
+            if seg_end>end:
+                raise Exception("segment ends outside where it should have")
+            prev_end=seg_end
+
+        if prev_end<end:
+            row_ibd0.append([prev_end, end, 0])
+        row_ibd0 = row_ibd0 + [[start, end, 0] for start, end in segs[seg_counter+1:]]
+        row_ibd = segments+row_ibd0
+        row_ibd = sorted(row_ibd, key=lambda x:x[0])        
+        flatten_row_ibd = []
+        for l in row_ibd:
+            for el in l:
+                flatten_row_ibd.append(el)
+        all_ibd_segs.append(flatten_row_ibd)
+    ibd["segment"] = pd.Series(all_ibd_segs)
+    ibd_dict = ibd.set_index(["ID1", "ID2"]).to_dict()["segment"]
+    for index, row in sibships.iterrows():
+        sibs = row["IID"]
+        nsibs = len(sibs)
+        if nsibs > 1:
+            for i in range(1, nsibs):
+                for j in range(0, i):
+                    sib1 = sibs[i].decode()
+                    sib2 = sibs[j].decode()
+                    if not((sib1, sib2) in ibd_dict or (sib2, sib1) in ibd_dict):
+                        ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
+    return ibd_dict
+    # print(segs)
+    # all_segs = segs[['Chr', 'StartSNPLoc', 'StopSNPLoc']].sort_values(['Chr', 'StartSNPLoc'])
+    # all_ibd = ibd
+
+    # for chrom in chromosomes:
+    #     segs = all_segs[all_segs["Chr"] == chrom][['StartSNPLoc', 'StopSNPLoc']].values.tolist()
+    #     ibd = all_ibd[all_ibd["Chr"] == chrom]
+    #     flatten_seg_as_ibd0 = []
+    #     for l in segs:
+    #         flatten_seg_as_ibd0 = flatten_seg_as_ibd0 + l + [0]
+    #     #TODO does this work with multichromosome in the ibd file? it won't work if snplocs are indexed from zero in each snp
+    #     all_ibd_segs = []
+    #     for index, row in ibd[ibd["Chr"]==chrom].iterrows():
+    #         id1, id2, segments = row["ID1"], row["ID2"], row["segment"]
+    #         seg_counter = 0
+    #         row_ibd0 = []        
+    #         start, end = segs[seg_counter]
+    #         prev_end = start
+    #         for seg_start, seg_end, ibd_type in segments:  
+    #             while seg_start>end:
+    #                 if prev_end<end:
+    #                     row_ibd0.append([prev_end, end, 0])
+    #                 if (seg_counter+1) < len(segs):
+    #                     seg_counter+=1
+    #                     start, end = segs[seg_counter]
+    #                     prev_end = start
+    #                 else:
+    #                     raise Exception("this segments starts after all meaningfull segments")
+
+    #             if seg_start<start:
+    #                 raise Exception("segment starts sooner than it should")
+
+    #             if seg_start>prev_end:
+    #                 row_ibd0.append([prev_end, seg_start, 0])
+    #                 print("booooo")
+
+    #             if seg_end>end:
+    #                 raise Exception("segment ends outside where it should have")
+    #             prev_end=seg_end
+
+    #         if prev_end<end:
+    #             row_ibd0.append([prev_end, end, 0])
+    #             print("woooooooow")
+    #         row_ibd0 = row_ibd0 + [[start, end, 0] for start, end in segs[seg_counter+1:]]
+    #         row_ibd = segments+row_ibd0
+    #         row_ibd = sorted(row_ibd, key=lambda x:x[0])        
+    #         flatten_row_ibd = []
+    #         for l in row_ibd:
+    #             for el in l:
+    #                 flatten_row_ibd.append(el)
+    #         all_ibd_segs.append(flatten_row_ibd)
+    #     ibd["segment"] = pd.Series(all_ibd_segs)
+    #     print(all_ibd_segs)
+    #     print("ibd>>>>>>>>>>>>>", ibd)
+    #     print("all_ibd>>>>>>>>>>>>>", all_ibd)
+    #     # print(np.sum(np.isnan(ibd["segment"])))
+    #     # print(np.sum(np.isnan(allibd["segment"])))
+    #     # 0/0
+    # ibd_dict = ibd.set_index(["ID1", "ID2"]).to_dict()["segment"]
+    # for index, row in sibships.iterrows():
+    #     sibs = row["IID"]
+    #     nsibs = len(sibs)
+    #     if nsibs > 1:
+    #         for i in range(1, nsibs):
+    #             for j in range(0, i):
+    #                 sib1 = sibs[i].decode()
+    #                 sib2 = sibs[j].decode()
+    #                 if not((sib1, sib2) in ibd_dict or (sib2, sib1) in ibd_dict):
+    #                     ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
+    # print(list(ibd_dict.items()))
+    # return ibd_dict
+
+def prepare_data(pedigree, phased_address, unphased_address, ibd, segs, bim_address = None, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -263,13 +419,14 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = 
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
-        bim = pd.read_csv(bim_address, sep = "\t", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
-        
+        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
     else:
         if bim_address is None:
             bim_address = phased_address+'.bgen'
         bgen = read_bgen(bim_address, verbose=False)
         bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
+        #TODO this line should be replaced
+        bim["id"]=bim["rsid"]
         if chromosome is None:
             raise Exception("chromosome should be specified when using phased data") 
         bim["Chr"] = chromosome
@@ -298,26 +455,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, bim_address = 
     ibd = ibd.astype(str)
     #Adding location of start and end of each
     chromosomes = chromosomes.astype(str)
-    if len(chromosomes)>1:
-        ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-    else:
-        ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
-    #TODO cancel or generalize this
-    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
-        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
-    ibd["IBDType"] = ibd["IBDType"].astype(int)
-    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
-    ibd= ibd.merge(temp, on="StartSNP")
-    temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
-    ibd = ibd.merge(temp, on="StopSNP")
-    ibd['segment'] = ibd[['StartSNPLoc', 'StopSNPLoc', "IBDType"]].values.tolist()
-    def create_seg_list(x):
-        elements = list(x)
-        result = []
-        for el in elements:
-            result = result+el
-        return result
-    ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
+    ibd = preprocess_king(ibd, segs, bim, chromosomes, sibships)
     logging.info(f"with chromosomes {chromosomes} loading genotype file ...")
 
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
@@ -379,26 +517,28 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     phased_gts = None
     unphased_gts = None
     if unphased_address:
-        gts_f = Bed(unphased_address+".bed",count_A1 = True)
+        bim_as_csv = pd.read_csv(unphased_address+".bim", delim_whitespace=True, header=None)
+        gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
         logging.info(f"with chromosomes {chromosomes} opened unphased file ...")
         ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
         logging.info(f"with chromosomes {chromosomes} loaded ids ...")
         gts_ids = gts_f.iid[ids_in_ped]
         logging.info(f"with chromosomes {chromosomes} restrict to ids ...")
-        all_sids = gts_f.sid
+        all_sids = bim_as_csv[1].values
+
         if end is not None:
             unphased_gts = gts_f[ids_in_ped , start:end].read().val
             logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[start:end, 2]
             logging.info(f"with chromosomes {chromosomes} loaded pos ...")
-            sid = gts_f.sid[start:end]
+            sid = all_sids[start:end]
             logging.info(f"with chromosomes {chromosomes} loaded sid ...")
         else:
-            unphased_gts = gts_f[ids_in_ped, :].read().val            
+            unphased_gts = gts_f[ids_in_ped, :].read().val
             logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[:, 2]
             logging.info(f"with chromosomes {chromosomes} loaded pos ...")
-            sid = gts_f.sid
+            sid = all_sids
             logging.info(f"with chromosomes {chromosomes} loaded sid ...")
     if phased_address:
         bgen = open_bgen(phased_address+".bgen", verbose=False)
@@ -420,7 +560,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             phased_gts[nanmask] = nan_integer
     _, indexes = np.unique(all_sids, return_index=True)
     indexes = np.sort(indexes)
-    indexes = indexes[(indexes>=start) & (indexes<end)]-start
+    indexes = (indexes[(indexes>=start) & (indexes<end)]-start)
     sid = sid[indexes]
     pos = pos[indexes]
     unphased_gts = unphased_gts[:, indexes]
