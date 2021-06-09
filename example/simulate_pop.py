@@ -55,7 +55,7 @@ parser.add_argument('n_one_parent',type=int,help='Number of families to observe 
 parser.add_argument('p_sib_missing',type=float,help='Probability that one sibling is missing')
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
 parser.add_argument('--blocksize',type=int,help='Size of blocks without recombination (number of SNPs)', default=None)
-parser.add_argument('--chrom',type=str,help='Prefix for all snp ids', default="")
+parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default="")
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -205,8 +205,8 @@ for i in range(0,nfam):
     haps_matrix[:,nhaps] = mother_gts[i, :, 1]
     nhaps += 1
 
-haps_snps = np.column_stack(([chrom]*nsnp,[f'{chrom}_rs'+str(x) for x in range(nsnp)],
-                             [str(x) for x in range(nsnp)],['A' for x in range(nsnp)],['G' for x in range(nsnp)]))
+haps_snps = np.column_stack(([f"{chrom}"]*nsnp,[f'{chrom}_rs'+str(x) for x in range(nsnp)],
+                             [f"{chrom*nsnp+x}" for x in range(nsnp)],['A' for x in range(nsnp)],['G' for x in range(nsnp)]))
 
 haps_out = np.column_stack((haps_snps,haps_matrix))
 np.savetxt(args.outprefix+'.haps',haps_out,fmt='%s')
