@@ -82,8 +82,18 @@ class test_regrnd_functions(unittest.TestCase):
             nderiv[i, :] = ld._num_grad_V(ld.Vmat2V(V, model.M), model.z[i, :], model.S[i], model.l[i], model.M)
 
         self.assertTrue(np.allclose(aderiv, nderiv))
-        
+
+    def test_modified_chol(self):
+
+        A = np.random.rand(3,3)
+        G = A.T @ A
+
+        Gmod = ld.modified_cholesky(G)
+
+        self.assertTrue(np.allclose(G, Gmod))
+
         
 if  __name__=='__main__':
+    np.random.seed(123)
     unittest.main()
     

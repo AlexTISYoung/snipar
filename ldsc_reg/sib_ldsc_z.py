@@ -119,61 +119,63 @@ def modified_cholesky(G):
     Gill et al Gill and Murray (1974)
     '''
     
-    n = G.shape[0]
-    Gnorm = np.linalg.norm(G, np.inf)
+    # n = G.shape[0]
+    # Gnorm = np.linalg.norm(G, np.inf)
     
-    R = np.eye(n)
-    E = np.zeros((n, n))
+    # R = np.eye(n)
+    # E = np.zeros((n, n))
     
-    eps = np.finfo(np.float64).eps
-    gamm = np.max(np.abs(np.diag(G)))
-    delta = max([eps * Gnorm, eps])
+    # eps = np.finfo(np.float64).eps
+    # gamm = np.max(np.abs(np.diag(G)))
+    # delta = max([eps * Gnorm, eps])
     
     
-    # algorithm
-    for j in range(n):
-        theta_j = 0
+    # # algorithm
+    # for j in range(n):
+    #     theta_j = 0
         
         
-        for i in range(n):
+    #     for i in range(n):
             
-            summ = 0
-            for k in range(j):
-                summ += R[k,i] * R[k,j]
+    #         summ = 0
+    #         for k in range(j):
+    #             summ += R[k,i] * R[k,j]
         
-            R[i,j] = (G[i,j] - summ)/R[i,i]
+    #         R[i,j] = (G[i,j] - summ)/R[i,i]
             
-            if G[i, j] - summ > theta_j:
-                theta_j = G[i, j] - summ
+    #         if G[i, j] - summ > theta_j:
+    #             theta_j = G[i, j] - summ
             
-            if i > j:
-                R[i, j] = 0.0
+    #         if i > j:
+    #             R[i, j] = 0.0
         
-        summ = 0
+    #     summ = 0
         
-        for k in range(j):
-            summ += R[k, j] ** 2
+    #     for k in range(j):
+    #         summ += R[k, j] ** 2
         
-        phi_j = G[j,j] - summ
+    #     phi_j = G[j,j] - summ
         
-        if (j+2) <= n:
-            xi_j = max(np.abs(G[j+1:, j]))
-        else:
-            xi_j = np.abs(G[n-1, j])
+    #     if (j+2) <= n:
+    #         xi_j = max(np.abs(G[j+1:, j]))
+    #     else:
+    #         xi_j = np.abs(G[n-1, j])
         
         
-        beta_j = np.sqrt(max([gamm, xi_j/n, eps]))
+    #     beta_j = np.sqrt(max([gamm, xi_j/n, eps]))
         
-        if delta >= max([np.abs(phi_j), (theta_j**2)/beta_j**2]):
-            E[j, j] = delta - phi_j
-        elif np.abs(phi_j) >= max([(delta**2)/(beta_j**2), delta]):
-            E[j,j] = np.abs(phi_j) - phi_j
-        elif ((theta_j**2)/(beta_j**2)) >= max([delta, np.abs(phi_j)]):
-            E[j,j] = ((theta_j**2)/(beta_j**2)) - phi_j
+    #     if delta >= max([np.abs(phi_j), (theta_j**2)/beta_j**2]):
+    #         E[j, j] = delta - phi_j
+    #     elif np.abs(phi_j) >= max([(delta**2)/(beta_j**2), delta]):
+    #         E[j,j] = np.abs(phi_j) - phi_j
+    #     elif ((theta_j**2)/(beta_j**2)) >= max([delta, np.abs(phi_j)]):
+    #         E[j,j] = ((theta_j**2)/(beta_j**2)) - phi_j
               
-        R[j, j] = np.sqrt(G[j, j] - summ + E[j, j])
+    #     R[j, j] = np.sqrt(G[j, j] - summ + E[j, j])
         
-    return R.T @ R
+    # return R.T @ R
+
+    return G
 
 
 @njit(fastmath = True)
@@ -197,7 +199,7 @@ def _log_ll(V, z, S, l, N):
     logll = scalar
     """
     Vmat = V2Vmat(V, N)
-    # Vmat = modified_cholesky(Vmat)
+    Vmat = modified_cholesky(Vmat)
     Vnew, Snew = standardize_mat(Vmat, S, N)
 
     Sigma = Snew + l * Vnew
@@ -228,7 +230,7 @@ def _grad_ll_v(V, z, S, l, N):
     """
 
     Vmat = V2Vmat(V, N)
-    # Vmat = modified_cholesky(Vmat)
+    Vmat = modified_cholesky(Vmat)
     V = Vmat2V(Vmat, N)
 
     d = S.shape[0]
@@ -635,7 +637,8 @@ class sibreg():
 def jkse_core(indices,
              model,
              full_est,
-             rbounds = True):
+             rbounds = True,
+             printout = False):
     
     '''
     This runs the core estimation
@@ -658,7 +661,7 @@ def jkse_core(indices,
                     u = u,
                     f = f,
                     M = M,
-                    printout = False,
+                    printout = printout,
                     est_init = full_est,
                     rbounds = rbounds,
                     hess = False)
@@ -695,7 +698,7 @@ def jkse(model,
     # store full parameter estimate as array
     full_est = np.array([full_est_params['v1'], full_est_params['v2'], full_est_params['r']])
     
-    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est, rbounds = rbounds)
+    jkse_toparallelize = partial(jkse_core, model = model, full_est = full_est, rbounds = rbounds, printout = printinfo)
     
     num_procs = num_procs
     pool = mp.Pool(num_procs)
@@ -730,10 +733,7 @@ def read_ldscores(ldscore_path, ldcolnames):
     '''
     Reads in LD scores
     ldscore_path : string signifying where the ldscores are
-    ldfiles : string - a glob identifier for all the ld score files
     ldcolnames : list - the columns present in the ldscore data
-    Mfiles : string - a glob identifier for all the files which has M data
-    Mcolnames : list - the columns present in the M file data
     '''
     files = glob.glob(f"{ldscore_path}")
     ldscores = pd.DataFrame(columns = ldcolnames)
