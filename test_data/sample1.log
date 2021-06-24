@@ -8,9 +8,9 @@ Options in effect:
 
 Hostname: g03
 Working directory: /disk/genetics4/ukb/moeen/SNIPar
-Start time: Tue Jun  1 17:13:15 2021
+Start time: Thu Jun 24 17:28:16 2021
 
-Random number seed: 1622581995
+Random number seed: 1624570096
 257670 MiB RAM detected; reserving 128835 MiB for main workspace.
 Using up to 48 threads (change this with --threads).
 --bgen: 1000 variants detected, format v1.2.
@@ -25,4 +25,4 @@ Writing test_data/sample1.fam ... done.
 Writing test_data/sample1.bim ... done.
 Writing test_data/sample1.bed ... done.
 
-End time: Tue Jun  1 17:13:15 2021
+End time: Thu Jun 24 17:28:16 2021

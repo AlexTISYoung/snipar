@@ -3,6 +3,7 @@ from sibreg.bin.impute_from_sibs import *
 from sibreg.bin.impute_from_sibs cimport *
 import numpy as np
 import unittest
+from config import nan_integer
 
 class TestSibImpute(unittest.TestCase):
     def test_get_IBD_type(self):
@@ -15,11 +16,11 @@ class TestSibImpute(unittest.TestCase):
         }
 
         inferred_ibd0 = get_IBD_type(b"jack", b"another thing", 1, ibd_dict)
-        self.assertEqual(inferred_ibd0, -1, msg="error when ids are not in the dict")
+        self.assertEqual(inferred_ibd0, nan_integer, msg="error when ids are not in the dict")
         inferred_ibd0 = get_IBD_type(b"another thing", b"jack", 1, ibd_dict)
-        self.assertEqual(inferred_ibd0, -1, msg="error when ids are not in the dict")
+        self.assertEqual(inferred_ibd0, nan_integer, msg="error when ids are not in the dict")
         inferred_ibd0 = get_IBD_type(b"another thing", b"another thing", 1, ibd_dict)
-        self.assertEqual(inferred_ibd0, -1, msg="error when ids are not in the dict")
+        self.assertEqual(inferred_ibd0, nan_integer, msg="error when ids are not in the dict")
 
         for i in range(60):
             inferred_ibd1 = get_IBD_type(b"jack", b"jim", i, ibd_dict)
@@ -32,7 +33,7 @@ class TestSibImpute(unittest.TestCase):
             elif ibd2[0] <= i < ibd2[1]:
                 self.assertEqual(inferred_ibd1, 2, msg="inferred IBD is not 2")
             else:
-                self.assertEqual(inferred_ibd1, -1, msg="inferred IBD is not 0")
+                self.assertEqual(inferred_ibd1, nan_integer, msg="inferred IBD is not 0")
 
     def test_dict_to_cmap(self):
         the_dict = {

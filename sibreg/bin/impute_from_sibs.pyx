@@ -28,7 +28,7 @@ from libc.stdio cimport printf
 from libc.time cimport time, ctime, time_t
 from config import nan_integer as python_integer_nan
 cdef float nan_float = np.nan
-cdef float nan_integer = python_integer_nan
+cdef int nan_integer = python_integer_nan
 
 cdef extern from * nogil:
     r"""
