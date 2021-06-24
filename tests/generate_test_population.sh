@@ -6,6 +6,9 @@ python example/simulate_pop.py 1000 0.5 3000 1000 1000 0.5 "outputs/tmp/t__t${i}
 python -c "import pandas as pd;
 from sibreg.bin.preprocess_data import create_pedigree;
 ped = pd.read_csv('outputs/tmp/t__t${i}_fams.ped', delim_whitespace=True);
+ped.to_csv('test_data/sample_parent_sib${i}.ped', index = False, sep = ' ');
+offsprings = ped[~ (ped['IID'].str.endswith('_M') | ped['IID'].str.endswith('_P'))]
+offsprings.to_csv('test_data/sample_sib${i}.ped', index = False, sep = ' ');
 remove = pd.read_csv('outputs/tmp/t__t1_remove.txt', delim_whitespace=True, names = ['counter', 'id']);
 ped = ped[~ped['IID'].isin(remove['id'])];
 ped.to_csv('test_data/sample${i}.ped', index = False, sep = ' ');
@@ -32,6 +35,27 @@ python example/simulate_trait_quad.py test_data/sample${i}.bed outputs/tmp/t__t$
 plink/plink2 --bgen test_data/sample_reduced${i}.bgen ref-last --sample test_data/sample_reduced${i}.sample --make-bed --out test_data/sample_reduced${i} --oxford-single-chr ${i}
 cp outputs/tmp/t__t${i}.segments.gz test_data/sample${i}.segments.gz
 cp outputs/tmp/t__t${i}allsegs.txt test_data/sample${i}allsegs.txt
+cp outputs/tmp/t__t${i}.effects test_data/sample${i}.effects
+cp outputs/tmp/t__t${i}.father_phen test_data/sample${i}.father_phen
+cp outputs/tmp/t__t${i}.mother_phen test_data/sample${i}.mother_phen
+cp outputs/tmp/t__t${i}.sib_phen test_data/sample${i}.sib_phen
+
+awk 'NR % 4 == 1 || NR % 4 == 2 {print $1 "\t" $2}' test_data/sample${i}.fam > test_data/sample_sib_ids${i}
+plink/plink2 --keep-fam test_data/sample_sib_ids${i}  --bfile test_data/sample${i} --make-bed --out test_data/sample_sib${i}
+paste test_data/sample_sib${i}.fam test_data/sample${i}.sib_phen  | awk '{print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 "\t" $7}' > outputs/tmp/tmp
+cp outputs/tmp/tmp test_data/sample_sib${i}.fam
+
+awk 'NR % 4 == 3 {print $1 "\t" $2}'  test_data/sample${i}.fam > test_data/sample_father_ids${i}
+plink/plink2 --keep-fam test_data/sample_father_ids${i}  --bfile test_data/sample${i} --make-bed --out test_data/sample_father${i}
+paste test_data/sample_father${i}.fam test_data/sample${i}.father_phen  | awk '{print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 "\t" $7}' > outputs/tmp/tmp
+cp outputs/tmp/tmp test_data/sample_father${i}.fam
+
+awk 'NR % 4 == 0 {print $1 "\t" $2}'  test_data/sample${i}.fam > test_data/sample_mother_ids${i}
+plink/plink2 --keep-fam test_data/sample_mother_ids${i}  --bfile test_data/sample${i} --make-bed --out test_data/sample_mother${i}
+paste test_data/sample_mother${i}.fam test_data/sample${i}.mother_phen  | awk '{print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 "\t" $7}' > outputs/tmp/tmp
+cp outputs/tmp/tmp test_data/sample_mother${i}.fam
+
+plink1 --bfile test_data/sample_mother${i} --bmerge test_data/sample_father${i} --out test_data/sample_parent${i}
 done
 
 cp test_data/sample1.agesex test_data/sample.agesex

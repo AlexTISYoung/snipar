@@ -76,16 +76,41 @@ father_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
 mother_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
 ibd = np.zeros((nfam,fsize*(fsize-1)//2,nsnp),dtype=np.int8)
 sib_gts = np.zeros((nfam,fsize,nsnp,2),dtype=np.int8)
+effects = np.random.normal(size=(nsnp,1))
+
+father_gts = np.random.binomial(1, f, size=(nfam,nsnp,2))
+father_sum = np.sum(father_gts, axis=2)
+father_phen = (father_sum@effects).flatten()
+father_indexes = np.argsort(father_phen, axis=0)
+father_phen = father_phen[father_indexes]
+father_gts = father_gts[father_indexes,:,:]
+
+mother_gts = np.random.binomial(1, f, size=(nfam,nsnp,2))
+mother_sum = np.sum(mother_gts, axis=2)
+mother_phen = (mother_sum@effects).flatten()
+mother_indexes = np.argsort(mother_phen, axis=0)
+mother_phen = mother_phen[mother_indexes]
+mother_gts = mother_gts[mother_indexes,:,:]
 
 for i in range(0,nfam):
-    father = simulate_ind(nsnp,f)
-    father_gts[i,:,:] = father
-    mother = simulate_ind(nsnp,f)
-    mother_gts[i, :, :] = mother
-    sibs = simulate_sibs(father,mother, blocksize = blocksize)
+    father = father_gts[i, :, :]
+    mother = mother_gts[i, :, :]
+    # sibs = simulate_sibs(father,mother, blocksize = blocksize)
+    sibs = simulate_sibs(father,father, blocksize = blocksize)
     sib_gts[i, :, :] = sibs[0]
     ibd[i,:,:] = sibs[1]
 
+sib_phen = np.zeros((nfam, fsize))
+for i in range(fsize):
+    sib_phen[:, i] = (np.sum(sib_gts[:, i, :, :], axis=2)@effects).flatten()
+print("=================================")
+print(np.corrcoef(sib_phen[:, 0].flatten(), sib_phen[:, 1].flatten())[0,1])
+print(np.corrcoef(father_phen, mother_phen)[0,1])
+print(np.cov(sib_phen[:, 0].flatten(), sib_phen[:, 1].flatten())[0,1])
+print(np.cov(father_phen, mother_phen)[0,1])
+a = 0
+b = 0
+a/b
 # Make pedigree file
 fp = fsize+2
 ped = np.zeros((nfam*fp,4),dtype="U20")
@@ -260,3 +285,8 @@ for i in range(n_sib_only+n_one_parent,nfam):
             remove.write(ped[fp * i + j, 0] + ' ' + ped[fp * i + j, 1] + '\n')
 
 remove.close()
+
+np.savetxt(args.outprefix+'.effects',effects)
+np.savetxt(args.outprefix+'.father_phen',father_phen)
+np.savetxt(args.outprefix+'.mother_phen',mother_phen)
+np.savetxt(args.outprefix+'.sib_phen',sib_phen.flatten())

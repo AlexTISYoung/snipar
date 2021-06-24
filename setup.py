@@ -42,6 +42,7 @@ setup(name='sibreg',
             'pysnptools==0.4.11',
             'networkx>=2.2',
             'h5py>=2.10.0',
+            'pooch',
             ],
       tests_require=['pytest'],
       extras_require={
