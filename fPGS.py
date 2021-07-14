@@ -32,6 +32,12 @@ def parse_filelist(obsfiles, impfiles, obsformat):
             imp_files = [impfiles+'.hdf5']
     return np.array(obs_files), np.array(imp_files)
 
+def calc_pgs_r2(sigma2, tau, phvar = 1.0):
+
+    r2 = 1 - (sigma2/phvar) * ((1/tau) + 1)
+
+    return r2
+
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -57,6 +63,8 @@ if __name__ == '__main__':
     parser.add_argument('--compute_controls', action='store_true', default=False,
                         help='Compute PGS for control families (default False)')
     parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
+    parser.add_argument('--pgsreg-r2', action = "store_true",
+    help='Should R2 be calculated when conducting the family pgs regression.',default=False)
     args=parser.parse_args()
 
     if args.weights is not None:
@@ -71,7 +79,7 @@ if __name__ == '__main__':
         if args.sep is None:
             weights = np.loadtxt(args.weights,dtype=str)
         else:
-            weights = np.loadtxt(args.weight,dtype=args.sep)
+            weights = np.loadtxt(args.weights,dtype=str, delimiter = args.sep)
         colnames = weights[0,:]
         weights = weights[1:weights.shape[0],:]
         print('Read weights for '+str(weights.shape[0])+' variants')
@@ -155,10 +163,26 @@ if __name__ == '__main__':
             pg.gts = pg.gts / np.std(pg.gts[:, 0])
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
-        alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        if args.pgsreg_r2:
+            alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=True)
+            sigma2 = alpha_imp[0]
+            tau = alpha_imp[1]
+            r2 = calc_pgs_r2(sigma2, tau)
+            print("R-squared from PGS Regression for full model: ", r2)
+            alpha_imp = alpha_imp[2:]
+        else:
+            alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        if args.pgsreg_r2:
+            alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=True)
+            sigma2 = alpha_proband[0]
+            tau = alpha_proband[1]
+            r2_pop = calc_pgs_r2(sigma2, tau)
+            print("R-squared from PGS Regression for population effects: ", r2_pop)
+            alpha_proband = alpha_proband[2:]
+        else:
+            alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]
@@ -167,8 +191,15 @@ if __name__ == '__main__':
         alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
         print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
         outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
+        pgseffects_out = np.hstack((outcols, np.array(alpha_out, dtype='S20')))
+
+        effects_out_nrows = pgseffects_out.shape[0]
+        base_r2_array = np.repeat(r2, effects_out_nrows-1)
+        base_r2_array = np.hstack((base_r2_array, r2_pop)).reshape((effects_out_nrows, 1))
+        pgseffects_out_r2 = np.hstack((pgseffects_out, base_r2_array))
         np.savetxt(args.outprefix + '.pgs_effects.txt',
-                   np.hstack((outcols, np.array(alpha_out, dtype='S20'))),
+                   pgseffects_out_r2,
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+        
