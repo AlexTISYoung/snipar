@@ -400,6 +400,8 @@ if __name__ == '__main__':
     estimates = {'v1' : output_matrix['v1'],
                 'v2' : output_matrix['v2'],
                 'r' : output_matrix['r']}
+
+    estimates_vmat = ld.V2Vmat(output_matrix, M)
     
     std_errors = np.diag(output_matrix['std_err_mat'])
     
@@ -410,13 +412,19 @@ if __name__ == '__main__':
     print(f"Standard Errors: {std_errors}")
     print(f"Maximizer Output: {result}")
     print(f"Estimation time: {estimationTime}")
-    
+    print(f"======================================")
+    print(f"Implied V Matrix:")
+    print(f"{estimates_vmat}")
+
     if args.logfile is not None:
         logging.info("----------------------------------")
         logging.info(f"Estimates: {estimates}")
         logging.info(f"Standard Errors: {std_errors}")
         logging.info(f"Maximizer Output: {result}")
         logging.info(f"Estimation time: {estimationTime}")
+        logging.info(f"======================================")
+        logging.info(f"Implied V Matrix:")
+        logging.info(f"{estimates_vmat}")
         
     if args.jkse:
         
