@@ -269,6 +269,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-sigma2', default = "sigma2", type = str, help = "Name of sigma2 column")
     parser.add_argument('-tau', default = "tau", type = str, help = "Name of tau column")
+    parser.add_argument('--write-v-out', type = str, help = """Prefix to write the estimated vmatrix to. If not provided
+    final variance covariance matrix is not outputted""")
 
     args=parser.parse_args()
     
@@ -401,7 +403,9 @@ if __name__ == '__main__':
                 'v2' : output_matrix['v2'],
                 'r' : output_matrix['r']}
 
-    estimates_vmat = ld.V2Vmat(output_matrix, M)
+    estimates_vmat = ld.V2Vmat(np.array([output_matrix['v1'],
+                                        output_matrix['v2'],
+                                        output_matrix['r']]))
     
     std_errors = np.diag(output_matrix['std_err_mat'])
     
@@ -425,7 +429,14 @@ if __name__ == '__main__':
         logging.info(f"======================================")
         logging.info(f"Implied V Matrix:")
         logging.info(f"{estimates_vmat}")
-        
+    
+    if args.write_v_out is not None:
+        np.savetxt(args.write_v_out, estimates_vmat)
+        varcovmessage = f"Variance Covariance matrix outputted to {args.write_v_out}"
+        print(varcovmessage)
+        if args.logfile is not None:
+            logging.info(varcovmessage)
+
     if args.jkse:
         
         if args.jkse_nblocks is not None:

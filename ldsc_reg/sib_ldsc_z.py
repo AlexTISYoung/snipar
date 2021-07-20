@@ -76,7 +76,7 @@ def standardize_mat(V, S, M):
     return Vnew, Snew
 
 @njit
-def V2Vmat(V, M):
+def V2Vmat(V, M = 1):
     '''
     Transforms a 1 dimensional V array
     with 3 elements v1, v2 and r
