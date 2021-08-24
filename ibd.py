@@ -203,7 +203,7 @@ parser.add_argument('--outprefix',
 parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
                     default=1e-3)
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=1e-4)
-parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=1e-4)
+parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
 args = parser.parse_args()
 
 p = args.p_error
