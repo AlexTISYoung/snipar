@@ -41,7 +41,8 @@ setup(name='sibreg',
             'scipy>=1.2.3',
             'pysnptools==0.4.11',
             'networkx>=2.2',
-            'h5py>=2.10.0',
+            'h5py==2.10.0',
+            'numba==0.48.0'
             ],
       tests_require=['pytest'],
       extras_require={
