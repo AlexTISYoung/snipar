@@ -28,7 +28,7 @@ from libc.stdio cimport printf
 from libc.time cimport time, ctime, time_t
 from config import nan_integer as python_integer_nan
 cdef float nan_float = np.nan
-cdef float nan_integer = python_integer_nan
+cdef int nan_integer = python_integer_nan
 #[gp1,gp2,gs]
 cdef double[:,:,:] prob_offspring_on_parent = np.array(
 [[[1.0, 0.0, 0.0],
