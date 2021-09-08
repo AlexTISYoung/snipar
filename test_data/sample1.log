@@ -7,17 +7,17 @@ Options in effect:
   --sample test_data/sample1.sample
 
 Hostname: g03
-Working directory: /disk/genetics4/ukb/moeen/sibreg
-Start time: Tue Feb 16 14:45:26 2021
+Working directory: /disk/genetics4/ukb/moeen/SNIPar
+Start time: Tue Jun  1 17:13:15 2021
 
-Random number seed: 1613504726
+Random number seed: 1622581995
 257670 MiB RAM detected; reserving 128835 MiB for main workspace.
 Using up to 48 threads (change this with --threads).
 --bgen: 1000 variants detected, format v1.2.
-1200 samples imported from .sample file to test_data/sample1-temporary.psam .
+12000 samples imported from .sample file to test_data/sample1-temporary.psam .
 --bgen: test_data/sample1-temporary.pgen + test_data/sample1-temporary.pvar
 written.
-1200 samples (0 females, 0 males, 1200 ambiguous; 1200 founders) loaded from
+12000 samples (0 females, 0 males, 12000 ambiguous; 12000 founders) loaded from
 test_data/sample1-temporary.psam.
 1000 variants loaded from test_data/sample1-temporary.pvar.
 Note: No phenotype data present.
@@ -25,4 +25,4 @@ Writing test_data/sample1.fam ... done.
 Writing test_data/sample1.bim ... done.
 Writing test_data/sample1.bed ... done.
 
-End time: Tue Feb 16 14:45:27 2021
+End time: Tue Jun  1 17:13:15 2021

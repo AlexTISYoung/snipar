@@ -144,6 +144,7 @@ def run_imputation(data):
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     ibd_pd = data["ibd_pd"]
+    segs_pd = data["segs_pd"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -152,8 +153,9 @@ def run_imputation(data):
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
+    pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, segs_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -185,7 +187,7 @@ def run_imputation(data):
             bim_columns = np.array(hf["bim_columns"])
             bim_values = np.array(hf["bim_values"])
             pedigree = np.array(hf["pedigree"])
-            counter_ibd0 = np.array(hf["counter_ibd0"])
+            ratio_ibd0 = np.array(hf["ratio_ibd0"])
             non_duplicates = np.array(hf["non_duplicates"])
         os.remove(chunk_output_address)
         for i in range(1, chunks):
@@ -195,14 +197,14 @@ def run_imputation(data):
                 new_imputed_par_gts = np.array(hf['imputed_par_gts'])
                 new_pos = np.array(hf['pos'])
                 new_bim_values = np.array(hf["bim_values"])
-                new_counter_ibd0 = np.array(hf["counter_ibd0"])
+                new_ratio_ibd0 = np.array(hf["ratio_ibd0"])
                 new_non_duplicates = np.array(hf["non_duplicates"])
                 new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
                 imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
                 pos = np.hstack((pos, new_pos))
                 non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
                 bim_values = np.vstack((bim_values, new_bim_values))
-                counter_ibd0 = counter_ibd0+new_counter_ibd0
+                ratio_ibd0 = np.hstack((ratio_ibd0, new_ratio_ibd0))
             os.remove(chunk_output_address)
         logging.info(f"writing results of the merge")
         #Writing the merged output
@@ -214,7 +216,7 @@ def run_imputation(data):
             hf["bim_columns"] = bim_columns
             hf["bim_values"] = bim_values
             hf["pedigree"] =  pedigree
-            hf["counter_ibd0"] = counter_ibd0
+            hf["ratio_ibd0"] = ratio_ibd0
             hf["non_duplicates"] = non_duplicates
         logging.info(f"merging chunks done")
     elif chunks == 1:
@@ -292,6 +294,10 @@ if __name__ == "__main__":
                         type=int,
                         default=None,
                         help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
+    parser.add_argument('--pedigree_nan',
+                        type=str,
+                        default='0',
+                        help='The value representing NaN in the pedigreee.')
 
     args=parser.parse_args()
     if args.bgen is None and args.bed is None:
@@ -303,7 +309,7 @@ if __name__ == "__main__":
         logging.info("creating pedigree ...")
         pedigree = create_pedigree(args.king, args.agesex)
     else:
-        pedigree = pd.read_csv(args.pedigree, sep = " ")
+        pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
     logging.info("pedigree loaded.")
 
     if args.c:
@@ -312,7 +318,8 @@ if __name__ == "__main__":
         logging.info("Control Added.")
     
     logging.info("Loading ibd ...")
-    ibd_pd = pd.read_csv(args.ibd, sep = "\t")
+    ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
+    segs_pd = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)
     logging.info("ibd loaded.")
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
@@ -335,15 +342,17 @@ if __name__ == "__main__":
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "ibd_pd": ibd_pd,
+            "segs_pd": segs_pd,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
-            "bim": args.bim,
+            "bim": none_tansform(args.bim, "~", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
+            "pedigree_nan":args.pedigree_nan,
             }
             for chromosome in chromosomes]
     #TODO output more information about the imputation inside the hdf5 filehf

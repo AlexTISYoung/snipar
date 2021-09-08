@@ -19,7 +19,6 @@ def imputation_test(chromosomes,
         with h5py.File(imputed_prefix+str(chromosome)+".hdf5",'r') as f:
             gts = np.array(f["imputed_par_gts"])
             fids = np.array(f["families"]).astype(str)
-            parental_status = np.array(f["parental_status"])
             ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
             non_duplicates = np.array(f["non_duplicates"])
@@ -99,7 +98,8 @@ def imputation_test(chromosomes,
     z_pm = (1-coef_pm)/np.sqrt(s2_pm)
     q_pm = norm.cdf(z_pm)
     p_value_pm = min(q_pm, 1-q_pm)
-    print(covs_pm, coef_pm, z_pm, p_value_pm)
+    print("returning:")
+    print((coef_o, coef_pm), (z_o, z_pm), (p_value_o, p_value_pm))
     #TODO compute z correctly(find the correct sd)
     return (coef_o, coef_pm), (z_o, z_pm), (p_value_o, p_value_pm)
 

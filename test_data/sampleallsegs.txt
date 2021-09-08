@@ -1,0 +1,3 @@
+Segment	Chr	StartMB	StopMB	Length	N_SNP	StartSNP	StopSNP
+1	1	0	1	1	998	1_rs1	1_rs998
+1	2	0	1	1	998	2_rs1	2_rs998
