@@ -168,7 +168,7 @@ if __name__ == '__main__':
         print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
         outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
         np.savetxt(args.outprefix + '.pgs_effects.txt',
-                   np.hstack((outcols, np.array(alpha_out, dtype='S20'))),
+                   np.hstack((outcols, np.array(alpha_out, dtype='S'))),
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
         np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
