@@ -1,8 +1,9 @@
 rm outputs/tmp/*
 rm test_data/*
+fams=3000
 for i in {1..2}
 do
-python example/simulate_pop.py 1000 0.5 3000 1000 1000 0.5 "outputs/tmp/t__t${i}" --chrom ${i}
+python example/simulate_pop.py 1000 0.5 ${fams} 1000 1000 0.5 "outputs/tmp/t__t${i}" --chrom ${i}
 python -c "import pandas as pd;
 from sibreg.bin.preprocess_data import create_pedigree;
 ped = pd.read_csv('outputs/tmp/t__t${i}_fams.ped', delim_whitespace=True);
@@ -62,6 +63,20 @@ done
 cp test_data/sample1.agesex test_data/sample.agesex
 cp test_data/sample1.ped test_data/sample.ped
 cp test_data/sample1.king test_data/sample.king
+python -c "
+import numpy as np
+import pandas as pd
+np.random.seed(100)
+mask = np.random.choice(range(3000), 100, replace=False)
+ped = pd.read_csv('test_data/sample.ped', delim_whitespace=True)
+ped.loc[ped['FID'].isin(mask)].to_csv('test_data/pedigree_creation_sample.ped', sep = '\t', index = False)
+
+agesex = pd.read_csv('test_data/sample.agesex', delim_whitespace=True)
+agesex.loc[agesex['FID'].isin(mask)].to_csv('test_data/pedigree_creation_sample.agesex', sep = '\t', index = False)
+
+king = pd.read_csv('test_data/sample.king', delim_whitespace=True)
+king.loc[king['FID1'].isin(mask)].to_csv('test_data/pedigree_creation_sample.king', sep = '\t', index = False)
+"
 cp outputs/tmp/t__t1phen.npy test_data/phen.npy
 for fname in outputs/tmp/*.png; do cp ${fname} test_data/${fname:17} ; done
 for fname in outputs/tmp/*.png; do cp ${fname} graphs/${fname:17} ; done
