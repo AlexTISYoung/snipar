@@ -35,7 +35,8 @@ python example/simulate_trait_quad.py test_data/sample${i}.bed outputs/tmp/t__t$
 plink/plink2 --bgen test_data/sample_reduced${i}.bgen ref-last --sample test_data/sample_reduced${i}.sample --make-bed --out test_data/sample_reduced${i} --oxford-single-chr ${i}
 cp outputs/tmp/t__t${i}.segments.gz test_data/sample${i}.segments.gz
 cp outputs/tmp/t__t${i}allsegs.txt test_data/sample${i}allsegs.txt
-cp outputs/tmp/t__t${i}.effects test_data/sample${i}.effects
+cp outputs/tmp/t__t${i}.direct_effects test_data/sample${i}.direct_effects
+cp outputs/tmp/t__t${i}.indirect_effects test_data/sample${i}.indirect_effects
 cp outputs/tmp/t__t${i}.father_phen test_data/sample${i}.father_phen
 cp outputs/tmp/t__t${i}.mother_phen test_data/sample${i}.mother_phen
 cp outputs/tmp/t__t${i}.sib_phen test_data/sample${i}.sib_phen
@@ -61,7 +62,10 @@ done
 cp test_data/sample1.agesex test_data/sample.agesex
 cp test_data/sample1.ped test_data/sample.ped
 cp test_data/sample1.king test_data/sample.king
-
+cp outputs/tmp/t__t1phen.npy test_data/phen.npy
+for fname in outputs/tmp/*.png; do cp ${fname} test_data/${fname:17} ; done
+for fname in outputs/tmp/*.png; do cp ${fname} graphs/${fname:17} ; done
+cp outputs/tmp/t__t1rel_change*.png test_data/rel_change.png
 zcat test_data/sample1.segments.gz > outputs/tmp/sample.segments
 zcat test_data/sample2.segments.gz | tail -n +2 >> outputs/tmp/sample.segments
 gzip outputs/tmp/sample.segments
