@@ -985,8 +985,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1
-            if not(len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2==0):
-                counter_nonnan_input[snp] = counter_nonnan_input[snp]+1
+            
             if single_parent[index]:
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
@@ -1022,20 +1021,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          len_snp_ibd2)
             snp = snp+1
     destroy()
-    ratio_ibd0 = np.array([<float>counter_ibd0[i]/counter_nonnan_input[i] for i in range(number_of_snps)])
-    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/np.sum(counter_nonnan_input)
+    ratio_ibd0 = np.array([<float>counter_ibd0[i]/sum(sibships["sib_count"]>1) for i in range(number_of_snps)])
+    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(sum(sibships["sib_count"]>1)*number_of_snps)
     logging.info("with chromosome " + str(chromosome)+":total ibd0 ratio is"+str(total_ratio_ibd0))
     if total_ratio_ibd0>0.5:
         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     output_nan_count = np.sum(np.isnan(imputed_par_gts))
-    expected_nan_count = np.array([number_of_fams-counter_nonnan_input[i] for i in range(number_of_snps)])
-    expected_nan_ratio = expected_nan_count/number_of_fams
-    total_expected_nan = np.sum(expected_nan_count)
-    non_expected_nan = output_nan_count-total_expected_nan
-    non_expected_ratio = non_expected_nan/imputed_par_gts.size
-    logging.info("with chromosome " + str(chromosome)+f": imputation is nan in {non_expected_nan} locations where it shouldn't have been because of inconsistencies in the data. That is {non_expected_ratio*100:.3f}% of the loci.")
-    logging.info("with chromosome " + str(chromosome)+f": expected nan: {total_expected_nan}, actual_nan: {output_nan_count}")
-    if non_expected_ratio > 0.01:
+    nan_ratio = output_nan_count/imputed_par_gts.size
+    logging.info("with chromosome " + str(chromosome)+f": total number of nans: {output_nan_count}, ratio of nan snps to all snps is {nan_ratio}")
+    if nan_ratio > 0.01:
         logging.warning("Too much inconsistencies in the data")        
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
