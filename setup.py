@@ -43,6 +43,7 @@ setup(name='sibreg',
             'networkx==2.2',
             'h5py==2.10.0',
             'pooch==1.5.1',
+            'numba==0.48.0''
             ],
       tests_require=['pytest'],
       extras_require={

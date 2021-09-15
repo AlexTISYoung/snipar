@@ -10,19 +10,53 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S')
 @njit
 def transition_matrix(cM):
+    """Compute probabilities of transitioning between IBD states as a function of genetic distance.
+
+    Args:
+        cM : :class:`float`
+            genetic distance in centiMorgans (cM)
+
+    Returns:
+        log(P) : :class:`~numpy:numpy.array`
+            the natural logarithm (element-wise) of the matrix of transition probabilities
+
+    """
     P = np.identity(3)
     r_array = np.array([[-1.0,1.0,0.0],[0.5,-1.0,0.5],[0.0,1.0,-1.0]],dtype=np.float64)
     r = 1.0 - np.power((1.0 + np.exp(-cM / 50)) / 2.0, 4)
     P += r_array*r
     return np.log(P)
 
+#
 @njit
 def p_ibd_0(f):
+    """Compute Joint-PMF for sibling pair genotypes given IBD0.
+
+    Args:
+        f : :class:`float`
+            allele frequency
+
+    Returns:
+        P : :class:`~numpy:numpy.array`
+            matrix of probabilities
+
+    """
     P_vec = np.array([(1.0-f)**2.0,2.0*f*(1-f),f**2.0]).reshape((3,1))
     return P_vec @ P_vec.T
 
 @njit
 def p_ibd_1(f):
+    """Compute Joint-PMF for sibling pair genotypes given IBD1.
+
+    Args:
+        f : :class:`float`
+            allele frequency
+
+    Returns:
+        P : :class:`~numpy:numpy.array`
+            matrix of probabilities
+
+    """
     fmatrix = np.array([[0.0,1.0,0.0],[1.0,1.0,2.0],[0.0,2.0,3.0]])
     minus_fmatrix = np.array([[3.0,2.0,0.0],[2.0,1.0,1.0],[0.0,1.0,0.0]])
     P = np.exp(fmatrix*np.log(f)+minus_fmatrix*np.log(1-f))
@@ -32,6 +66,17 @@ def p_ibd_1(f):
 
 @njit
 def p_ibd_2(f):
+    """Compute Joint-PMF for sibling pair genotypes given IBD2.
+
+    Args:
+        f : :class:`float`
+            allele frequency
+
+    Returns:
+        P : :class:`~numpy:numpy.array`
+            matrix of probabilities
+
+    """
     P = np.zeros((3,3),dtype=np.float64)
     fdiag = np.array([(1.0-f)**2.0,2.0*f*(1.0-f),f**2.0])
     np.fill_diagonal(P,fdiag.reshape((3,1)))
@@ -39,6 +84,22 @@ def p_ibd_2(f):
 
 @njit
 def p_obs_given_IBD(g1_obs,g2_obs,f,p):
+    """Compute Joint-PMF for sibling pair genotypes given IBD0.
+
+    Args:
+        g1_obs : :class:`integer`
+            observed genotype for sibling 1
+        g2_obs : :class:`integer`
+            observed genotype for sibling 2
+        f : :class:`float`
+            allele frequency
+        p : :class:'float'
+            genotyping error probability
+
+    Returns:
+        log(P) : :class:`~numpy:numpy.array`
+            vector giving log-probabilities of observing g1_obs,g2_obs give IBD 0,1,2
+    """
     P_out = np.zeros((3))
     # Get probabilities of observed genotypes given true
     err_vectors = np.array([[1.0 - p, p / 2.0, 0.0],
@@ -57,6 +118,28 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
 
 @njit
 def make_dynamic(g1,g2,freqs,map,weights,p):
+    """Make state-matrix and pointer matrix for a sibling pair by dynamic programming
+
+    Args:
+        g1 : :class:`~numpy:numpy.array`
+            integer vector of first sibling's genotypes
+        g2 : :class:`~numpy:numpy.array`
+            integer vector of first sibling's genotypes
+        freqs : :class:`~numpy:numpy.array`
+            floating point vector of allele frequencies
+        map : :class:`~numpy:numpy.array`
+            floating point vector of genetic positions in cM
+        weights : :class:`~numpy:numpy.array`
+            floating point vector of SNP weights (usually inverse LD-scores)
+        p : :class:'float'
+            genotyping error probability
+
+    Returns:
+        state_matrix : :class:`~numpy:numpy.array`
+            matrix where each column gives the prob of max prob path to that state, where each row is IBD 0,1,2
+        pointers : :class:`~numpy:numpy.array`
+            integer vector giving the pointer to which state from previous position lead to max at this position
+    """
     state_matrix = np.zeros((3,g1.shape[0]),dtype=np.float64)
     pointers = np.zeros((3,g1.shape[0]),dtype=np.int8)
     # Initialise
@@ -73,6 +156,18 @@ def make_dynamic(g1,g2,freqs,map,weights,p):
 
 @njit
 def viterbi(state_matrix,pointers):
+    """Get viterbi path from state_matrix and pointers output of make_dynamic
+
+    Args:
+        state_matrix : :class:`~numpy:numpy.array`
+            matrix where each column gives the prob of max prob path to that state, where each row is IBD 0,1,2
+        pointers : :class:`~numpy:numpy.array`
+            integer vector giving the pointer to which state from previous position lead to max at this position
+
+    Returns:
+            path : :class:`~numpy:numpy.array`
+            integer vector giving the Viterbi path through the IBD states
+    """
     path = np.zeros(state_matrix.shape[1],dtype=np.int8)
     path[path.shape[0]-1] = np.argmax(state_matrix[:,state_matrix.shape[1]-1])
     for i in range(1,path.shape[0]):
@@ -192,45 +287,34 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--bed',
-#                     type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
-# parser.add_argument('--king',
-#                     type=str,
-#                     default = None,
-#                     help='Address of the king file')
-# parser.add_argument('--ldscores',type=str,help='Path to directory with LD scores',default=None)
-# parser.add_argument('--map',type=str,default=None)
-# parser.add_argument('--outprefix',
-#                     type=str,
-#                     default = "parent_imputed",
-#                     help="Writes the result of imputation for chromosome i to outprefix{i}")
-# parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
-#                     default=1e-3)
-# parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=1e-4)
-# parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=1e-4)
-# args = parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--bed',
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
+parser.add_argument('--king',
+                    type=str,
+                    default = None,
+                    help='Address of the king file')
+parser.add_argument('--ldscores',type=str,help='Path to directory with LD scores',default=None)
+parser.add_argument('--map',type=str,default=None)
+parser.add_argument('--outprefix',
+                    type=str,
+                    default = "parent_imputed",
+                    help="Writes the result of imputation for chromosome i to outprefix{i}")
+parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
+                    default=1e-4)
+parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=1e-4)
+parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
+args = parser.parse_args()
 
-# p = args.p_error
-# p_length = args.min_p_seg
-# bedfile = args.bed+'.bed'
-# kinfile = args.king
-# ldfile = args.ldscores
-# min_maf = args.min_maf
-# mapfile = args.map
-# outprefix = args.outprefix
+p = args.p_error
+p_length = args.min_p_seg
+bedfile = args.bed+'.bed'
+kinfile = args.king
+ldfile = args.ldscores
+min_maf = args.min_maf
+mapfile = args.map
+outprefix = args.outprefix
 
-p = 1e-4
-p_length = 1e-3
-bedfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/ukb_hap_chr22.bed'
-kinfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/hap.kin0'
-ldfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/ldscores/22.l2.ldscore.gz'
-min_maf = 0.01
-mapfile = None
-outprefix = 'ibd/chr_22'
-# total_snps_n = 1000
-total_snps_n = 500
-logging.info('start')
 kin_header = np.array(open(kinfile,'r').readline().split('\t'))
 logging.info('kin loaded')
 inf_type_index = np.where(np.array([x[0:7]=='InfType' for x in kin_header]))[0][0]
