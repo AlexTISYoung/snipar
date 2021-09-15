@@ -154,6 +154,7 @@ def run_imputation(data):
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    logging.info(f"after prepare_data ibd is {list(ibd_pd.items())[:2]}")
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -321,6 +322,8 @@ if __name__ == "__main__":
     if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(ibd_pd.columns.values.tolist())):
         raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
     logging.info("ibd loaded.")
+    logging.info(f"ibd is {ibd_pd}")
+    logging.info(f"ibd0 is {ibd_pd[ibd_pd[IBDType]==0]}")
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
     else:
