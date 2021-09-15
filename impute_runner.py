@@ -331,7 +331,7 @@ if __name__ == "__main__":
 
     if args.bgen:
         if args.to_chr is None or args.from_chr is None:
-            raise Exception("Chromosome range should be specified with unphased genotype")
+            raise Exception("Chromosome range should be specified with phased genotype")
 
     def none_tansform(a, b, c):
         if a is not None:
