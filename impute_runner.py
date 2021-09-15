@@ -317,8 +317,8 @@ if __name__ == "__main__":
     
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
-    print(ibd_pd.columns.values.tolist())
-    if ibd_pd.columns.values.tolist() != ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",]:
+    print(set(ibd_pd.columns.values.tolist()))
+    if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(ibd_pd.columns.values.tolist())):
         raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
     logging.info("ibd loaded.")
     if (args.from_chr is not None) and (args.to_chr is not None):
