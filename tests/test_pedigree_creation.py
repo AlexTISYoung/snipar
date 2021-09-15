@@ -3,7 +3,7 @@ import subprocess
 import pandas as pd
 from sibreg.bin.preprocess_data import create_pedigree, add_control
 import networkx as nx
-
+import numpy as np
 
 
 def node_match(node1, node2):
@@ -35,19 +35,17 @@ def create_graph_from_pedigree(pedigree):
 class TestPedigree(unittest.TestCase):
     def test_create_pedigree(self):
         result = create_pedigree("test_data/pedigree_creation_sample.king",
-                                   "test_data/sample.agesex",
+                                   "test_data/pedigree_creation_sample.agesex",
         ).sort_values(by=['FID', "IID"])
         expected = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"])
         result_graph = create_graph_from_pedigree(result)
         expected_graph = create_graph_from_pedigree(expected)
-        print("here")
-        print(expected)
-        print(result)
+
         equality = nx.is_isomorphic(result_graph, expected_graph, node_match)
         self.assertTrue(equality)
     
     def test_add_control(self):
-        pedigree = pd.read_csv("test_data/sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
+        pedigree = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
         controlled_pedigree = add_control(pedigree).astype(str)
         controlled_fams = [fid[3:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
         has_father = pedigree["FATHER_ID"].isin(pedigree["IID"])

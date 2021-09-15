@@ -1,5 +1,6 @@
 import numpy as np
 import h5py, argparse, gzip
+from scipy.stats import multivariate_normal
 
 def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
@@ -56,6 +57,8 @@ parser.add_argument('p_sib_missing',type=float,help='Probability that one siblin
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
 parser.add_argument('--blocksize',type=int,help='Size of blocks without recombination (number of SNPs)', default=None)
 parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default="")
+parser.add_argument('--gens',type=int,help='number of generations', default=2)
+parser.add_argument('--am_noise',type=int,help='size of am noise', default=100000)
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -66,25 +69,145 @@ n_sib_only = args.n_sib_only
 n_one_parent = args.n_one_parent
 p_sib_missing = args.p_sib_missing
 chrom = args.chrom
+gens = args.gens
+am_noise = args.am_noise
 fsize = 2
 if args.blocksize is None:
     blocksize = nsnp
 else:
     blocksize = args.blocksize
+print(f"blocksize is {blocksize}")
 
-father_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
-mother_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
 ibd = np.zeros((nfam,fsize*(fsize-1)//2,nsnp),dtype=np.int8)
-sib_gts = np.zeros((nfam,fsize,nsnp,2),dtype=np.int8)
+# direct_effects = np.random.normal(size=(nsnp,1))#np.zeros((nsnp,1))+1
+# indirect_effects = np.random.normal(size=(nsnp,1))#np.zeros((nsnp,1))
 
-for i in range(0,nfam):
-    father = simulate_ind(nsnp,f)
-    father_gts[i,:,:] = father
-    mother = simulate_ind(nsnp,f)
-    mother_gts[i, :, :] = mother
-    sibs = simulate_sibs(father,mother, blocksize = blocksize)
-    sib_gts[i, :, :] = sibs[0]
-    ibd[i,:,:] = sibs[1]
+direct_var = 1/100#1/nsnp
+indirect_var = 0#0.25/nsnp
+direct_indirect_corr = 0
+direct_indirect_cov = direct_indirect_corr*np.sqrt(indirect_var*direct_var)
+direct_indirect_cov_matrix = [[direct_var, direct_indirect_cov],[direct_indirect_cov, indirect_var]]
+direct_indirect = multivariate_normal.rvs(cov = direct_indirect_cov_matrix, size=nsnp)
+direct_effects = direct_indirect[:,0].reshape((-1, 1))
+indirect_effects = direct_indirect[:,1].reshape((-1, 1))
+print("direct_effects", direct_effects)
+print("indirect_effects", indirect_effects)
+print("direct_indirect_cov_matrix", direct_indirect_cov_matrix)
+
+v_direct = []
+v_indirect = []
+cov_parental_direct = []
+spousal_corrs = []
+sib_corrs = []
+
+father_gts = np.random.binomial(1, f, size=(nfam,nsnp,2))
+mother_gts = np.random.binomial(1, f, size=(nfam,nsnp,2))
+sib_gts = np.zeros((nfam,fsize,nsnp,2))
+# second fpgs can be replaced with normal joint regression 
+father_sum = np.sum(father_gts, axis=2)
+father_indirect = np.zeros(nfam)
+father_direct = (father_sum@direct_effects).flatten()
+father_noise = np.random.normal(size=father_direct.shape)
+father_phen = father_direct+father_indirect+father_noise
+
+mother_sum = np.sum(mother_gts, axis=2)
+mother_indirect = np.zeros(nfam)
+mother_direct = (mother_sum@direct_effects).flatten()
+mother_noise = np.random.normal(size=mother_direct.shape)
+mother_phen = mother_direct+mother_indirect
+
+v_direct.append(np.var(np.hstack((father_direct, mother_direct))))
+v_indirect.append(np.var(np.hstack((father_indirect, mother_indirect))))
+cov_parental_direct.append(np.cov(father_direct, mother_direct)[0,1])
+spousal_corrs.append(-1)
+sib_corrs.append(-1)
+for gen in range(gens):
+    print("*"*100)
+    print(f"gen is {gen}")
+    
+    father_indexes = np.argsort(father_phen + np.random.normal(scale=am_noise*np.std(father_phen), size=father_phen.shape))
+    father_direct = father_direct[father_indexes]
+    father_indirect = father_indirect[father_indexes]
+    father_phen = father_phen[father_indexes]
+    father_gts = father_gts[father_indexes,:,:]
+    father_sum = father_sum[father_indexes,:]
+    
+    mother_indexes = np.argsort(mother_phen + np.random.normal(scale=am_noise*np.std(mother_phen), size=mother_phen.shape))
+    mother_direct = mother_direct[mother_indexes]
+    mother_indirect = mother_indirect[mother_indexes]
+    mother_phen = mother_phen[mother_indexes]
+    mother_gts = mother_gts[mother_indexes,:,:]
+    mother_sum = mother_sum[mother_indexes,:]
+    print(f"assort {np.corrcoef((mother_phen, father_phen))[0,1]}")
+    for i in range(0,nfam):
+        father = father_gts[i, :, :]
+        mother = mother_gts[i, :, :]
+        sibs = simulate_sibs(father,mother, blocksize = blocksize)
+        sib_gts[i, :, :, :] = sibs[0]
+        ibd[i,:,:] = sibs[1]
+
+    tmp=((father_sum+mother_sum)@indirect_effects).flatten()
+
+    sib_indirect = np.tile(tmp, (2,1)).T
+    sib_direct = np.zeros((nfam, fsize))
+    sib_phen = np.zeros((nfam, fsize))
+    for i in range(fsize):
+        sib_direct[:, i] = (np.sum(sib_gts[:, i, :, :], axis=2)@direct_effects).flatten()
+        sib_noise = np.random.normal(size=sib_direct[:, i].shape)
+        sib_phen[:, i] = sib_indirect[:, i]+sib_direct[:, i]+sib_noise
+    
+    v_direct.append(np.var(sib_direct))
+    v_indirect.append(np.var(sib_indirect))
+    cov_parental_direct.append(np.cov(father_direct, mother_direct)[0,1])
+    sib_corr = np.corrcoef(sib_phen[:, 0].flatten(), sib_phen[:, 1].flatten())[0, 1]
+    sib_corrs.append(sib_corr)
+    print("sib corr", sib_corr)
+    spousal_corr = np.corrcoef(father_phen, mother_phen)[0,1]
+    spousal_corrs.append(spousal_corr)
+    print("spousal corr", spousal_corr)
+    print("v_direct", v_direct[-1])
+    if gen < (gens-1):
+        whos_father = np.array([True,False]*(nfam//2))
+        np.random.shuffle(whos_father)
+        father_gts = np.concatenate([sib_gts[whos_father, i, :, :] for i in range(sib_gts.shape[1])], 0)
+        father_sum = np.sum(father_gts, axis=2)
+        father_direct = np.concatenate([sib_direct[whos_father, i] for i in range(sib_direct.shape[1])], 0)
+        father_indirect = np.concatenate([sib_indirect[whos_father, i] for i in range(sib_indirect.shape[1])], 0)
+        father_phen = np.concatenate([sib_phen[whos_father, i] for i in range(sib_phen.shape[1])], 0)
+        
+        mother_gts = np.concatenate([sib_gts[~whos_father, i, :, :] for i in range(sib_gts.shape[1])], 0)
+        mother_sum = np.sum(mother_gts, axis=2)
+        mother_direct = np.concatenate([sib_direct[~whos_father, i] for i in range(sib_direct.shape[1])], 0)
+        mother_indirect = np.concatenate([sib_indirect[~whos_father, i] for i in range(sib_indirect.shape[1])], 0)
+        mother_phen = np.concatenate([sib_phen[~whos_father, i] for i in range(sib_phen.shape[1])], 0)
+v_direct = np.array(v_direct)
+v_indirect = np.array(v_indirect)
+cov_parental_direct = np.array(cov_parental_direct)
+spousal_corrs = np.array(spousal_corrs)
+sib_corrs = np.array(sib_corrs)
+
+def get_rel_change(x):
+    return list(range(len(x)-2)), (x[2:]-x[1:-1])/x[1:-1]
+
+from matplotlib import pyplot as plt
+plt.rcParams["figure.figsize"] = (20,10)
+plt.plot(*get_rel_change(spousal_corrs), label="spousal_corrs")
+plt.plot(*get_rel_change(sib_corrs), label="sib_corrs")
+plt.plot(*get_rel_change(v_direct), label="v_direct")
+plt.axhline()
+plt.grid()
+plt.title(f"relative change nsnp {nsnp}, nfam {nfam}, blocksize {blocksize}")
+plt.legend()
+plt.savefig(f"{args.outprefix}rel_change_nsnp{nsnp}_nfam{nfam}_blocksize{blocksize}")
+
+
+np.save(f"{args.outprefix}phen", {
+    "v_direct":v_direct,
+    "v_indirect":v_indirect,
+    "cov_parental_direct":cov_parental_direct,
+    "spousal_corrs":spousal_corrs,
+    "sib_corrs":sib_corrs
+})
 
 # Make pedigree file
 fp = fsize+2
@@ -167,8 +290,8 @@ for i in range(0,nfam):
         for s in range(0,nseg):
             t = f"{i}_0\t{i}_1\t{ibd_type[s]}\t{chrom}\t{chrom*nsnp+start_snps[s]}\t{chrom*nsnp+end_snps[s]}"
             king_out.write(t.encode("ascii"))
-            if s==(nseg-1):
-                king_out.write(b'\n')
+            # if s==(nseg-1):
+            #     king_out.write(b'\n')
 king_out.close()
 
 ## Write full haps file
@@ -248,3 +371,9 @@ for i in range(n_sib_only+n_one_parent,nfam):
             remove.write(ped[fp * i + j, 0] + ' ' + ped[fp * i + j, 1] + '\n')
 
 remove.close()
+
+np.savetxt(args.outprefix+'.direct_effects',direct_effects)
+np.savetxt(args.outprefix+'.indirect_effects',indirect_effects)
+np.savetxt(args.outprefix+'.father_phen',father_phen)
+np.savetxt(args.outprefix+'.mother_phen',mother_phen)
+np.savetxt(args.outprefix+'.sib_phen',sib_phen.flatten())

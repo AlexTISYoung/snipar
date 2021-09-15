@@ -1,8 +1,13 @@
 from pysnptools.snpreader import Bed
 from sibreg.sibreg import *
 import argparse, gzip
-from numba import njit, jit, prange
+from numba import njit, prange
+import logging
 
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
 @njit
 def transition_matrix(cM):
     P = np.identity(3)
@@ -117,7 +122,7 @@ def smooth_segments(path,map,p_length):
         for i in range(len(segments)):
             length_prob = 1-np.exp(-segments[i].length/100.0)
             if length_prob<p_length:
-                #print('Segment prob: '+str(length_prob))
+
                 if i==0:
                     if segments[i].start == segments[i].end:
                         path[segments[i].start] = segments[i+1].state
@@ -187,58 +192,65 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
-parser.add_argument('--king',
-                    type=str,
-                    default = None,
-                    help='Address of the king file')
-parser.add_argument('--ldscores',type=str,help='Path to directory with LD scores',default=None)
-parser.add_argument('--map',type=str,default=None)
-parser.add_argument('--outprefix',
-                    type=str,
-                    default = "parent_imputed",
-                    help="Writes the result of imputation for chromosome i to outprefix{i}")
-parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
-                    default=1e-3)
-parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=1e-4)
-parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=1e-4)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--bed',
+#                     type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
+# parser.add_argument('--king',
+#                     type=str,
+#                     default = None,
+#                     help='Address of the king file')
+# parser.add_argument('--ldscores',type=str,help='Path to directory with LD scores',default=None)
+# parser.add_argument('--map',type=str,default=None)
+# parser.add_argument('--outprefix',
+#                     type=str,
+#                     default = "parent_imputed",
+#                     help="Writes the result of imputation for chromosome i to outprefix{i}")
+# parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
+#                     default=1e-3)
+# parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=1e-4)
+# parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=1e-4)
+# args = parser.parse_args()
 
-p = args.p_error
-p_length = args.min_p_seg
-bedfile = args.bed+'.bed'
-kinfile = args.king
-ldfile = args.ldscores
-min_maf = args.min_maf
-mapfile = args.map
-outprefix = args.outprefix
+# p = args.p_error
+# p_length = args.min_p_seg
+# bedfile = args.bed+'.bed'
+# kinfile = args.king
+# ldfile = args.ldscores
+# min_maf = args.min_maf
+# mapfile = args.map
+# outprefix = args.outprefix
 
-#p = 1e-4
-#p_length = 1e-3
-#bedfile = 'bedfiles/ukb_hap_chr22.bed'
-#kinfile = 'bedfiles/hap.kin0'
-#ldfile = 'bedfiles/ldscores/22.l2.ldscore.gz'
-#min_maf = 0.01
-#mapfile = None
-#outprefix = 'ibd/chr_22'
-
+p = 1e-4
+p_length = 1e-3
+bedfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/ukb_hap_chr22.bed'
+kinfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/hap.kin0'
+ldfile = '/disk/genetics4/ukb/alextisyoung/haplotypes/relatives/bedfiles/ldscores/22.l2.ldscore.gz'
+min_maf = 0.01
+mapfile = None
+outprefix = 'ibd/chr_22'
+# total_snps_n = 1000
+total_snps_n = 500
+logging.info('start')
 kin_header = np.array(open(kinfile,'r').readline().split('\t'))
+logging.info('kin loaded')
 inf_type_index = np.where(np.array([x[0:7]=='InfType' for x in kin_header]))[0][0]
+logging.info('1')
 id1_index = np.where(np.array(kin_header)=='ID1')[0][0]
+logging.info('2')
 id2_index = np.where(np.array(kin_header)=='ID2')[0][0]
+logging.info('3')
 sibpairs = np.loadtxt(kinfile,dtype=str,skiprows=1,usecols=(id1_index,id2_index,inf_type_index))
+logging.info('4')
 sibpairs = sibpairs[sibpairs[:,2]=='FS',0:2]
-print('Found '+str(sibpairs.shape[0])+' full sibling pairs in '+kinfile)
+logging.info('Found '+str(sibpairs.shape[0])+' full sibling pairs in '+kinfile)
 
 # Read bed
-print('Reading genotypes from '+bedfile)
+logging.info('Reading genotypes from '+bedfile)
 bed = Bed(bedfile,count_A1=True)
 ids = bed.iid
 id_dict = make_id_dict(ids,1)
 sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
-gts = bed.read().val
+gts = bed[:,:total_snps_n].read().val
 freqs = np.mean(gts,axis=0)/2.0
 gts = gts[sibindices,:]
 gts = np.array(gts,dtype=np.int8)
@@ -248,28 +260,28 @@ sibpair_indices = np.zeros((sibpairs.shape),dtype=bool)
 sibpair_indices[:,0] = np.array([x in id_dict for x in sibpairs[:,0]])
 sibpair_indices[:,1] = np.array([x in id_dict for x in sibpairs[:,1]])
 sibpairs = sibpairs[np.sum(sibpair_indices,axis=1)==2,:]
-print(str(np.sum(sibpairs.shape[0]))+' sibpairs have genotypes in '+bedfile)
+logging.info(str(np.sum(sibpairs.shape[0]))+' sibpairs have genotypes in '+bedfile)
 # Find indices of sibpairs
 sibpair_indices = np.zeros((sibpairs.shape),dtype=int)
 sibpair_indices[:,0] = np.array([id_dict[x] for x in sibpairs[:,0]])
 sibpair_indices[:,1] = np.array([id_dict[x] for x in sibpairs[:,1]])
 # LD scores
-print('Reading LD scores from '+ldfile)
+logging.info('Reading LD scores from '+ldfile)
 ld = np.loadtxt(ldfile,usecols=3,skiprows=1)
 ldsnps = np.loadtxt(ldfile,usecols=1,skiprows=1,dtype=str)
 ld_dict = make_id_dict(ldsnps)
-in_ld_dict = np.array([x in ld_dict for x in bed.sid])
+in_ld_dict = np.array([x in ld_dict for x in bed.sid[:total_snps_n]])
 # Filtering on MAF
-print('Before filtering on MAF and having an LD score, there were '+str(gts.shape[1])+' SNPs')
+logging.info('Before filtering on MAF and having an LD score, there were '+str(gts.shape[1])+' SNPs')
 freq_pass = np.logical_and(np.logical_and(freqs > min_maf, freqs < 1-min_maf),in_ld_dict)
 gts = gts[:,freq_pass]
 freqs = freqs[freq_pass]
-print('After filtering on MAF and having an LD score, there are '+str(gts.shape[1])+' SNPs')
+logging.info('After filtering on MAF and having an LD score, there are '+str(gts.shape[1])+' SNPs')
 if mapfile is None:
     bimfile = bedfile.split('.bed')[0]+'.bim'
-    print('Separate genetic map not provided, so attempting to read map from '+bimfile)
-    map = np.loadtxt(bimfile, usecols=2)
-    chr = np.loadtxt(bimfile,usecols=0,dtype=str)
+    logging.info('Separate genetic map not provided, so attempting to read map from '+bimfile)
+    map = np.loadtxt(bimfile, usecols=2)[:total_snps_n]
+    chr = np.loadtxt(bimfile,usecols=0,dtype=str)[:total_snps_n]
     chr = np.unique(chr)
     if chr.shape[0]>1:
         raise(ValueError('More than 1 chromosome in input bedfile'))
@@ -290,23 +302,24 @@ if mapfile is None:
     if np.max(map)>5000:
         raise(ValueError('Maximum value of map too large'))
     map = map[freq_pass]
-    print('Read map')
+    logging.info('Read map')
 else:
     map = np.loadtxt(mapfile)
 # Weights
-weights = np.power(ld[np.array([ld_dict[x] for x in bed.sid[freq_pass]])],-1)
+weights = np.power(ld[np.array([ld_dict[x] for x in bed.sid[:total_snps_n][freq_pass]])],-1)
 # IBD
-print('Inferring IBD')
+logging.info('Inferring IBD')
 ibd = infer_ibd(sibpair_indices,gts,freqs,map,weights,p)
+logging.info('smooth')
 ibd, allsegs = smooth_ibd(ibd,map,p_length)
 ## Write output
-snps = bed.sid[freq_pass]
+snps = bed.sid[:total_snps_n][freq_pass]
 # Write segments
 segs_outfile = outprefix+'.ibd.segments.gz'
-print('Writing segments to '+segs_outfile)
+logging.info('Writing segments to '+segs_outfile)
 write_segs(sibpairs,allsegs,chr,snps,segs_outfile)
 outfile = outprefix+'.ibd.gz'
-print('Writing matrix output to '+str(outfile))
+logging.info('Writing matrix output to '+str(outfile))
 ibd = np.row_stack((np.column_stack((np.array(['sib1','sib2']).reshape((1,2)),snps.reshape(1,gts.shape[1]))),
                     np.column_stack((sibpairs,ibd))))
 np.savetxt(outfile,ibd,fmt='%s')
