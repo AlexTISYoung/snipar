@@ -323,7 +323,7 @@ if __name__ == "__main__":
         raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
     logging.info("ibd loaded.")
     logging.info(f"ibd is {ibd_pd}")
-    logging.info(f"ibd0 is {ibd_pd[ibd_pd[IBDType]==0]}")
+    logging.info(f"ibd0 is {ibd_pd[ibd_pd["IBDType"]==0]}")
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
     else:
