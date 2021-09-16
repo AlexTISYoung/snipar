@@ -888,7 +888,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
     #pos
     cdef cnp.ndarray[cnp.int_t, ndim=1] c_pos = pos
-
+    logging.warning(f"with chromosome {str(chromosome)}: + pos is {pos}")
     cdef int len_snp_ibd0 = 0
     cdef int len_snp_ibd1 = 0
     cdef int len_snp_ibd2 = 0
