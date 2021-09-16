@@ -913,9 +913,10 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long[:] counter_ibd0 = np.zeros(number_of_snps).astype(long)
     cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype(long)
+    cdef int no0 = 1
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
-    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+    for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
@@ -952,6 +953,11 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                         sib1_gene_isnan = (c_unphased_gts[sib1_index, snp] == nan_integer)
                         sib2_gene_isnan = (c_unphased_gts[sib2_index, snp] == nan_integer)
                         ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
+                        if ibd_type == 0:
+                            if no0<20:
+                                printf("=================================had0==========================================")
+                                report(mod, b"==========================had0===============", number_of_fams)
+                                no0+=1
                         if sib1_gene_isnan  and sib2_gene_isnan:
                             continue
                         elif not sib1_gene_isnan  and sib2_gene_isnan:
@@ -1023,8 +1029,10 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             snp = snp+1
     destroy()
     ratio_ibd0 = np.array([<float>counter_ibd0[i]/counter_nonnan_input[i] for i in range(number_of_snps)])
-    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/np.sum(counter_nonnan_input)
+    total_ibd = np.sum(counter_ibd0)
+    total_ratio_ibd0 = (<float>total_ibd)/np.sum(counter_nonnan_input)
     logging.info("with chromosome " + str(chromosome)+":total ibd0 ratio is"+str(total_ratio_ibd0))
+    logging.info("with chromosome " + str(chromosome)+":total ibd0 is"+str(total_ratio_ibd0))
     if total_ratio_ibd0>0.5:
         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     output_nan_count = np.sum(np.isnan(imputed_par_gts))
