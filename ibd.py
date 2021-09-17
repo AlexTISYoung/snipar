@@ -407,7 +407,7 @@ parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with pr
                     default=1e-4)
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=None)
 parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
-parser.add_argument('--ibdmatrix',type=bool,action=store_true,default=False,help='Whether to output a matrix of SNP IBD states')
+parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Whether to output a matrix of SNP IBD states')
 args = parser.parse_args()
 
 p_length = args.min_p_seg
@@ -422,7 +422,7 @@ outprefix = args.outprefix
 if args.pedigree is not None:
     print('Reading pedigree from '+str(args.pedigree))
     ped = np.loadtxt(args.pedigree,dtype=str)
-    if not ped.shape[1] < 4:
+    if ped.shape[1] < 4:
         raise(ValueError('Not enough columns in pedigree file'))
     elif ped.shape[1] > 4:
         print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
