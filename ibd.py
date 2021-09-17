@@ -97,6 +97,7 @@ def read_sibs_from_bed(bedfile,sibpairs):
     in_bed = np.vstack((np.array([x in id_dict for x in sibpairs[:,0]]),
                         np.array([x in id_dict for x in sibpairs[:, 1]]))).T
     both_in_bed = np.sum(in_bed,axis=1)==2
+    # Remove pairs without both in bedfile
     if np.sum(both_in_bed)<sibpairs.shape[0]:
         print(str(sibpairs.shape[0]-np.sum(both_in_bed))+' sibpairs do not both have genotypes')
         sibpairs = sibpairs[both_in_bed,:]
