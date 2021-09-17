@@ -93,6 +93,14 @@ def read_sibs_from_bed(bedfile,sibpairs):
     bed = Bed(bedfile, count_A1=True)
     ids = bed.iid
     id_dict = make_id_dict(ids, 1)
+    # Find sibpairs in bed
+    in_bed = np.vstack((np.array([x in id_dict for x in sibpairs[:,0]]),
+                        np.array([x in id_dict for x in sibpairs[:, 1]]))).T
+    both_in_bed = np.sum(in_bed,axis=1)==2
+    if np.sum(both_in_bed)<sibpairs.shape[0]:
+        print(str(sibpairs.shape[0]-np.sum(both_in_bed))+' sibpairs do not both have genotypes')
+        sibpairs = sibpairs[both_in_bed,:]
+    # Find indices of sibpairs
     sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
     gts = bed.read().val
     gts = gts[sibindices, :]
@@ -436,7 +444,7 @@ else:
 
 if sibpairs.shape[0]==0:
     raise(ValueError('No sibling pairs found'))
-print('Found '+str(sibpairs.shape[0])+' full sibling pairs in '+kinfile)
+print('Found '+str(sibpairs.shape[0])+' full sibling pairs')
 
 #### Get genotyping error probability ####
 if args.p_error is None:
