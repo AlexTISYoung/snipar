@@ -90,6 +90,7 @@ import random
 import pandas as pd
 import os
 from multiprocessing import Pool
+import git
 random.seed(1567924)
 
 def run_imputation(data):
@@ -301,7 +302,13 @@ if __name__ == "__main__":
     args=parser.parse_args()
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
-        
+    
+    dir_name = os.path.dirname(os.path.realpath(__file__))
+    repo = git.Repo(dir_name)
+    logging.info(f"Last commit is: {repo.head.commit}")
+    logging.info(f"summary is: {repo.head.commit.summary}")
+    logging.info(f"Active branch is: {repo.active_branch.name}")
+
     #fids starting with _ are reserved for control
     #Families should not have grandparents
     if not args.pedigree:
