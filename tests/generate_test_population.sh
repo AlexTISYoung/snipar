@@ -34,8 +34,9 @@ plink/plink2 --bgen test_data/sample${i}.bgen ref-last --sample test_data/sample
 python example/simulate_trait_quad.py test_data/sample${i}.bed outputs/tmp/t__t${i}_fams.ped 0.8 test_data/h2_quad_0.8${i} --no_sib --dncor 0.5
 /disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample${i}.bgen -s test_data/sample${i}.sample -og test_data/sample_reduced${i}.bgen -os test_data/sample_reduced${i}.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t${i}_remove.txt
 plink/plink2 --bgen test_data/sample_reduced${i}.bgen ref-last --sample test_data/sample_reduced${i}.sample --make-bed --out test_data/sample_reduced${i} --oxford-single-chr ${i}
-cp outputs/tmp/t__t${i}.segments.gz test_data/sample${i}.segments.gz
-cp outputs/tmp/t__t${i}allsegs.txt test_data/sample${i}allsegs.txt
+cp outputs/tmp/t__t${i}.our.segments.gz test_data/sample${i}.our.segments.gz
+cp outputs/tmp/t__t${i}.king.segments.gz test_data/sample${i}.king.segments.gz
+cp outputs/tmp/t__t${i}.kingallsegs.txt test_data/sample${i}.kingallsegs.txt
 cp outputs/tmp/t__t${i}.direct_effects test_data/sample${i}.direct_effects
 cp outputs/tmp/t__t${i}.indirect_effects test_data/sample${i}.indirect_effects
 cp outputs/tmp/t__t${i}.father_phen test_data/sample${i}.father_phen
@@ -81,13 +82,18 @@ cp outputs/tmp/t__t1phen.npy test_data/phen.npy
 for fname in outputs/tmp/*.png; do cp ${fname} test_data/${fname:17} ; done
 for fname in outputs/tmp/*.png; do cp ${fname} graphs/${fname:17} ; done
 cp outputs/tmp/t__t1rel_change*.png test_data/rel_change.png
-zcat test_data/sample1.segments.gz > outputs/tmp/sample.segments
-zcat test_data/sample2.segments.gz | tail -n +2 >> outputs/tmp/sample.segments
-gzip outputs/tmp/sample.segments
-cp outputs/tmp/sample.segments.gz test_data/
+zcat test_data/sample1.king.segments.gz > outputs/tmp/sample.king.segments
+zcat test_data/sample2.king.segments.gz | tail -n +2 >> outputs/tmp/sample.king.segments
+gzip outputs/tmp/sample.king.segments
+cp outputs/tmp/sample.king.segments.gz test_data/
 
-cat test_data/sample1allsegs.txt > test_data/sampleallsegs.txt
-cat test_data/sample2allsegs.txt | tail -n +2 >> test_data/sampleallsegs.txt
+zcat test_data/sample1.our.segments.gz > outputs/tmp/sample.our.segments
+zcat test_data/sample2.our.segments.gz | tail -n +2 >> outputs/tmp/sample.our.segments
+gzip outputs/tmp/sample.our.segments
+cp outputs/tmp/sample.our.segments.gz test_data/
+
+cat test_data/sample1.kingallsegs.txt > test_data/sample.kingallsegs.txt
+cat test_data/sample2.kingallsegs.txt | tail -n +2 >> test_data/sample.kingallsegs.txt
 
 
 plink1 --bfile test_data/sample1 --bmerge test_data/sample2 --out test_data/sample1_2

@@ -142,7 +142,9 @@ def run_imputation(data):
     pedigree = data["pedigree"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
-    ibd_pd = data["ibd_pd"]
+    our_ibd = data["our_ibd"]
+    king_ibd = data["king_ibd"]
+    king_seg = data["king_seg"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -153,8 +155,7 @@ def run_imputation(data):
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_pd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
-    logging.info(f"after prepare_data ibd is {list(ibd.items())[:2]}")
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, our_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -234,7 +235,9 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument('ibd',
                         type=str,
-                        help='IBD file, should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate')                        
+                        help='IBD file, should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate')
+    parser.add_argument('--our_ibd',
+                        action='store_true')    
     parser.add_argument('--bgen',
                         type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--bed',
@@ -318,12 +321,17 @@ if __name__ == "__main__":
     
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
-    print(set(ibd_pd.columns.values.tolist()))
-    if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(ibd_pd.columns.values.tolist())):
-        raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
+    our_ibd = None
+    king_ibd = None
+    king_seg = None
+    if args.our_ibd:
+        our_ibd = ibd_pd
+        if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(our_ibd.columns.values.tolist())):
+            raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
+    else:
+        king_ibd = ibd_pd
+        king_seg = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)    
     logging.info("ibd loaded.")
-    logging.info(f"ibd is {ibd_pd}")
-    logging.info(f"ibd0 is {ibd_pd[ibd_pd['IBDType']=='0']}")
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
     else:
@@ -344,7 +352,9 @@ if __name__ == "__main__":
     inputs = [{"pedigree": pedigree,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
-            "ibd_pd": ibd_pd,
+            "our_ibd": our_ibd,
+            "king_ibd": king_ibd,
+            "king_seg": king_seg,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,

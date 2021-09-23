@@ -6,11 +6,11 @@ Options in effect:
   --oxford-single-chr 1
   --sample test_data/sample1.sample
 
-Hostname: g03
+Hostname: g02
 Working directory: /disk/genetics4/ukb/moeen/SNIPar
-Start time: Thu Jun 24 17:28:16 2021
+Start time: Thu Sep 23 14:41:54 2021
 
-Random number seed: 1624570096
+Random number seed: 1632422514
 257670 MiB RAM detected; reserving 128835 MiB for main workspace.
 Using up to 48 threads (change this with --threads).
 --bgen: 1000 variants detected, format v1.2.
@@ -25,4 +25,4 @@ Writing test_data/sample1.fam ... done.
 Writing test_data/sample1.bim ... done.
 Writing test_data/sample1.bed ... done.
 
-End time: Thu Jun 24 17:28:16 2021
+End time: Thu Sep 23 14:41:54 2021

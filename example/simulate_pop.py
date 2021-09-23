@@ -266,9 +266,9 @@ kin_out.close()
 ibd = ibd[:,0,:]
 
 
-# Convert IBD to KING format
-king_out = gzip.open(args.outprefix+'.segments.gz','wb')
-king_out.write(b'ID1\tID2\tIBDType\tChr\tstart_coordinate\tstop_coordinate\n')
+# Convert IBD to our input format
+our_ibd_out = gzip.open(args.outprefix+'.our.segments.gz','wb')
+our_ibd_out.write(b'ID1\tID2\tIBDType\tChr\tstart_coordinate\tstop_coordinate\n')
 
 for i in range(0,nfam):
     start_snps = []
@@ -289,10 +289,50 @@ for i in range(0,nfam):
     if nseg>0:
         for s in range(0,nseg):
             t = f"{i}_0\t{i}_1\t{ibd_type[s]}\t{chrom}\t{chrom*nsnp+start_snps[s]}\t{chrom*nsnp+end_snps[s]}"
+            our_ibd_out.write(t.encode("ascii"))
+            if s==(nseg-1):
+                our_ibd_out.write(b'\n')
+our_ibd_out.close()
+
+# Determine IBD segments assessed
+allsegs_out = open(args.outprefix+'.kingallsegs.txt','w')
+allsegs_out.write('Segment\tChr\tStartMB\tStopMB\tLength\tN_SNP\tStartSNP\tStopSNP\n')
+# Ignore first and last SNP
+insegs = np.ones((nsnp),dtype=bool)
+insegs[[0,insegs.shape[0]-1]] = False
+allsegs_out.write(f'1\t{chrom}\t0\t1\t1\t'+str(nsnp-2)+f'\t{chrom}_rs1\t{chrom}_rs'+str(nsnp-2)+'\n')
+allsegs_out.close()
+
+# Convert IBD to KING format
+king_out = gzip.open(args.outprefix+'.king.segments.gz','wb')
+king_out.write(b'FID1\tID1\tFID2\tID2\tIBDType\tChr\tStartMB\tStopMB\tStartSNP\tStopSNP\tN_SNP\tLength\n')
+
+for i in range(0,nfam):
+    start_snps = []
+    end_snps = []
+    ibd_type = []
+    init_ibd = ibd[i,1]
+    if init_ibd>0:
+        start_snps.append(f'{chrom}_rs'+str(1))
+        ibd_type.append(ibd[i,1])
+    for j in range(2,ibd.shape[1]-1):
+        if not ibd[i,j]==init_ibd:
+            if init_ibd>0:
+                end_snps.append(f'{chrom}_rs'+str(j-1))
+            init_ibd = ibd[i,j]
+            if init_ibd>0:
+                start_snps.append(f'{chrom}_rs'+str(j))
+                ibd_type.append(ibd[i,j])
+    if init_ibd>0:
+        end_snps.append(f'{chrom}_rs'+str(j))
+    # Write to file
+    nseg = len(start_snps)
+    if nseg>0:
+        for s in range(0,nseg):
+            t = str(i)+'\t'+str(i)+'_0\t'+str(i)+'\t'+str(i)+'_1\tIBD'+str(ibd_type[s])+f'\t{chrom}\t0.0\t0.0\t'+start_snps[s]+'\t'+end_snps[s]+'\t0\t0\n'
             king_out.write(t.encode("ascii"))
-            # if s==(nseg-1):
-            #     king_out.write(b'\n')
 king_out.close()
+
 
 ## Write full haps file
 haps_out = open(outprefix+'.haps','w')
