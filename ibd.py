@@ -106,8 +106,53 @@ def read_sibs_from_bed(bedfile,sibpairs):
     gts = bed.read().val
     gts = gts[sibindices, :]
     gts = np.array(gts, dtype=np.int8)
-    id_dict = make_id_dict(ids[sibindices, :], 1)
-    return gts, id_dict, bed.sid
+    return gtarray(garray = gts, ids = ids[sibindices, 1], sid = bed.sid, pos = np.array(bed.pos[:,2],dtype=int))
+
+# Read header of mapfile
+def get_map_positions(mapfile,gts,min_map_prop = 0.5):
+    map_file = open(mapfile,'r')
+    map_header = map_file.readline()
+    map_header = np.array(map_header.split(' '))
+    map_header[len(map_header)-1] = map_header[len(map_header)-1].split('\n')[0]
+    map_file.close()
+    if 'pposition' in map_header and 'gposition' in map_header:
+        bp_pos = np.loadtxt(mapfile,usecols = np.where(map_header=='pposition')[0][0], dtype=int, skiprows =1)
+        pos_dict = make_id_dict(bp_pos)
+        cm_pos = np.loadtxt(mapfile,usecols = np.where(map_header=='gposition')[0][0], dtype=float, skiprows =1)
+        # Check for NAs
+        if np.sum(np.isnan(cm_pos)) > 0:
+            raise (ValueError('Map cannot have NAs'))
+        if np.min(cm_pos) < 0:
+            raise (ValueError('Map file cannot have negative values'))
+        if np.var(cm_pos) == 0:
+            raise (ValueError('Map file has no variation'))
+        # Check ordering
+        ordered_map = np.sort(cm_pos)
+        if np.array_equal(cm_pos, ordered_map):
+            pass
+        else:
+            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
+        # Check scale
+        if np.max(cm_pos) > 5000:
+            raise (ValueError('Maximum value of map too large'))
+        # Find positions of SNPs in map file
+        map = np.zeros((gts.shape[1]),dtype=float)
+        map[:] = np.nan
+        in_map = np.array([x in pos_dict for x in gts.pos])
+        # Check if we have at least 50% of SNPs in map
+        prop_in_map = np.mean(in_map)
+        if prop_in_map < min_map_prop:
+            raise(ValueError('Only '+str(round(100*prop_in_map))+'% of SNPs have genetic positions in '+mapfile+'. Need at least '+str(round(100*min_map_prop))+'%'))
+        print('Found genetic map positions for '+str(round(100*prop_in_map))+'% of SNPs in '+mapfile)
+        # Fill in map values
+        map[in_map] = cm_pos[[pos_dict[x] for x in gts.pos[in_map]]]
+        # Linearly interpolate map
+        if prop_in_map < 1:
+            print('Linearly interpolating genetic map for SNPs not in input map')
+            map = np.interp(gts.pos, gts.pos[in_map], map[in_map])
+        return map
+    else:
+        raise(ValueError('Map file must contain columns pposition and gposition'))
 
 @njit(parallel=True)
 def count_ME(gts,pair_indices):
@@ -293,40 +338,46 @@ def infer_ibd(sibpairs,gts,freqs,map,weights,p):
     return ibd
 
 class segment(object):
-    def __init__(self,start_index,end_index,length,state):
+    def __init__(self,start_index,end_index,start_bp,end_bp,start_snp,end_snp,length,state):
         self.start = start_index
         self.end = end_index
+        self.start_bp = start_bp
+        self.end_bp = end_bp
+        self.start_snp = start_snp
+        self.end_snp = end_snp
         self.length = length
         self.state = state
     def to_text(self,id1,id2,chr,end=False):
-        start_snp = snps[self.start]
-        stop_snp = snps[self.end-1]
-        seg_txt = str(id1)+'\t'+str(id2)+'\t'+str(self.state)+'\t'+str(chr)+'\t'+str(self.start)+'\t'+str(self.end)+'\t'+start_snp+'\t'+stop_snp+'\t'+str(self.length)
+        seg_txt = str(id1)+'\t'+str(id2)+'\t'+str(self.state)+'\t'+str(chr)+'\t'+str(self.start_bp)+'\t'+str(self.end_bp)+'\t'+str(self.start_snp)+'\t'+str(self.end_snp)+'\t'+str(self.length)
         if end:
             return seg_txt
         else:
             return seg_txt+'\n'
 
-def find_segments(path,map):
+def find_segments(path,map,snps,pos):
     segments = []
     ibd_start = path[0]
     ibd_start_index = 0
     for i in range(1,path.shape[0]):
         if not path[i] == ibd_start:
-            segments.append(segment(ibd_start_index,i,map[i-1]-map[ibd_start_index],ibd_start))
+            segments.append(segment(ibd_start_index,i,
+                                    pos[ibd_start_index],pos[i-1],
+                                    snps[ibd_start_index],snps[i-1],
+                                    map[i-1]-map[ibd_start_index],ibd_start))
             ibd_start_index = i
             ibd_start = path[i]
-    segments.append(segment(ibd_start_index,i,map[i]-map[ibd_start_index],ibd_start))
+    segments.append(segment(ibd_start_index,i,
+                            pos[ibd_start_index],pos[i],
+                            snps[ibd_start_index],snps[i],
+                            map[i]-map[ibd_start_index],ibd_start))
     return segments
 
-def smooth_segments(path,map,p_length):
+def smooth_segments(path,map,snps,pos,min_length):
     # Smooth path
-    segments = find_segments(path,map)
+    segments = find_segments(path,map,snps,pos)
     if len(segments)>1:
         for i in range(len(segments)):
-            length_prob = 1-np.exp(-segments[i].length/100.0)
-            if length_prob<p_length:
-                #print('Segment prob: '+str(length_prob))
+            if segments[i].length < min_length:
                 if i==0:
                     if segments[i].start == segments[i].end:
                         path[segments[i].start] = segments[i+1].state
@@ -343,18 +394,18 @@ def smooth_segments(path,map,p_length):
                         path[segments[i].start] = segments[i-1].state
                     else:
                         path[segments[i].start:segments[i].end] = segments[i - 1].state
-        segments = find_segments(path,map)
+        segments = find_segments(path,map,snps,pos)
     return path, segments
 
-def smooth_ibd(ibd,map,p_length):
+def smooth_ibd(ibd,map,snps,pos,min_length):
     allsegs = []
     for i in range(ibd.shape[0]):
-        ibd_path, segments = smooth_segments(ibd[i,:],map,p_length)
+        ibd_path, segments = smooth_segments(ibd[i,:],map,snps,pos,min_length)
         ibd[i,:] = ibd_path
         allsegs.append(segments)
     return ibd, allsegs
 
-def write_segs(sibpairs,allsegs,chr,snps,outfile):
+def write_segs(sibpairs,allsegs,chr,outfile):
     seg_out = gzip.open(outfile,'wb')
     # Header
     seg_out.write('ID1\tID2\tIBDType\tChr\tstart_coordinate\tstop_coordinate\tstartSNP\tstopSNP\tlength\n'.encode())
@@ -412,14 +463,15 @@ parser.add_argument('--outprefix',
                     type=str,
                     default = 'ibd',
                     help="Writes the result of IBD inference to outprefix.ibd.segments.gz")
-parser.add_argument('--min_p_seg',type=float,help='Smooth short segments with probability of length smaller than that less than min_p_seg',
-                    default=1e-4)
+parser.add_argument('--chrom',type=str,default=None,help='Chromosome (only input one chromosome at a time)')
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=None)
+parser.add_argument('--min_length',type=float,help='Smooth segments with length less than min_length (cM)',
+                    default=0.01)
 parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Whether to output a matrix of SNP IBD states')
 args = parser.parse_args()
 
-p_length = args.min_p_seg
+min_length = args.min_length
 bedfile = args.bed+'.bed'
 kinfile = args.king
 ldfile = args.ldscores
@@ -463,57 +515,61 @@ if args.p_error is None:
     if p > 0.05:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
 
-# Read bed
+## Read bed
 print('Reading genotypes from '+bedfile)
-gts, id_dict, snp_ids = read_sibs_from_bed(bedfile,sibpairs)
+# Determine chromosome
+bimfile = bedfile.split('.bed')[0]+'.bim'
+chr = np.loadtxt(bimfile,usecols=0,dtype=str)
+chr = np.unique(chr)
+if chr.shape[0]>1:
+    raise(ValueError('More than 1 chromosome in input bedfile'))
+else:
+    chr = chr[0]
+print('Inferring IBD for chromosome '+str(chr))
+# Read sibling genotypes from bed file
+gts = read_sibs_from_bed(bedfile,sibpairs)
 
 # Calculate allele frequencies
 print('Calculating allele frequencies')
-freqs = np.mean(gts, axis=0) / 2.0
+gts.compute_freqs()
 
 # Check which sibling pairs have genotypes
 sibpair_indices = np.zeros((sibpairs.shape),dtype=bool)
-sibpair_indices[:,0] = np.array([x in id_dict for x in sibpairs[:,0]])
-sibpair_indices[:,1] = np.array([x in id_dict for x in sibpairs[:,1]])
+sibpair_indices[:,0] = np.array([x in gts.id_dict for x in sibpairs[:,0]])
+sibpair_indices[:,1] = np.array([x in gts.id_dict for x in sibpairs[:,1]])
 sibpairs = sibpairs[np.sum(sibpair_indices,axis=1)==2,:]
 if sibpairs.shape[0]==0:
     raise(ValueError('No genotyped sibling pairs found'))
 print(str(np.sum(sibpairs.shape[0]))+' sibpairs have genotypes in '+bedfile)
 # Find indices of sibpairs
 sibpair_indices = np.zeros((sibpairs.shape),dtype=int)
-sibpair_indices[:,0] = np.array([id_dict[x] for x in sibpairs[:,0]])
-sibpair_indices[:,1] = np.array([id_dict[x] for x in sibpairs[:,1]])
+sibpair_indices[:,0] = np.array([gts.id_dict[x] for x in sibpairs[:,0]])
+sibpair_indices[:,1] = np.array([gts.id_dict[x] for x in sibpairs[:,1]])
 
 # LD scores
 print('Reading LD scores from '+ldfile)
 ld = np.loadtxt(ldfile,usecols=3,skiprows=1)
 ldsnps = np.loadtxt(ldfile,usecols=1,skiprows=1,dtype=str)
 ld_dict = make_id_dict(ldsnps)
-in_ld_dict = np.array([x in ld_dict for x in snp_ids])
+in_ld_dict = np.array([x in ld_dict for x in gts.sid])
 
 # Filtering on MAF and LD score
 print('Before filtering on MAF and having an LD score, there were '+str(gts.shape[1])+' SNPs')
-freq_pass = np.logical_and(np.logical_and(freqs > min_maf, freqs < 1-min_maf),in_ld_dict)
-gts = gts[:,freq_pass]
-freqs = freqs[freq_pass]
+freq_pass = np.logical_and(np.logical_and(gts.freqs > min_maf, gts.freqs < 1-min_maf),in_ld_dict)
+gts.filter(freq_pass)
 print('After filtering on MAF and having an LD score, there are '+str(gts.shape[1])+' SNPs')
 
 # Read map file
 if mapfile is None:
-    bimfile = bedfile.split('.bed')[0]+'.bim'
     print('Separate genetic map not provided, so attempting to read map from '+bimfile)
     map = np.loadtxt(bimfile, usecols=2)
-    chr = np.loadtxt(bimfile,usecols=0,dtype=str)
-    chr = np.unique(chr)
-    if chr.shape[0]>1:
-        raise(ValueError('More than 1 chromosome in input bedfile'))
-    else:
-        chr = chr[0]
     # Check for NAs
     if np.sum(np.isnan(map))>0:
         raise(ValueError('Map cannot have NAs'))
     if np.min(map)<0:
         raise(ValueError('Map file cannot have negative values'))
+    if np.var(map)==0:
+        raise(ValueError('Map file has no variation'))
     # Check ordering
     ordered_map = np.sort(map)
     if np.array_equal(map,ordered_map):
@@ -523,28 +579,29 @@ if mapfile is None:
     # Check scale
     if np.max(map)>5000:
         raise(ValueError('Maximum value of map too large'))
-    map = map[freq_pass]
-    print('Read map')
+    gts.map = map[freq_pass]
 else:
-    map = np.loadtxt(mapfile)
+    print('Reading map from '+str(mapfile))
+    gts.map = get_map_positions(mapfile,gts)
+print('Read map')
 
 # Weights
-weights = np.power(ld[np.array([ld_dict[x] for x in snp_ids[freq_pass]])],-1)
+gts.weights = np.power(ld[np.array([ld_dict[x] for x in gts.sid])],-1)
 
 # IBD
 print('Inferring IBD')
-ibd = infer_ibd(sibpair_indices,gts,freqs,map,weights,p)
-ibd, allsegs = smooth_ibd(ibd,map,p_length)
+ibd = infer_ibd(sibpair_indices,np.array(gts.gts),gts.freqs,gts.map,gts.weights,p)
+ibd, allsegs = smooth_ibd(ibd,gts.map,gts.sid,gts.pos,min_length)
 
 ## Write output
-snps = snp_ids[freq_pass]
 # Write segments
 segs_outfile = outprefix+'.ibd.segments.gz'
 print('Writing segments to '+segs_outfile)
-write_segs(sibpairs,allsegs,chr,snps,segs_outfile)
+write_segs(sibpairs,allsegs,chr,segs_outfile)
+# Write matrix
 if args.ibdmatrix:
     outfile = outprefix+'.ibd.gz'
     print('Writing matrix output to '+str(outfile))
-    ibd = np.row_stack((np.column_stack((np.array(['sib1','sib2']).reshape((1,2)),snps.reshape(1,gts.shape[1]))),
+    ibd = np.row_stack((np.column_stack((np.array(['sib1','sib2']).reshape((1,2)),gts.sid.reshape(1,gts.shape[1]))),
                         np.column_stack((sibpairs,ibd))))
     np.savetxt(outfile,ibd,fmt='%s')
