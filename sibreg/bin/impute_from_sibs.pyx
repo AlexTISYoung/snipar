@@ -913,7 +913,6 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long[:] counter_ibd0 = np.zeros(number_of_snps).astype(long)
     cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype(long)
-    cdef int no0 = 1
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -953,11 +952,6 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                         sib1_gene_isnan = (c_unphased_gts[sib1_index, snp] == nan_integer)
                         sib2_gene_isnan = (c_unphased_gts[sib2_index, snp] == nan_integer)
                         ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
-                        if ibd_type == 0:
-                            if no0<20:
-                                printf("=================================had0==========================================")
-                                report(mod, b"==========================had0===============", number_of_fams)
-                                no0+=1
                         if sib1_gene_isnan  and sib2_gene_isnan:
                             continue
                         elif not sib1_gene_isnan  and sib2_gene_isnan:

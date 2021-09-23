@@ -7,10 +7,11 @@ class TestCommanline(unittest.TestCase):
     def test_impute_runner_with_unphased_pedigree(self):
         command = ["python",
                    "impute_runner.py",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
-                   "--to_chr", "3",
+                   "--to_chr", "2",
                    "--pedigree", "test_data/sample.ped",
                    "--threads", "10",
                    "--output_address", "outputs/tmp/test_impute_runner_with_unphased_pedigree~",
@@ -21,7 +22,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -42,7 +44,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -58,11 +61,33 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
+    def test_impute_runner_with_unphased_pedigree_control_legacy_ibd(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.king",
+                   "--bed", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--pedigree", "test_data/sample.ped",
+                   "--threads", "10",
+                   "--output_address", "outputs/tmp/test_impute_runner_with_unphased_pedigree_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1],
+                imputed_prefix = "outputs/tmp/test_impute_runner_with_unphased_pedigree_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+
     def test_impute_runner_with_phased_pedigree_control(self):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bgen", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -82,7 +107,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bgen", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -102,7 +128,8 @@ class TestCommanline(unittest.TestCase):
     def test_impute_runner_with_unphased_king(self):
         command = ["python",
                    "impute_runner.py",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -117,7 +144,29 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
+                   "--bed", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--king", "test_data/sample.king",
+                   "--agesex", "test_data/sample.agesex",
+                   "--threads", "10",
+                   "--output_address", "outputs/tmp/test_impute_runner_with_unphased_king_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1, 2],
+                imputed_prefix = "outputs/tmp/test_impute_runner_with_unphased_king_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+    def test_impute_runner_with_unphased_king_control_legacy_ibd(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.king",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -139,7 +188,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -158,7 +208,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample~",
                    "--from_chr", "1",
                    "--to_chr", "3",
@@ -179,7 +230,8 @@ class TestCommanline(unittest.TestCase):
         command = ["python",
                    "impute_runner.py",
                    "-c",
-                   "test_data/sample",
+                   "test_data/sample.our",
+                   "--our_ibd",
                    "--bed", "test_data/sample1",
                    "--pedigree", "test_data/sample.ped",
                    "--output_address", "outputs/tmp/test_impute_runner_with_unphased_pedigree_control_notilda1",
@@ -193,4 +245,4 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
-    #TODO raise error in multichromosome files
+    # #TODO raise error in multichromosome files
