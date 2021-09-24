@@ -89,6 +89,14 @@ def estimate_genotyping_error_rate(bedfile,ped):
     p_error = ME / (npair * sum_het)
     return p_error
 
+@njit(parallel=True)
+def count_ME(gts,pair_indices):
+    ME = 0
+    # Count Mendelian errors
+    for i in prange(pair_indices.shape[0]):
+        ME += np.sum(np.abs(gts[pair_indices[i,0],:]-gts[pair_indices[i,1],:])>1)
+    return ME
+
 def read_sibs_from_bed(bedfile,sibpairs):
     bed = Bed(bedfile, count_A1=True)
     ids = bed.iid
@@ -103,9 +111,8 @@ def read_sibs_from_bed(bedfile,sibpairs):
         sibpairs = sibpairs[both_in_bed,:]
     # Find indices of sibpairs
     sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
-    gts = bed.read().val
-    gts = gts[sibindices, :]
-    gts = np.array(gts, dtype=np.int8)
+    gts = np.zeros((sibindices.shape[0],bed.sid.shape[0]),dtype=np.float32)
+    gts[:] = bed[sibindices,:].read().val
     return gtarray(garray = gts, ids = ids[sibindices, 1], sid = bed.sid, pos = np.array(bed.pos[:,2],dtype=int))
 
 # Read header of mapfile
@@ -153,14 +160,6 @@ def get_map_positions(mapfile,gts,min_map_prop = 0.5):
         return map
     else:
         raise(ValueError('Map file must contain columns pposition and gposition'))
-
-@njit(parallel=True)
-def count_ME(gts,pair_indices):
-    ME = 0
-    # Count Mendelian errors
-    for i in prange(pair_indices.shape[0]):
-        ME += np.sum(np.abs(gts[pair_indices[i,0],:]-gts[pair_indices[i,1],:])>1)
-    return ME
 
 @njit
 def transition_matrix(cM):
@@ -296,11 +295,18 @@ def make_dynamic(g1,g2,freqs,map,weights,p):
     """
     state_matrix = np.zeros((3,g1.shape[0]),dtype=np.float64)
     pointers = np.zeros((3,g1.shape[0]),dtype=np.int8)
+    # Check for nans
+    not_nan = np.logical_not(np.logical_or(np.isnan(g1),np.isnan(g2)))
     # Initialise
-    state_matrix[:,0] = np.log(np.array([0.25,0.5,0.25],dtype=np.float64))+weights[0]*p_obs_given_IBD(g1[0],g2[0],freqs[0],p)
+    state_matrix[:,0] = np.log(np.array([0.25,0.5,0.25],dtype=np.float64))
+    if not_nan[0]:
+        state_matrix[:,0] += weights[0]*p_obs_given_IBD(np.int8(g1[0]),np.int8(g2[0]),freqs[0],p)
     # Compute
     for l in range(1,g1.shape[0]):
-        probs = weights[l]*p_obs_given_IBD(g1[l],g2[l],freqs[l],p)
+        if not_nan[l]:
+            probs = weights[l]*p_obs_given_IBD(np.int8(g1[l]),np.int8(g2[l]),freqs[l],p)
+        else:
+            probs = np.zeros((3))
         tmatrix = transition_matrix(map[l]-map[l-1])
         for i in range(3):
             tprobs = tmatrix[:,i]+state_matrix[:,l-1]
