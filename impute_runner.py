@@ -142,7 +142,7 @@ def run_imputation(data):
     pedigree = data["pedigree"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
-    our_ibd = data["our_ibd"]
+    snipar_ibd = data["snipar_ibd"]
     king_ibd = data["king_ibd"]
     king_seg = data["king_seg"]
     output_address = data["output_address"]
@@ -155,7 +155,7 @@ def run_imputation(data):
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, our_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -236,7 +236,7 @@ if __name__ == "__main__":
     parser.add_argument('ibd',
                         type=str,
                         help='IBD file, should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate')
-    parser.add_argument('--our_ibd',
+    parser.add_argument('--snipar_ibd',
                         action='store_true')    
     parser.add_argument('--bgen',
                         type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
@@ -321,12 +321,12 @@ if __name__ == "__main__":
     
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
-    our_ibd = None
+    snipar_ibd = None
     king_ibd = None
     king_seg = None
-    if args.our_ibd:
-        our_ibd = ibd_pd
-        if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(our_ibd.columns.values.tolist())):
+    if args.snipar_ibd:
+        snipar_ibd = ibd_pd
+        if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
             raise Exception("Invalid ibd columns. Columns must be: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
     else:
         king_ibd = ibd_pd
@@ -352,7 +352,7 @@ if __name__ == "__main__":
     inputs = [{"pedigree": pedigree,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
-            "our_ibd": our_ibd,
+            "snipar_ibd": snipar_ibd,
             "king_ibd": king_ibd,
             "king_seg": king_seg,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
