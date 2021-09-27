@@ -915,7 +915,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype(long)
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
-    for index in range(number_of_fams):#prange(number_of_fams, nogil = True, num_threads = number_of_threads):
+    for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
         report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
