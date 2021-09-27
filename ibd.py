@@ -1,7 +1,8 @@
 from pysnptools.snpreader import Bed
 from sibreg.sibreg import *
 import argparse, gzip
-from numba import njit, prange
+from numba import njit, prange, set_num_threads
+from numba import config as numba_config
 from sibreg.bin.preprocess_data import create_pedigree
 
 def get_sibpairs_from_ped(ped):
@@ -473,9 +474,18 @@ parser.add_argument('--chrom',type=str,default=None,help='Chromosome (only input
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=None)
 parser.add_argument('--min_length',type=float,help='Smooth segments with length less than min_length (cM)',
                     default=0.01)
+parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference',default=None)
 parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
-parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Whether to output a matrix of SNP IBD states')
+parser.add_argument('--max_missing', type=float,
+                    help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
+parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 args = parser.parse_args()
+
+# Set number of threads
+if args.threads is not None:
+    if args.threads < numba_config.NUMBA_NUM_THREADS:
+        set_num_threads(args.threads)
+        print('Number of threads: '+str(args.threads))
 
 min_length = args.min_length
 bedfile = args.bed+'.bed'
@@ -484,6 +494,7 @@ ldfile = args.ldscores
 min_maf = args.min_maf
 mapfile = args.map
 outprefix = args.outprefix
+max_missing = args.max_missing
 
 #### Find sibling pairs ####
 if args.pedigree is not None:
@@ -560,15 +571,17 @@ ld_dict = make_id_dict(ldsnps)
 in_ld_dict = np.array([x in ld_dict for x in gts.sid])
 
 # Filtering on MAF and LD score
-print('Before filtering on MAF and having an LD score, there were '+str(gts.shape[1])+' SNPs')
-freq_pass = np.logical_and(np.logical_and(gts.freqs > min_maf, gts.freqs < 1-min_maf),in_ld_dict)
-gts.filter(freq_pass)
-print('After filtering on MAF and having an LD score, there are '+str(gts.shape[1])+' SNPs')
+print('Before filtering on MAF, missingness, and having an LD score, there were '+str(gts.shape[1])+' SNPs')
+gts.filter(in_ld_dict)
+gts.filter_maf(min_maf)
+gts.filter_missingness(max_missing)
+print('After filtering on MAF, missingness, and having an LD score, there are '+str(gts.shape[1])+' SNPs')
 
 # Read map file
 if mapfile is None:
     print('Separate genetic map not provided, so attempting to read map from '+bimfile)
     map = np.loadtxt(bimfile, usecols=2)
+    map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1,dtype=str))
     # Check for NAs
     if np.sum(np.isnan(map))>0:
         raise(ValueError('Map cannot have NAs'))
@@ -585,7 +598,7 @@ if mapfile is None:
     # Check scale
     if np.max(map)>5000:
         raise(ValueError('Maximum value of map too large'))
-    gts.map = map[freq_pass]
+    gts.map = map[[map_snp_dict[x] for x in gts.sid]]
 else:
     print('Reading map from '+str(mapfile))
     gts.map = get_map_positions(mapfile,gts)
