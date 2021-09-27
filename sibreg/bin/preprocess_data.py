@@ -292,7 +292,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, our_ibd = None, bim_address = None, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -377,12 +377,10 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
     logging.info(f"with chromosomes {chromosomes} loading bim file ...")      
     logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
-    if our_ibd is None:
-        print(king_ibd)
-        print(king_segs)
+    if snipar_ibd is None:
         ibd = preprocess_king(king_ibd, king_segs, bim, chromosomes, sibships)
     else:
-        ibd = our_ibd.astype(str)
+        ibd = snipar_ibd.astype(str)
         ibd[["IBDType", "start_coordinate", "stop_coordinate"]] = ibd[["IBDType", "start_coordinate", "stop_coordinate"]].astype(int)
         #Adding location of start and end of each
         chromosomes = chromosomes.astype(str)
