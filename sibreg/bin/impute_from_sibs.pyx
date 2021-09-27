@@ -1024,9 +1024,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     multi_sib_fams = sum(sibships["sib_count"]>1)
     multi_sib_fams_ratio = multi_sib_fams/number_of_fams
     ratio_ibd0 = np.array([<float>counter_ibd0[i]/multi_sib_fams for i in range(number_of_snps)])
-    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(multi_sib_fams*number_of_snps)
+    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(number_of_fams*number_of_snps)
+    expected_total_ibd0 = 0
+    for c in sib_count:
+        expected_total_ibd0 += (1-0.5**(c-1))**2
+    expected_total_ratio_ibd0 = expected_total_ibd0/number_of_fams
+    logging.info(f"with chromosome {chromosome} :total number of fams is {number_of_fams}")
     logging.info(f"with chromosome {chromosome} :multi sibs available for {multi_sib_fams} which is {multi_sib_fams_ratio} of total fams")
     logging.info(f"with chromosome {chromosome} :total ibd0 ratio is {total_ratio_ibd0}")
+    logging.info(f"with chromosome {chromosome} :expected total ibd0 ratio is {expected_total_ratio_ibd0}")
     if total_ratio_ibd0>0.5:
         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     output_nan_count = np.sum(np.isnan(imputed_par_gts))
