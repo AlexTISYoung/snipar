@@ -104,25 +104,38 @@ def count_ME(gts,pair_indices):
         ME += np.sum(np.abs(gts[pair_indices[i,0],:]-gts[pair_indices[i,1],:])>1)
     return ME
 
-def parse_filelist(obsfiles, ldfiles, obsformat='bed'):
+# def parse_filelist(obsfiles, ldfiles, obsformat='bed'):
+#     obs_files = []
+#     ld_files = []
+#     if '~' in obsfiles and '~' in  ldfiles:
+#         bed_ixes = obsfiles.split('~')
+#         ld_ixes = ldfiles.split('~')
+#         for i in range(1,23):
+#             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
+#             ldfile = ld_ixes[0]+str(i)+ld_ixes[1]
+#             if path.exists(ldfile) and path.exists(obsfile):
+#                 obs_files.append(obsfile)
+#                 ld_files.append(ldfile)
+#         print(str(len(obs_files))+' matched observed and imputed genotype files found')
+#     elif '~' not in obsfiles and '~' not in ldfiles:
+#             obs_files = [obsfiles+'.'+obsformat]
+#             ld_files = [ldfiles]
+#     else:
+#         raise(ValueError('Observed genotypes argument and ld files argument must be contain ~ (multiple chromosomes) or neither (single chromosome)'))
+#     return np.array(obs_files), np.array(ld_files)
+
+def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
-    ld_files = []
-    if '~' in obsfiles and '~' in  ldfiles:
+    if '~' in obsfiles:
         bed_ixes = obsfiles.split('~')
-        ld_ixes = ldfiles.split('~')
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            ldfile = ld_ixes[0]+str(i)+ld_ixes[1]
-            if path.exists(ldfile) and path.exists(obsfile):
+            if path.exists(obsfile):
                 obs_files.append(obsfile)
-                ld_files.append(ldfile)
-        print(str(len(obs_files))+' matched observed and imputed genotype files found')
-    elif '~' not in obsfiles and '~' not in ldfiles:
-            obs_files = [obsfiles+'.'+obsformat]
-            ld_files = [ldfiles]
+        print(str(len(obs_files))+' matched observed genotype files found')
     else:
-        raise(ValueError('Observed genotypes argument and ld files argument must be contain ~ (multiple chromosomes) or neither (single chromosome)'))
-    return np.array(obs_files), np.array(ld_files)
+            obs_files = [obsfiles+'.'+obsformat]
+    return np.array(obs_files)
 
 def read_sibs_from_bed(bedfile,sibpairs):
     bed = Bed(bedfile, count_A1=True)
@@ -188,6 +201,39 @@ def get_map_positions(mapfile,gts,min_map_prop = 0.5):
     else:
         raise(ValueError('Map file must contain columns pposition and gposition'))
 
+#### Compute LD-scores ####
+@njit(parallel=True)
+def compute_ld_scores(gts,map,max_dist = 1):
+    ldscores = np.zeros((gts.shape[1]),dtype=np.float64)
+    for i in prange(gts.shape[1]):
+        ldscore_i = 1
+        if i>0:
+            j = i-1
+            dist = map[i]-map[j]
+            while dist < max_dist and j>=0:
+                ldscore_i += r2_est(gts[...,i],gts[...,j])
+                j -= 1
+                if j>=0:
+                    dist = map[i]-map[j]
+        if i<(gts.shape[1]-1):
+            j = i + 1
+            dist = map[j] - map[i]
+            while dist < max_dist and j < gts.shape[1]:
+                ldscore_i += r2_est(gts[..., i], gts[..., j])
+                j += 1
+                if j < gts.shape[1]:
+                    dist = map[j] - map[i]
+        ldscores[i] = ldscore_i
+    return ldscores
+
+## Unbiased estimator of R^2 between SNPs
+@njit
+def r2_est(g1,g2):
+    r2 = np.power(np.corrcoef(g1,g2)[0,1],2)
+    return r2-(1-r2)/(g1.shape[0]-2)
+
+
+####### Transition Matrix ######
 @njit
 def transition_matrix(cM):
     """Compute probabilities of transitioning between IBD states as a function of genetic distance.
@@ -475,7 +521,7 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
-def infer_ibd_chr(bedfile, ldfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False):
+def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
@@ -504,18 +550,11 @@ def infer_ibd_chr(bedfile, ldfile, sibpairs, p, min_length = 0.01, mapfile=None,
     sibpair_indices = np.zeros((sibpairs.shape), dtype=int)
     sibpair_indices[:, 0] = np.array([gts.id_dict[x] for x in sibpairs[:, 0]])
     sibpair_indices[:, 1] = np.array([gts.id_dict[x] for x in sibpairs[:, 1]])
-    # LD scores
-    print('Reading LD scores from ' + ldfile)
-    ld = np.loadtxt(ldfile, usecols=3, skiprows=1)
-    ldsnps = np.loadtxt(ldfile, usecols=1, skiprows=1, dtype=str)
-    ld_dict = make_id_dict(ldsnps)
-    in_ld_dict = np.array([x in ld_dict for x in gts.sid])
     # Filtering on MAF and LD score
-    print('Before filtering on MAF, missingness, and having an LD score, there were ' + str(gts.shape[1]) + ' SNPs')
-    gts.filter(in_ld_dict)
+    print('Before filtering on MAF and missingness, there were ' + str(gts.shape[1]) + ' SNPs')
     gts.filter_maf(min_maf)
     gts.filter_missingness(max_missing)
-    print('After filtering on MAF, missingness, and having an LD score, there are ' + str(gts.shape[1]) + ' SNPs')
+    print('After filtering on MAF and missingness, there are ' + str(gts.shape[1]) + ' SNPs')
     # Read map file
     if mapfile is None:
         print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
@@ -543,7 +582,9 @@ def infer_ibd_chr(bedfile, ldfile, sibpairs, p, min_length = 0.01, mapfile=None,
         gts.map = get_map_positions(mapfile, gts)
     print('Read map')
     # Weights
-    gts.weights = np.power(ld[np.array([ld_dict[x] for x in gts.sid])], -1)
+    print('Computing LD weights')
+    ld = compute_ld_scores(gts.gts, gts.map, max_dist=1)
+    gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')
     ibd = infer_ibd(sibpair_indices, np.array(gts.gts), gts.freqs, gts.map, gts.weights, p)
@@ -561,12 +602,14 @@ def infer_ibd_chr(bedfile, ldfile, sibpairs, p, min_length = 0.01, mapfile=None,
             (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')
+    if ld_out:
+        ld_out = np.vstack((np.array(['CHR','SNP','BP','L2']).reshape((1,4)),np.vstack((np.array([chr for x in gts.sid]), gts.sid, gts.pos, ld)).T))
+        np.savetxt(outprefix+str(chr)+'.l2.ldscore.gz',ld_out)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('bedfiles', type=str,
                     help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
-parser.add_argument('ldfiles',type=str,help='Address of LD scores files in LDSC format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',default=None)
 parser.add_argument('--king',
                     type=str,
                     default = None,
@@ -592,10 +635,11 @@ parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency'
 parser.add_argument('--max_missing', type=float,
                     help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
+parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 args = parser.parse_args()
 
 # Find bed files
-bedfiles, ldfiles = parse_filelist(args.bedfiles,args.ldfiles,obsformat='bed')
+bedfiles = parse_obsfiles(args.bedfiles,obsformat='bed')
 
 # Set parameters
 min_length = args.min_length
@@ -651,4 +695,4 @@ else:
 
 ######### Infer IBD ###########
 for i in range(bedfiles.shape[0]):
-    infer_ibd_chr(bedfiles[i], ldfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix)
+    infer_ibd_chr(bedfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out)
