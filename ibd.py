@@ -4,6 +4,7 @@ import argparse, gzip
 from numba import njit, prange, set_num_threads
 from numba import config as numba_config
 from sibreg.bin.preprocess_data import create_pedigree
+from os import path
 
 def get_sibpairs_from_ped(ped):
     parent_missing = np.array([ped[i,2]=='0' or ped[i,3]=='0' for i in range(ped.shape[0])])
@@ -38,9 +39,15 @@ def get_sibpairs_from_king(kinfile):
     sibpairs = sibpairs[sibpairs[:,2]=='FS',0:2]
     return sibpairs
 
-def estimate_genotyping_error_rate(bedfile,ped):
+def estimate_genotyping_error_rate(bedfiles,ped):
+    ME_het = np.zeros((2))
+    for bedfile in bedfiles:
+        ME_het += mendelian_errors_from_bed(bedfile,ped)
+    p = ME_het[0]/ME_het[1]
+    return p
+
+def mendelian_errors_from_bed(bedfile,ped):
     # Read bed
-    print('Reading genotypes from ' + bedfile)
     bed = Bed(bedfile, count_A1=True)
     ids = bed.iid
     id_dict = make_id_dict(ids, 1)
@@ -58,8 +65,8 @@ def estimate_genotyping_error_rate(bedfile,ped):
     # number of pairs
     npair = np.sum(father_genotyped) + np.sum(mother_genotyped)
     if npair == 0:
-        raise(ValueError('No parent-offspring pairs for genotype error probability estimation'))
-    print(str(npair)+' parent-offspring pairs found')
+        raise(ValueError('No parent-offspring pairs in  '+str(bedfile)+' for genotype error probability estimation'))
+    print(str(npair)+' parent-offspring pairs found in '+bedfile)
     if npair*bed.sid.shape[0] < 10**5:
         print('Warning: limited information for estimation of genotyping error probability.')
     ## Read genotypes
@@ -87,8 +94,7 @@ def estimate_genotyping_error_rate(bedfile,ped):
     freqs = ma.mean(gts, axis=0) / 2.0
     # Estimate error probability
     sum_het = np.sum(freqs * (1 - freqs))
-    p_error = ME / (npair * sum_het)
-    return p_error
+    return np.array([ME,sum_het*pair_count])
 
 @njit(parallel=True)
 def count_ME(gts,pair_indices):
@@ -97,6 +103,26 @@ def count_ME(gts,pair_indices):
     for i in prange(pair_indices.shape[0]):
         ME += np.sum(np.abs(gts[pair_indices[i,0],:]-gts[pair_indices[i,1],:])>1)
     return ME
+
+def parse_filelist(obsfiles, ldfiles, obsformat='bed'):
+    obs_files = []
+    ld_files = []
+    if '~' in obsfiles and '~' in  ldfiles:
+        bed_ixes = obsfiles.split('~')
+        ld_ixes = ldfiles.split('~')
+        for i in range(1,23):
+            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
+            ldfile = ld_ixes[0]+str(i)+ld_ixes[1]
+            if path.exists(ldfile) and path.exists(obsfile):
+                obs_files.append(obsfile)
+                ld_files.append(ldfile)
+        print(str(len(obs_files))+' matched observed and imputed genotype files found')
+    elif '~' not in obsfiles and '~' not in ldfiles:
+            obs_files = [obsfiles+'.'+obsformat]
+            ld_files = [ldfiles]
+    else:
+        raise(ValueError('Observed genotypes argument and ld files argument must be contain ~ (multiple chromosomes) or neither (single chromosome)'))
+    return np.array(obs_files), np.array(ld_files)
 
 def read_sibs_from_bed(bedfile,sibpairs):
     bed = Bed(bedfile, count_A1=True)
@@ -449,9 +475,98 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
+def infer_ibd_chr(bedfile, ldfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False):
+    ## Read bed
+    print('Reading genotypes from ' + bedfile)
+    # Determine chromosome
+    bimfile = bedfile.split('.bed')[0] + '.bim'
+    chr = np.loadtxt(bimfile, usecols=0, dtype=str)
+    chr = np.unique(chr)
+    if chr.shape[0] > 1:
+        raise (ValueError('More than 1 chromosome in input bedfile'))
+    else:
+        chr = chr[0]
+    print('Inferring IBD for chromosome ' + str(chr))
+    # Read sibling genotypes from bed file
+    gts = read_sibs_from_bed(bedfile, sibpairs)
+    # Calculate allele frequencies
+    print('Calculating allele frequencies')
+    gts.compute_freqs()
+    # Check which sibling pairs have genotypes
+    sibpair_indices = np.zeros((sibpairs.shape), dtype=bool)
+    sibpair_indices[:, 0] = np.array([x in gts.id_dict for x in sibpairs[:, 0]])
+    sibpair_indices[:, 1] = np.array([x in gts.id_dict for x in sibpairs[:, 1]])
+    sibpairs = sibpairs[np.sum(sibpair_indices, axis=1) == 2, :]
+    if sibpairs.shape[0] == 0:
+        raise (ValueError('No genotyped sibling pairs found'))
+    print(str(np.sum(sibpairs.shape[0])) + ' sibpairs have genotypes in ' + bedfile)
+    # Find indices of sibpairs
+    sibpair_indices = np.zeros((sibpairs.shape), dtype=int)
+    sibpair_indices[:, 0] = np.array([gts.id_dict[x] for x in sibpairs[:, 0]])
+    sibpair_indices[:, 1] = np.array([gts.id_dict[x] for x in sibpairs[:, 1]])
+    # LD scores
+    print('Reading LD scores from ' + ldfile)
+    ld = np.loadtxt(ldfile, usecols=3, skiprows=1)
+    ldsnps = np.loadtxt(ldfile, usecols=1, skiprows=1, dtype=str)
+    ld_dict = make_id_dict(ldsnps)
+    in_ld_dict = np.array([x in ld_dict for x in gts.sid])
+    # Filtering on MAF and LD score
+    print('Before filtering on MAF, missingness, and having an LD score, there were ' + str(gts.shape[1]) + ' SNPs')
+    gts.filter(in_ld_dict)
+    gts.filter_maf(min_maf)
+    gts.filter_missingness(max_missing)
+    print('After filtering on MAF, missingness, and having an LD score, there are ' + str(gts.shape[1]) + ' SNPs')
+    # Read map file
+    if mapfile is None:
+        print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
+        map = np.loadtxt(bimfile, usecols=2)
+        map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
+        # Check for NAs
+        if np.sum(np.isnan(map)) > 0:
+            raise (ValueError('Map cannot have NAs'))
+        if np.min(map) < 0:
+            raise (ValueError('Map file cannot have negative values'))
+        if np.var(map) == 0:
+            raise (ValueError('Map file has no variation'))
+        # Check ordering
+        ordered_map = np.sort(map)
+        if np.array_equal(map, ordered_map):
+            pass
+        else:
+            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
+        # Check scale
+        if np.max(map) > 5000:
+            raise (ValueError('Maximum value of map too large'))
+        gts.map = map[[map_snp_dict[x] for x in gts.sid]]
+    else:
+        print('Reading map from ' + str(mapfile))
+        gts.map = get_map_positions(mapfile, gts)
+    print('Read map')
+    # Weights
+    gts.weights = np.power(ld[np.array([ld_dict[x] for x in gts.sid])], -1)
+    # IBD
+    print('Inferring IBD')
+    ibd = infer_ibd(sibpair_indices, np.array(gts.gts), gts.freqs, gts.map, gts.weights, p)
+    ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
+    ## Write output
+    # Write segments
+    segs_outfile = outprefix + 'chr_'+str(chr)+'.ibd.segments.gz'
+    print('Writing segments to ' + segs_outfile)
+    write_segs(sibpairs, allsegs, chr, segs_outfile)
+    # Write matrix
+    if ibdmatrix:
+        outfile = outprefix + 'chr_'+str(chr)+'.ibd.gz'
+        print('Writing matrix output to ' + str(outfile))
+        ibd = np.row_stack(
+            (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
+             np.column_stack((sibpairs, ibd))))
+        np.savetxt(outfile, ibd, fmt='%s')
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format.')
+parser.add_argument('bedfiles', type=str,
+                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
+                    default=None)
+parser.add_argument('ldfiles',type=str,help='Address of LD scores files in LDSC format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',default=None)
 parser.add_argument('--king',
                     type=str,
                     default = None,
@@ -464,33 +579,27 @@ parser.add_argument('--pedigree',
                     type=str,
                     default=None,
                     help='Address of pedigree file')
-parser.add_argument('--ldscores',type=str,help='Path to directory with LD scores',default=None)
 parser.add_argument('--map',type=str,default=None)
 parser.add_argument('--outprefix',
                     type=str,
                     default = 'ibd',
                     help="Writes the result of IBD inference to outprefix.ibd.segments.gz")
-parser.add_argument('--chrom',type=str,default=None,help='Chromosome (only input one chromosome at a time)')
-parser.add_argument('--p_error',type=float,help='Probability of genotyping error',default=None)
+parser.add_argument('--p_error',type=float,help='Probability of genotyping error. By default, this is estimated from genotyped parent-offspring pairs.',default=None)
 parser.add_argument('--min_length',type=float,help='Smooth segments with length less than min_length (cM)',
                     default=0.01)
-parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference',default=None)
+parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
 parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
 parser.add_argument('--max_missing', type=float,
                     help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 args = parser.parse_args()
 
-# Set number of threads
-if args.threads is not None:
-    if args.threads < numba_config.NUMBA_NUM_THREADS:
-        set_num_threads(args.threads)
-        print('Number of threads: '+str(args.threads))
+# Find bed files
+bedfiles, ldfiles = parse_filelist(args.bedfiles,args.ldfiles,obsformat='bed')
 
+# Set parameters
 min_length = args.min_length
-bedfile = args.bed+'.bed'
 kinfile = args.king
-ldfile = args.ldscores
 min_maf = args.min_maf
 mapfile = args.map
 outprefix = args.outprefix
@@ -516,6 +625,12 @@ if sibpairs.shape[0]==0:
     raise(ValueError('No sibling pairs found'))
 print('Found '+str(sibpairs.shape[0])+' full sibling pairs')
 
+# Set number of threads
+if args.threads is not None:
+    if args.threads < numba_config.NUMBA_NUM_THREADS:
+        set_num_threads(args.threads)
+        print('Number of threads: '+str(args.threads))
+
 #### Get genotyping error probability ####
 if args.p_error is None:
     print('No genotyping error probability provided. Will attempt to estimate from parent-offspring pairs.')
@@ -527,100 +642,13 @@ if args.p_error is None:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     else:
         ped = np.loadtxt(args.pedigree, dtype=str)
-    p = estimate_genotyping_error_rate(bedfile, ped)
+    p = estimate_genotyping_error_rate(bedfiles, ped)
     print('Estimated genotyping error probability: '+str(round(p,6)))
     if p > 0.05:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
-
-## Read bed
-print('Reading genotypes from '+bedfile)
-# Determine chromosome
-bimfile = bedfile.split('.bed')[0]+'.bim'
-chr = np.loadtxt(bimfile,usecols=0,dtype=str)
-chr = np.unique(chr)
-if chr.shape[0]>1:
-    raise(ValueError('More than 1 chromosome in input bedfile'))
 else:
-    chr = chr[0]
-print('Inferring IBD for chromosome '+str(chr))
-# Read sibling genotypes from bed file
-gts = read_sibs_from_bed(bedfile,sibpairs)
+    p = args.p_error
 
-# Calculate allele frequencies
-print('Calculating allele frequencies')
-gts.compute_freqs()
-
-# Check which sibling pairs have genotypes
-sibpair_indices = np.zeros((sibpairs.shape),dtype=bool)
-sibpair_indices[:,0] = np.array([x in gts.id_dict for x in sibpairs[:,0]])
-sibpair_indices[:,1] = np.array([x in gts.id_dict for x in sibpairs[:,1]])
-sibpairs = sibpairs[np.sum(sibpair_indices,axis=1)==2,:]
-if sibpairs.shape[0]==0:
-    raise(ValueError('No genotyped sibling pairs found'))
-print(str(np.sum(sibpairs.shape[0]))+' sibpairs have genotypes in '+bedfile)
-# Find indices of sibpairs
-sibpair_indices = np.zeros((sibpairs.shape),dtype=int)
-sibpair_indices[:,0] = np.array([gts.id_dict[x] for x in sibpairs[:,0]])
-sibpair_indices[:,1] = np.array([gts.id_dict[x] for x in sibpairs[:,1]])
-
-# LD scores
-print('Reading LD scores from '+ldfile)
-ld = np.loadtxt(ldfile,usecols=3,skiprows=1)
-ldsnps = np.loadtxt(ldfile,usecols=1,skiprows=1,dtype=str)
-ld_dict = make_id_dict(ldsnps)
-in_ld_dict = np.array([x in ld_dict for x in gts.sid])
-
-# Filtering on MAF and LD score
-print('Before filtering on MAF, missingness, and having an LD score, there were '+str(gts.shape[1])+' SNPs')
-gts.filter(in_ld_dict)
-gts.filter_maf(min_maf)
-gts.filter_missingness(max_missing)
-print('After filtering on MAF, missingness, and having an LD score, there are '+str(gts.shape[1])+' SNPs')
-
-# Read map file
-if mapfile is None:
-    print('Separate genetic map not provided, so attempting to read map from '+bimfile)
-    map = np.loadtxt(bimfile, usecols=2)
-    map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1,dtype=str))
-    # Check for NAs
-    if np.sum(np.isnan(map))>0:
-        raise(ValueError('Map cannot have NAs'))
-    if np.min(map)<0:
-        raise(ValueError('Map file cannot have negative values'))
-    if np.var(map)==0:
-        raise(ValueError('Map file has no variation'))
-    # Check ordering
-    ordered_map = np.sort(map)
-    if np.array_equal(map,ordered_map):
-        pass
-    else:
-        raise(ValueError('Map not monotonic. Please make sure input is ordered correctly'))
-    # Check scale
-    if np.max(map)>5000:
-        raise(ValueError('Maximum value of map too large'))
-    gts.map = map[[map_snp_dict[x] for x in gts.sid]]
-else:
-    print('Reading map from '+str(mapfile))
-    gts.map = get_map_positions(mapfile,gts)
-print('Read map')
-
-# Weights
-gts.weights = np.power(ld[np.array([ld_dict[x] for x in gts.sid])],-1)
-
-# IBD
-print('Inferring IBD')
-ibd = infer_ibd(sibpair_indices,np.array(gts.gts),gts.freqs,gts.map,gts.weights,p)
-ibd, allsegs = smooth_ibd(ibd,gts.map,gts.sid,gts.pos,min_length)
-
-## Write output
-# Write segments
-segs_outfile = outprefix+'.ibd.segments.gz'
-print('Writing segments to '+segs_outfile)
-write_segs(sibpairs,allsegs,chr,segs_outfile)
-# Write matrix
-if args.ibdmatrix:
-    outfile = outprefix+'.ibd.gz'
-    print('Writing matrix output to '+str(outfile))
-    ibd = np.row_stack((np.column_stack((np.array(['sib1','sib2']).reshape((1,2)),gts.sid.reshape(1,gts.shape[1]))),
-                        np.column_stack((sibpairs,ibd))))
-    np.savetxt(outfile,ibd,fmt='%s')
+######### Infer IBD ###########
+for i in range(bedfiles.shape[0]):
+    infer_ibd_chr(bedfiles[i], ldfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix)
