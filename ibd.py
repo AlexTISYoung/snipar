@@ -132,7 +132,7 @@ def parse_obsfiles(obsfiles, obsformat='bed'):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):
                 obs_files.append(obsfile)
-        print(str(len(obs_files))+' matched observed genotype files found')
+        print(str(len(obs_files))+' observed genotype files found')
     else:
             obs_files = [obsfiles+'.'+obsformat]
     return np.array(obs_files)
@@ -604,7 +604,7 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
         np.savetxt(outfile, ibd, fmt='%s')
     if ld_out:
         ld_out = np.vstack((np.array(['CHR','SNP','BP','L2']).reshape((1,4)),np.vstack((np.array([chr for x in gts.sid]), gts.sid, gts.pos, ld)).T))
-        np.savetxt(outprefix+str(chr)+'.l2.ldscore.gz',ld_out)
+        np.savetxt(outprefix+str(chr)+'.l2.ldscore.gz',ld_out,fmt='%s')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('bedfiles', type=str,
