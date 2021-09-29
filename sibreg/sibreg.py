@@ -902,7 +902,7 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = Fal
         print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     # Find which individuals can be used
-    none_missing = np.min(par_status, axis=1)
+    none_missing = np.min(gt_indices, axis=1)
     none_missing = none_missing >= 0
     N = np.sum(none_missing)
     if N == 0:
