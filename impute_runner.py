@@ -303,11 +303,14 @@ if __name__ == "__main__":
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
     
-    dir_name = os.path.dirname(os.path.realpath(__file__))
-    repo = git.Repo(dir_name)
-    logging.info(f"Last commit is: {repo.head.commit}")
-    logging.info(f"summary is: {repo.head.commit.summary}")
-    logging.info(f"Active branch is: {repo.active_branch.name}")
+    try:
+        dir_name = os.path.dirname(os.path.realpath(__file__))
+        repo = git.Repo(dir_name)
+        logging.info(f"Last commit is: {repo.head.commit}")
+        logging.info(f"summary is: {repo.head.commit.summary}")
+        logging.info(f"Active branch is: {repo.active_branch.name}")        
+    except git.exc.InvalidGitRepositoryError:
+        pass
 
     #fids starting with _ are reserved for control
     #Families should not have grandparents
