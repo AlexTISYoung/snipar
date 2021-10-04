@@ -211,9 +211,7 @@ cdef int get_hap_index(int i, int j) nogil:
         int"""
     if i > j:
         return i*(i-1)/2+j
-    if j > i:
-        return j*(j-1)/2+i
-    0/0
+    return j*(j-1)/2+i
 
 cdef char is_possible_child(int child, int parent) nogil:
     """Checks whether a person with child genotype can be an offspring of someone with the parent genotype. Returns False if any of them is nan
