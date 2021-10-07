@@ -373,7 +373,7 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
             raise Exception("chromosome should be specified when using phased data") 
         bim["Chr"] = chromosome
 
-    chromosomes = bim["Chr"].unique()
+    chromosomes = bim["Chr"].unique().astype(int)
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #keeping individuals with no parents
