@@ -10,7 +10,6 @@ import argparse
 import sys
 import os
 
-sys.path.append("/homes/nber/harij/gitrepos/SNIPar/ldsc_reg")
 import sib_ldsc_z as ld
 
 import scipy.stats
@@ -100,7 +99,7 @@ if __name__ == '__main__':
 
 
     parser.add_argument('-outsumstat', type = int, default = 1, help = "Column from estimates to output as the beta column")
-    parser.add_argument('-merge-alleles', type = str, help = "Alleles to merge and keep")
+    parser.add_argument('--merge-alleles', type = str, help = "Alleles to merge and keep")
     parser.add_argument('-out', type = str, help = "outputdir")
 
     args=parser.parse_args()
@@ -217,9 +216,9 @@ if __name__ == '__main__':
 
 
     # Constructing dataframe of data
-    zdata = pd.DataFrame({'CHR' : chromosome.astype(int),
+    zdata = pd.DataFrame({'CHR' : chromosome.astype(float).astype(int),
                         'SNP' : snp.astype(str),
-                        'BP' : bp.astype(int),
+                        'BP' : bp.astype(float).astype(int),
                         "f" : f,
                         "N" : N,
                         "A1" : A1.astype(str),

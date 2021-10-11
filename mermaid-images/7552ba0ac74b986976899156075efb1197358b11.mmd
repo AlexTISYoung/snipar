@@ -1,0 +1,6 @@
+graph TD
+    a[Weights from LDPred] --> |ldpred_beta column| d[fPGS]
+    b[Bed files <br> obrserved genotypes]--> d
+    c[Imputated parental genotypes <br> hdf5 file] --> d 
+    
+    d --> output[PGI, PGI_m, PGI_f]

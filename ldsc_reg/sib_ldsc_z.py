@@ -44,17 +44,35 @@ def calc_inv_root(S):
     return S_inv_root
 
 
+# @njit
+# def makeDmat(S, M):
+#     '''
+#     Makes D matrix = M [[1/sigma_1, 0], [0, 1/sigma_2]]
+#     '''
+
+#     sigma1 = np.sqrt(M * S[0, 0])
+#     sigma2 = np.sqrt(M * S[1, 1])
+    
+#     Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
+#                                 [0, 1/sigma2]])
+    
+#     return Dmat
+
 @njit
-def makeDmat(S, M):
+def makeDmat(S):
     '''
     Makes D matrix = M [[1/sigma_1, 0], [0, 1/sigma_2]]
     '''
+    ndims = S.shape[0]
+    assert ndims == S.shape[1]
 
-    sigma1 = np.sqrt(M * S[0, 0])
-    sigma2 = np.sqrt(M * S[1, 1])
-    
-    Dmat = np.sqrt(M) * np.array([[1/sigma1, 0], 
-                                [0, 1/sigma2]])
+    Dmat = np.zeros(ndims)
+    Dmat = np.diag(Dmat)
+
+    for idx in range(ndims):
+        sigma_tmp = np.sqrt(S[idx, idx])
+        
+        Dmat[idx, idx] = 1/sigma_tmp
     
     return Dmat
 
@@ -846,7 +864,7 @@ def theta2z(theta, S, M):
     '''
     zval = np.empty_like(theta)
     for i in range(theta.shape[0]):
-        Dmat = makeDmat(S[i], M)
+        Dmat = makeDmat(S[i])
         zval[i, :] = Dmat @ theta[i, :]
 
     return zval
