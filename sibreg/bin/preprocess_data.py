@@ -307,16 +307,32 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
         unphased_address : str
             Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
         
-        ibd : pd.DataFrame
+        king_ibd : pd.DataFrame, optional
             A pandas dataframe containing IBD statuses for all SNPs.
             This It has these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
             Each line states an IBD segment between a pair on individuals. This can be generated using King software.
+            Either king inputs or snipar should be provided.
+
+        king_segs : pd.DataFrame, optional
+            A pandas dataframe containing IBD segments that have been processed.
+            This It has these columns: Segment, Chr, StartSNP, StopSNP
+            Each line states a segment that's been processed. This can be generated using King software.
+            Either king inputs or snipar should be provided.
+
+        snipar_ibd : pd.DataFrame, optional
+            A pandas dataframe containing IBD statuses for all SNPs.
+            This It has these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate
+            Each line states an IBD segment between a pair on individuals. This can be generated using snipar.
+            Either king inputs or snipar should be provided.
 
         bim_address : str, optional
             Address of the bim file if it's different from the address of the bed file. Does not include '.bim'.
         
         chromosome: str, optional
             Number of the chromosome that's going to be loaded.
+
+        pedigree_nan: str, optional
+            Value that's considered nan in the pedigree
 
     Returns:
         tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
@@ -357,7 +373,7 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
             raise Exception("chromosome should be specified when using phased data") 
         bim["Chr"] = chromosome
 
-    chromosomes = bim["Chr"].unique()
+    chromosomes = bim["Chr"].unique().astype(int)
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #keeping individuals with no parents
@@ -424,6 +440,9 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
 
         ped_ids: set
             Set of ids of individuals with missing parents.
+        
+        chromosomes: str
+                    A string containing all the chromosomes present in the data.
 
         start : int, optional
             This function can be used for preparing a slice of a chromosome. This is the location of the start of the slice.
@@ -431,8 +450,6 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         end : int, optional
             This function can be used for preparing a slice of a chromosome. This is the location of the end of the slice.
 
-        chromosomes: str
-                    A string containing all the chromosomes present in the data.
 
     Returns:
         tuple(np.array[signed char], np.array[signed char], str->int, np.array[int], np.array[float], dict)

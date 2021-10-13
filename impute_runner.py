@@ -15,9 +15,10 @@ Args:
         These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
     IBD : str
-        Address of a file containing IBD statuses for all SNPs.
-        This is a '\t seperated CSV with these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
-        Each line states an IBD segment between a pair on individuals. This can be generated using King software
+        Address of a file containing IBD statuses for all SNPs without segments.gz suffix. with --snipar_ibd flag this is assumed to be in snipar format and without it, it's assumed to be in king format.
+
+    --snipar_ibd
+        If not provided the ibd input is assumed to be in king format with an allsegs file
 
     --bgen : str
         Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
@@ -108,7 +109,13 @@ def run_imputation(data):
                     Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
 
 
-                ibd_pd: pd.Dataframe
+                king_ibd: pd.Dataframe
+                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, StartSNP, StopSNP
+
+                king_seg: pd.Dataframe
+                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: Segment, Chr, StartSNP, StopSNP
+
+                snipar_ibd: pd.Dataframe
                     IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate
 
                 output_address: str
@@ -235,9 +242,10 @@ if __name__ == "__main__":
                         action='store_true')
     parser.add_argument('ibd',
                         type=str,
-                        help='IBD file, should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate')
+                        help='IBD file withoout suffix')
     parser.add_argument('--snipar_ibd',
-                        action='store_true')    
+                        action='store_true',
+                        help='If not provided the ibd input is assumed to be in king format with an allsegs file')
     parser.add_argument('--bgen',
                         type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
     parser.add_argument('--bed',
