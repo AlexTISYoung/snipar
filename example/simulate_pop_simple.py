@@ -274,4 +274,4 @@ ppos = [f"{chrom*nsnp+x}" for x in range(nsnp)]
 gpos = np.arange(0,1,1/float(nsnp))
 map = np.vstack((np.array(['pposition','gposition']),
                  np.vstack((ppos,gpos)).T))
-np.savetxt(args.outprefix+'genetic_map.txt',map,fmt='%s')
+np.savetxt(args.outprefix+'.genetic_map.txt',map,fmt='%s')

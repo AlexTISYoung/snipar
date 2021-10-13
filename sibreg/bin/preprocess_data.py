@@ -213,6 +213,7 @@ def add_control(pedigree):
 def preprocess_king(ibd, segs, bim, chromosomes, sibships):
     ibd["Chr"] = ibd["Chr"].astype(int)
     segs["Chr"] = segs["Chr"].astype(int)
+    chromosomes = [int(x) for x in chromosomes]
     if len(chromosomes)>1:
         ibd = ibd[ibd["Chr"].isin(chromosomes)][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
     else:
