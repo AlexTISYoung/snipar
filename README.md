@@ -1,9 +1,11 @@
 # SNIPar
 
-SNIPar (single nucleotide imputation of parents) is a python library for imputing missing parental genotypes from observed genotypes in a nuclear family, and for performing
+SNIPar (single nucleotide imputation of parents) is a python library for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes from observed genotypes and IBD segments in a nuclear family, and for performing
 family based genome-wide association and polygenic score analyses. 
 
 # Main features:
+
+Infer identity-by-descent segments shared between siblings (ibd.py). 
 
 Impute missing parental genotypes given the observed genotypes in a nuclear family (impute_runner.py).
 
@@ -37,6 +39,8 @@ Packages:
 - pandas
 - networkx
 - Cython
+- pooch
+- numba
 
 We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
 This will come with both numpy and scipy installed and can include an MKL-compiled distribution
@@ -46,6 +50,13 @@ To install from source, clone the git repository, and in the directory
 containing the SNIPar source code, at the shell type
 
     'python setup.py install'
+   
+If you have problems with the installation, it may be due to package conflicts with your existing Python installation. To overcome this, you can 
+try installing in a virtual environment. In a bash shell, this could be done by using the following commands in the SNIPar directory:
+    
+    'python -m venv env'
+    'source env/bin/activate'
+    'python setup.py install' 
 
 # Running tests
 
