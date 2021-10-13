@@ -269,6 +269,9 @@ if __name__ == '__main__':
         gts_f = args.bgen+'.bgen'
         bgen = open_bgen(gts_f, verbose=False)
         snp_ids = bgen.ids
+        # If SNP IDs are broken, try rsids
+        if np.unique(snp_ids).shape[0] == 1:
+            snp_ids = bgen.rsids
         pos = np.array(bgen.positions)
         chrom = np.array(bgen.chromosomes)
         # If chromosomse unknown, set to zero

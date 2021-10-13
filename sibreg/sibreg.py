@@ -902,7 +902,7 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = Fal
         print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
     # Find which individuals can be used
-    none_missing = np.min(par_status, axis=1)
+    none_missing = np.min(gt_indices, axis=1)
     none_missing = none_missing >= 0
     N = np.sum(none_missing)
     if N == 0:
@@ -1105,6 +1105,8 @@ def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None, start=0
         raise(ValueError('Could not find SNP ids in imputed parental genotypes'))
     imp_sid = imp_bim[:, id_col]
     obs_sid = gts_f.ids
+    if np.unique(obs_sid).shape[0] == 1:
+        obs_sid = gts_f.rsids
     obs_sid_dict = make_id_dict(obs_sid)
     in_obs_sid = np.zeros((imp_sid.shape[0]), dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]), dtype=int)

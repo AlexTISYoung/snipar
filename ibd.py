@@ -576,6 +576,7 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
         # Check scale
         if np.max(map) > 5000:
             raise (ValueError('Maximum value of map too large'))
+        gts.filter(np.array([x in map_snp_dict for x in gts.sid]))
         gts.map = map[[map_snp_dict[x] for x in gts.sid]]
     else:
         print('Reading map from ' + str(mapfile))
@@ -603,6 +604,7 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')
     if ld_out:
+        print('Writing LD-scores to '+outprefix+str(chr)+'.l2.ldscore.gz')
         ld_out = np.vstack((np.array(['CHR','SNP','BP','L2']).reshape((1,4)),np.vstack((np.array([chr for x in gts.sid]), gts.sid, gts.pos, ld)).T))
         np.savetxt(outprefix+str(chr)+'.l2.ldscore.gz',ld_out,fmt='%s')
 

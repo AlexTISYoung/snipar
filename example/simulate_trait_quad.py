@@ -89,7 +89,7 @@ y = A*a_factor+np.sqrt(1-args.h2quad)*e
 
 # Write phenotype
 yout = np.hstack((ped_out,np.array(y,dtype=str).reshape((y.shape[0],1))))
-np.savetxt(args.outprefix+'.ped',yout,fmt='%s')
+np.savetxt(args.outprefix+'.txt',yout,fmt='%s')
 
 b = b*a_factor
 
