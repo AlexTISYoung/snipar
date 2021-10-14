@@ -293,7 +293,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, fam_address = None, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -362,10 +362,16 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
+        if fam_address is None:
+            fam_address = unphased_address+'.fam'
         bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+        fam = pd.read_csv(fam_address, delim_whitespace=True, header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
+
     else:
         if bim_address is None:
             bim_address = phased_address+'.bgen'
+        if fam_address is None:
+            fam_address = phased_address+'.bgen'
         bgen = read_bgen(bim_address, verbose=False)
         bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
         #TODO this line should be replaced
@@ -373,13 +379,21 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
         if chromosome is None:
             raise Exception("chromosome should be specified when using phased data") 
         bim["Chr"] = chromosome
+        bgen = read_bgen(bim_address, verbose=False)
+        bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
+        #TODO this line should be replaced
+        bim["id"]=bim["rsid"]
+        if chromosome is None:
+            raise Exception("chromosome should be specified when using phased data") 
+        bim["Chr"] = chromosome
+        fam = pd.DataFrame({"IID":read_bgen(fam_address)["samples"]})
 
     chromosomes = bim["Chr"].unique().astype(int)
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #keeping individuals with no parents
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"]) & pedigree["FATHER_ID"].isin(fam["IID"])
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"]) & pedigree["MOTHER_ID"].isin(fam["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     #removing individual whose parents are nan
     no_parent_pedigree = no_parent_pedigree[(no_parent_pedigree["MOTHER_ID"] != pedigree_nan) & (no_parent_pedigree["FATHER_ID"] != pedigree_nan)]

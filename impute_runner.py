@@ -91,6 +91,7 @@ import random
 import pandas as pd
 import os
 from multiprocessing import Pool
+import git
 random.seed(1567924)
 
 def run_imputation(data):
@@ -312,7 +313,16 @@ if __name__ == "__main__":
     args=parser.parse_args()
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
-        
+    
+    try:
+        dir_name = os.path.dirname(os.path.realpath(__file__))
+        repo = git.Repo(dir_name)
+        logging.info(f"Last commit is: {repo.head.commit}")
+        logging.info(f"summary is: {repo.head.commit.summary}")
+        logging.info(f"Active branch is: {repo.active_branch.name}")        
+    except git.exc.InvalidGitRepositoryError:
+        pass
+
     #fids starting with _ are reserved for control
     #Families should not have grandparents
     if not args.pedigree:
@@ -351,7 +361,7 @@ if __name__ == "__main__":
 
     if args.bgen:
         if args.to_chr is None or args.from_chr is None:
-            raise Exception("Chromosome range should be specified with unphased genotype")
+            raise Exception("Chromosome range should be specified with phased genotype")
 
     def none_tansform(a, b, c):
         if a is not None:
