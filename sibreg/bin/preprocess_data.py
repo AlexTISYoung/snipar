@@ -293,7 +293,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd, segs, bim_address = None, fam_address = None, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, fam_address = None, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -362,9 +362,9 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd, segs, bim_addr
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
+        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         if fam_address is None:
             fam_address = unphased_address+'.fam'
-        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         fam = pd.read_csv(fam_address, delim_whitespace=True, header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
 
     else:

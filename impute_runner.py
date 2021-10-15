@@ -157,13 +157,14 @@ def run_imputation(data):
     start = data.get("start")
     end = data.get("end")
     bim = data.get("bim")
+    fam = data.get("fam")
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -261,6 +262,10 @@ if __name__ == "__main__":
                         type=str,
                         default = None,
                         help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
+    parser.add_argument('--fam',
+                        type=str,
+                        default = None,
+                        help='Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes')
     parser.add_argument('--output_address',
                         type=str,
                         default = "parent_imputed",
@@ -320,7 +325,7 @@ if __name__ == "__main__":
         logging.info(f"Last commit is: {repo.head.commit}")
         logging.info(f"summary is: {repo.head.commit.summary}")
         logging.info(f"Active branch is: {repo.active_branch.name}")        
-    except:
+    except git.exc.InvalidGitRepositoryError:
         pass
 
     #fids starting with _ are reserved for control
@@ -377,6 +382,7 @@ if __name__ == "__main__":
             "start": args.start,
             "end": args.end,
             "bim": none_tansform(args.bim, "~", str(chromosome)),
+            "fam": none_tansform(args.fam, "~", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
