@@ -30,7 +30,7 @@ kinship_df.to_csv('test_data/sample${i}.king', sep = '\t', index = False);
 "
 cp outputs/tmp/t__t${i}.agesex test_data/sample${i}.agesex
 /disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g outputs/tmp/t__t${i}.haps -s outputs/tmp/t__t${i}.sample -og test_data/sample${i}.bgen -os test_data/sample${i}.sample -filetype shapeit_haplotypes -ofiletype bgen
-plink/plink2 --bgen test_data/sample${i}.bgen ref-last --sample test_data/sample${i}.sample --make-bed --out test_data/sample${i} --oxford-single-chr ${i}
+plink2 --bgen test_data/sample${i}.bgen ref-last --sample test_data/sample${i}.sample --make-bed --out test_data/sample${i} --oxford-single-chr ${i}
 python example/simulate_trait_quad.py test_data/sample${i}.bed outputs/tmp/t__t${i}_fams.ped 0.8 test_data/h2_quad_0.8${i} --no_sib --dncor 0.5
 /disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g test_data/sample${i}.bgen -s test_data/sample${i}.sample -og test_data/sample_reduced${i}.bgen -os test_data/sample_reduced${i}.sample -filetype bgen -ofiletype bgen -excl-samples outputs/tmp/t__t${i}_remove.txt
 plink/plink2 --bgen test_data/sample_reduced${i}.bgen ref-last --sample test_data/sample_reduced${i}.sample --make-bed --out test_data/sample_reduced${i} --oxford-single-chr ${i}
