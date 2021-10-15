@@ -8,7 +8,7 @@ Test data
 
 In the example/ directory, there is some example data. The file h2_quad_0.8.txt is a simulated phenotype with direct, paternal, and maternal effects, where 80% of the phenotypic
 variance is explained by the combined direct, paternal and maternal effects of the SNPs; and the
-pairwise correlations between the direct, paternal, and maternal effects is 0.5.
+pairwise correlations between the direct, paternal, and maternal effects are 0.5.
 
 The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
@@ -26,9 +26,9 @@ use the following command
 
 This will output the IBD segments to a gzipped text file example/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
 inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with column 'FID' (family ID), 'IID'
-(individual). It is necessary to provide the genetic map positions in centiMorgans (cM) of the SNPs:
-the *--map* argument allows the user to specify a genetic map (in the same format as used by SHAPEIT); otherwise,
-the script can use the genetic map positions (in cM) provided by the bim file. The *--threads* argument controls the number of threads used.
+(individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). It is necessary to provide the genetic map positions in centiMorgans (cM) of the SNPs:
+the *--map* argument allows the user to specify a genetic map (in the same format as used by SHAPEIT: https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats); otherwise,
+the script can use the genetic map positions (in cM) provided by the bim file. The *--threads* argument controls the number of threads used for computation.
 
 If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID),
 they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred
@@ -36,14 +36,14 @@ as individuals in the pedigree that share both parents. Using the example pedigr
 
     ``python ibd.py example/sample --pedigree example/sample.ped --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
 
-While the script can be run for .bed files containing single chromosomes, it can also be run for all chromosomes simultaneously. If the bed files are
+While the script can be run for a .bed file containing a single chromosome, it can also be run for multiple bed files each containing a single chromosome. If the bed files are
 chr_1.bed, chr_2.bed, ..., chr_22.bed, then you can specify these files to the script as 'chr_~', where '~' is interpreted as a numerical wildcard character.
 The script first infers a genotyping error probability from Mendelian Errors between parents and offspring across all the input chromosomes,
 then it will infer the IBD segments shared between siblings for each chromosome.
 
 The IBD inference can be performed on a smaller set of SNPs than will be imputed to save computation time.
 For example, IBD inference could be performed using SNPs from a genotyping array, and the imputation performed using all
-imputed SNPs. SNPs that fall outside of regions covered by the IBD segments will be imputed as missing values.
+SNPs that have been imputed from a reference panel. For imputation from siblings, SNPs that fall outside of regions covered by the IBD segments will be imputed as missing values.
 
 
 Imputing missing parental genotypes
@@ -78,10 +78,10 @@ To compute summary statistics for direct, paternal, and maternal effects for all
 
     ``python fGWAS.py example/sample example/h2_quad_0.8.txt --outprefix example/h2_quad_0.8 --bed example/sample``
 
-This takes the observed genotypes in example/sample1.bed and the imputed parental genotypes in example/sample1.hdf5 and uses
+This takes the observed genotypes in example/sample.bed and the imputed parental genotypes in example/sample.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
 (imputed) genotype. This is done using a random effects model that models phenotypic correlations between siblings,
-where sibling relations in the pedigree stored in the output of the imputation script: example/sample.hdf5. The 'family variance estimate'
+where sibling relations in the pedigree are stored in the output of the imputation script: example/sample.hdf5. The 'family variance estimate'
 output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance.
 
 To use the .bgen file instead, type:
@@ -101,7 +101,7 @@ regress phenotype onto genotype without control for parental genotypes. The fina
 correlations between the different effect estimates at that SNP.
 
 In addition to the plain text output, the effects and their sampling variance-covariance matrices are output in example/h2_quad_0.8.sumstats.hdf5.
-The contents of HDF5 file can be read into Python (using `h5py <https://www.h5py.org>`_) and R (using `rhdf5 <https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html>`_) easily.
+The contents of the HDF5 file can be read into Python (using `h5py <https://www.h5py.org>`_) and R (using `rhdf5 <https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html>`_) easily.
 The output contains different datasets:
 
 1. *estimate*, the estimated SNP effect, where each row gives a SNP, and each column gives an effect
@@ -115,7 +115,7 @@ The output contains different datasets:
 9. *N*, the sample size
 10. *NAs*, the number of missing values for each of SNPs, given for each relative in the regression (individual, father, mother, etc.)
 
-Now we have estimated locus specific summary statistics. To compare to the true effects, run
+Now we have estimated SNP specific summary statistics. To compare to the true effects, run
 
     ``python example/estimate_sim_effects.py example/h2_quad_0.8.sumstats.hdf5 example/h2_quad_0.8.effects.txt``
 
