@@ -325,7 +325,7 @@ if __name__ == "__main__":
         logging.info(f"Last commit is: {repo.head.commit}")
         logging.info(f"summary is: {repo.head.commit.summary}")
         logging.info(f"Active branch is: {repo.active_branch.name}")        
-    except git.exc.InvalidGitRepositoryError:
+    except :
         pass
 
     #fids starting with _ are reserved for control
