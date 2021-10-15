@@ -17,6 +17,9 @@ import numpy as np
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen, read_bgen
 from config import nan_integer
+from sklearn.impute import SimpleImputer
+from sklearn.decomposition import PCA
+import torch
 class Person:
     """Just a simple data structure representing individuals
 
@@ -435,6 +438,42 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
+def lr(unphased_gts, n_components=40, epochs=200):
+    imp_mean =SimpleImputer()
+    unphased_pc_gts = imp_mean.fit_transform(unphased_gts/2)
+    pca = PCA(n_components)
+    pca.fit_transform(unphased_pc_gts)
+    components = pca.components_
+    pc_scores = unphased_pc_gts@components.T
+    expected_f = []    
+    for i in range(n_components):        
+        weights = torch.tensor(
+            [[0.]]*(n_components),
+            requires_grad=True,
+            dtype=torch.double
+            )
+        optimizer = torch.optim.Adam([weights], lr=0.01,)
+        trainx= torch.tensor(
+                np.hstack(
+                    (
+                        np.delete(pc_scores, i, axis=1),
+                        [[1]]*pc_scores.shape[0]
+                    )
+                ),
+                dtype=torch.double
+            )
+        trainy= torch.tensor(pc_scores[:, [i]])
+        for e in range(epochs):
+            yhat = torch.nn.functional.sigmoid(trainx@weights) 
+            loss = (yhat-trainy).T@(yhat-trainy)
+            print(f"i is {i}, e is {e}, loss={loss}")
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        expected_f.append(weights)
+    return expected_f
+
+
 def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None):
     """ Processes the gts required data for the imputation and returns it.
 
@@ -489,6 +528,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
     phased_gts = None
     unphased_gts = None
+    unphased_pc_gts = None
     if unphased_address:
         bim_as_csv = pd.read_csv(unphased_address+".bim", delim_whitespace=True, header=None)
         gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
@@ -530,7 +570,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
-            phased_gts[nanmask] = nan_integer
+            phased_gts[nanmask] = nan_integer                
     _, indexes = np.unique(all_sids, return_index=True)
     indexes = np.sort(indexes)
     indexes = (indexes[(indexes>=start) & (indexes<end)]-start)
@@ -538,7 +578,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     pos = pos[indexes]
     unphased_gts = unphased_gts[:, indexes]
     if not phased_gts is None:
-        phased_gts = phased_gts[:, indexes, :]
+        phased_gts = phased_gts[:, indexes, :]        
     pos = pos.astype(int)
     unphased_gts_greater2 = unphased_gts>2
     num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
@@ -568,7 +608,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     freqs = np.nanmean(unphased_gts,axis=0)/2.0
     nanmask = np.isnan(unphased_gts) 
     unphased_gts = unphased_gts.astype(np.int8)
-    unphased_gts[nanmask] = nan_integer    
+    unphased_gts[nanmask] = nan_integer
     if not phased_gts is None:
         nanmask = np.isnan(phased_gts)
         phased_gts = phased_gts.astype(np.int8)
@@ -579,4 +619,5 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     bim_columns = selected_bim.columns
     hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
+    lr(unphased_gts)
     return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict
