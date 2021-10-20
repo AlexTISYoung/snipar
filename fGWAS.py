@@ -183,43 +183,7 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, parsum=False,
     if verbose:
         print('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
-    #### Match phenotype ####
-    # y = match_phenotype(G, y, pheno_ids)
-
-
-    #### Fit null model ####
-    # if fit_null:
-    #     print('Estimating variance components')
-    # if covar is not None and fit_null:
-    #     # Match covariates #
-    #     covariates.filter_ids(G.ids, verbose=False)
-    #     null_model, sigma2, tau, null_alpha, null_alpha_cov = fit_sibreg_model(y, covariates.gts, G.fams, add_intercept=True,
-    #                                                tau_init=tau_init)
-
-    # elif fit_null:
-    #     null_model, sigma2, tau = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
-    #                                                                            tau_init = tau_init, return_fixed = False)
-    # else:
-    #     null_model = model(y, np.ones((y.shape[0], 1)), G.fams)
-    # if fit_null:
-    #     print('Family variance estimate: '+str(round(sigma2/tau,4)))
-    #     print('Residual variance estimate: ' + str(round(sigma2,4)))
-    # ##### Transform genotypes and phenotypes ######
-    # if verbose:
-    #     print('Transforming genotypes and phenotypes')
-    # if tau is None or sigma2 is None:
-    #     raise(ValueError('Must provide variance components if not fitting null model'))
-    # L = null_model.sigma_inv_root(tau, sigma2)
-    # G.diagonalise(L)
-    # if covar is None:
-    #     y = transform_phenotype(L, y, G.fam_indices)
-    # else:
-    #     null_mean = null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]])
-    #     y = transform_phenotype(L, y, G.fam_indices, null_mean)
-    # ### Fit models for SNPs ###
-    # if verbose:
-    #     print('Estimating SNP effects')
-    # alpha, alpha_cov, alpha_ses = fit_models(y,G)
+    
     alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts)
     return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses 
 
