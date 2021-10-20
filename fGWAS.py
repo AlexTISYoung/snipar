@@ -1,4 +1,5 @@
 from sibreg.sibreg import *
+from sibreg.model import *
 import argparse, h5py
 import numpy as np
 from bgen_reader import open_bgen
@@ -37,7 +38,7 @@ def fit_models(y,G):
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
 
-def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
+def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma_grm, sigma_sib, sigma_res, freqs):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -66,8 +67,9 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     outfile['estimate_cols'] = encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
-    outfile['sigma2'] = sigma2
-    outfile['tau'] = tau
+    outfile['sigma_grm'] = sigma_grm
+    outfile['sigma_sib'] = sigma_sib
+    outfile['sigma_res'] = sigma_res
     outfile['freqs'] = freqs
     outfile.close()
 
@@ -80,7 +82,7 @@ def outarray_effect(est, ses, freqs, vy):
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigma2, tau, freqs):
+def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigma_grm, sigma_sib, sigma_res, freqs):
     outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
     header = ['chromosome','SNP','pos','A1','A2','freq']
     # Which effects to estimate
@@ -129,7 +131,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
         if not parsum:
             alpha_corr_out[i,ncor-1] = alpha_cov_i[paternal_index,maternal_index]/(alpha_ses_out[i,maternal_index]*alpha_ses_out[i,paternal_index])
     # Create output array
-    vy = (1+1/tau)*sigma2
+    vy = sigma_grm + sigma_sib + sigma_res
     outstack = [outbim]
     for i in range(len(effects)):
         outstack.append(outarray_effect(alpha[:,i],alpha_ses_out[:,i],freqs,vy))
@@ -153,8 +155,8 @@ def compute_batch_boundaries(snp_ids,batch_size):
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
     return block_bounds
 
-def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=None, sigma2=None, null_alpha=None, covar=None, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1, verbose=False, print_sample_info=False):
+def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, parsum=False,
+                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
     # Check for empty fam labels
@@ -182,41 +184,44 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
         print('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
     #### Match phenotype ####
-    y = match_phenotype(G,y,pheno_ids)
-    #### Fit null model ####
-    if fit_null:
-        print('Estimating variance components')
-    if covar is not None and fit_null:
-        # Match covariates #
-        covariates.filter_ids(G.ids, verbose=False)
-        null_model, sigma2, tau, null_alpha, null_alpha_cov = fit_sibreg_model(y, covariates.gts, G.fams, add_intercept=True,
-                                                   tau_init=tau_init)
+    # y = match_phenotype(G, y, pheno_ids)
 
-    elif fit_null:
-        null_model, sigma2, tau = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
-                                                                               tau_init = tau_init, return_fixed = False)
-    else:
-        null_model = model(y, np.ones((y.shape[0], 1)), G.fams)
-    if fit_null:
-        print('Family variance estimate: '+str(round(sigma2/tau,4)))
-        print('Residual variance estimate: ' + str(round(sigma2,4)))
-    ##### Transform genotypes and phenotypes ######
-    if verbose:
-        print('Transforming genotypes and phenotypes')
-    if tau is None or sigma2 is None:
-        raise(ValueError('Must provide variance components if not fitting null model'))
-    L = null_model.sigma_inv_root(tau, sigma2)
-    G.diagonalise(L)
-    if covar is None:
-        y = transform_phenotype(L, y, G.fam_indices)
-    else:
-        null_mean = null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]])
-        y = transform_phenotype(L, y, G.fam_indices, null_mean)
-    ### Fit models for SNPs ###
-    if verbose:
-        print('Estimating SNP effects')
-    alpha, alpha_cov, alpha_ses = fit_models(y,G)
-    return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses, sigma2, tau, null_alpha
+
+    #### Fit null model ####
+    # if fit_null:
+    #     print('Estimating variance components')
+    # if covar is not None and fit_null:
+    #     # Match covariates #
+    #     covariates.filter_ids(G.ids, verbose=False)
+    #     null_model, sigma2, tau, null_alpha, null_alpha_cov = fit_sibreg_model(y, covariates.gts, G.fams, add_intercept=True,
+    #                                                tau_init=tau_init)
+
+    # elif fit_null:
+    #     null_model, sigma2, tau = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
+    #                                                                            tau_init = tau_init, return_fixed = False)
+    # else:
+    #     null_model = model(y, np.ones((y.shape[0], 1)), G.fams)
+    # if fit_null:
+    #     print('Family variance estimate: '+str(round(sigma2/tau,4)))
+    #     print('Residual variance estimate: ' + str(round(sigma2,4)))
+    # ##### Transform genotypes and phenotypes ######
+    # if verbose:
+    #     print('Transforming genotypes and phenotypes')
+    # if tau is None or sigma2 is None:
+    #     raise(ValueError('Must provide variance components if not fitting null model'))
+    # L = null_model.sigma_inv_root(tau, sigma2)
+    # G.diagonalise(L)
+    # if covar is None:
+    #     y = transform_phenotype(L, y, G.fam_indices)
+    # else:
+    #     null_mean = null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]])
+    #     y = transform_phenotype(L, y, G.fam_indices, null_mean)
+    # ### Fit models for SNPs ###
+    # if verbose:
+    #     print('Estimating SNP effects')
+    # alpha, alpha_cov, alpha_ses = fit_models(y,G)
+    alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts)
+    return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses 
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -243,6 +248,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
     parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
     parser.add_argument('--no_txt_out',action='store_true',help='Suppress text output of summary statistics',default=False)
+
+    parser.add_argument('--hapmap_bed', type=str, help='Bed file with observed hapmap3 snps (without suffix, chromosome number should be #).', default=None)
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--gcta_path', type=str, help='Path to gcta executable.', default=None)
+    group.add_argument('--grm_path', type=str, help='Path to gcta grm output (ending in .grm but without prefix).', default=None)
+    parser.add_argument('--plink_path', type=str, help='Path to plink2 executable.')
+    parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM sparsity', default=0.05)
+
     args=parser.parse_args()
 
     ######### Read Phenotype ########
@@ -274,6 +287,26 @@ if __name__ == '__main__':
         # If chromosomse unknown, set to zero
         chrom[[len(x)==0 for x in chrom]] = 0
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
+    ########## Construct GRM and sibship matrix ##########
+    ids, fam_labels = get_ids_with_par(args.pargts, gts_f, pheno_ids)
+    if args.grm_path is None:
+        run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)
+        grm_path = args.outprefix + '.grm'
+    else:
+        grm_path = args.grm_path
+    he_id_dict = make_id_pair_dict(ids)
+    print('Building ingredient for HE regression...')
+    grm_arr = build_grm_arr(grm_path, he_id_dict, thres=args.sparse_thres)
+    sibship_arr = build_sibship_arr(fam_labels, ids, he_id_dict)
+    pheno_prod_arr = build_pheno_prod_arr(y, ids, he_id_dict)
+    print('Performing HE regression...')
+    sigma_grm, sigma_sib, sigma_res = he_reg(grm_arr, sibship_arr, pheno_prod_arr)
+    ################## Setup null model ##################
+    y = match_phenotype_(ids, y, pheno_ids)
+    model = LinearMixedModel(y, sigma_grm, sigma_sib, sigma_res, include_covar=args.covar is not None)
+    if args.covar is not None:
+        model.fit_covar(self.y, covar_X=covariates.gts)
+    model.compute_V_inv(ids, he_id_dict, grm_arr, sibship_arr)
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' variants in '+gts_f)
     if args.end is not None:
@@ -315,11 +348,11 @@ if __name__ == '__main__':
     freqs[:] = np.nan
     ##############  Process batches of SNPs ##############
     ######## Fit null model in first batch ############
-    batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
+    batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(
                    snp_ids[batch_bounds[0, 0]:batch_bounds[0, 1]],
                    y, pheno_ids, args.pargts, gts_f,
-                   fit_null=True, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
-                   max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init, print_sample_info=True)
+                   parsum=args.parsum, fit_sib=args.fit_sib,
+                   max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, print_sample_info=True)
     # Fill in fitted SNPs
     batch_indices = np.array([snp_dict[x] for x in batch_snps])
     alpha[batch_indices,:] = batch_alpha
@@ -329,10 +362,10 @@ if __name__ == '__main__':
     print('Done batch 1 out of '+str(batch_bounds.shape[0]))
     ########### Process remaining batches ###########
     for i in range(1,batch_bounds.shape[0]):
-        batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses, sigma2, tau, null_alpha = process_batch(
-            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], y, pheno_ids, args.pargts, gts_f, fit_null=False,
-            tau=tau, sigma2=sigma2, null_alpha=null_alpha, covar=args.covar, parsum=args.parsum, fit_sib=args.fit_sib,
-            max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, tau_init=args.tau_init)
+        batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(
+            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], y, pheno_ids, args.pargts, gts_f,
+            parsum=args.parsum, fit_sib=args.fit_sib,
+            max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,)
         # Fill in fitted SNPs
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
@@ -343,7 +376,7 @@ if __name__ == '__main__':
     ######## Save output #########
     if not args.no_hdf5_out:
         write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
-                     sigma2, tau, freqs)
+                     sigma_grm, sigma_sib, sigma_res, freqs)
     if not args.no_txt_out:
         write_txt_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_cov,
-                     sigma2, tau, freqs)
+                     sigma_grm, sigma_sib, sigma_res, freqs)
