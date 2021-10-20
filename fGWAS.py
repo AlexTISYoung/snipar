@@ -262,9 +262,10 @@ if __name__ == '__main__':
     print('Building ingredient for HE regression...')
     grm_arr = build_grm_arr(grm_path, he_id_dict, thres=args.sparse_thres)
     sibship_arr = build_sibship_arr(fam_labels, ids, he_id_dict)
+    res_arr = build_res_arr(he_id_dict)
     pheno_prod_arr = build_pheno_prod_arr(y, ids, he_id_dict)
     print('Performing HE regression...')
-    sigma_grm, sigma_sib, sigma_res = he_reg(grm_arr, sibship_arr, pheno_prod_arr)
+    sigma_grm, sigma_sib, sigma_res = he_reg(grm_arr, sibship_arr, res_arr, pheno_prod_arr)
     ################## Setup null model ##################
     y = match_phenotype_(ids, y, pheno_ids)
     model = LinearMixedModel(y, sigma_grm, sigma_sib, sigma_res, include_covar=args.covar is not None)

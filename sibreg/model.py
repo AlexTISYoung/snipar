@@ -12,7 +12,7 @@ import tempfile
 import gzip
 from functools import wraps
 from time import time
-from typing import List, Optional, Dict, Tuple, Callable
+from typing import List, Optional, Dict, Tuple, Callable, Any, Iterable
 from collections import defaultdict
 from itertools import combinations
 
@@ -44,6 +44,12 @@ def match_phenotype_(
     y = y[[pheno_id_dict[x] for x in ids]]
     return y
 
+
+def combo_with_rep(it: Iterable[Any]) -> List[Tuple[Any, Any]]: 
+    """
+    Return all combinations of length 2 plus duplicates (i.e., [a, a])
+    """
+    return list(combinations(it, 2)) + [(l, l) for l in it]
 
 class OrderedIdPair(tuple):
     """
@@ -162,7 +168,7 @@ def make_id_pair_dict(ids: List[str]) -> Dict[OrderedIdPair, int]:
     """
     Make ordered ID pair dict from list of IDs.
     """
-    pairs = combinations(ids, 2)
+    pairs = combo_with_rep(ids)
     id_pair_dict = dict()
     i = 0
     for p in map(OrderedIdPair, pairs):
@@ -190,9 +196,6 @@ def build_grm_arr(
     with gzip.open(f'{grm_path}.gz', 'rt') as f:
         for line in f:
             id1, id2, _, gr = line.strip().split('\t')
-            # no need to read in diagonal terms as they are all 1's
-            if id1 == id2:
-                continue
             id1, id2 = gcta_id[int(id1)], gcta_id[int(id2)]
             gr = float(gr)
             id_pair = OrderedIdPair([id1, id2])
@@ -228,7 +231,7 @@ def build_sibship_arr(
     for f, indices_lst in label_indices.items():
         if len(indices_lst) == 1:
             continue
-        for pair in combinations(indices_lst, 2):
+        for pair in combo_with_rep(indices_lst):
             id_pair = list(map(ids.__getitem__, pair))
             try:
                sibship_arr[he_id_dict[OrderedIdPair(id_pair)]] = 1.
@@ -236,6 +239,15 @@ def build_sibship_arr(
                sys.exit(f'ID pair {id_pair} from fam_indices is not repuested in he_id_dict.')
     
     return sibship_arr
+
+
+def build_res_arr(
+    he_id_dict: Dict[OrderedIdPair, int], 
+) -> np.ndarray:
+    """
+    Build residual array for HE regression.
+    """
+    return np.array([int(i == j) for i, j in he_id_dict], dtype=np.float)
 
 
 def build_pheno_prod_arr(
@@ -259,7 +271,7 @@ def build_pheno_prod_arr(
 
 
 def he_reg(
-    grm_arr: np.ndarray, sibship_arr: np.ndarray, pheno_prod_arr: np.ndarray
+    grm_arr: np.ndarray, sibship_arr: np.ndarray, res_arr: np.ndarray, pheno_prod_arr: np.ndarray
 ) -> Tuple[float, float, float]:
     """
     Perform HE regression.
@@ -268,15 +280,14 @@ def he_reg(
         raise TypeError('Wrong input dimension. Expecting ndarrays of dim 1.')
     if len(grm_arr) != len(sibship_arr) or len(sibship_arr) != len(pheno_prod_arr):
         raise ValueError('Lengths of inputs do not match.')
-        
+
     X = np.vstack([np.ones(len(grm_arr)), grm_arr, sibship_arr]).T
-    beta = np.linalg.inv(X.T.dot(X)).dot(X.T).dot(pheno_prod_arr)
-    res = pheno_prod_arr - X.dot(beta)
-    err = res.T.dot(res) / (pheno_prod_arr.shape[0] - 2)
+    beta = np.linalg.solve(X.T.dot(X), X.T.dot(pheno_prod_arr))
+    res = pheno_prod_arr - X @ beta
+    err = res.T @ res / pheno_prod_arr.shape[0]
     beta1 = 0 if beta[1] < 0 else beta[1]
     beta2 = 0 if beta[2] < 0 else beta[2]
-    err = 0 if err < 0 else err
-    return beta1, beta2, err 
+    return beta1, beta2, err
 
 
 class LinearMixedModel(object):
@@ -319,7 +330,8 @@ class LinearMixedModel(object):
         self._sigma_grm = sigma_grm
         self._sigma_sib = sigma_sib
         self._sigma_res = sigma_res
-        
+
+     
     def fit_covar(self, covar_X: np.ndarray) -> np.ndarray:
         if not self.include_covar:
             print('This model does not include covariates.')
@@ -349,6 +361,10 @@ class LinearMixedModel(object):
         """
         Construct covariance matrix V, compute its inverse and its product with self.y
         """
+        if self.include_covar and not getattr(self, '_covar_adjusted'):
+            raise RuntimeError(
+                'Please adjust phenotype for covariates first.'
+            )
         if grm_arr.ndim > 1 or sibship_arr.ndim > 1:
             raise TypeError(
                 'Wrong input dimension. grm_arr and sibship_arr should have dimension (1, ).'
@@ -359,20 +375,31 @@ class LinearMixedModel(object):
             )
         
         id_dict = make_id_dict(ids)
+
+        # split into diag and off-diag
         data = self._sigma_grm * grm_arr + self._sigma_sib * sibship_arr
-        row_ind = np.array([id_dict[i] for i, _ in id_pair_dict])
-        col_ind = np.array([id_dict[j] for _, j in id_pair_dict])
+        off_data = data[np.array([ind for (i, j), ind in id_pair_dict.items() if i != j])]
+        off_row_ind = np.array([id_dict[i] for i, _ in id_pair_dict if i != _])
+        off_col_ind = np.array([id_dict[j] for _, j in id_pair_dict if _ != j])
+        diag_data = data[np.array([ind for (i, j), ind in id_pair_dict.items() if i == j])]
+        diag_row_ind = np.array([id_dict[i] for i, _ in id_pair_dict if i == _])
+        diag_col_ind = np.array([id_dict[j] for _, j in id_pair_dict if _ == j])
 
         # keep only nonzero entries
-        nonzero = data.nonzero()
-        data, row_ind, col_ind = data[nonzero], row_ind[nonzero], col_ind[nonzero]
-        diag = np.full(self.n, self._sigma_grm + self._sigma_sib + self._sigma_res)
-        data = np.concatenate([data, data, diag])
+        off_nonzero = off_data.nonzero()
+        off_data, off_row_ind, off_col_ind = \
+            off_data[off_nonzero], off_row_ind[off_nonzero], off_col_ind[off_nonzero]
+        
+        # combine diag and off-diag
+        data = np.concatenate([off_data, off_data, diag_data + self._sigma_res])
         row_ind, col_ind = \
-            np.concatenate([row_ind, col_ind, np.arange(0, self.n)]), np.concatenate([col_ind, row_ind, np.arange(0, self.n)])
+            np.concatenate([off_row_ind, off_col_ind, diag_row_ind]), np.concatenate([off_col_ind, off_row_ind, diag_col_ind])
+        
+        # construct sparse V
         V = csc_matrix((data, (row_ind, col_ind)), shape=(self.n, self.n))
         self._Vinv = inv(V)
         self._Vinv_y = self._Vinv.dot(self.y)
+
 
     @staticmethod
     def sp_mul_dense3d(
@@ -382,16 +409,21 @@ class LinearMixedModel(object):
         Compute product of given sparse matrix and 3d dense matrix
         """
         if dense_mat.ndim != 3:
-            raise ValueError('dense_mat must be a 3-d array.')
+            raise ValueError(
+                'dense_mat must be a 3-d array.'
+            )
         n1, n2 = sps_mat.shape
         m, n, c = dense_mat.shape
         if n != n2:
-            raise ValueError('Input dims do not match.')
+            raise ValueError(
+                'Input dims do not match.'
+            )
 
         out = np.empty((m, n1, c))
         for i in range(m):
             out[i, :, :] = sps_mat.dot(dense_mat[i, :, :])
         return out
+
 
     def fit_snps_eff(
         self,
@@ -401,11 +433,17 @@ class LinearMixedModel(object):
         Perform repeated OLS to estimate SNP effects and sampling variance-covariance in transformed model
         """
         if self.include_covar and not getattr(self, '_covar_adjusted'):
-            raise RuntimeError('Please adjust phenotype for covariates first.')
+            raise RuntimeError(
+                'Please adjust phenotype for covariates first.'
+            )
         if gts.ndim != 3:
-            raise ValueError('gts is expected to be of dimension 3.')
+            raise ValueError(
+                'gts is expected to be of dimension 3.'
+            )
         if not hasattr(self, '_Vinv'):
-            raise RuntimeError('V inverse is not computed.')
+            raise RuntimeError(
+                'V inverse is not computed.'
+            )
 
         gts = gts.transpose(2, 0, 1)
         Vinv_X = self.sp_mul_dense3d(self._Vinv, gts)
