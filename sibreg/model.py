@@ -51,6 +51,7 @@ def combo_with_rep(it: Iterable[Any]) -> List[Tuple[Any, Any]]:
     """
     return list(combinations(it, 2)) + [(l, l) for l in it]
 
+
 class OrderedIdPair(tuple):
     """
     Container to store ordered id pair.
@@ -284,7 +285,7 @@ def he_reg(
     X = np.vstack([np.ones(len(grm_arr)), grm_arr, sibship_arr]).T
     beta = np.linalg.solve(X.T.dot(X), X.T.dot(pheno_prod_arr))
     res = pheno_prod_arr - X @ beta
-    err = res.T @ res / pheno_prod_arr.shape[0]
+    err = res.T @ res / (pheno_prod_arr.shape[0] - 2)
     beta1 = 0 if beta[1] < 0 else beta[1]
     beta2 = 0 if beta[2] < 0 else beta[2]
     return beta1, beta2, err
