@@ -1,3 +1,4 @@
+from numpy.linalg.linalg import solve
 from .sibreg import convert_str_array, get_indices_given_ped, make_id_dict, find_par_gts
 import numpy as np
 import numpy.ma as ma
@@ -28,7 +29,7 @@ FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(m
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(format=FORMAT, level=logging.DEBUG)
+logging.basicConfig(format=FORMAT, level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -80,46 +81,33 @@ def linear2coord(ind: int) -> Tuple[int, int]:
 n_tril: Callable[[int], int] = lambda n: int(n * (n + 1) / 2)
 
 
-class OrderedIdPair(tuple):
-    """Container to store ordered id pair.
-    NOTE: not used now
-    """
-    def __new__(cls, lst):
-        if len(lst) != 2:
-            raise ValueError('Input must of length 2.')
-        if any(not isinstance(i, str) for i in lst):
-            raise TypeError('Ids must be string.')
-        id1, id2 = sorted(lst)
-        return tuple.__new__(cls, [id1, id2])
-
-
 def get_ids_with_par(par_gts_f: str,
                      gts_f: str,
-                     ids: List[str] = None) -> Tuple[List[str], List[str]]:
+                     ids: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
     """Find ids with observed/imputed parents and family labels
     """
     # Imputed parental file
-    par_gts_f = h5py.File(par_gts_f + '.hdf5', 'r')
+    par_gts_f_ = h5py.File(par_gts_f + '.hdf5', 'r')
     # Genotype file
-    ped = convert_str_array(np.array(par_gts_f['pedigree']))
+    ped = convert_str_array(np.array(par_gts_f_['pedigree']))
     ped = ped[1:ped.shape[0], :]
     # Remove control families
     controls = np.array([x[0] == '_' for x in ped[:, 0]])
     ped = ped[np.logical_not(controls), :]
     # Get families with imputed parental genotypes
-    fams = convert_str_array(np.array(par_gts_f['families']))
+    fams = convert_str_array(np.array(par_gts_f_['families']))
 
     if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
-        gts_f = Bed(gts_f, count_A1=True)
-        gts_ids = gts_f.iid[:, 1]
+        gts_f_: Bed = Bed(gts_f, count_A1=True)
+        gts_ids = gts_f_.iid[:, 1]
         ids, observed_indices, imp_indices = get_indices_given_ped(ped,
                                                                    fams,
                                                                    gts_ids,
                                                                    ids=ids)
-        gts_ids = gts_f.iid[observed_indices, 1]
+        gts_ids = gts_f_.iid[observed_indices, 1]
     elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
-        gts_f = open_bgen(gts_f)
-        gts_ids = gts_f.samples
+        gts_f_ = open_bgen(gts_f)
+        gts_ids = gts_f_.samples
         ids, observed_indices, imp_indices = get_indices_given_ped(ped,
                                                                    fams,
                                                                    gts_ids,
@@ -200,21 +188,6 @@ def run_gcta_grm(plink_path: str,
         subprocess.run(args)
     logger.info('Finished running gcta grm.')
 
-
-def make_id_pair_dict(ids: List[str]) -> Dict[OrderedIdPair, int]:
-    """Make ordered ID pair dict from list of IDs.
-    NOTE: not used now
-    """
-    logger.info('Making ID pairs...')
-    # convert ids to str
-    ids = map(str, ids)
-    pairs = map(OrderedIdPair, combinations_with_replacement(ids, 2))
-
-    logger.info('Building ibd arr...')
-    id_pair_dict = {p: ind for ind, p in enumerate(pairs)}
-    return id_pair_dict
-
-
 def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
                   thres: float) -> np.ndarray:
     """Build GRM data array for HE regression.
@@ -236,8 +209,8 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
             id1, id2 = gcta_id[int(id1)], gcta_id[int(id2)]
             ind1, ind2 = id_dict[id1], id_dict[id2]
             arr_ind = coord2linear(ind1, ind2)
-            gr = float(gr)
-            grm_arr[arr_ind] = gr if gr >= thres else 0.
+            gr_: float = float(gr)
+            grm_arr[arr_ind] = gr_ if gr_ >= thres else 0.
 
     if np.isnan(grm_arr).any():
         raise ValueError('Fewer pairs in GCTA GRM outout than expected.')
@@ -274,11 +247,11 @@ def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
         id2 = row.ID2
         ind1, ind2 = id_dict[id1], id_dict[id2]
         arr_ind = coord2linear(ind1, ind2)
-        ibd_arr[arr_ind] = row.PropIBD if row.PropIBD > thres else 0.   # 0.0205
+        ibd_arr[arr_ind] = row.PropIBD if row.PropIBD > thres else 0.
     for i in range(n):
         diag_ind = coord2linear(i, i)
         ibd_arr[diag_ind] = 1.
-    logger.info('Done building ibd arr')
+    logger.info('Done building ibd arr.')
     return ibd_arr
 
 
@@ -363,8 +336,7 @@ def build_res_arr(nonzero_ind: np.ndarray) -> np.ndarray:
     """Build residual array for HE regression.
     """
     def is_diag(x, y): return int(x == y)
-    n_ = len(nonzero_ind)
-    x = [is_diag(*linear2coord(i)) for i in range(n_)]
+    x = [is_diag(*linear2coord(i)) for i in nonzero_ind]
     return np.array(x, dtype=np.float)
 
 
@@ -432,19 +404,20 @@ class LinearMixedModel:
         """
         if y.ndim != 1:
             raise ValueError('y should be a 1-d array.')
-
+        self.y: np.ndarray
         if covar_X is not None:
             if covar_X.ndim != 2:
                 raise ValueError('covar_X should be a 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
                 raise ValueError('Dimensions of y and covar_X do not match.')
             logger.info('Adjusting phenotype for fixed covariates...')
-            self.y: np.ndarray = self.fit_covar(y, covar_X)
+            self.y = self.fit_covar(y, covar_X)
             logger.info('Finished adjusting.')
         else:
-            self.y: np.ndarray = y
+            self.y = y
         self.n: int = len(y)
-        def to_nz(arr): nz = arr.nonzero()[0]; return arr[nz], nz
+        def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]: 
+            nz = arr.nonzero()[0]; return arr[nz], nz
         self._varcomp_mats: Tuple[csc_matrix, ...] = \
             tuple(self._build_sp_mat(*to_nz(arr), self.n) for arr in varcomp_arr_lst) \
             + (
@@ -453,7 +426,7 @@ class LinearMixedModel:
         )
         self.n_varcomps: int = len(varcomp_arr_lst) + 1
         logger.debug(f'Number of variance components: {self.n_varcomps}.')
-        self._varcomps = tuple(
+        self._varcomps: Tuple[float, ...] = tuple(
             self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
         self.optimized: bool = False
 
@@ -562,7 +535,7 @@ class LinearMixedModel:
         if not self.optimized:
             raise ValueError('Variance components are not optimized.')
         return self._varcomps
-
+    
     @cached_property_depends_on('_varcomps')
     def V(self) -> csc_matrix:
         """Compute V.
@@ -716,18 +689,16 @@ class LinearMixedModel:
             del V
         _: int
         logdet_V: float
-        V_: np.ndarray
         _, logdet_V = slogdet(V_)
         e: np.ndarray = np.ones(self.n)
+        Vinv_y: np.ndarray; Vinv_e: np.ndarray
         if method == 'chol':
             c, low = cho_factor(V_)
-            Vinv_y: np.ndarray = cho_solve((c, low), self.y)
-            Vinv_e: np.ndarray = cho_solve((c, low), e)
+            Vinv_y = cho_solve((c, low), self.y)
+            Vinv_e = cho_solve((c, low), e)
         elif method == 'cg':
             info1: int
             info2: int
-            Vinv_y: float
-            Vinv_e: float
             Vinv_y, info1 = cg(V, self.y, atol='legacy')
             if info1 == 0:
                 pass
@@ -759,7 +730,7 @@ class LinearMixedModel:
         upper: float = np.var(self.y) - self.jitter
         step: float = upper / 100.
         max_loglik: float = float('-inf')
-        max_sigma: Tuple[float, ...] = None
+        max_sigma: Tuple[float, ...] = (0.,)
         logging.info('Starting grid search...')
         i: int = 1
         possible_values: np.ndarray = np.arange(0.0, upper + step, step)
@@ -784,7 +755,7 @@ class LinearMixedModel:
         ll_: float = float('inf')
         max_ll: float = float('-inf')
         iter: int = 1
-        max_sigma: Tuple[float]
+        max_sigma: Tuple[float, ...]
         logger.info('Starting AI-REML...')
         while True:
             logger.info(f'Iter: {iter}\tloglik: {self.reml_loglik}')
@@ -822,3 +793,43 @@ class LinearMixedModel:
             logger.info('Finished LBFGS-B.')
         else:
             raise ValueError('Scipy minimize failed.')
+    
+    def test_grad_hessian(self) -> Tuple[float, np.ndarray, np.ndarray]:
+        """Calculate REML loglikelihood, grad and hessian in dense format for testing purposes.
+
+        Returns:
+            Tuple[float, np.ndarray, np.ndarray]: a tuple containing the three results
+        """        
+        varcomps: np.ndarray = np.array(self._varcomps)
+        varcomps[-1] += self.jitter
+        V_: np.ndarray = sum(
+            varcomps[i] * self._varcomp_mats[i] for i in range(self.n_varcomps)
+        )
+        V: np.ndarray = V_.toarray()
+        _: int
+        logdet_V: float
+        _, logdet_V = slogdet(V)
+        e: np.ndarray = np.ones(self.n)
+        Vinv_y: np.ndarray = solve(V, self.y)
+        Vinv_e: np.ndarray = solve(V, e)
+        y_T_V_inv_y: float = self.y @ Vinv_y
+        e_T_V_inv_e: float = e @ Vinv_e
+        e_T_V_inv_y: float = e @ Vinv_y
+        logdet_e_T_V_inv_e: float = np.log(e_T_V_inv_e)
+        ll: float = -0.5 * (logdet_V + logdet_e_T_V_inv_e + y_T_V_inv_y - e_T_V_inv_y ** 2 / e_T_V_inv_e)
+        P_comp: np.ndarray = np.outer(
+            Vinv_e, Vinv_e) / (np.ones(self.n) @ Vinv_e)
+        P_y: np.ndarray = Vinv_y - P_comp @ self.y
+        Vinv_varcomp_mats = tuple(solve(V, self._varcomp_mats[i].toarray()) for i in range(self.n_varcomps))
+        P_varcomp_mats: Tuple[np.ndarray, ...] = tuple(
+            Vinv_varcomp_mats[i] - P_comp @ self._varcomp_mats[i].toarray() for i in range(self.n_varcomps))
+        grad: np.ndarray = -0.5 * np.array(
+            [
+                P_mat.diagonal().sum() - self.y @ P_mat @ P_y for P_mat in P_varcomp_mats
+            ]
+        )
+        hessian: np.ndarray = np.empty((self.n_varcomps, self.n_varcomps))
+        for i in range(self.n_varcomps):
+            for j in range(self.n_varcomps):
+                hessian[i, j] = 0.5 * self.y @ P_varcomp_mats[i] @ P_varcomp_mats[j] @ P_y
+        return ll, grad, hessian
