@@ -390,7 +390,7 @@ class LinearMixedModel:
 
     def __init__(self, y: np.ndarray, varcomp_arr_lst: Tuple[np.ndarray, ...],
                  covar_X: np.ndarray = None) -> None:
-        """Initilize an LinearMixedModel instance.
+        """Initilize a LinearMixedModel instance.
 
         Args:
             y (np.ndarray): 1-d array phenotpye
