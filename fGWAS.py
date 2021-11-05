@@ -7,6 +7,15 @@ from scipy.stats import chi2
 from math import log10
 from pysnptools.snpreader import Bed
 
+
+FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
+# numeric_level = getattr(logging, loglevel.upper(), None)
+# if not isinstance(numeric_level, int):
+#     raise ValueError('Invalid log level: %s' % loglevel)
+logging.basicConfig(format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
+logger = logging.getLogger(__name__)
+
+
 def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
     Transform phenotype based on inverse square root of phenotypic covariance matrix.
@@ -42,7 +51,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
-    print('Writing output to ' + outprefix + '.sumstats.hdf5')
+    logger.info('Writing output to ' + outprefix + '.sumstats.hdf5')
     outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
     outfile['bim'] = encode_str_array(outbim)
@@ -140,7 +149,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     header += corrs
     # Output array
     outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
-    print('Writing text output to '+outprefix+'.sumstats.gz')
+    logger.info('Writing text output to '+outprefix+'.sumstats.gz')
     np.savetxt(outprefix+'.sumstats.gz',outarray,fmt='%s')
 
 def compute_batch_boundaries(snp_ids,batch_size):
@@ -155,7 +164,7 @@ def compute_batch_boundaries(snp_ids,batch_size):
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
     return block_bounds
 
-def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, parsum=False,
+def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
@@ -166,22 +175,22 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, parsum=False,
     G.compute_freqs()
     #### Filter SNPs ####
     if verbose:
-        print('Filtering based on MAF')
+        logger.info('Filtering based on MAF')
     G.filter_maf(min_maf)
     gt_filetype = gts_f.split('.')[1]
     if gt_filetype=='bed':
         if verbose:
-            print('Filtering based on missingness')
+            logger.info('Filtering based on missingness')
         G.filter_missingness(max_missing)
     if gt_filetype=='bgen':
         if verbose:
-            print('Filtering based on imputation INFO')
+            logger.info('Filtering based on imputation INFO')
         G.filter_info(min_info)
     if verbose:
-        print(str(G.shape[2])+' SNPs that pass filters')
+        logger.info(str(G.shape[2])+' SNPs that pass filters')
     #### Fill NAs ####
     if verbose:
-        print('Imputing missing values with population frequencies')
+        logger.info('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
     
     alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts)
@@ -214,19 +223,28 @@ if __name__ == '__main__':
     parser.add_argument('--no_txt_out',action='store_true',help='Suppress text output of summary statistics',default=False)
 
     parser.add_argument('--hapmap_bed', type=str, help='Bed file with observed hapmap3 snps (without suffix, chromosome number should be #).', default=None)
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--gcta_path', type=str, help='Path to gcta executable.', default=None)
-    group.add_argument('--grm_path', type=str, help='Path to gcta grm output (ending in .grm but without prefix).', default=None)
-    parser.add_argument('--plink_path', type=str, help='Path to plink2 executable.')
-    parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM sparsity', default=0.05)
+    parser.add_argument('--gcta_path', type=str, help='Path to gcta executable.', default=None)
+    parser.add_argument('--grm_path', type=str, help='Path to gcta grm output (without prefix).', default=None)
+    parser.add_argument('--plink_path', type=str, help='Path to plink2 executable.', default=None)
+
+    parser.add_argument('--ibdseg_path', type=str, help='Path to KING ibdseg output (without .seg prefix).', default=None)
+
+    parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM/IBD sparsity', default=0.05)
 
     args=parser.parse_args()
+
+    if args.ibdseg_path is not None and (args.grm_path is not None or args.gcta_path is not None):
+        raise parser.error('Only one of ibdseg_path and grm_path/gcta_path should be supplied.')
+    if args.ibdseg_path is not None and (args.grm_path is None or args.gcta_path is None):
+        raise parser.error('Need one of ibdseg_path and grm_path/gcta_path should be supplied.') 
+    if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
+        raise parser.error('Should provide plink_path and hapmap_bed is gcta_path is supplied.')
 
     ######### Read Phenotype ########
     y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
     ######## Read covariates ########
     if args.covar is not None:
-        print('Reading covariates')
+        logger.info('Reading covariates')
         covariates = read_covariates(args.covar, missing_char=args.missing_char)
         # Match to pheno ids
         covariates.filter_ids(pheno_ids)
@@ -251,40 +269,40 @@ if __name__ == '__main__':
         # If chromosomse unknown, set to zero
         chrom[[len(x)==0 for x in chrom]] = 0
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
-    ########## Construct GRM and sibship matrix ##########
+    ########## Construct GRM/IBD and sibship matrix ##########
     ids, fam_labels = get_ids_with_par(args.pargts, gts_f, pheno_ids)
-    if args.grm_path is None:
-        run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)
-        grm_path = args.outprefix + '.grm'
+    id_dict = make_id_dict(ids)
+    logger.info('Building GRM...')
+    if args.ibdseg_path is not None:
+        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=pheno_ids, thres=args.thres)
     else:
-        grm_path = args.grm_path
-    he_id_dict = make_id_pair_dict(ids)
-    print('Building ingredient for HE regression...')
-    grm_arr = build_grm_arr(grm_path, he_id_dict, thres=args.sparse_thres)
-    sibship_arr = build_sibship_arr(fam_labels, ids, he_id_dict)
-    res_arr = build_res_arr(he_id_dict)
-    pheno_prod_arr = build_pheno_prod_arr(y, ids, he_id_dict)
-    print('Performing HE regression...')
-    sigma_grm, sigma_sib, sigma_res = he_reg(grm_arr, sibship_arr, res_arr, pheno_prod_arr)
-    ################## Setup null model ##################
+        if args.grm_path is None:
+            run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)
+            grm_path = args.outprefix
+        else:
+            grm_path = args.grm_path
+        grm = build_grm_arr(grm_path, id_dict=id_dict, thres=args.thres)
+    logger.info('Building sibship matrix...')
+    sib = build_sib_arr(fam_labels)
+    ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
-    model = LinearMixedModel(y, sigma_grm, sigma_sib, sigma_res, include_covar=args.covar is not None)
-    if args.covar is not None:
-        model.fit_covar(self.y, covar_X=covariates.gts)
-    model.compute_V_inv(ids, he_id_dict, grm_arr, sibship_arr)
+    lmm = LinearMixedModel(y, (grm, sib), covar_X=covariates.gts)
+    logger.info('Optimizing variance components...')
+    lmm.scipy_optimize()
+    sigma_grm, sigma_sib, sigma_res = lmm.varcomps
     ####### Compute batches #######
-    print('Found '+str(snp_ids.shape[0])+' variants in '+gts_f)
+    logger.info('Found '+str(snp_ids.shape[0])+' variants in '+gts_f)
     if args.end is not None:
         snp_ids = snp_ids[args.start:args.end]
         pos = pos[args.start:args.end]
         chrom = chrom[args.start:args.end]
         alleles = alleles[args.start:args.end]
-        print('Using SNPs with indices from '+str(args.start)+' to '+str(args.end))
+        logger.info('Using SNPs with indices from '+str(args.start)+' to '+str(args.end))
     # Remove duplicates
     unique_snps, counts = np.unique(snp_ids, return_counts=True)
     non_duplicate = set(unique_snps[counts==1])
     if np.sum(counts>1)>0:
-        print('Removing '+str(np.sum(counts>1))+' duplicate SNP ids')
+        logger.info('Removing '+str(np.sum(counts>1))+' duplicate SNP ids')
         not_duplicated = np.array([x in non_duplicate for x in snp_ids])
         snp_ids = snp_ids[not_duplicated]
         pos = pos[not_duplicated]
@@ -294,9 +312,9 @@ if __name__ == '__main__':
     # Compute batches
     batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
     if batch_bounds.shape[0] == 1:
-        print('Using 1 batch')
+        logger.info('Using 1 batch')
     else:
-        print('Using '+str(batch_bounds.shape[0])+' batches')
+        logger.info('Using '+str(batch_bounds.shape[0])+' batches')
     alpha_dim = 2
     if args.fit_sib:
         alpha_dim += 1
@@ -312,23 +330,9 @@ if __name__ == '__main__':
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
     freqs[:] = np.nan
     ##############  Process batches of SNPs ##############
-    ######## Fit null model in first batch ############
-    batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(
-                   snp_ids[batch_bounds[0, 0]:batch_bounds[0, 1]],
-                   y, pheno_ids, args.pargts, gts_f,
-                   parsum=args.parsum, fit_sib=args.fit_sib,
-                   max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info, print_sample_info=True)
-    # Fill in fitted SNPs
-    batch_indices = np.array([snp_dict[x] for x in batch_snps])
-    alpha[batch_indices,:] = batch_alpha
-    alpha_cov[batch_indices,:,:] = batch_alpha_cov
-    alpha_ses[batch_indices,:] = batch_alpha_ses
-    freqs[batch_indices] = batch_freqs
-    print('Done batch 1 out of '+str(batch_bounds.shape[0]))
-    ########### Process remaining batches ###########
-    for i in range(1,batch_bounds.shape[0]):
+    for i in range(0, batch_bounds.shape[0]):
         batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(
-            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], y, pheno_ids, args.pargts, gts_f,
+            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], pheno_ids, args.pargts, gts_f,
             parsum=args.parsum, fit_sib=args.fit_sib,
             max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,)
         # Fill in fitted SNPs
@@ -337,7 +341,7 @@ if __name__ == '__main__':
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses
         freqs[batch_indices] = batch_freqs
-        print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
+        logger.info('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
     if not args.no_hdf5_out:
         write_output(chrom, snp_ids, pos, alleles, args.outprefix, args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
