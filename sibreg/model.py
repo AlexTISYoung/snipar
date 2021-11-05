@@ -29,7 +29,7 @@ FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(m
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(format=FORMAT, level=logging.INFO)
+logging.basicConfig(format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -218,7 +218,7 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
 
 
 def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
-                     keep: List[Union[str, int]], thres: float = 0.0205) -> np.ndarray:
+                     keep: List[Union[str, int]], thres: float = 0.05) -> np.ndarray:
     """Build ibdseg array (lower triangular entries) from KING ibdseg output.
 
     Args:
@@ -230,8 +230,8 @@ def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
     Returns:
         np.ndarray: 1-d ibdseg array.
     """
-    logger.info(f'Reading {ibdseg_path}...')
-    king = pd.read_csv(ibdseg_path, sep='\t')[['ID1', 'ID2', 'PropIBD']]
+    logger.info(f'Reading {ibdseg_path}.seg...')
+    king = pd.read_csv(ibdseg_path + '.seg', sep='\t')[['ID1', 'ID2', 'PropIBD']]
     king['ID1'] = king['ID1'].astype(str)
     king['ID2'] = king['ID2'].astype(str)
 

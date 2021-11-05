@@ -193,7 +193,7 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
         logger.info('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
     
-    alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts)
+    alpha, alpha_cov, alpha_ses = lmm.fit_snps_eff(G.gts)
     return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses 
 
 ######### Command line arguments #########
@@ -274,19 +274,22 @@ if __name__ == '__main__':
     id_dict = make_id_dict(ids)
     logger.info('Building GRM...')
     if args.ibdseg_path is not None:
-        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=pheno_ids, thres=args.thres)
+        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=pheno_ids, thres=args.sparse_thres)
     else:
         if args.grm_path is None:
             run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)
             grm_path = args.outprefix
         else:
             grm_path = args.grm_path
-        grm = build_grm_arr(grm_path, id_dict=id_dict, thres=args.thres)
+        grm = build_grm_arr(grm_path, id_dict=id_dict, thres=args.sparse_thres)
     logger.info('Building sibship matrix...')
     sib = build_sib_arr(fam_labels)
     ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
-    lmm = LinearMixedModel(y, (grm, sib), covar_X=covariates.gts)
+    if args.covar is None:
+        lmm = LinearMixedModel(y, (grm, sib), covar_X=None)
+    else:
+        lmm = LinearMixedModel(y, (grm, sib), covar_X=covariates.gts)
     logger.info('Optimizing variance components...')
     lmm.scipy_optimize()
     sigma_grm, sigma_sib, sigma_res = lmm.varcomps
