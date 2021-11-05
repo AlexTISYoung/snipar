@@ -29,16 +29,13 @@ FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(m
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
 logging.basicConfig(format=FORMAT, level=logging.DEBUG)
-
 logger = logging.getLogger(__name__)
 
 
 def cached_property_depends_on(*args):
     attrs = attrgetter(*args)
-
     def decorator(func):
         _cache = lru_cache(maxsize=None)(lambda self, _: func(self))
-
         def _with_tracked(self):
             return _cache(self, attrs(self))
         return property(_with_tracked, doc=func.__doc__)
@@ -215,9 +212,6 @@ def make_id_pair_dict(ids: List[str]) -> Dict[OrderedIdPair, int]:
 
     logger.info('Building ibd arr...')
     id_pair_dict = {p: ind for ind, p in enumerate(pairs)}
-    # for p in map(OrderedIdPair, pairs):
-    #     id_pair_dict[p] = i
-    #     i += 1
     return id_pair_dict
 
 
@@ -435,7 +429,7 @@ class LinearMixedModel:
             ValueError: y should be a 1-d array.
             ValueError: covar_X should be a 2-d array.
             ValueError: Dimensions of y and covar_X do not match.
-        """                 
+        """
         if y.ndim != 1:
             raise ValueError('y should be a 1-d array.')
 
@@ -451,17 +445,17 @@ class LinearMixedModel:
             self.y: np.ndarray = y
         self.n: int = len(y)
         def to_nz(arr): nz = arr.nonzero()[0]; return arr[nz], nz
-        self._varcomp_mats = tuple(self._build_sp_mat(*to_nz(arr), self.n) for arr in varcomp_arr_lst) \
+        self._varcomp_mats: Tuple[csc_matrix, ...] = \
+            tuple(self._build_sp_mat(*to_nz(arr), self.n) for arr in varcomp_arr_lst) \
             + (
                 self._build_sp_mat(np.ones(self.n), self._vec_coord2linear(
                     np.arange(self.n), np.arange(self.n)), self.n),
         )
-        self.n_varcomps = len(varcomp_arr_lst) + 1
+        self.n_varcomps: int = len(varcomp_arr_lst) + 1
         logger.debug(f'Number of variance components: {self.n_varcomps}.')
         self._varcomps = tuple(
             self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
-
-        self.optimized = False
+        self.optimized: bool = False
 
     @staticmethod
     def fit_covar(y: np.ndarray, covar_X: np.ndarray) -> np.ndarray:
@@ -564,7 +558,7 @@ class LinearMixedModel:
 
         Returns:
             Tuple[float, ...]: a tuple of variance components
-        """        
+        """
         if not self.optimized:
             raise ValueError('Variance components are not optimized.')
         return self._varcomps
@@ -575,7 +569,7 @@ class LinearMixedModel:
 
         Returns:
             csc_matrix: V in sparse csc format
-        """        
+        """
         logger.debug('Calculating V...')
         varcomps = np.array(self._varcomps)
         varcomps[-1] += self.jitter
@@ -590,7 +584,7 @@ class LinearMixedModel:
 
         Returns:
             SuperLU: wrapper object holding LU factorization of V
-        """        
+        """
         logger.debug('Calculating V_lu')
         lu: SuperLU = splu(self.V)
         return lu
@@ -601,7 +595,7 @@ class LinearMixedModel:
 
         Returns:
             float: log determinant of V
-        """        
+        """
         diag_l: np.ndarray = self.V_lu.L.diagonal()
         diag_u: np.ndarray = self.V_lu.U.diagonal()
         V_logdet: float = np.log(diag_l).sum() + np.log(diag_u).sum()
@@ -613,7 +607,7 @@ class LinearMixedModel:
 
         Returns:
             np.ndarray: Vinv_e
-        """        
+        """
         logger.debug('Calculating Vinv_y')
         return self.V_lu.solve(self.y)
 
@@ -623,7 +617,7 @@ class LinearMixedModel:
 
         Returns:
             np.ndarray: Vinv_e
-        """        
+        """
         logger.debug('Calculating V_inv_e')
         e = np.ones(self.n)
         return self.V_lu.solve(e)
@@ -634,7 +628,7 @@ class LinearMixedModel:
 
         Returns:
             Tuple[csc_matrix, ...]: a tuple holding all Vinv_varcomp_mat
-        """        
+        """
         logger.debug('Calculating V_inv_varcomp_mats...')
         return tuple(spsolve(self.V, self._varcomp_mats[i]) for i in range(self.n_varcomps))
 
@@ -644,7 +638,7 @@ class LinearMixedModel:
 
         Returns:
             GradHessComponents: a NameTuple holding the computation results
-        """        
+        """
         logger.debug('Calculating P_mats...')
         P_comp: np.ndarray = np.outer(
             self.Vinv_e, self.Vinv_e) / (np.ones(self.n) @ self.Vinv_e)
@@ -659,7 +653,7 @@ class LinearMixedModel:
 
         Returns:
             np.ndarray: 1-d array of gradient
-        """        
+        """
         logger.debug('Calculating grad...')
         P_y: np.ndarray = self.P_attrs.P_y
         grad: np.ndarray = -0.5 * np.array(
@@ -675,7 +669,7 @@ class LinearMixedModel:
 
         Returns:
             np.ndarray: 2-d n_varcomps-by-n_varcomps array
-        """        
+        """
         logger.debug('Calculating hessian...')
         hessian: np.ndarray = np.empty((self.n_varcomps, self.n_varcomps))
         P_y: np.ndarray = self.P_attrs.P_y
@@ -711,8 +705,8 @@ class LinearMixedModel:
 
         Returns:
             float: REML log likelihood
-        """        
-        varcomps = np.array(self._varcomps)
+        """
+        varcomps: np.ndarray = np.array(self._varcomps)
         varcomps[-1] += self.jitter
         V: csc_matrix = sum(
             varcomps[i] * self._varcomp_mats[i] for i in range(self.n_varcomps)
@@ -759,15 +753,16 @@ class LinearMixedModel:
     def grid_search_reml(self) -> None:
         """Perform grid search on variance component parameters.
         """
+        if self.optimized:
+            logger.warning('Variance components are already optimized.')
         # reserve jitter for sibma_sib
         upper: float = np.var(self.y) - self.jitter
         step: float = upper / 100.
         max_loglik: float = float('-inf')
         max_sigma: Tuple[float, ...] = None
         logging.info('Starting grid search...')
-        i = 1
+        i: int = 1
         possible_values: np.ndarray = np.arange(0.0, upper + step, step)
-        print(len(possible_values))
         for sigma in product(possible_values, repeat=self.n_varcomps - 1):
             if sum(sigma) > upper:
                 continue
@@ -781,12 +776,14 @@ class LinearMixedModel:
         self._varcomps = max_sigma
         self.optimized = True
 
-    def ai_reml(self):
+    def ai_reml(self) -> None:
         """Perform AI-REML algorithm to obtain maximum likelihood estimates of variance components.
         """
-        ll_ = float('inf')
-        max_ll = float('-inf')
-        iter = 1
+        if self.optimized:
+            logger.warning('Variance components are already optimized.')
+        ll_: float = float('inf')
+        max_ll: float = float('-inf')
+        iter: int = 1
         max_sigma: Tuple[float]
         logger.info('Starting AI-REML...')
         while True:
@@ -807,10 +804,13 @@ class LinearMixedModel:
         self.optimized = True
         logger.info('Finished AI-REML.')
 
-    def scipy_optimize(self):
+    def scipy_optimize(self) -> None:
         """Perform LBFGS-B to optimize variance components.
-        """        
+        """
+        if self.optimized:
+            logger.warning('Variance components are already optimized.')
         logger.info('Starting LBFGS-B...')
+
         def nll(x):
             self._varcomps = tuple(x)
             return -1 * self.reml_loglik
