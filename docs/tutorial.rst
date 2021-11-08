@@ -40,11 +40,11 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bed test_data/sample1``
+    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bed test_data/sample1 --ibdseg_path test_data/sample``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
-(imputed) genotype. This is done using a random effects model that models phenotypic correlations between siblings,
+(imputed) genotype. This is done using a random effects model that models phenotypic correlations among related individuals scaled by pairwise genetic relationships, where the relatedness threshold can be controlled using `--sparse_thres` and the genetic relationship matrix is constructed from IBD segment coefficients given in test_data/sample.segments.gz, as well as phenotypic correlations between siblings,
 where sibling relations are inferred from the pedigree stored in the output of the imputation script: test_data/sample1.hdf5. The 'family variance estimate'
 output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance.
 

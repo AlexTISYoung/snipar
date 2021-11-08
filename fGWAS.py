@@ -289,6 +289,7 @@ if __name__ == '__main__':
     if args.covar is None:
         lmm = LinearMixedModel(y, (grm, sib), covar_X=None)
     else:
+        covariates.filter_ids(ids)
         lmm = LinearMixedModel(y, (grm, sib), covar_X=covariates.gts)
     logger.info('Optimizing variance components...')
     lmm.scipy_optimize()
