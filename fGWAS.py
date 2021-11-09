@@ -235,8 +235,8 @@ if __name__ == '__main__':
 
     if args.ibdseg_path is not None and (args.grm_path is not None or args.gcta_path is not None):
         raise parser.error('Only one of ibdseg_path and grm_path/gcta_path should be supplied.')
-    if args.ibdseg_path is not None and (args.grm_path is None or args.gcta_path is None):
-        raise parser.error('Need one of ibdseg_path and grm_path/gcta_path should be supplied.') 
+    if args.ibdseg_path is None and (args.grm_path is None or args.gcta_path is None):
+        raise parser.error('One of ibdseg_path and grm_path/gcta_path should be supplied.') 
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error('Should provide plink_path and hapmap_bed is gcta_path is supplied.')
 
@@ -271,26 +271,28 @@ if __name__ == '__main__':
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
     ########## Construct GRM/IBD and sibship matrix ##########
     ids, fam_labels = get_ids_with_par(args.pargts, gts_f, pheno_ids)
-    id_dict = make_id_dict(ids)
     logger.info('Building GRM...')
     if args.ibdseg_path is not None:
-        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=pheno_ids, thres=args.sparse_thres)
+        ids, fam_labels = match_grm_ids(ids, fam_labels, grm_path=args.ibdseg_path, grm_source='ibdseg')
+        id_dict = make_id_dict(ids)
+        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
     else:
         if args.grm_path is None:
             run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)
             grm_path = args.outprefix
         else:
             grm_path = args.grm_path
+        ids, fam_labels = match_grm_ids(ids, fam_labels, grm_path=grm_path, grm_source='gcta')
+        id_dict = make_id_dict(ids)
         grm = build_grm_arr(grm_path, id_dict=id_dict, thres=args.sparse_thres)
-    logger.info('Building sibship matrix...')
     sib = build_sib_arr(fam_labels)
     ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
     if args.covar is None:
-        lmm = LinearMixedModel(y, (grm, sib), covar_X=None)
+        lmm = LinearMixedModel(y, (grm, sib,), covar_X=None)
     else:
         covariates.filter_ids(ids)
-        lmm = LinearMixedModel(y, (grm, sib), covar_X=covariates.gts)
+        lmm = LinearMixedModel(y, (grm, sib,), covar_X=covariates.gts)
     logger.info('Optimizing variance components...')
     lmm.scipy_optimize()
     sigma_grm, sigma_sib, sigma_res = lmm.varcomps
@@ -336,7 +338,7 @@ if __name__ == '__main__':
     ##############  Process batches of SNPs ##############
     for i in range(0, batch_bounds.shape[0]):
         batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(
-            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], pheno_ids, args.pargts, gts_f,
+            snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], ids, args.pargts, gts_f,
             parsum=args.parsum, fit_sib=args.fit_sib,
             max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,)
         # Fill in fitted SNPs

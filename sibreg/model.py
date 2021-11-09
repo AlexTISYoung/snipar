@@ -29,14 +29,17 @@ FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(m
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
+logging.basicConfig(
+    format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 def cached_property_depends_on(*args):
     attrs = attrgetter(*args)
+
     def decorator(func):
         _cache = lru_cache(maxsize=None)(lambda self, _: func(self))
+
         def _with_tracked(self):
             return _cache(self, attrs(self))
         return property(_with_tracked, doc=func.__doc__)
@@ -127,6 +130,30 @@ def get_ids_with_par(par_gts_f: str,
     return ids, fam_labels
 
 
+def match_grm_ids(ids: np.ndarray,
+                  fam_labels: np.ndarray,
+                  grm_path: str,
+                  grm_source: Literal['gcta', 'ibdseg'],
+                  ) -> Tuple[np.ndarray, np.ndarray]:
+    """Match ids with GRM individual ids.
+    """
+    orig_ids = pd.DataFrame({'ids': ids, 'fam_labels': fam_labels})
+    if grm_source == 'gcta':
+        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\t', names=[
+                              '_', 'ids_'])[['ids_']]
+    elif grm_source == 'ibdseg':
+        grm_ids = pd.read_csv(grm_path + '.seg',
+                              sep='\t')[['ID1', 'ID2']]
+        id1 = grm_ids['ID1'].to_numpy(dtype=str)
+        id2 = grm_ids['ID2'].to_numpy(dtype=str)
+        grm_ids = pd.DataFrame({'ids_': np.union1d(id1, id2)})
+    else:
+        raise ValueError('Incorrect source.')
+    orig_ids = orig_ids.merge(grm_ids, how='inner',
+                              left_on='ids', right_on='ids_')
+    return orig_ids['ids'].to_numpy(), orig_ids['fam_labels'].to_numpy()
+
+
 def run_gcta_grm(plink_path: str,
                  gcta_path: str,
                  filename: str,
@@ -188,6 +215,7 @@ def run_gcta_grm(plink_path: str,
         subprocess.run(args)
     logger.info('Finished running gcta grm.')
 
+
 def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
                   thres: float) -> np.ndarray:
     """Build GRM data array for HE regression.
@@ -207,6 +235,9 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
         for line in f:
             id1, id2, _, gr = line.strip().split('\t')
             id1, id2 = gcta_id[int(id1)], gcta_id[int(id2)]
+            if id1 not in id_dict or id2 not in id_dict:
+                # if ignore individuals that are not in id_dict
+                continue
             ind1, ind2 = id_dict[id1], id_dict[id2]
             arr_ind = coord2linear(ind1, ind2)
             gr_: float = float(gr)
@@ -231,7 +262,8 @@ def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
         np.ndarray: 1-d ibdseg array.
     """
     logger.info(f'Reading {ibdseg_path}.seg...')
-    king = pd.read_csv(ibdseg_path + '.seg', sep='\t')[['ID1', 'ID2', 'PropIBD']]
+    king = pd.read_csv(ibdseg_path + '.seg',
+                       sep='\t')[['ID1', 'ID2', 'PropIBD']]
     king['ID1'] = king['ID1'].astype(str)
     king['ID2'] = king['ID2'].astype(str)
 
@@ -317,6 +349,7 @@ def build_sib_arr(fam_labels: List[str]) -> np.ndarray:
     Returns:
         np.ndarray: lower triangular entries of sibship matrix.
     """
+    logger.info('Building sibship arr...')
     n = len(fam_labels)
     sib_arr = np.zeros(n_tril(n))
 
@@ -328,7 +361,7 @@ def build_sib_arr(fam_labels: List[str]) -> np.ndarray:
         for pair in combinations_with_replacement(indices_lst, 2):
             arr_ind = coord2linear(*pair)
             sib_arr[arr_ind] = 1.
-
+    logger.info('Done building sibship arr.')
     return sib_arr
 
 
@@ -409,15 +442,18 @@ class LinearMixedModel:
             if covar_X.ndim != 2:
                 raise ValueError('covar_X should be a 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
-                raise ValueError(f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
+                raise ValueError(
+                    f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
             logger.info('Adjusting phenotype for fixed covariates...')
             self.y = self.fit_covar(y, covar_X)
             logger.info('Finished adjusting.')
         else:
             self.y = y
         self.n: int = len(y)
-        def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]: 
-            nz = arr.nonzero()[0]; return arr[nz], nz
+
+        def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+            nz = arr.nonzero()[0]
+            return arr[nz], nz
         self._varcomp_mats: Tuple[csc_matrix, ...] = \
             tuple(self._build_sp_mat(*to_nz(arr), self.n) for arr in varcomp_arr_lst) \
             + (
@@ -468,7 +504,7 @@ class LinearMixedModel:
         n1, n2 = sps_mat.shape
         m, n, c = dense_mat.shape
         if n != n2:
-            raise ValueError('Input dims do not match.')
+            raise ValueError(f'Input dims do not match: {n2} and {n}.')
         out: np.ndarray = np.empty((m, n1, c))
         for i in range(m):
             out[i, :, :] = spsolve(sps_mat, dense_mat[i, :, :])
@@ -535,7 +571,7 @@ class LinearMixedModel:
         if not self.optimized:
             raise ValueError('Variance components are not optimized.')
         return self._varcomps
-    
+
     @cached_property_depends_on('_varcomps')
     def V(self) -> csc_matrix:
         """Compute V.
@@ -691,7 +727,8 @@ class LinearMixedModel:
         logdet_V: float
         _, logdet_V = slogdet(V_)
         e: np.ndarray = np.ones(self.n)
-        Vinv_y: np.ndarray; Vinv_e: np.ndarray
+        Vinv_y: np.ndarray
+        Vinv_e: np.ndarray
         if method == 'chol':
             c, low = cho_factor(V_)
             Vinv_y = cho_solve((c, low), self.y)
@@ -793,13 +830,13 @@ class LinearMixedModel:
             logger.info('Finished LBFGS-B.')
         else:
             raise ValueError('Scipy minimize failed.')
-    
+
     def test_grad_hessian(self) -> Tuple[float, np.ndarray, np.ndarray]:
         """Calculate REML loglikelihood, grad and hessian in dense format for testing purposes.
 
         Returns:
             Tuple[float, np.ndarray, np.ndarray]: a tuple containing the three results
-        """        
+        """
         varcomps: np.ndarray = np.array(self._varcomps)
         varcomps[-1] += self.jitter
         V_: np.ndarray = sum(
@@ -816,11 +853,13 @@ class LinearMixedModel:
         e_T_V_inv_e: float = e @ Vinv_e
         e_T_V_inv_y: float = e @ Vinv_y
         logdet_e_T_V_inv_e: float = np.log(e_T_V_inv_e)
-        ll: float = -0.5 * (logdet_V + logdet_e_T_V_inv_e + y_T_V_inv_y - e_T_V_inv_y ** 2 / e_T_V_inv_e)
+        ll: float = -0.5 * (logdet_V + logdet_e_T_V_inv_e +
+                            y_T_V_inv_y - e_T_V_inv_y ** 2 / e_T_V_inv_e)
         P_comp: np.ndarray = np.outer(
             Vinv_e, Vinv_e) / (np.ones(self.n) @ Vinv_e)
         P_y: np.ndarray = Vinv_y - P_comp @ self.y
-        Vinv_varcomp_mats = tuple(solve(V, self._varcomp_mats[i].toarray()) for i in range(self.n_varcomps))
+        Vinv_varcomp_mats = tuple(
+            solve(V, self._varcomp_mats[i].toarray()) for i in range(self.n_varcomps))
         P_varcomp_mats: Tuple[np.ndarray, ...] = tuple(
             Vinv_varcomp_mats[i] - P_comp @ self._varcomp_mats[i].toarray() for i in range(self.n_varcomps))
         grad: np.ndarray = -0.5 * np.array(
@@ -831,5 +870,6 @@ class LinearMixedModel:
         hessian: np.ndarray = np.empty((self.n_varcomps, self.n_varcomps))
         for i in range(self.n_varcomps):
             for j in range(self.n_varcomps):
-                hessian[i, j] = 0.5 * self.y @ P_varcomp_mats[i] @ P_varcomp_mats[j] @ P_y
+                hessian[i, j] = 0.5 * \
+                    self.y @ P_varcomp_mats[i] @ P_varcomp_mats[j] @ P_y
         return ll, grad, hessian
