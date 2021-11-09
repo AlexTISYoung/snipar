@@ -1,4 +1,4 @@
-from numpy.linalg.linalg import solve
+from numpy.linalg import solve
 from .sibreg import convert_str_array, get_indices_given_ped, make_id_dict, find_par_gts
 import numpy as np
 import numpy.ma as ma
@@ -409,7 +409,7 @@ class LinearMixedModel:
             if covar_X.ndim != 2:
                 raise ValueError('covar_X should be a 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
-                raise ValueError('Dimensions of y and covar_X do not match.')
+                raise ValueError(f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
             logger.info('Adjusting phenotype for fixed covariates...')
             self.y = self.fit_covar(y, covar_X)
             logger.info('Finished adjusting.')
@@ -438,8 +438,8 @@ class LinearMixedModel:
             raise TypeError(
                 f'Input dimensions do not match. y: {y.shape}. covar_X: {covar_X.shape}.'
             )
-        y_adjusted: np.ndarray = y - covar_X @ np.linalg.inv(
-            covar_X.T @ covar_X) @ covar_X.T @ y
+        y_adjusted: np.ndarray = y - covar_X.dot(np.linalg.solve(
+            covar_X.T.dot(covar_X), covar_X.T.dot(y)))
         return y_adjusted
 
     @staticmethod
