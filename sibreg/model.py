@@ -34,12 +34,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# https://stackoverflow.com/questions/48262273/python-bookkeeping-dependencies-in-cached-attributes-that-might-change#answer-48264126
 def cached_property_depends_on(*args):
     attrs = attrgetter(*args)
-
     def decorator(func):
         _cache = lru_cache(maxsize=None)(lambda self, _: func(self))
-
         def _with_tracked(self):
             return _cache(self, attrs(self))
         return property(_with_tracked, doc=func.__doc__)
