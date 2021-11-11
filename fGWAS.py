@@ -227,16 +227,16 @@ if __name__ == '__main__':
     parser.add_argument('--grm_path', type=str, help='Path to gcta grm output (without prefix).', default=None)
     parser.add_argument('--plink_path', type=str, help='Path to plink2 executable.', default=None)
 
-    parser.add_argument('--ibdseg_path', type=str, help='Path to KING ibdseg output (without .seg prefix).', default=None)
+    parser.add_argument('--ibdrel_path', type=str, help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
 
     parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM/IBD sparsity', default=0.05)
 
     args=parser.parse_args()
 
-    if args.ibdseg_path is not None and (args.grm_path is not None or args.gcta_path is not None):
-        raise parser.error('Only one of ibdseg_path and grm_path/gcta_path should be supplied.')
-    if args.ibdseg_path is None and (args.grm_path is None or args.gcta_path is None):
-        raise parser.error('One of ibdseg_path and grm_path/gcta_path should be supplied.') 
+    if args.ibdrel_path is not None and (args.grm_path is not None or args.gcta_path is not None):
+        raise parser.error('Only one of ibdrel_path and grm_path/gcta_path should be supplied.')
+    if args.ibdrel_path is None and (args.grm_path is None or args.gcta_path is None):
+        raise parser.error('One of ibdrel_path and grm_path/gcta_path should be supplied.') 
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error('Should provide plink_path and hapmap_bed is gcta_path is supplied.')
 
@@ -272,10 +272,10 @@ if __name__ == '__main__':
     ########## Construct GRM/IBD and sibship matrix ##########
     ids, fam_labels = get_ids_with_par(args.pargts, gts_f, pheno_ids)
     logger.info('Building GRM...')
-    if args.ibdseg_path is not None:
-        ids, fam_labels = match_grm_ids(ids, fam_labels, grm_path=args.ibdseg_path, grm_source='ibdseg')
+    if args.ibdrel_path is not None:
+        ids, fam_labels = match_grm_ids(ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
         id_dict = make_id_dict(ids)
-        grm = build_ibdseg_arr(args.ibdseg_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
+        grm = build_ibdrel_arr(args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
     else:
         if args.grm_path is None:
             run_gcta_grm(args.plink_path, args.gcta_path, args.hapmap_bed, args.outprefix, ids)

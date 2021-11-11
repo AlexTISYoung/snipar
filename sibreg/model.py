@@ -132,7 +132,7 @@ def get_ids_with_par(par_gts_f: str,
 def match_grm_ids(ids: np.ndarray,
                   fam_labels: np.ndarray,
                   grm_path: str,
-                  grm_source: Literal['gcta', 'ibdseg'],
+                  grm_source: Literal['gcta', 'ibdrel'],
                   ) -> Tuple[np.ndarray, np.ndarray]:
     """Match ids with GRM individual ids.
     """
@@ -140,7 +140,7 @@ def match_grm_ids(ids: np.ndarray,
     if grm_source == 'gcta':
         grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\t', names=[
                               '_', 'ids_'])[['ids_']]
-    elif grm_source == 'ibdseg':
+    elif grm_source == 'ibdrel':
         grm_ids = pd.read_csv(grm_path + '.seg',
                               sep='\t')[['ID1', 'ID2']]
         id1 = grm_ids['ID1'].to_numpy(dtype=str)
@@ -247,21 +247,21 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
     return grm_arr
 
 
-def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
+def build_ibdrel_arr(ibdrel_path: str, id_dict: Dict[Hashable, int],
                      keep: List[Union[str, int]], thres: float = 0.05) -> np.ndarray:
-    """Build ibdseg array (lower triangular entries) from KING ibdseg output.
+    """Build ibd relatedness array (lower triangular entries) from KING ibdseg output.
 
     Args:
-        ibdseg_path (str): Path to ibdseg output.
+        ibdrel_path (str): Path to ibdseg output.
         id_dict (Dict[Hashable, int]): dictionary of id-index pairs.
         keep (List[Union[str, int]]): list of ids to keep.
         thres (float, optional): sparsity threshold. Defaults to 0.0205.
 
     Returns:
-        np.ndarray: 1-d ibdseg array.
+        np.ndarray: 1-d ibdrel array.
     """
-    logger.info(f'Reading {ibdseg_path}.seg...')
-    king = pd.read_csv(ibdseg_path + '.seg',
+    logger.info(f'Reading {ibdrel_path}.seg...')
+    king = pd.read_csv(ibdrel_path + '.seg',
                        sep='\t')[['ID1', 'ID2', 'PropIBD']]
     king['ID1'] = king['ID1'].astype(str)
     king['ID2'] = king['ID2'].astype(str)
@@ -286,12 +286,12 @@ def build_ibdseg_arr(ibdseg_path: str, id_dict: Dict[Hashable, int],
     return ibd_arr
 
 
-def write_ibdseg_to_grm(ibdseg_path: str, output_path: str,
+def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
                         ids: List[str], thres: float = 0.0205) -> None:
-    """Write ibdseg from KING to GCTA GRM format.
+    """Write ibd relatedness from KING to GCTA GRM format.
     """
-    logger.info(f'Reading {ibdseg_path}...')
-    king = pd.read_csv(ibdseg_path, sep='\t')[['ID1', 'ID2', 'PropIBD']]
+    logger.info(f'Reading {ibdrel_path}...')
+    king = pd.read_csv(ibdrel_path, sep='\t')[['ID1', 'ID2', 'PropIBD']]
     king['ID1'] = king['ID1'].astype(str)
     king['ID2'] = king['ID2'].astype(str)
     logger.info('Filtering...')

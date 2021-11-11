@@ -40,7 +40,7 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bed test_data/sample1 --ibdseg_path test_data/sample``
+    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bed test_data/sample1 --ibdrel_path test_data/sample``
 
 This takes the observed genotypes in test_data/sample1.bed and the imputed parental genotypes in test_data/sample1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -50,7 +50,7 @@ output is the  phenotypic variance explained by mean differences between sibship
 
 To use the .bgen file instead, type:
 
-    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bgen test_data/sample1``
+    ``python fGWAS.py test_data/sample1 test_data/h2_quad_0.8.ped --outprefix test_data/h2_quad_0.8 --bgen test_data/sample1 --ibdrel_path test_data/sample``
 
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
