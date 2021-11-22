@@ -1,10 +1,8 @@
 from sibreg.sibreg import *
 from sibreg.model import *
+import os
 import argparse, h5py
-import numpy as np
 from bgen_reader import open_bgen
-from scipy.stats import chi2
-from math import log10
 from pysnptools.snpreader import Bed
 
 
@@ -231,6 +229,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM/IBD sparsity', default=0.05)
 
+    parser.add_argument('--num_threads', type=float, help='Number of threads numpy uses.', default=None)
+
     args=parser.parse_args()
 
     if args.ibdrel_path is not None and (args.grm_path is not None or args.gcta_path is not None):
@@ -239,6 +239,16 @@ if __name__ == '__main__':
         raise parser.error('One of ibdrel_path and grm_path/gcta_path should be supplied.') 
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error('Should provide plink_path and hapmap_bed is gcta_path is supplied.')
+
+    if args.num_threads:
+        os.environ["OMP_NUM_THREADS"] = str(args.num_threads) # export OMP_NUM_THREADS=...
+        os.environ["OPENBLAS_NUM_THREADS"] = str(args.num_threads) # export OPENBLAS_NUM_THREADS=...
+        os.environ["MKL_NUM_THREADS"] = str(args.num_threads) # export MKL_NUM_THREADS=...
+        os.environ["VECLIB_MAXIMUM_THREADS"] = str(args.num_threads) # export VECLIB_MAXIMUM_THREADS=...
+        os.environ["NUMEXPR_NUM_THREADS"] = str(args.num_threads) # export NUMEXPR_NUM_THREADS=...
+    import numpy as np
+    from scipy.stats import chi2
+    from math import log10
 
     ######### Read Phenotype ########
     y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)

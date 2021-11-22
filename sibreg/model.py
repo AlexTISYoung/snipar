@@ -1,10 +1,11 @@
+from os import system, ttyname
 from numpy.linalg import solve
 from .sibreg import convert_str_array, get_indices_given_ped, make_id_dict, find_par_gts
 import numpy as np
 import numpy.ma as ma
 from numpy.linalg import slogdet
-from scipy.sparse import csc_matrix, csr_matrix, tril
-from scipy.sparse.linalg import splu, SuperLU, spsolve, cg
+from scipy.sparse import csc_matrix, csr_matrix, tril, triu
+from scipy.sparse.linalg import splu, SuperLU, spsolve, cg, spsolve_triangular
 from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize, OptimizeResult
 from bgen_reader import open_bgen
@@ -23,6 +24,8 @@ from itertools import product, combinations_with_replacement
 from functools import lru_cache
 import pandas as pd
 from operator import attrgetter
+from multiprocessing import Pool, RawArray
+import ctypes
 
 
 FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
@@ -37,8 +40,10 @@ logger = logging.getLogger(__name__)
 # https://stackoverflow.com/questions/48262273/python-bookkeeping-dependencies-in-cached-attributes-that-might-change#answer-48264126
 def cached_property_depends_on(*args):
     attrs = attrgetter(*args)
+
     def decorator(func):
         _cache = lru_cache(maxsize=None)(lambda self, _: func(self))
+
         def _with_tracked(self):
             return _cache(self, attrs(self))
         return property(_with_tracked, doc=func.__doc__)
@@ -411,6 +416,91 @@ class GradHessComponents(NamedTuple):
     P_varcomp_mats: Tuple[np.ndarray, ...]
 
 
+var_dict = {}
+
+
+NUM_CPU = 8
+
+
+def init_worker(L_data_, L_indices_, L_indptr_,
+                U_data_, U_indices_, U_indptr_,
+                dense_mat_, dense_mat_shape,
+                perm_c_, perm_r_):
+    var_dict['L_data_'] = L_data_
+    var_dict['L_indices_'] = L_indices_
+    var_dict['L_indptr_'] = L_indptr_
+    var_dict['U_data_'] = U_data_
+    var_dict['U_indices_'] = U_indices_
+    var_dict['U_indptr_'] = U_indptr_
+    var_dict['dense_mat_'] = dense_mat_
+    var_dict['dense_mat_shape'] = dense_mat_shape
+    var_dict['perm_c_'] = perm_c_
+    var_dict['perm_r_'] = perm_r_
+
+
+def worker_func(ind_lst):
+    def spsolve_lu(L, U, b, perm_c=None, perm_r=None):
+        if perm_r is not None:
+            b_old = b.copy()
+            for old_ndx, new_ndx in enumerate(perm_r):
+                b[new_ndx] = b_old[old_ndx]
+        try:
+            c = spsolve_triangular(L, b, lower=True, unit_diagonal=True)
+        except TypeError:
+            c = spsolve_triangular(L, b, lower=True)
+        px = spsolve_triangular(U, c, lower=False)
+        if perm_c is None:
+            return px
+        return px[perm_c]
+    L_data = np.frombuffer(var_dict['L_data_'])
+    L_indices = np.frombuffer(var_dict['L_indices_'], dtype='int32')
+    L_indptr = np.frombuffer(var_dict['L_indptr_'], dtype='int32')
+    U_data = np.frombuffer(var_dict['U_data_'])
+    U_indices = np.frombuffer(var_dict['U_indices_'], dtype='int32')
+    U_indptr = np.frombuffer(var_dict['U_indptr_'], dtype='int32')
+    dense_mat = np.frombuffer(var_dict['dense_mat_']).reshape(
+        var_dict['dense_mat_shape'])
+    perm_c = np.frombuffer(var_dict['perm_c_'], dtype='int32')
+    perm_r = np.frombuffer(var_dict['perm_r_'], dtype='int32')
+    L = csc_matrix((L_data, L_indices, L_indptr), shape=(
+        dense_mat.shape[1], dense_mat.shape[1])).tocsr()
+    U = csc_matrix((U_data, U_indices, U_indptr), shape=(
+        dense_mat.shape[1], dense_mat.shape[1])).tocsr()
+    out = np.empty((len(ind_lst), L.shape[0], dense_mat.shape[2]))
+    for i, ind in enumerate(ind_lst):
+        start = time()
+        out[i, :, :] = spsolve_lu(
+            L, U, dense_mat[ind, :, :], perm_c=perm_c, perm_r=perm_r)
+        print(time() - start)
+    return out
+
+
+def init_worker_(data_, indices_, indptr_, shape,
+                 dense_mat_, dense_mat_shape):
+    var_dict['data_'] = data_
+    var_dict['indices_'] = indices_
+    var_dict['indptr_'] = indptr_
+    var_dict['dense_mat_'] = dense_mat_
+    var_dict['dense_mat_shape'] = dense_mat_shape
+    var_dict['shape'] = shape
+
+
+def worker_func_(ind_lst):
+    data = np.frombuffer(var_dict['data_'])
+    indices = np.frombuffer(var_dict['indices_'], dtype='int32')
+    indptr = np.frombuffer(var_dict['indptr_'], dtype='int32')
+    dense_mat = np.frombuffer(var_dict['dense_mat_']).reshape(
+        var_dict['dense_mat_shape'])
+    V = csc_matrix((data, indices, indptr), shape=var_dict['shape'])
+    lu = splu(V)
+    out = np.empty((len(ind_lst), V.shape[0], dense_mat.shape[2]))
+    for i, ind in enumerate(ind_lst):
+        for j in range(dense_mat.shape[2]):
+            out[i, :, j] = lu.solve(dense_mat[ind, :, j])
+    logger.debug(f'Start sending result: {out.nbytes} bytes...')
+    return out
+
+
 class LinearMixedModel:
     """Wrapper of data and functions that compute estimates of variance components or SNP effects.
     """
@@ -436,18 +526,17 @@ class LinearMixedModel:
         """
         if y.ndim != 1:
             raise ValueError('y should be a 1-d array.')
-        self.y: np.ndarray
+        self.y: np.ndarray = y
         if covar_X is not None:
             if covar_X.ndim != 2:
                 raise ValueError('covar_X should be a 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
                 raise ValueError(
                     f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
-            logger.info('Adjusting phenotype for fixed covariates...')
-            self.y = self.fit_covar(y, covar_X)
-            logger.info('Finished adjusting.')
-        else:
-            self.y = y
+            self.Z: np.ndarray = ma.getdata(covar_X)
+            # logger.info('Adjusting phenotype for fixed covariates...')
+            # self.y = self.fit_covar(y, covar_X)
+            # logger.info('Finished adjusting.')
         self.n: int = len(y)
 
         def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -509,10 +598,188 @@ class LinearMixedModel:
             out[i, :, :] = spsolve(sps_mat, dense_mat[i, :, :])
         return out
 
-    def fit_snps_eff(
-            self,
-            gts: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Perform repeated OLS to estimate SNP effects and sampling variance-covariance in transformed model.
+    @staticmethod
+    def sp_solve_dense3d_lu(sps_mat: csc_matrix,
+                            dense_mat: np.ndarray) -> np.ndarray:
+        """Compute product of the inverse of given sparse matrix and given 3-d dense array uisng LU; used for repeated OLS.
+
+        Args:
+            sps_mat (csc_matrix): 2-d sparse matrix.
+            dense_mat (np.ndarray): 3-d dense array.
+
+        Raises:
+            ValueError: dense_mat should be 3-d.
+            ValueError: 2nd dimensions of both inputs should match.
+
+        Returns:
+            np.ndarray: 3-d dense array.
+        """
+        if dense_mat.ndim != 3:
+            raise ValueError('dense_mat must be a 3-d array.')
+        n1: int
+        n2: int
+        m: int
+        n: int
+        c: int
+        n1, n2 = sps_mat.shape
+        m, n, c = dense_mat.shape
+        if n != n2:
+            raise ValueError(f'Input dims do not match: {n2} and {n}.')
+        lu = splu(sps_mat)
+        out: np.ndarray = np.empty((m, n1, c))
+        for i in range(m):
+            for j in range(c):
+                out[i, :, j] = lu.solve(dense_mat[i, :, j])
+        return out
+
+    @staticmethod
+    def sp_solve_dense3d_lu_mp(sps_mat: csc_matrix,
+                               dense_mat: np.ndarray) -> np.ndarray:
+        """Compute product of the inverse of given sparse matrix and given 3-d dense array using LU in parallel; used for repeated OLS.
+        Each SNP requires one LU factorization.
+
+        Args:
+            sps_mat (csc_matrix): 2-d sparse matrix.
+            dense_mat (np.ndarray): 3-d dense array.
+
+        Raises:
+            ValueError: dense_mat should be 3-d.
+            ValueError: 2nd dimensions of both inputs should match.
+
+        Returns:
+            np.ndarray: 3-d dense array.
+        """
+        if dense_mat.ndim != 3:
+            raise ValueError('dense_mat must be a 3-d array.')
+        n1: int
+        n2: int
+        m: int
+        n: int
+        c: int
+        n1, n2 = sps_mat.shape
+        m, n, c = dense_mat.shape
+        if n != n2:
+            raise ValueError(f'Input dims do not match: {n2} and {n}.')
+        lu = timethis(splu)(sps_mat)
+        L, U = lu.L, lu.U
+
+        L_data, L_indices, L_indptr = L.data, L.indices, L.indptr
+        U_data, U_indices, U_indptr = U.data, U.indices, U.indptr
+        L_data_shape = L_data.shape
+        L_indices_shape = L_indices.shape
+        L_indptr_shape = L_indptr.shape
+        U_data_shape = U_data.shape
+        U_indices_shape = U_indices.shape
+        U_indptr_shape = U_indptr.shape
+        L_data_ = RawArray('d', L_data_shape[0])
+        L_data_buffer = np.frombuffer(L_data_)
+        np.copyto(L_data_buffer, L_data)
+        L_indices_ = RawArray(ctypes.c_int32, L_indices_shape[0])
+        L_indices_buffer = np.frombuffer(L_indices_, dtype='int32')
+        np.copyto(L_indices_buffer, L_indices)
+        L_indptr_ = RawArray(ctypes.c_int32, L_indptr_shape[0])
+        L_indptr_buffer = np.frombuffer(L_indptr_, dtype='int32')
+        np.copyto(L_indptr_buffer, L_indptr)
+
+        U_data_ = RawArray('d', U_data_shape[0])
+        U_data_buffer = np.frombuffer(U_data_)
+        np.copyto(U_data_buffer, U_data)
+        U_indices_ = RawArray(ctypes.c_int32, U_indices_shape[0])
+        U_indices_buffer = np.frombuffer(U_indices_, dtype='int32')
+        np.copyto(U_indices_buffer, U_indices)
+        U_indptr_ = RawArray(ctypes.c_int32, U_indptr_shape[0])
+        U_indptr_buffer = np.frombuffer(U_indptr_, dtype='int32')
+        np.copyto(U_indptr_buffer, U_indptr)
+
+        perm_c_ = RawArray(ctypes.c_int32, lu.perm_c.shape[0])
+        perm_c_buffer = np.frombuffer(perm_c_, dtype='int32')
+        np.copyto(perm_c_buffer, lu.perm_c)
+        perm_r_ = RawArray(ctypes.c_int32, lu.perm_r.shape[0])
+        perm_r_buffer = np.frombuffer(perm_r_, dtype='int32')
+        np.copyto(perm_r_buffer, lu.perm_r)
+
+        dense_mat_shape = dense_mat.shape
+        dense_mat_ = RawArray(
+            'd', dense_mat_shape[0] * dense_mat_shape[1] * dense_mat_shape[2])
+        dense_mat_buffer = np.frombuffer(dense_mat_).reshape(*dense_mat_shape)
+        np.copyto(dense_mat_buffer, dense_mat)
+
+        ind_lst = np.array_split(np.arange(dense_mat.shape[0]), NUM_CPU)
+        with Pool(processes=NUM_CPU, initializer=init_worker, initargs=(L_data_, L_indices_, L_indptr_,
+                                                                        U_data_, U_indices_, U_indptr_,
+                                                                        dense_mat_, dense_mat_shape,
+                                                                        perm_c_, perm_r_)) as pool:
+            result = pool.map(worker_func, ind_lst)
+        return np.vstack(result)
+
+    @staticmethod
+    def sp_solve_dense3d_mp(sps_mat: csc_matrix,
+                            dense_mat: np.ndarray, tasks: int = 8) -> np.ndarray:
+        """Compute product of the inverse of given sparse matrix and given 3-d dense array in parallel; used for repeated OLS.
+        Each batch of SNPs require one LU factorization.
+
+        Args:
+            sps_mat (csc_matrix): 2-d sparse matrix.
+            dense_mat (np.ndarray): 3-d dense array.
+
+        Raises:
+            ValueError: dense_mat should be 3-d.
+            ValueError: 2nd dimensions of both inputs should match.
+
+        Returns:
+            np.ndarray: 3-d dense array.
+        """
+        if dense_mat.ndim != 3:
+            raise ValueError('dense_mat must be a 3-d array.')
+        n1: int
+        n2: int
+        m: int
+        n: int
+        c: int
+        n1, n2 = sps_mat.shape
+        m, n, c = dense_mat.shape
+        if n != n2:
+            raise ValueError(f'Input dims do not match: {n2} and {n}.')
+        data, indices, indptr = sps_mat.data, sps_mat.indices, sps_mat.indptr
+        data_shape = data.shape
+        indices_shape = indices.shape
+        indptr_shape = indptr.shape
+
+        data_ = RawArray('d', data_shape[0])
+        data_buffer = np.frombuffer(data_)
+        np.copyto(data_buffer, data)
+        indices_ = RawArray(ctypes.c_int32, indices_shape[0])
+        indices_buffer = np.frombuffer(indices_, dtype='int32')
+        np.copyto(indices_buffer, indices)
+        indptr_ = RawArray(ctypes.c_int32, indptr_shape[0])
+        indptr_buffer = np.frombuffer(indptr_, dtype='int32')
+        np.copyto(indptr_buffer, indptr)
+
+        dense_mat_shape = dense_mat.shape
+        dense_mat_ = RawArray(
+            'd', dense_mat_shape[0] * dense_mat_shape[1] * dense_mat_shape[2])
+        dense_mat_buffer = np.frombuffer(dense_mat_).reshape(*dense_mat_shape)
+        np.copyto(dense_mat_buffer, dense_mat)
+        shape = sps_mat.shape
+
+        nbytes = int(dense_mat.shape[1] * dense_mat.shape[2] * 8)
+        max_nbytes = 2147483647
+        if nbytes > max_nbytes:
+            raise ValueError('Too many bytes to handle for multiprocessing.')
+        oldtasks = tasks
+        while int(m / tasks) * nbytes > max_nbytes:
+            tasks += NUM_CPU
+        logger.info(f'Original number of tasks: {oldtasks}; Final number of tasks: {tasks}')
+        ind_lst = np.array_split(np.arange(dense_mat.shape[0]), tasks)
+        with Pool(processes=tasks if NUM_CPU > tasks else NUM_CPU, initializer=init_worker_, initargs=(data_, indices_, indptr_, shape,
+                                                                         dense_mat_, dense_mat_shape)) as pool:
+            result = pool.map(worker_func_, ind_lst)
+            logger.info('Got result back.')
+        return np.vstack(result)
+
+    # testing
+    def fit_snps_eff(self, gts: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Perform repeated OLS to estimate SNP effects and sampling variance-covariance.
 
         Args:
             gts (np.ndarray): 3-d array of genetic data.
@@ -524,15 +791,27 @@ class LinearMixedModel:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
         """
-        if not self.optimized:
-            raise RuntimeError('Variance components are not optimized yer.')
-        if gts.ndim != 3:
-            raise ValueError('gts is expected to be of dimension 3.')
+        n, k, l = gts.shape
+        assert n == self.n
+        gts_ = gts.reshape((gts.shape[0], int(k * l)))
         gts = gts.transpose(2, 0, 1)
-        # TODO: computing self._Vinv is inefficient; use LU decomp on self._grm_mat, self._sib_mat... instead
-        Vinv_X: np.ndarray = self.sp_solve_dense3d(self.V, gts)
-        XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
-        XT_Vinv_y: np.ndarray = np.einsum('...ij,i', gts, self.Vinv_y)
+        logger.info('Calculating projecting matrix...')
+        M: np.ndarray = - self.Z @ solve(self.Z.T @ self.Z, self.Z.T)
+        M.flat[::self.n + 1] += 1
+        logger.info('Projecting genotype...')
+        # np.einsum('ij,...jk', M, gts)
+        # X: np.ndarray = np.empty((gts.shape[0], self.Z.shape[0], gts.shape[2]))
+        # for i in range(gts.shape[0]):
+        #     X[i, :, :] = M.dot(gts[i, :, :])
+        X_ = M.dot(gts_).reshape((self.n, k, l)).transpose(2, 0, 1)
+        logger.info('Done projecting genotype.')
+        logger.info('Projecting phenotype...')
+        y: np.ndarray = M @ self.y
+        logger.info('Start estimating snp effects...')
+        Vinv_X: np.ndarray = self.sp_solve_dense3d_mp(self.V, X_)
+        Vinv_y: np.ndarray = self.V_lu.solve(y)
+        XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
+        XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_, Vinv_y)
         alpha: np.ndarray = np.linalg.solve(XT_Vinv_X, XT_Vinv_y)
         alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
         alpha_ses: np.ndarray = np.sqrt(
@@ -619,6 +898,48 @@ class LinearMixedModel:
         logger.debug('Calculating Vinv_y')
         return self.V_lu.solve(self.y)
 
+    def Vinv_mat(self, dense_mat: np.ndarray) -> np.ndarray:
+        """Calculate matrix-matrix product of inverse of V and a dense matrix
+
+        Args:
+            dense_mat (np.ndarray): 2-d array in the dense format
+
+        Raises:
+            ValueError: dense_mat must be a 2-d array
+            ValueError: dimensions of V and dense_mat must match
+
+        Returns:
+            np.ndarray: matrix product in the dense format
+        """        
+        if dense_mat.ndim != 2:
+            raise ValueError('dense_mat must be a 2-d array.')
+        n, c = dense_mat.shape
+        if n != self.n:
+            raise ValueError(f'Input dims do not match: {self.n} and {n}.')
+        out: np.ndarray = np.empty((self.n, c))
+        for i in range(c):
+            out[:, i] = self.V_lu.solve(dense_mat[:, i])
+        return out
+
+    # testing
+    def Vinv_X(self, gts) -> np.ndarray:
+        return self.sp_solve_dense3d(self.V, gts.transpose(2, 0, 1))
+
+    # testing
+    def Vinv_X_lu(self, gts) -> np.ndarray:
+        return self.sp_solve_dense3d_lu(self.V, gts.transpose(2, 0, 1))
+
+    # testing
+    def Vinv_X_lu_mp(self, gts) -> np.ndarray:
+        return self.sp_solve_dense3d_lu_mp(self.V, gts.transpose(2, 0, 1))
+
+    def Vinv_X_mp(self, gts) -> np.ndarray:
+        return self.sp_solve_dense3d_mp(self.V, gts.transpose(2, 0, 1), gts.shape[2])
+
+    @cached_property_depends_on('_varcomps')
+    def Vinv_Z(self):
+        return self.Vinv_mat(self.Z)
+
     @cached_property_depends_on('_varcomps')
     def Vinv_e(self) -> np.ndarray:
         """Compute matrix-vector product of inverse of V and one-vector
@@ -638,8 +959,9 @@ class LinearMixedModel:
             Tuple[csc_matrix, ...]: a tuple holding all Vinv_varcomp_mat
         """
         logger.debug('Calculating V_inv_varcomp_mats...')
-        return tuple(spsolve(self.V, self._varcomp_mats[i]) for i in range(self.n_varcomps))
+        return tuple(self.Vinv_mat(self._varcomp_mats[i]) for i in range(self.n_varcomps))
 
+    # TODO: test
     @cached_property_depends_on('_varcomps')
     def P_attrs(self) -> GradHessComponents:
         """Compute ingredients for gradient and hessian (Vinv_y, Vinv_varcomp_mats).
@@ -648,8 +970,7 @@ class LinearMixedModel:
             GradHessComponents: a NameTuple holding the computation results
         """
         logger.debug('Calculating P_mats...')
-        P_comp: np.ndarray = np.outer(
-            self.Vinv_e, self.Vinv_e) / (np.ones(self.n) @ self.Vinv_e)
+        P_comp: np.ndarray = self.Vinv_Z @ solve(self.Z.T @ self.Vinv_Z, self.Vinv_Z.T)
         P_y: np.ndarray = self.Vinv_y - P_comp @ self.y
         P_varcomp_mats: Tuple[np.ndarray, ...] = tuple(
             (self.Vinv_varcomp_mats[i] - P_comp @ self._varcomp_mats[i]).A for i in range(self.n_varcomps))
@@ -693,13 +1014,14 @@ class LinearMixedModel:
         Returns:
             float: REML log likelihood
         """
-        e: np.ndarray = np.ones(self.n)
-        yT_Vinv_y: float = self.y @ self.Vinv_y
-        eT_Vinv_e: float = e @ self.Vinv_e
-        eT_Vinv_y: float = e @ self.Vinv_y
-        logdet_eT_Vinv_e: float = np.log(np.ones(self.n) @ self.Vinv_e)
-        return -0.5 * (self.V_logdet + logdet_eT_Vinv_e + yT_Vinv_y - eT_Vinv_y ** 2 / eT_Vinv_e)
+        ZT_Vinv_Z: np.ndarray = self.Z.T @ self.Vinv_Z
+        P_comp: np.ndarray = self.Vinv_Z @ solve(ZT_Vinv_Z, self.Vinv_Z.T)
+        P_y: np.ndarray = self.Vinv_y - P_comp @ self.y
+        logdet_ZT_Vinv_Z: float
+        _, logdet_ZT_Vinv_Z = slogdet(ZT_Vinv_Z)
+        return -0.5 * (self.V_logdet + logdet_ZT_Vinv_Z + self.y @ P_y)
 
+    # TODO: Vinv_Z instead of Vinv_e
     # TODO: check sparsity of V and apply dense version if not sparse enough
     def dense_reml_loglik(self, method: Literal['chol', 'cg'] = 'cg') -> float:
         """Dense version of reml_loglik
