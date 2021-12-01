@@ -244,5 +244,3 @@ class TestCommanline(unittest.TestCase):
                 )
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
-
-    # #TODO raise error in multichromosome files

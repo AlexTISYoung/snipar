@@ -26,8 +26,14 @@ Args:
     --bed : str
         Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
-    bim : str
+    --bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
+
+    --pcs : str, optional
+        Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs
+
+    --pc_num : int, optional
+        Number of PCs to consider. Default is 10.
 
     --from_chr : int, optional
         Which chromosome (<=). Should be used with to_chr parameter.
@@ -153,6 +159,7 @@ def run_imputation(data):
     snipar_ibd = data["snipar_ibd"]
     king_ibd = data["king_ibd"]
     king_seg = data["king_seg"]
+    pcs = data["pcs"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -179,7 +186,7 @@ def run_imputation(data):
             interval = ((end-start+chunks-1)//chunks)
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
-            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
+            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
             imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
             logging.info(f"imputing chunk {i}/{chunks} done")
         
@@ -228,7 +235,7 @@ def run_imputation(data):
             hf["non_duplicates"] = non_duplicates
         logging.info(f"merging chunks done")
     elif chunks == 1:
-        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end)
+        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, start, end)
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
@@ -285,6 +292,14 @@ if __name__ == "__main__":
                         type=str,
                         default = None,
                         help='Address of the agesex file with header "FID IID age sex"')
+    parser.add_argument('--pcs',
+                        type=str,
+                        default = None,
+                        help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
+    parser.add_argument('--pc_num',
+                        type=int,
+                        default = 10,
+                        help='Number of PCs to consider')
     parser.add_argument('--threads',
                         type=int,
                         default=1, 
@@ -342,6 +357,7 @@ if __name__ == "__main__":
     snipar_ibd = None
     king_ibd = None
     king_seg = None
+    pcs = None
     if args.snipar_ibd:
         snipar_ibd = ibd_pd
         if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
@@ -350,6 +366,18 @@ if __name__ == "__main__":
         king_ibd = ibd_pd
         king_seg = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)    
     logging.info("ibd loaded.")
+
+    logging.info("loading pcs ...")
+    if args.pcs:
+        #ordering should be the same
+        pcs = pd.read_csv(f"{args.pcs}", delim_whitespace=True)
+        pcs = pcs[[pc for pc in pcs.columns if pc.startswith("PC")]].values        
+        if args.pc_num > pcs.shape[1]:
+            raise Exception("pc_num less than PCs available in pcs")
+        else:
+            pcs = pcs[:,:args.pc_num]
+    logging.info("pcs loaded")
+    
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
     else:
@@ -373,6 +401,7 @@ if __name__ == "__main__":
             "snipar_ibd": snipar_ibd,
             "king_ibd": king_ibd,
             "king_seg": king_seg,
+            "pcs": pcs,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,

@@ -20,6 +20,9 @@ from config import nan_integer
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 import torch
+from tqdm import tqdm
+import statsmodels.api as sm
+
 class Person:
     """Just a simple data structure representing individuals
 
@@ -438,43 +441,42 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
-def lr(unphased_gts, n_components=40, epochs=200):
-    imp_mean =SimpleImputer()
-    unphased_pc_gts = imp_mean.fit_transform(unphased_gts/2)
-    pca = PCA(n_components)
-    pca.fit_transform(unphased_pc_gts)
-    components = pca.components_
-    pc_scores = unphased_pc_gts@components.T
-    expected_f = []    
-    for i in range(n_components):        
-        weights = torch.tensor(
-            [[0.]]*(n_components),
-            requires_grad=True,
-            dtype=torch.double
-            )
-        optimizer = torch.optim.Adam([weights], lr=0.01,)
-        trainx= torch.tensor(
-                np.hstack(
-                    (
-                        np.delete(pc_scores, i, axis=1),
-                        [[1]]*pc_scores.shape[0]
-                    )
-                ),
-                dtype=torch.double
-            )
-        trainy= torch.tensor(pc_scores[:, [i]])
-        for e in range(epochs):
-            yhat = torch.nn.functional.sigmoid(trainx@weights) 
-            loss = (yhat-trainy).T@(yhat-trainy)
-            print(f"i is {i}, e is {e}, loss={loss}")
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-        expected_f.append(weights)
-    return expected_f
+def glm_f(unphased_gts, pc_scores):
+    """Estimates MAF with a glm from by regressing unphased_gts on pc_scores
+    
+    Args:
+        unphased_gts: np.array[signed char]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+        pc_scores: np.array[float]
+            A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+        
+    Returns:
+        np.array[float]
+            A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
+    """
+
+    pop_size = unphased_gts.shape[0]
+    nsnps = unphased_gts.shape[1]
+    unphased_gts[unphased_gts==nan_integer]=0
+    unphased_pc_gts = unphased_gts.copy().astype(np.float)
+    x = np.hstack((pc_scores, np.ones((pop_size, 1))))
+    models = []
+    model_results = []
+    fs = unphased_pc_gts.copy()
+    for i in tqdm(range(nsnps)):
+        y = np.zeros((pop_size,2))
+        y[:,0] = unphased_pc_gts[:,i]
+        y[:,1] = 2-unphased_pc_gts[:,i]
+        binom_model = sm.GLM(y, x, family=sm.families.Binomial())        
+        binom_result = binom_model.fit()
+        models.append(binom_model)
+        model_results.append(binom_result)
+        fs[:,i] = binom_result.predict(x)
+    return fs
 
 
-def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None):
+def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, start=None, end=None):
     """ Processes the gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -520,7 +522,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
                 A numpy array with the position of each SNP in the order of appearance in gts.
 
             freqs: np.array[float]
-                Min allele frequency for all the SNPs present in the genotypes in that order.
+                A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
 
             hdf5_output_dict: dict
                 A  dictionary whose values will be written in the imputation output under its keys.
@@ -555,22 +557,27 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             logging.info(f"with chromosomes {chromosomes} loaded sid ...")
     if phased_address:
         bgen = open_bgen(phased_address+".bgen", verbose=False)
+        ids_in_ped = [(bytes(id, "ascii") in ped_ids) for id in bgen.samples]
         gts_ids = np.array([[None, id] for id in bgen.samples])
+        gts_ids = gts_ids[ids_in_ped]
         pos = np.array(bim["coordinate"][start: end])
         all_sids = np.array(bim["id"])
         sid = np.array(bim["id"][start: end])
         pop_size = len(gts_ids)
-        probs= bgen.read((slice(0, pop_size),slice(start, end)))        
+        probs= bgen.read((slice(0, len(bgen.samples)),slice(start, end)))        
         phased_gts = np.zeros((probs.shape[0], probs.shape[1], 2))
         phased_gts[:] = np.nan
         phased_gts[probs[:,:,0] > 0.99, 0] = 1
         phased_gts[probs[:,:,1] > 0.99, 0] = 0
         phased_gts[probs[:,:,2] > 0.99, 1] = 1
         phased_gts[probs[:,:,3] > 0.99, 1] = 0
+        phased_gts = phased_gts[ids_in_ped,:]
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
             phased_gts[nanmask] = nan_integer                
+    if not pcs is None:
+        pcs = pcs[ids_in_ped]
     _, indexes = np.unique(all_sids, return_index=True)
     indexes = np.sort(indexes)
     indexes = (indexes[(indexes>=start) & (indexes<end)]-start)
@@ -605,7 +612,8 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
             phased_gts[phased_gts_greater1] = nan_integer
     
-    freqs = np.nanmean(unphased_gts,axis=0)/2.0
+    freqs = unphased_gts.copy()
+    freqs[:] = np.nanmean(unphased_gts,axis=0)/2.0
     nanmask = np.isnan(unphased_gts) 
     unphased_gts = unphased_gts.astype(np.int8)
     unphased_gts[nanmask] = nan_integer
@@ -618,6 +626,22 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns
     hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
-    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
-    lr(unphased_gts)
+    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")    
+    if not pcs is None:
+        logging.info("estimating MAF using PCs ...")
+        freqs = glm_f(unphased_gts, pcs)
+        logging.info("estimating MAF using PCs done")
+    if unphased_gts.shape[0] == 0:
+        logging.warning(f"with chromosomes {chromosomes}: 0 individuals in unphased genotypes")
+    if unphased_gts.shape[1] == 0:
+        logging.warning(f"with chromosomes {chromosomes}: 0 snps in unphased genotypes")
+    if unphased_gts.max()>2 or unphased_gts.min()<0:
+        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes has values out of 0-2 range")
+    if not phased_gts is None:
+        if phased_gts.shape[0] == 0:
+            logging.warning(f"with chromosomes {chromosomes}: 0 individuals in phased genotypes")
+        if phased_gts.shape[1] == 0:
+            logging.warning(f"with chromosomes {chromosomes}: 0 snps in phased genotypes")
+        if phased_gts.max()>1 or phased_gts.min()<0:
+            logging.warning(f"with chromosomes {chromosomes}: phased genotypes has values out of 0-1 range")
     return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict

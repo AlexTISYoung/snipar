@@ -815,7 +815,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
 
         freqs: list[float]
-            Min allele frequency for all the SNPs present in the genotypes in that order.
+            A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
 
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
@@ -863,8 +863,10 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int max_sibs = np.max(sibships["sib_count"])
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
     cdef int number_of_fams = sibships.shape[0]
-    cdef cnp.ndarray[cnp.double_t, ndim=1] c_freqs = freqs#np.nanmean(unphased_gts,axis=0)/2.0
-    cdef double[:, :] parent_genotype_prob = np.hstack(((1-freqs.reshape(-1,1))**2, 2*freqs.reshape(-1,1)*(1-freqs.reshape(-1,1)), freqs.reshape(-1,1)**2))
+    cdef cnp.ndarray[cnp.double_t, ndim=2] c_freqs = freqs
+    cdef double[:] parent_genotype_prob = np.array([0., 0., 0.])
+    cdef double f
+    cdef int p, q
     sibships["parent"] = sibships["FATHER_ID"]
     sibships["parent"][sibships["has_father"]] = sibships["FATHER_ID"][sibships["has_father"]]
     sibships["parent"][sibships["has_mother"]] = sibships["MOTHER_ID"][sibships["has_mother"]]
@@ -983,8 +985,16 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                     snp_ibd2[this_thread, len_snp_ibd2,0] = 0
                     snp_ibd2[this_thread, len_snp_ibd2,1] = 0
                     len_snp_ibd2 = len_snp_ibd2 + 1
-            
-            if single_parent[index]:
+            f = 0.
+            for p in range(sib_count[index]):
+                q = sibs_index[this_thread, p]
+                f = f + c_freqs[q, snp]
+            f = f/sib_count[index]
+            parent_genotype_prob[0] = 1-f**2
+            parent_genotype_prob[1] = 2*f*(1-f)
+            parent_genotype_prob[2] = f**2
+
+            if single_parent[index] and c_unphased_gts[c_iid_to_bed_index[parents[index]], snp] != nan_integer:
                 imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
                                                                                 sibs_index[this_thread, :],
@@ -992,8 +1002,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 snp_ibd0[this_thread,:,:],
                                                                                 snp_ibd1[this_thread,:,:],
                                                                                 snp_ibd2[this_thread,:,:],
-                                                                                c_freqs[snp],
-                                                                                parent_genotype_prob[snp,:],
+                                                                                f,
+                                                                                parent_genotype_prob,
                                                                                 c_phased_gts,
                                                                                 c_unphased_gts,
                                                                                 sib_hap_IBDs[this_thread,:,:,:],
@@ -1009,8 +1019,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          snp_ibd0[this_thread,:,:],
                                                                          snp_ibd1[this_thread,:,:],
                                                                          snp_ibd2[this_thread,:,:],
-                                                                         c_freqs[snp],
-                                                                         parent_genotype_prob[snp,:],
+                                                                         f,
+                                                                         parent_genotype_prob,
                                                                          c_phased_gts,
                                                                          c_unphased_gts,
                                                                          sib_hap_IBDs[this_thread,:,:,:],
@@ -1040,15 +1050,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         logging.warning("Too much inconsistencies in the data")        
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
-        with h5py.File(output_address+".hdf5",'w') as f:
-            f.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
-            f['families'] = np.array(sibships["FID"].values, dtype='S')
-            f['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
-            f['pos'] = pos
-            f["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
-            f["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
-            f["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
-            f["non_duplicates"] =  np.array(hdf5_output_dict["non_duplicates"], dtype=int)
+        with h5py.File(output_address+".hdf5",'w') as file:
+            file.create_dataset('imputed_par_gts',(number_of_fams, number_of_snps),dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
+            file['families'] = np.array(sibships["FID"].values, dtype='S')
+            file['parental_status'] = sibships[["has_father", "has_mother", "single_parent"]]
+            file['pos'] = pos
+            file["bim_columns"] = np.array(hdf5_output_dict["bim_columns"], dtype='S')
+            file["bim_values"] = np.array(hdf5_output_dict["bim_values"], dtype='S')
+            file["pedigree"] =  np.array(hdf5_output_dict["pedigree"], dtype='S')
+            file["non_duplicates"] =  np.array(hdf5_output_dict["non_duplicates"], dtype=int)
             #Todo automate this for all possible output_dicts
-            f["ratio_ibd0"] = ratio_ibd0
+            file["ratio_ibd0"] = ratio_ibd0
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)
