@@ -94,7 +94,7 @@ def get_ids_with_par(par_gts_f: str,
     """Find ids with observed/imputed parents and family labels
     """
     # Imputed parental file
-    par_gts_f_ = h5py.File(par_gts_f + '.hdf5', 'r')
+    par_gts_f_ = h5py.File(par_gts_f, 'r')
     # Genotype file
     ped = convert_str_array(np.array(par_gts_f_['pedigree']))
     ped = ped[1:ped.shape[0], :]
@@ -416,7 +416,7 @@ class GradHessComponents(NamedTuple):
     P_varcomp_mats: Tuple[np.ndarray, ...]
 
 
-var_dict = {}
+_var_dict = {}
 
 
 NUM_CPU = 8
@@ -426,16 +426,16 @@ def init_worker(L_data_, L_indices_, L_indptr_,
                 U_data_, U_indices_, U_indptr_,
                 dense_mat_, dense_mat_shape,
                 perm_c_, perm_r_):
-    var_dict['L_data_'] = L_data_
-    var_dict['L_indices_'] = L_indices_
-    var_dict['L_indptr_'] = L_indptr_
-    var_dict['U_data_'] = U_data_
-    var_dict['U_indices_'] = U_indices_
-    var_dict['U_indptr_'] = U_indptr_
-    var_dict['dense_mat_'] = dense_mat_
-    var_dict['dense_mat_shape'] = dense_mat_shape
-    var_dict['perm_c_'] = perm_c_
-    var_dict['perm_r_'] = perm_r_
+    _var_dict['L_data_'] = L_data_
+    _var_dict['L_indices_'] = L_indices_
+    _var_dict['L_indptr_'] = L_indptr_
+    _var_dict['U_data_'] = U_data_
+    _var_dict['U_indices_'] = U_indices_
+    _var_dict['U_indptr_'] = U_indptr_
+    _var_dict['dense_mat_'] = dense_mat_
+    _var_dict['dense_mat_shape'] = dense_mat_shape
+    _var_dict['perm_c_'] = perm_c_
+    _var_dict['perm_r_'] = perm_r_
 
 
 def worker_func(ind_lst):
@@ -452,16 +452,16 @@ def worker_func(ind_lst):
         if perm_c is None:
             return px
         return px[perm_c]
-    L_data = np.frombuffer(var_dict['L_data_'])
-    L_indices = np.frombuffer(var_dict['L_indices_'], dtype='int32')
-    L_indptr = np.frombuffer(var_dict['L_indptr_'], dtype='int32')
-    U_data = np.frombuffer(var_dict['U_data_'])
-    U_indices = np.frombuffer(var_dict['U_indices_'], dtype='int32')
-    U_indptr = np.frombuffer(var_dict['U_indptr_'], dtype='int32')
-    dense_mat = np.frombuffer(var_dict['dense_mat_']).reshape(
-        var_dict['dense_mat_shape'])
-    perm_c = np.frombuffer(var_dict['perm_c_'], dtype='int32')
-    perm_r = np.frombuffer(var_dict['perm_r_'], dtype='int32')
+    L_data = np.frombuffer(_var_dict['L_data_'])
+    L_indices = np.frombuffer(_var_dict['L_indices_'], dtype='int32')
+    L_indptr = np.frombuffer(_var_dict['L_indptr_'], dtype='int32')
+    U_data = np.frombuffer(_var_dict['U_data_'])
+    U_indices = np.frombuffer(_var_dict['U_indices_'], dtype='int32')
+    U_indptr = np.frombuffer(_var_dict['U_indptr_'], dtype='int32')
+    dense_mat = np.frombuffer(_var_dict['dense_mat_']).reshape(
+        _var_dict['dense_mat_shape'])
+    perm_c = np.frombuffer(_var_dict['perm_c_'], dtype='int32')
+    perm_r = np.frombuffer(_var_dict['perm_r_'], dtype='int32')
     L = csc_matrix((L_data, L_indices, L_indptr), shape=(
         dense_mat.shape[1], dense_mat.shape[1])).tocsr()
     U = csc_matrix((U_data, U_indices, U_indptr), shape=(
@@ -477,21 +477,21 @@ def worker_func(ind_lst):
 
 def init_worker_(data_, indices_, indptr_, shape,
                  dense_mat_, dense_mat_shape):
-    var_dict['data_'] = data_
-    var_dict['indices_'] = indices_
-    var_dict['indptr_'] = indptr_
-    var_dict['dense_mat_'] = dense_mat_
-    var_dict['dense_mat_shape'] = dense_mat_shape
-    var_dict['shape'] = shape
+    _var_dict['data_'] = data_
+    _var_dict['indices_'] = indices_
+    _var_dict['indptr_'] = indptr_
+    _var_dict['dense_mat_'] = dense_mat_
+    _var_dict['dense_mat_shape'] = dense_mat_shape
+    _var_dict['shape'] = shape
 
 
 def worker_func_(ind_lst):
-    data = np.frombuffer(var_dict['data_'])
-    indices = np.frombuffer(var_dict['indices_'], dtype='int32')
-    indptr = np.frombuffer(var_dict['indptr_'], dtype='int32')
-    dense_mat = np.frombuffer(var_dict['dense_mat_']).reshape(
-        var_dict['dense_mat_shape'])
-    V = csc_matrix((data, indices, indptr), shape=var_dict['shape'])
+    data = np.frombuffer(_var_dict['data_'])
+    indices = np.frombuffer(_var_dict['indices_'], dtype='int32')
+    indptr = np.frombuffer(_var_dict['indptr_'], dtype='int32')
+    dense_mat = np.frombuffer(_var_dict['dense_mat_']).reshape(
+        _var_dict['dense_mat_shape'])
+    V = csc_matrix((data, indices, indptr), shape=_var_dict['shape'])
     lu = splu(V)
     out = np.empty((len(ind_lst), V.shape[0], dense_mat.shape[2]))
     for i, ind in enumerate(ind_lst):
@@ -511,6 +511,7 @@ class LinearMixedModel:
     _vec_coord2linear: Callable[..., np.ndarray] = np.vectorize(coord2linear)
 
     def __init__(self, y: np.ndarray, varcomp_arr_lst: Tuple[np.ndarray, ...],
+                 varcomps: Tuple[float, ...] = None,
                  covar_X: np.ndarray = None) -> None:
         """Initilize a LinearMixedModel instance.
 
@@ -549,10 +550,18 @@ class LinearMixedModel:
                     np.arange(self.n), np.arange(self.n)), self.n),
         )
         self.n_varcomps: int = len(varcomp_arr_lst) + 1
+        self._varcomps: Tuple[float, ...]
+        self.optimized: bool
+        if varcomps is not None:
+            if len(varcomps) != self.n_varcomps:
+                raise ValueError('varcomps and varcomps_arr_lst must have the same length.')
+            self._varcomps = varcomps
+            self.optimized = True
+        else:
+            self._varcomps = tuple(
+                self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
+            self.optimized = False
         logger.debug(f'Number of variance components: {self.n_varcomps}.')
-        self._varcomps: Tuple[float, ...] = tuple(
-            self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
-        self.optimized: bool = False
 
     @staticmethod
     def fit_covar(y: np.ndarray, covar_X: np.ndarray) -> np.ndarray:
@@ -794,11 +803,11 @@ class LinearMixedModel:
         n, k, l = gts.shape
         assert n == self.n
         gts_ = gts.reshape((gts.shape[0], int(k * l)))
-        gts = gts.transpose(2, 0, 1)
         logger.info('Calculating projecting matrix...')
         M: np.ndarray = - self.Z @ solve(self.Z.T @ self.Z, self.Z.T)
         M.flat[::self.n + 1] += 1
         logger.info('Projecting genotype...')
+        # gts = gts.transpose(2, 0, 1)
         # np.einsum('ij,...jk', M, gts)
         # X: np.ndarray = np.empty((gts.shape[0], self.Z.shape[0], gts.shape[2]))
         # for i in range(gts.shape[0]):
@@ -808,7 +817,7 @@ class LinearMixedModel:
         logger.info('Projecting phenotype...')
         y: np.ndarray = M @ self.y
         logger.info('Start estimating snp effects...')
-        Vinv_X: np.ndarray = self.sp_solve_dense3d_mp(self.V, X_)
+        Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, X_)
         Vinv_y: np.ndarray = self.V_lu.solve(y)
         XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
         XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_, Vinv_y)
@@ -1152,6 +1161,7 @@ class LinearMixedModel:
         else:
             raise ValueError('Scipy minimize failed.')
 
+    # TODO: Z instead of e
     def test_grad_hessian(self) -> Tuple[float, np.ndarray, np.ndarray]:
         """Calculate REML loglikelihood, grad and hessian in dense format for testing purposes.
 
