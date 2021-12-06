@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 import torch
 from tqdm import tqdm
 import statsmodels.api as sm
-
+from scipy.stats import norm
 class Person:
     """Just a simple data structure representing individuals
 
@@ -441,8 +441,53 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
-def glm_f(unphased_gts, pc_scores):
-    """Estimates MAF with a glm from by regressing unphased_gts on pc_scores
+def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
+    """Akaike information criterion of linear regressions with increasing number of PCs. Returns the number of PCs that minimizes aic.
+    Args:    
+        unphased_gts: np.array[signed char]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+        pc_scores: np.array[float]
+            A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+
+        linear : bool, optional
+            Whether the model is linear regression or not. GLM is not implemented yet. Default is true.
+        
+        sample_size : int, optional
+            number of snps to use for computing aics. aics from these snps are averaged. default is 1000.
+    
+    Returns:
+        optimal number of PCs to use
+    """
+    if linear:
+        pop_size = unphased_gts.shape[0]
+        nsnps = unphased_gts.shape[1]
+        if nsnps < sample_size:
+            sample_size = nsnps
+        individual_mask = np.random.permutation([True]*sample_size+[False]*(nsnps-sample_size))
+        unphased_gts = unphased_gts[:, individual_mask]
+
+        unphased_pc_gts = unphased_gts.copy().astype(np.float)
+        unphased_pc_gts[unphased_gts==nan_integer]=0.
+        number_of_pcs = pc_scores.shape[1]
+        x = np.hstack((np.ones((pop_size, 1)), pc_scores))
+        aic = []
+        logging.info("computing aics ...")
+        for i in tqdm(range(1,number_of_pcs+2)):
+            coefs, _, _, _ = np.linalg.lstsq(x[:, :i], unphased_pc_gts/2)
+            fs = x[:, :i]@coefs
+            std = np.sqrt(np.var(unphased_pc_gts.flatten()/2)-np.var(fs.flatten()))
+            fs[fs>1] = 1
+            fs[fs<0] = 0            
+            log_likelihoods = np.sum(np.log(norm.pdf(unphased_pc_gts/2-fs, 0, std)), axis=0)
+            log_likelihood = np.mean(log_likelihoods)
+            aic.append(2*(i-log_likelihood))
+        logging.info("computing aics done")
+        return np.argmin(aic)
+    raise Exception("not implemented yet")
+
+def estimate_f(unphased_gts, pc_scores, linear=True):
+    """Estimates MAF with an ols or glm from by regressing unphased_gts on pc_scores
     
     Args:
         unphased_gts: np.array[signed char]
@@ -450,6 +495,9 @@ def glm_f(unphased_gts, pc_scores):
 
         pc_scores: np.array[float]
             A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+
+        linear, bool, optional
+            Whether the model is linear regression or not. Default is true.
         
     Returns:
         np.array[float]
@@ -458,25 +506,31 @@ def glm_f(unphased_gts, pc_scores):
 
     pop_size = unphased_gts.shape[0]
     nsnps = unphased_gts.shape[1]
-    unphased_gts[unphased_gts==nan_integer]=0
     unphased_pc_gts = unphased_gts.copy().astype(np.float)
+    unphased_pc_gts[unphased_gts==nan_integer] = 0.
     x = np.hstack((pc_scores, np.ones((pop_size, 1))))
-    models = []
-    model_results = []
-    fs = unphased_pc_gts.copy()
-    for i in tqdm(range(nsnps)):
-        y = np.zeros((pop_size,2))
-        y[:,0] = unphased_pc_gts[:,i]
-        y[:,1] = 2-unphased_pc_gts[:,i]
-        binom_model = sm.GLM(y, x, family=sm.families.Binomial())        
-        binom_result = binom_model.fit()
-        models.append(binom_model)
-        model_results.append(binom_result)
-        fs[:,i] = binom_result.predict(x)
+    if linear:
+        coefs, _, _, _ = np.linalg.lstsq(x, unphased_pc_gts/2)
+        fs = x@coefs
+        fs[fs>1] = 1
+        fs[fs<0] = 0
+    else:
+        models = []
+        model_results = []
+        fs = unphased_pc_gts.copy()
+        for i in tqdm(range(nsnps)):
+            y = np.zeros((pop_size,2))
+            y[:,0] = unphased_pc_gts[:,i]
+            y[:,1] = 2-unphased_pc_gts[:,i]
+            binom_model = sm.GLM(y, x, family=sm.families.Binomial())
+            binom_result = binom_model.fit()
+            models.append(binom_model)
+            model_results.append(binom_result)
+            fs[:,i] = binom_result.predict(x)
     return fs
 
 
-def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, start=None, end=None):
+def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None, pcs=None, pc_ids=None, find_optimal_pc=None):
     """ Processes the gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -506,6 +560,14 @@ def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped
         end : int, optional
             This function can be used for preparing a slice of a chromosome. This is the location of the end of the slice.
 
+        pcs : np.array[float], optional
+            A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+
+        pc_ids : set, optional
+            Set of ids of individuals in the pcs.
+
+        find_optimal_pc : bool, optional
+            It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
     Returns:
         tuple(np.array[signed char], np.array[signed char], str->int, np.array[int], np.array[float], dict)
@@ -535,21 +597,24 @@ def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped
         bim_as_csv = pd.read_csv(unphased_address+".bim", delim_whitespace=True, header=None)
         gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
         logging.info(f"with chromosomes {chromosomes} opened unphased file ...")
-        ids_in_ped = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
+        if not pc_ids is None:
+            ids_in_ped_pc = [(id in ped_ids) and (id in pc_ids) for id in gts_f.iid[:,1].astype("S")]
+        else:
+            ids_in_ped_pc = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
         logging.info(f"with chromosomes {chromosomes} loaded ids ...")
-        gts_ids = gts_f.iid[ids_in_ped]
+        gts_ids = gts_f.iid[ids_in_ped_pc]
         logging.info(f"with chromosomes {chromosomes} restrict to ids ...")
         all_sids = bim_as_csv[1].values
 
         if end is not None:
-            unphased_gts = gts_f[ids_in_ped , start:end].read().val
+            unphased_gts = gts_f[ids_in_ped_pc , start:end].read().val
             logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[start:end, 2]
             logging.info(f"with chromosomes {chromosomes} loaded pos ...")
             sid = all_sids[start:end]
             logging.info(f"with chromosomes {chromosomes} loaded sid ...")
         else:
-            unphased_gts = gts_f[ids_in_ped, :].read().val
+            unphased_gts = gts_f[ids_in_ped_pc, :].read().val
             logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
             pos = gts_f.pos[:, 2]
             logging.info(f"with chromosomes {chromosomes} loaded pos ...")
@@ -557,9 +622,12 @@ def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped
             logging.info(f"with chromosomes {chromosomes} loaded sid ...")
     if phased_address:
         bgen = open_bgen(phased_address+".bgen", verbose=False)
-        ids_in_ped = [(bytes(id, "ascii") in ped_ids) for id in bgen.samples]
-        gts_ids = np.array([[None, id] for id in bgen.samples])
-        gts_ids = gts_ids[ids_in_ped]
+        if not pc_ids is None:
+            ids_in_ped_pc = [(id in ped_ids) and (id in pc_ids) for id in bgen.samples.astype("S")]
+        else:
+            ids_in_ped_pc = [(id in ped_ids) for id in bgen.samples.astype("S")]
+        gts_ids = np.array([[None, id] for id in bgen.samples.astype("S")])
+        gts_ids = gts_ids[ids_in_ped_pc]
         pos = np.array(bim["coordinate"][start: end])
         all_sids = np.array(bim["id"])
         sid = np.array(bim["id"][start: end])
@@ -571,13 +639,15 @@ def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped
         phased_gts[probs[:,:,1] > 0.99, 0] = 0
         phased_gts[probs[:,:,2] > 0.99, 1] = 1
         phased_gts[probs[:,:,3] > 0.99, 1] = 0
-        phased_gts = phased_gts[ids_in_ped,:]
+        phased_gts = phased_gts[ids_in_ped_pc,:]
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
             nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
             phased_gts[nanmask] = nan_integer                
     if not pcs is None:
-        pcs = pcs[ids_in_ped]
+        set_gts_ids = set(gts_ids[:, 1].astype("S"))
+        pc_ids_gts_ids =  [id in set_gts_ids for id in pc_ids]
+        pcs = pcs[pc_ids_gts_ids]
     _, indexes = np.unique(all_sids, return_index=True)
     indexes = np.sort(indexes)
     indexes = (indexes[(indexes>=start) & (indexes<end)]-start)
@@ -629,7 +699,14 @@ def prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")    
     if not pcs is None:
         logging.info("estimating MAF using PCs ...")
-        freqs = glm_f(unphased_gts, pcs)
+        if find_optimal_pc:
+            logging.info("finding optimal number of PCs using aic...")
+            optimal_pc_num = compute_aics(unphased_gts, pcs, sample_size=1000)
+            logging.info(f"optimal number of PCs is {optimal_pc_num}")
+            logging.info("finding optimal number of PCs using aic done")
+            freqs = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
+        else:
+            freqs = estimate_f(unphased_gts, pcs)
         logging.info("estimating MAF using PCs done")
     if unphased_gts.shape[0] == 0:
         logging.warning(f"with chromosomes {chromosomes}: 0 individuals in unphased genotypes")

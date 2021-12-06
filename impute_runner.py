@@ -30,10 +30,13 @@ Args:
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
 
     --pcs : str, optional
-        Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs
+        Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs
 
     --pc_num : int, optional
-        Number of PCs to consider. Default is 10.
+        Number of PCs to consider.
+
+    -find_optimal_pc: optional
+        It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
     --from_chr : int, optional
         Which chromosome (<=). Should be used with to_chr parameter.
@@ -115,6 +118,14 @@ def run_imputation(data):
                 phased_address: str, optional
                     Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
 
+                pcs : np.array[float], optional
+                    A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+
+                pc_ids : set, optional
+                    Set of ids of individuals in the pcs.
+
+                find_optimal_pc : bool, optional
+                    It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
                 king_ibd: pd.Dataframe
                     IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, StartSNP, StopSNP
@@ -160,6 +171,8 @@ def run_imputation(data):
     king_ibd = data["king_ibd"]
     king_seg = data["king_seg"]
     pcs = data["pcs"]
+    pc_ids = data["pc_ids"]
+    find_optimal_pc = data["find_optimal_pc"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -186,7 +199,7 @@ def run_imputation(data):
             interval = ((end-start+chunks-1)//chunks)
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
-            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
+            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end, pcs, pc_ids, find_optimal_pc)
             imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
             logging.info(f"imputing chunk {i}/{chunks} done")
         
@@ -235,7 +248,7 @@ def run_imputation(data):
             hf["non_duplicates"] = non_duplicates
         logging.info(f"merging chunks done")
     elif chunks == 1:
-        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pcs, pedigree_output, ped_ids, chromosomes, start, end)
+        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
@@ -298,8 +311,11 @@ if __name__ == "__main__":
                         help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
     parser.add_argument('--pc_num',
                         type=int,
-                        default = 10,
+                        default = None,
                         help='Number of PCs to consider')
+    parser.add_argument('-find_optimal_pc',
+                        action='store_true',
+                        help='It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.')
     parser.add_argument('--threads',
                         type=int,
                         default=1, 
@@ -358,6 +374,7 @@ if __name__ == "__main__":
     king_ibd = None
     king_seg = None
     pcs = None
+    pc_ids = None
     if args.snipar_ibd:
         snipar_ibd = ibd_pd
         if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
@@ -371,11 +388,13 @@ if __name__ == "__main__":
     if args.pcs:
         #ordering should be the same
         pcs = pd.read_csv(f"{args.pcs}", delim_whitespace=True)
-        pcs = pcs[[pc for pc in pcs.columns if pc.startswith("PC")]].values        
-        if args.pc_num > pcs.shape[1]:
-            raise Exception("pc_num less than PCs available in pcs")
-        else:
-            pcs = pcs[:,:args.pc_num]
+        pc_ids = pcs.iloc[:, 1].values.astype("S").tolist()
+        pcs = pcs.iloc[:, 2:].values
+        if not args.pc_num is None:
+            if args.pc_num > pcs.shape[1]:
+                raise Exception(f"pc_num={args.pc_num} more than {pcs.shape} PCs available in pcs")
+            else:
+                pcs = pcs[:,:args.pc_num]
     logging.info("pcs loaded")
     
     if (args.from_chr is not None) and (args.to_chr is not None):
@@ -402,6 +421,8 @@ if __name__ == "__main__":
             "king_ibd": king_ibd,
             "king_seg": king_seg,
             "pcs": pcs,
+            "pc_ids": pc_ids,
+            "find_optimal_pc": args.find_optimal_pc,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
