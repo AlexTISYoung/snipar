@@ -626,7 +626,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             ids_in_ped_pc = [(id in ped_ids) and (id in pc_ids) for id in bgen.samples.astype("S")]
         else:
             ids_in_ped_pc = [(id in ped_ids) for id in bgen.samples.astype("S")]
-        gts_ids = np.array([[None, id] for id in bgen.samples.astype("S")])
+        gts_ids = np.array([[None, id] for id in bgen.samples])
         gts_ids = gts_ids[ids_in_ped_pc]
         pos = np.array(bim["coordinate"][start: end])
         all_sids = np.array(bim["id"])

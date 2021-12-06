@@ -162,6 +162,31 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
+    def test_impute_runner_with_unphased_king_control_pca(self):
+        command = ["python",
+                   "impute_runner.py",
+                   "-c",
+                   "test_data/sample.our",
+                   "--snipar_ibd",
+                   "--bed", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--king", "test_data/sample.king",
+                   "--agesex", "test_data/sample.agesex",
+                   "--pcs", "test_data/sample1_2_pca.eigenvec",
+                   "--pc_num", "8",
+                   "-find_optimal_pc",
+                   "--threads", "10",
+                   "--output_address", "outputs/tmp/test_impute_runner_with_unphased_king_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1, 2],
+                imputed_prefix = "outputs/tmp/test_impute_runner_with_unphased_king_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertAlmostEqual(coef[0], 1., delta=0.01)
+        self.assertAlmostEqual(coef[1], 1., delta=0.01)
+
     def test_impute_runner_with_unphased_king_control_legacy_ibd(self):
         command = ["python",
                    "impute_runner.py",
