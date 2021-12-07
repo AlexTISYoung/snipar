@@ -76,7 +76,6 @@ def mendelian_errors_from_bed(bedfile,ped):
     all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
     gts = bed[all_ids_indices, :].read().val
     id_dict = make_id_dict(ids[all_ids_indices, :], 1)
-    gts = ma.array(gts, mask=np.isnan(gts))
     ## Get indices
     pair_indices = np.zeros((npair,2),dtype=int)
     pair_count = 0
@@ -91,6 +90,7 @@ def mendelian_errors_from_bed(bedfile,ped):
     ## Count Mendelian errors
     ME = count_ME(gts,pair_indices)
     # Compute allele frequencies
+    gts = ma.array(gts, mask=np.isnan(gts))
     freqs = ma.mean(gts, axis=0) / 2.0
     # Estimate error probability
     sum_het = np.sum(freqs * (1 - freqs))
@@ -101,28 +101,10 @@ def count_ME(gts,pair_indices):
     ME = 0
     # Count Mendelian errors
     for i in prange(pair_indices.shape[0]):
-        ME += np.sum(np.abs(gts[pair_indices[i,0],:]-gts[pair_indices[i,1],:])>1)
+        for j in range(gts.shape[1]):
+                if np.abs(gts[pair_indices[i,0],j]-gts[pair_indices[i,1],j])>1:
+                    ME += 1
     return ME
-
-# def parse_filelist(obsfiles, ldfiles, obsformat='bed'):
-#     obs_files = []
-#     ld_files = []
-#     if '~' in obsfiles and '~' in  ldfiles:
-#         bed_ixes = obsfiles.split('~')
-#         ld_ixes = ldfiles.split('~')
-#         for i in range(1,23):
-#             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-#             ldfile = ld_ixes[0]+str(i)+ld_ixes[1]
-#             if path.exists(ldfile) and path.exists(obsfile):
-#                 obs_files.append(obsfile)
-#                 ld_files.append(ldfile)
-#         print(str(len(obs_files))+' matched observed and imputed genotype files found')
-#     elif '~' not in obsfiles and '~' not in ldfiles:
-#             obs_files = [obsfiles+'.'+obsformat]
-#             ld_files = [ldfiles]
-#     else:
-#         raise(ValueError('Observed genotypes argument and ld files argument must be contain ~ (multiple chromosomes) or neither (single chromosome)'))
-#     return np.array(obs_files), np.array(ld_files)
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
@@ -229,23 +211,21 @@ def compute_ld_scores(gts,map,max_dist = 1):
 ## Unbiased estimator of R^2 between SNPs
 @njit
 def r2_est(g1,g2):
-    r2 = np.power(np.corrcoef(g1,g2)[0,1],2)
-    return r2-(1-r2)/(g1.shape[0]-2)
+    not_nan = np.logical_not(np.logical_or(np.isnan(g1), np.isnan(g2)))
+    r2 = np.power(np.corrcoef(g1[not_nan],g2[not_nan])[0,1],2)
+    return r2-(1-r2)/(np.sum(not_nan)-2)
 
 
 ####### Transition Matrix ######
 @njit
 def transition_matrix(cM):
     """Compute probabilities of transitioning between IBD states as a function of genetic distance.
-
     Args:
         cM : :class:`float`
             genetic distance in centiMorgans (cM)
-
     Returns:
         log(P) : :class:`~numpy:numpy.array`
             the natural logarithm (element-wise) of the matrix of transition probabilities
-
     """
     P = np.identity(3)
     r_array = np.array([[-1.0,1.0,0.0],[0.5,-1.0,0.5],[0.0,1.0,-1.0]],dtype=np.float64)
@@ -257,15 +237,12 @@ def transition_matrix(cM):
 @njit
 def p_ibd_0(f):
     """Compute Joint-PMF for sibling pair genotypes given IBD0.
-
     Args:
         f : :class:`float`
             allele frequency
-
     Returns:
         P : :class:`~numpy:numpy.array`
             matrix of probabilities
-
     """
     P_vec = np.array([(1.0-f)**2.0,2.0*f*(1-f),f**2.0]).reshape((3,1))
     return P_vec @ P_vec.T
@@ -273,15 +250,12 @@ def p_ibd_0(f):
 @njit
 def p_ibd_1(f):
     """Compute Joint-PMF for sibling pair genotypes given IBD1.
-
     Args:
         f : :class:`float`
             allele frequency
-
     Returns:
         P : :class:`~numpy:numpy.array`
             matrix of probabilities
-
     """
     fmatrix = np.array([[0.0,1.0,0.0],[1.0,1.0,2.0],[0.0,2.0,3.0]])
     minus_fmatrix = np.array([[3.0,2.0,0.0],[2.0,1.0,1.0],[0.0,1.0,0.0]])
@@ -293,15 +267,12 @@ def p_ibd_1(f):
 @njit
 def p_ibd_2(f):
     """Compute Joint-PMF for sibling pair genotypes given IBD2.
-
     Args:
         f : :class:`float`
             allele frequency
-
     Returns:
         P : :class:`~numpy:numpy.array`
             matrix of probabilities
-
     """
     P = np.zeros((3,3),dtype=np.float64)
     fdiag = np.array([(1.0-f)**2.0,2.0*f*(1.0-f),f**2.0])
@@ -311,7 +282,6 @@ def p_ibd_2(f):
 @njit
 def p_obs_given_IBD(g1_obs,g2_obs,f,p):
     """Compute Joint-PMF for sibling pair genotypes given IBD0.
-
     Args:
         g1_obs : :class:`integer`
             observed genotype for sibling 1
@@ -321,7 +291,6 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
             allele frequency
         p : :class:'float'
             genotyping error probability
-
     Returns:
         log(P) : :class:`~numpy:numpy.array`
             vector giving log-probabilities of observing g1_obs,g2_obs give IBD 0,1,2
@@ -345,7 +314,6 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
 @njit
 def make_dynamic(g1,g2,freqs,map,weights,p):
     """Make state-matrix and pointer matrix for a sibling pair by dynamic programming
-
     Args:
         g1 : :class:`~numpy:numpy.array`
             integer vector of first sibling's genotypes
@@ -359,7 +327,6 @@ def make_dynamic(g1,g2,freqs,map,weights,p):
             floating point vector of SNP weights (usually inverse LD-scores)
         p : :class:'float'
             genotyping error probability
-
     Returns:
         state_matrix : :class:`~numpy:numpy.array`
             matrix where each column gives the prob of max prob path to that state, where each row is IBD 0,1,2
@@ -390,13 +357,11 @@ def make_dynamic(g1,g2,freqs,map,weights,p):
 @njit
 def viterbi(state_matrix,pointers):
     """Get viterbi path from state_matrix and pointers output of make_dynamic
-
     Args:
         state_matrix : :class:`~numpy:numpy.array`
             matrix where each column gives the prob of max prob path to that state, where each row is IBD 0,1,2
         pointers : :class:`~numpy:numpy.array`
             integer vector giving the pointer to which state from previous position lead to max at this position
-
     Returns:
             path : :class:`~numpy:numpy.array`
             integer vector giving the Viterbi path through the IBD states
@@ -521,7 +486,7 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
-def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False):
+def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
@@ -584,11 +549,11 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
     print('Read map')
     # Weights
     print('Computing LD weights')
-    ld = compute_ld_scores(gts.gts, gts.map, max_dist=1)
+    ld = compute_ld_scores(np.array(gts.gts,dtype=np.float_), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')
-    ibd = infer_ibd(sibpair_indices, np.array(gts.gts), gts.freqs, gts.map, gts.weights, p)
+    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float_), gts.freqs, gts.map, gts.weights, p)
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments
@@ -697,4 +662,4 @@ else:
 
 ######### Infer IBD ###########
 for i in range(bedfiles.shape[0]):
-    infer_ibd_chr(bedfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out)
+    infer_ibd_chr(bedfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing)
