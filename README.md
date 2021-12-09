@@ -1,26 +1,19 @@
-# SNIPar
-
-SNIPar (single nucleotide imputation of parents) is a python library for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes from observed genotypes and IBD segments in a nuclear family, and for performing
+This is a branch of SNIPar (single nucleotide imputation of parents) created to enable replication of the methods employed in EA4 (Okbay et al., Polygenic prediction of educational attainment within and between families from genome-wide association analyses in 3 million individuals) for computing direct and population effects of the polygenic index (PGI), and for analysis of assortative mating using the PGI. 
 family based genome-wide association and polygenic score analyses. 
 
-# Main features:
+# Relevant scripts:
 
-Infer identity-by-descent segments shared between siblings (ibd.py). 
+Preprocess phenotype data in UKB Biobank: process_phenotypes_UKB.R
 
-Impute missing parental genotypes given the observed genotypes in a nuclear family (impute_runner.py).
+Preprocess phenotype data in Generation Scotland: process_phenotypes_GS.R
 
-Perform family based GWAS using observed and imputed parental genotypes (fGWAS.py). 
+Estimate direct, paternal, maternal, and population effects of PGIs using a linear mixed model: EA4_PGI_analysis.py
 
-Compute polygenic scores for probands, siblings, and parents from SNP weights using observed/imputed parental genotypes, and perform family
- based analysis of polygenic scores (fPGS.py script). 
+Meta-analyse direct, paternal, maternal PGI effect estimates from UK Biobank, Generation Scotland, and Swedish Twin Resource: meta_analysis.R
 
-# Documentation
+Analyse evidence for assortative mating using PGIs in UK Biobank: AM_analysis_UKB.R
 
-It is recommended to work through the tutorial: https://github.com/AlexTISYoung/SNIPar/blob/master/docs/tutorial.rst
-
-and read the guide: https://snipar.readthedocs.io/en/latest/guide.html
-
-Documentation for the modules and scripts is at: https://snipar.readthedocs.io/en/latest/
+Analyse evidence for assortative mating using PGIs in Generation Scotland: AM_analysis_GS.R
 
 
 # Package Install Instructions
