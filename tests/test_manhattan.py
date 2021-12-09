@@ -76,55 +76,65 @@ def imputation_test(chromosomes,
     whole_imputed_genes_o = np.where(np.isnan(whole_imputed_genes_o), np.nanmean(whole_imputed_genes_o, axis=0), whole_imputed_genes_o)
     whole_expected_genes_pm = np.where(np.isnan(whole_expected_genes_pm), np.nanmean(whole_expected_genes_pm, axis=0), whole_expected_genes_pm)
     whole_imputed_genes_pm = np.where(np.isnan(whole_imputed_genes_pm), np.nanmean(whole_imputed_genes_pm, axis=0), whole_imputed_genes_pm)
-    # o_coefs, residuals_o, _, _ = np.linalg.lstsq(whole_imputed_genes_o[:,:1], whole_expected_genes_o)
-    # pm_coefs, residuals_pm, _, _ = np.linalg.lstsq(whole_imputed_genes_pm[:,:1], whole_expected_genes_pm)
     pm_coefs = []
-    for i in range(whole_imputed_genes_pm.shape[1]):
-        covs = np.cov(whole_imputed_genes_pm[:,i], whole_expected_genes_pm[:,i])
-        pm_coefs.append(covs[0,1]/covs[0,0])
-    
+    pm_pvals = []
+    pop_size, nsnps = whole_imputed_genes_pm.shape
+    for i in tqdm(range(nsnps)):
+        x = whole_imputed_genes_pm[:,i]
+        y = whole_expected_genes_pm[:,i]
+        covs = np.cov(x, y)
+        b1 = covs[0,1]/covs[0,0]
+        mean_x = np.mean(x)
+        mean_y = np.mean(y)
+        b0 = mean_y - b1*mean_x
+        errs = np.sum((y - (b1*x+b0))**2)
+        sb1 = np.sqrt(errs/np.std(x)/(pop_size-2))
+        t = (b1-1)/sb1
+        pm_pvals.append(2*(1-norm.cdf(abs(t))))
+        pm_coefs.append(b1)
 
-    nsnps = whole_imputed_genes_pm.shape[1]
+    pm_pvals_log10 = -np.log10(pm_pvals)
+
     # sample data
     all_chrom_names = []
     for i in range(len(chromosomes)):
         all_chrom_names += [f'ch-{chromosomes[i]}']*chrom_sizes[i]
     df = DataFrame({'gene' : [f'gene-{i}' % i for i in np.arange(nsnps)],
-    'coef' : pm_coefs,
+    'pm_coef' : pm_coefs,
+    'pm_pvals' : pm_pvals,
+    'pm_pvals_log10': pm_pvals_log10,
     'chromosome' : all_chrom_names})
 
-    df.chromosome = df.chromosome.astype('category')
-    df.chromosome = df.chromosome.cat.set_categories([f'ch-{i}' for i in chromosomes], ordered=True)
-    df = df.sort_values('chromosome')
+    for col in ['pm_coef', 'pm_pvals', 'pm_pvals_log10']:
+        df.chromosome = df.chromosome.astype('category')
+        df.chromosome = df.chromosome.cat.set_categories([f'ch-{i}' for i in chromosomes], ordered=True)
+        df = df.sort_values('chromosome')
 
-    # How to plot gene vs. -log10(pvalue) and colour it by chromosome?
-    df['ind'] = range(len(df))
-    df_grouped = df.groupby(('chromosome'))
+        # How to plot gene vs. -log10(pvalue) and colour it by chromosome?
+        df['ind'] = range(len(df))
+        df_grouped = df.groupby(('chromosome'))
 
-    # manhattan plot
-    fig = plt.figure(figsize=(40, 8)) # Set the figure size
-    ax = fig.add_subplot(111)
-    colors = ['darkred','darkgreen','darkblue', 'darkslategray']
-    x_labels = []
-    x_labels_pos = []
-    for num, (name, group) in enumerate(df_grouped):
-        # group.plot(kind='scatter', x='ind', y='coef',color=colors[num % len(colors)], ax=ax, size=1)
-        ax.scatter(group["ind"], group["coef"], color=colors[num % len(colors)], s=1)
-        x_labels.append(name)
-        x_labels_pos.append((group['ind'].iloc[-1] - (group['ind'].iloc[-1] - group['ind'].iloc[0])/2))
-    ax.set_xticks(x_labels_pos)
-    ax.set_xticklabels(x_labels)
+        # manhattan plot
+        fig = plt.figure(figsize=(40, 8)) # Set the figure size
+        ax = fig.add_subplot(111)
+        colors = ['darkred','darkgreen','darkblue', 'darkslategray']
+        x_labels = []
+        x_labels_pos = []
+        for num, (name, group) in enumerate(df_grouped):
+            # group.plot(kind='scatter', x='ind', y='coef',color=colors[num % len(colors)], ax=ax, size=1)
+            ax.scatter(group["ind"], group[col], color=colors[num % len(colors)], s=1)
+            x_labels.append(name) 
+            x_labels_pos.append((group['ind'].iloc[-1] - (group['ind'].iloc[-1] - group['ind'].iloc[0])/2))
+        ax.set_xticks(x_labels_pos)
+        ax.set_xticklabels(x_labels)
 
-    # set axis limits
-    ax.set_xlim([0, len(df)])
-    ax.set_ylim([0, df["coef"].max()+0.2])
-    plt.grid(True)
+        # set axis limits
+        ax.set_xlim([0, len(df)])
+        ax.set_ylim([0, np.ma.masked_invalid(df[col]).max()+0.2])
+        ax.grid(True)
 
-    # x axis label
-    ax.set_xlabel('Chromosome')
-
-    # show the graph
-    plt.show()
-    plt.savefig(f"{imputed_prefix}_manhattan")
-    print(f"{imputed_prefix}_manhattan")
-    return 0
+        # x axis label
+        ax.set_xlabel('Chromosome')
+        ax.set_title(f"{imputed_prefix}\n{col}")
+        plt.savefig(f"{imputed_prefix}_manhattan_{col}")
+        print(f"{imputed_prefix}_manhattan_{col}.png")
