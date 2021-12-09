@@ -1,6 +1,14 @@
-setwd('~/Google Drive/EA4_revision/AM_analysis/')
+###########################################################################################
+# Script to meta-analyse assortative mating results from UK Biobank and Generation Scotland
+###########################################################################################
+#################### Input files ##################
+# UK Biobank results
+# Output of AM_analysis_UKB.R
 ukb = read.csv('UKB_AM_nonlinear.csv')
+# Generation Scotland results
+# Output of AM_analysis_GS.R
 gs = read.csv('GS_AM_nonlinear.csv')
+##################################################
 
 inv_var_meta = function(ests,ses){
   weights = ses^(-2)
