@@ -1,4 +1,17 @@
-setwd('/disk/genetics/sibling_consortium/GS20k/alextisyoung/')
+########################################################################
+# Script to perform assortative mating analyses using PGIs in UK Biobank
+########################################################################
+################################# Input files ###############################################
+# File containing raw trait values
+# Output of process_phenotypes_GS.R
+raw_traits_file = 'raw_traits.fam'
+# File containing genetic principal components with columns FID, IID, PC1, PC2, ...
+pcs_file = 'GS_PCs.eigenvec'
+# Pedigree file 
+pedfile = 'pedigree.txt'
+# PGI files for EA, cognitive ability, height, and BMI
+PGI_files = c('EA4_PGS_2.fam','cog_PGS.fam','height_PGS.fam','BMI_PGS.fam')
+#############################################################################################
 
 compute_cor = function(bpg_ped,traits,trait_name){
   pgs_bpg = matrix(NA,nrow=dim(bpg_ped),ncol=2)
@@ -8,17 +21,17 @@ compute_cor = function(bpg_ped,traits,trait_name){
 }
 
 trait_names = c('EA','Cognitive.ability','height','BMI')
-pgs_names = c('EA4_PGS_2.fam','cog_PGS.fam','height_PGS.fam','BMI_PGS.fam')
+pgs_names = PGI_files
 reg_names = c('EA_years','cog','height','BMI')
 
 # Read traits
-traits = read.table('raw_traits.fam',header=T,stringsAsFactors=F)
+traits = read.table(raw_traits_file,header=T,stringsAsFactors=F)
 # PCs
-pcs = read.table('../aokbay/PCs/GS_PCs.eigenvec')[,-1]
+pcs = read.table(pcs_file)[,-1]
 pcs = pcs[match(traits$IID,pcs[,1]),-1]
 
 # Pedigree
-ped = read.table('pedigree.txt',header=T)
+ped = read.table(pedfile,header=T)
 bpg_ped = ped[ped[,3]%in%ped[,2] & ped[,4]%in%ped[,2],]
 
 # Filter
