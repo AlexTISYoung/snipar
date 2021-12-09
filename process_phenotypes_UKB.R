@@ -1,3 +1,16 @@
+###############################################################################################################################
+# This script takes the raw phenotype data from UKB and processes it, adjusting for covariates and normalizing within each sex. 
+###############################################################################################################################
+
+#################### Input files ######################
+
+# UKB sample quality control file 
+ukb_sqc = '/disk/genetics2/ukb/orig/UKBv2/linking/ukb_sqc_v2_combined_header.txt'
+# File containing age of samples
+ukb_age = 'age.txt'
+
+#######################################################
+
 trait_names = c('Glucose',
 'HDL cholesterol',
 'Total cholesterol',
@@ -26,39 +39,14 @@ field_ids = c('30740.0.0','30760.0.0','30690.0.0',
               '50.0.0','21001.0.0','20016.0.0','738.0.0','4526.0.0','2050.0.0','20127.0.0')
 field_ids = paste('f',field_ids,sep='.')
 
-data_ids = rep('39604',2)
-field_ids = c('129.0.0','130.0.0')
-field_ids = paste('f',field_ids,sep='.')
-trait_names = c('north','east')
-
-data_ids = c('39604')
-field_ids = c('54.0.0')
-field_ids = paste('f',field_ids,sep='.')
-trait_names = c('assessment_centre')
-
-data_ids = c('39604')
-field_ids = c('189.0.0')
-field_ids = paste('f',field_ids,sep='.')
-trait_names = c('townsend')
-
-data_ids = c('39604')
-field_ids = c('6138.0.0','6138.0.1','6138.0.2',
-              '6138.0.3','6138.0.4','6138.0.5',
-              '845.0.0')
-field_ids = paste('f',field_ids,sep='.')
-trait_names = c('qual_0','qual_1','qual_2','qual_3','qual_4','qual_5',
-                'age_completed_edu')
-
 traits = data.frame(names=trait_names,data_ids = data_ids,field_ids = field_ids)
 
-#traits$qtrait = c(rep(T,5),F,T,F,T,T,F,T,T,T,F,F,F,T)
-#traits$qtrait = c(T,T)
-traits$qtrait=F
+traits$qtrait = c(rep(T,5),F,T,F,T,T,F,T,T,T,F,F,F,T)
 
 ### Get raw traits ###
 
 # Get sample QC
-sqc = read.table('/disk/genetics2/ukb/orig/UKBv2/linking/ukb_sqc_v2_combined_header.txt',
+sqc = read.table(ukb_sqc,
                  header=T,stringsAsFactors = F)
 
 # Filter sample 
@@ -79,65 +67,11 @@ for (dataset in datasets){
   raw_traits[,as.character(traits_d[,1])] = as.matrix(bd[id_match,trait_match])
 }
 
-############# Convert EA
-raw_traits$age_completed_edu = as.integer(raw_traits$age_completed_edu)-5
-raw_traits$age_completed_edu[raw_traits$age_completed_edu<7] = NA
-ea = matrix(NA,nrow=dim(raw_traits)[1],ncol=dim(raw_traits)[2])
-
-for (j in 1:6){
-ea[raw_traits[,j]=='NVQ or HND or HNC or equivalent' & !is.na(raw_traits[,j]),j] = raw_traits$age_completed_edu[raw_traits[,j]=='NVQ or HND or HNC or equivalent'  & !is.na(raw_traits[,j])]
-ea[raw_traits[,j]=='College or University degree' & !is.na(raw_traits[,j]),j] = 20
-ea[raw_traits[,j]=='A levels/AS levels or equivalent' & !is.na(raw_traits[,j]),j] = 13
-ea[raw_traits[,j]=='O levels/GCSEs or equivalent' & !is.na(raw_traits[,j]),j] = 10
-ea[raw_traits[,j]=='None of the above' & !is.na(raw_traits[,j]),j] = 7
-ea[raw_traits[,j]=='CSEs or equivalent' & !is.na(raw_traits[,j]),j] = 10
-ea[raw_traits[,j]=='Other professional qualifications eg: nursing, teaching' & !is.na(raw_traits[,j]),j] = 15
-}
-
-EA = apply(ea,1,max,na.rm=T)
-EA[EA<0] = NA
-EA = data.frame(IID=sqc$IID,EA=EA)
-raw_traits = EA
-
-north_east = read.table('north_east.fam',header=T)
-assessment = read.table('assessment_centre.txt',header=T)
-raw_traits$north = north_east[match(raw_traits$IID,north_east$IID),'north']
-raw_traits$north2 = raw_traits$north^2
-raw_traits$north3 = raw_traits$north^3
-raw_traits$east = north_east[match(raw_traits$IID,north_east$IID),'east']
-raw_traits$east2 = raw_traits$east^2
-raw_traits$east3 = raw_traits$east^3
-raw_traits$assessment = as.factor(assessment[match(raw_traits$IID,assessment$IID),2])
-raw_traits$ea4 = ea4[match(raw_traits$IID,ea4$IID),3]
-
-r = lm(ea$ea~sex+age+age2+age3+agesex+age2sex+age3sex+genotyping.array+as.matrix(pcs)+
-         north*east+north2*east+east2*north+north3*east+east3*north+north2*east3+
-         north3*east2+north3*east3+assessment*(north+north2+north3+east+east2+east3),data=raw_traits)
-
-r = lm(ea4~as.matrix(pcs)+
-         north*east+north2*east+east2*north+north3*east+east3*north+north2*east3+
-         north3*east2+north3*east3,data=raw_traits)
-
-raw_traits$ea4_resid = residuals(r)
-
-ea$EA_agesexarraypcs_northeast_assessment = residuals(r)
-
-write.table(ea,'EA_with_controls.fam',quote=F,row.names=F)
-save.image('EA_with_controls.RData')
-
-################
-
-fert = read.table('fertility_traits.txt',header=T,stringsAsFactors = F)
-unenthusiasm = read.table('unenthusiasm.txt',header=T)
-raw_traits = data.frame(raw_traits,fert[match(dimnames(raw_traits)[[1]],fert[,1]),])
-raw_traits = data.frame(raw_traits,unenthusiasm[match(dimnames(raw_traits)[[1]],dimnames(unenthusiasm)[[1]]),1])
-dimnames(raw_traits)[[2]][dim(raw_traits)[2]]='unenthusiasm'
-
 # add covariates
 raw_traits = data.frame(raw_traits)
 raw_traits$sex = sapply(sqc$Inferred.Gender,function(x) if (x=='M'){return(0)} 
                         else if (x=='F'){return(1)} else {return(NA)})
-age = read.table('age.txt',header=T,stringsAsFactors = F)
+age = read.table(ukb_age,header=T,stringsAsFactors = F)
 raw_traits$age = age[match(dimnames(raw_traits)[[1]],age[,1]),2]
 raw_traits$age2 = scale(raw_traits$age)^2
 raw_traits$age3 = scale(raw_traits$age)^3
@@ -149,14 +83,13 @@ raw_traits$Non_HDL = as.numeric(raw_traits[,'Total.cholesterol'])-
   as.numeric(raw_traits[,'HDL.cholesterol'])
 raw_traits$cigarettes.per.day = as.numeric(raw_traits$Cigarattes.per.day..current.)
 raw_traits$cigarettes.per.day[is.na(raw_traits$cigarettes.per.day)] = as.numeric(raw_traits$Cigarettes.per.day..former.[is.na(raw_traits$cigarettes.per.day)])
-save(raw_traits,file='raw_traits.RData')
 write.table(raw_traits,'raw_traits.txt',quote=F,sep='\t')
 pcs = as.matrix(sqc[,grep('PC',dimnames(sqc)[[2]])])
 save.image('raw_traits_and_sqc.RData')
 
 
 ################# Process traits ################
-load('raw_traits_and_sqc.RData')
+#load('raw_traits_and_sqc.RData')
 processed_traits = data.frame(IID=as.integer(dimnames(raw_traits)[[1]]))
 
 # quantitative traits
@@ -251,10 +184,6 @@ convert_mood = function(x){
   if (x=='Nearly every day'){return(4)}
 }
 
-#processed_traits$north = qt_transform(raw_traits$north,raw_traits,pcs,remove_upper=F,remove_lower=F)
-#processed_traits$east = qt_transform(raw_traits$east,raw_traits,pcs,remove_upper=F,remove_lower=F)
-
-
 processed_traits$Glucose = qt_transform(raw_traits$Glucose,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$Non_HDL = qt_transform(raw_traits$Non_HDL,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$HDL = qt_transform(raw_traits$HDL.cholesterol,raw_traits,pcs,remove_upper=T,remove_lower=T)
@@ -272,9 +201,6 @@ processed_traits$height = qt_transform(raw_traits$height,raw_traits,pcs,remove_u
 processed_traits$BMI = qt_transform(raw_traits$BMI,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$Cognitive.ability = qt_transform(raw_traits$Cognitive.ability,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$Neuroticism = qt_transform(raw_traits$Neuroticism,raw_traits,pcs,remove_upper=T,remove_lower=T)
-processed_traits$AAFB = qt_transform(raw_traits$AAFB,raw_traits,pcs)
-processed_traits$NC_M = qt_transform(raw_traits$NC_M,raw_traits,pcs,remove_upper=T)
-processed_traits$NC_F = qt_transform(raw_traits$NC_F,raw_traits,pcs,remove_upper=T)
 processed_traits$household.income = qt_transform(sapply(raw_traits$Household.income,convert_income),raw_traits,pcs)
 processed_traits$subjective.well.being = qt_transform(sapply(raw_traits$Subjective.well.being,happiness_convert),raw_traits,pcs)
 write.table(data.frame(FID=processed_traits$IID,processed_traits),'processed_traits.fam',quote=F,row.names=F)
