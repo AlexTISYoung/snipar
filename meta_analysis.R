@@ -1,10 +1,20 @@
+###########################################################################################################################
+# Script for meta-analysing PGI effect estimates (direct, paternal, maternal) from UK Biobank, Generation Scotland, and STR
+###########################################################################################################################
+####### Input files ########
+# UK Biobank estimates (output from EA4_PGI_analysis.py) in directory UKB/ with paths UKB/gls_1_effects.txt, UKB/gls_1_effects.txt, ...
+# UK Biobank variance-covariance matrices of effect estimates in direct UKB/ with paths UKB/gls_1_vcov.txt, UKB/gls_1_vcov.txt, ...
+# Generation Scotland estimates (output from EA4_PGI_analysis.py) in directory GS/ with paths GS/gls_1_effects.txt, GS/gls_1_effects.txt, ...
+# Generation Scotland variance-covariance matrices of effect estimates in direct GS/ with paths GS/gls_1_vcov.txt, GS/gls_1_vcov.txt, ...
+# STR estimates (output from fPGS.py with --parsum option) in directory STR_EA4_allscores/PGS_EA_5_LDpred_p1/
+############################
+
 # Function to approximate variance of ratio
 var_ratio_approx = function(x,y,vx,vy,cxy){
   x2 = x^2; y2 = y^2
   return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
 }
 
-setwd('~/Google Drive/EA4')
 traits = list()
 files = list()
 ests = list()
