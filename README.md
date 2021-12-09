@@ -1,4 +1,4 @@
-This is a branch of SNIPar (single nucleotide imputation of parents) created to enable replication of the methods employed in EA4 (Okbay et al., Polygenic prediction of educational attainment within and between families from genome-wide association analyses in 3 million individuals) for computing direct and population effects of the polygenic index (PGI), and for analysis of assortative mating using the PGI. 
+This is a branch of SNIPar (single nucleotide imputation of parents) created to enable replication of the methods employed in EA4 (Okbay et al., Polygenic prediction of educational attainment within and between families from genome-wide association analyses in 3 million individuals) for computing direct and population effects of the polygenic indices (PGIs), and for analysis of assortative mating using PGIs. 
 family based genome-wide association and polygenic score analyses. 
 
 # Relevant scripts:
