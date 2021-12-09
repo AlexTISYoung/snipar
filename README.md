@@ -1,5 +1,4 @@
 This is a branch of SNIPar created to enable replication of the methods employed in EA4 (Okbay et al., Polygenic prediction of educational attainment within and between families from genome-wide association analyses in 3 million individuals) for computing direct and population effects of the polygenic indices (PGIs), and for analysis of assortative mating using PGIs. 
-family based genome-wide association and polygenic score analyses. 
 
 # Relevant scripts:
 
@@ -15,6 +14,7 @@ Analyse evidence for assortative mating using PGIs in UK Biobank: AM_analysis_UK
 
 Analyse evidence for assortative mating using PGIs in Generation Scotland: AM_analysis_GS.R
 
+Meta-analyse evidence for assortative mating from UK Biobank and Generation Scotland: AM_meta.R
 
 # Package Install Instructions
 
