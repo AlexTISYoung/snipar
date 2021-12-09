@@ -1,3 +1,7 @@
+###############################################################################################
+# Process phenotypes in generation scotland, adjusting for covariates and normalizing within sex 
+###############################################################################################
+
 #### Read raw traits ####
 raw_traits = read.csv('phenotypes/agesex.csv',header=T)
 raw_traits = rbind(raw_traits,read.csv('../phenotype/Agesex.csv',header=T))
@@ -27,10 +31,10 @@ raw_traits$age3sex = raw_traits$age3*raw_traits$sex
 pcs = as.matrix(read.table('GS_PCs.eigenvec'))[,-1]
 pcs = pcs[match(traits$IID,pcs[,1]),-1]
 
-save.image('phenotypes/raw_traits.RData')
+#save.image('phenotypes/raw_traits.RData')
 
 ################# Process traits ################
-load('phenotypes/raw_traits.RData')
+#load('phenotypes/raw_traits.RData')
 processed_traits = data.frame(IID=raw_traits$id)
 
 # quantitative traits
@@ -85,8 +89,6 @@ processed_traits$HDL = qt_transform(raw_traits$HDL_cholesterol,raw_traits,pcs,re
 processed_traits$FEV1 = qt_transform(raw_traits$FEV_1,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$height = qt_transform(raw_traits$height,raw_traits,pcs,remove_upper=T,remove_lower=T)
 processed_traits$BMI = qt_transform(raw_traits$bmi,raw_traits,pcs,remove_upper=T,remove_lower=T)
-#processed_traits$ever.smoked = qt_transform(sapply(raw_traits$Ever.smoked,convert_ever_smoked),
-#                                            raw_traits,pcs,binary=T)
 raw_traits$packs_day[raw_traits$packs_day==0] = NA
 processed_traits$cigarettes.per.day = qt_transform(raw_traits$packs_day,raw_traits,pcs)
 # Cognitive PCA
