@@ -1,4 +1,22 @@
-setwd('/disk/genetics/ukb/alextisyoung/phenotypes')
+########################################################################
+# Script to perform assortative mating analyses using PGIs in UK Biobank
+########################################################################
+################################# Input files ###############################################
+# RData containing raw UK Biobank traits, sample QC information, genetic principal components
+# Output of process_phenotypes_UKB.R
+raw_traits_and_sqc = 'raw_traits_and_sqc.RData'
+# Processed phenotypes afer adjusting for covariates etc
+# Output of process_phenotypes_UKB.R
+processed_traits = 'processed_traits.fam'
+# File containing north and east birth coordinates of UKB participants, with columns ID, north coordinate, east coordinate
+north_east_file = 'north_east.fam'
+# File containing UK Biobank assessment centre of UKB participants
+assessment_centre_file = 'assessment_centre.txt'
+# Pedigree file for UK Biobank participants
+pedfile = 'ukb.ped'
+# PGI files for EA, cognitive ability, height, and BMI
+PGI_files = c('EA4_PGS_2.fam','cog_PGS.fam','height_PGS_2.fam','BMI_PGS_2.fam')
+##########################################################################################
 
 compute_cor = function(bpg_ped,traits,trait_name){
   pgs_bpg = matrix(NA,nrow=dim(bpg_ped),ncol=2)
@@ -8,18 +26,18 @@ compute_cor = function(bpg_ped,traits,trait_name){
 }
 
 # Read traits
-load('raw_traits_and_sqc.RData')
-processed = read.table('processed_traits.fam',header=T)
+load(raw_traits_and_sqc)
+processed = read.table(processed_traits,header=T)
 
 # Birth coordinates and assessment centre
-north_east = read.table('north_east.fam',header=T)
+north_east = read.table(north_east_file,header=T)
 north_east$north.east = north_east$north*north_east$east
 
 # Assessment centre
-assess = read.table('assessment_centre.txt',header=T)
+assess = read.table(assessment_centre_file,header=T)
 
 # Pedigree
-ped = read.table('ukb.ped',header=T)
+ped = read.table(pedfile,header=T)
 bpg_ped = ped[ped[,3]%in%ped[,2] & ped[,4]%in%ped[,2],]
 
 # Filter
@@ -29,7 +47,7 @@ pcs = pcs[in_bpg,]
 traits$EA = processed[match(traits$IID,processed$IID),'EA']
 
 trait_names = c('EA','Cognitive.ability','height','BMI')
-pgs_names = c('EA4_PGS_2.fam','cog_PGS.fam','height_PGS_2.fam','BMI_PGS_2.fam')
+pgs_names = PGI_files
 reg_names = c('EA','Cognitive.ability','height','BMI')
 
 # Find unique parent-pairs
