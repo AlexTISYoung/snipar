@@ -1,3 +1,23 @@
+####################################################################################################################################################################################################################
+# Script for estimating direct, paternal, maternal, and population effect PGIs using a linear mixed model
+# Takes as input the PGI file with columns FID, IID, PGI
+# The phenotype file with columns FID, IID, phenotype_1, phenotype_2, ..
+# The pedigree file for the sample
+# The hsq file output by GCTA REML which gives the variance components from a linear mixed model fit in GCTA with the PGI as a fixed effect
+# The model has three GRMs: the SNP GRM with off-diagonal elements greater than a threshold (0.025) set to zero (snp_grm_lower)
+# the SNP GRM with off-diagonal elements less than a threshold (0.025) set to zero (snp_grm_upper)
+# a GRM with 1 on the off-diagonal IFF the pair are full-siblings, and zero otherwise (sib_grm)
+# The hsq file should contain the variance component estimates for those three GRMs in that order: snp_grm_lower, snp_grm_upper, sib_grm
+# The GRMs are used to construct the residual covariance model 
+# The script will compute generalized least-squares estimates from a sibling-difference model if the --sibdiff option is used.
+# The script will compute generalized least-squares estimates from a trio model if the --trios option is used
+# If both the --sibdiff and --trios options are given, the script will meta-analyse the estimates from both, accounting for covariance between the estimates using the residual covariance model from the GRMs
+# The script will estimate the correlation between maternal and paternal PGIs and between sibling PGIs
+# The script will output the estimates of: direct, paternal, maternal, population, population-direct, and maternal-paternal
+# The population and population-direct estimates are adjusted for the correlation between maternal and paternal and between sibling PGIs due to non-random mating
+# The script will also output the variance-covariance matrix of these estimates (effects in _effects.txt, variance-covariance in _vcov.txt)
+####################################################################################################################################################################################################################
+
 from sibreg.sibreg import *
 import argparse, code
 from pysnptools.snpreader import Pheno
