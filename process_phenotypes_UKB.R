@@ -5,9 +5,11 @@
 #################### Input files ######################
 
 # UKB sample quality control file 
-ukb_sqc = '/disk/genetics2/ukb/orig/UKBv2/linking/ukb_sqc_v2_combined_header.txt'
+ukb_sqc = 'ukb_sqc_v2_combined_header.txt'
 # File containing age of samples
 ukb_age = 'age.txt'
+# In the working directory, raw UKB phenotype files
+# ukb40305.r, ukb39604.r, ukb41490.r','ukb39604.r'
 
 #######################################################
 
