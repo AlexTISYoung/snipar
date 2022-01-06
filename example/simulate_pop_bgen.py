@@ -32,7 +32,6 @@ def meiosis(map,n=1):
     # Return
     return recomb_vector
 
-
 @njit(parallel=True)
 def produce_next_gen(father_indices,mother_indices,males,females,map):
     ngen = np.zeros((father_indices.shape[0],2,males.shape[1],2),dtype=np.bool_)

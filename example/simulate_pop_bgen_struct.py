@@ -14,6 +14,7 @@ def simulate_recombinations(map):
     recomb_points = map_start+np.sort(np.random.uniform(0,1,n_recomb))*map_length
     return n_recomb,recomb_points
 
+
 @njit
 def meiosis(map,n=1):
     # Recomb vector
