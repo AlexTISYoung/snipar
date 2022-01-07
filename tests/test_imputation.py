@@ -17,13 +17,15 @@ def imputation_test(chromosomes,
     chromosomes_imputed_genes_pm = []
     for chromosome in chromosomes:
         with h5py.File(imputed_prefix+str(chromosome)+".hdf5",'r') as f:
-            gts = np.array(f["imputed_par_gts"])
+            if start is not None:
+                gts = np.array(f["imputed_par_gts"])[:,:end-start]
+                non_duplicates = non_duplicates[:end-start]+start
+            else:
+                gts = np.array(f["imputed_par_gts"])
             fids = np.array(f["families"]).astype(str)
             ped_array = np.array(f["pedigree"]).astype(str)
             ped = pd.DataFrame(ped_array[1:], columns = ped_array[0])
             non_duplicates = np.array(f["non_duplicates"])
-            if start is not None:
-                non_duplicates = non_duplicates+start
         expected = Bed(expected_prefix+str(chromosome)+".bed", count_A1 = True)
         expected_gts = expected[:, non_duplicates].read().val
         expected_ids = expected.iid
