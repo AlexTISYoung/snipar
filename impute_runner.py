@@ -91,7 +91,6 @@ import random
 import pandas as pd
 import os
 from multiprocessing import Pool
-import git
 random.seed(1567924)
 
 def run_imputation(data):
@@ -321,6 +320,7 @@ if __name__ == "__main__":
     
     try:
         dir_name = os.path.dirname(os.path.realpath(__file__))
+        import git
         repo = git.Repo(dir_name)
         logging.info(f"Last commit is: {repo.head.commit}")
         logging.info(f"summary is: {repo.head.commit.summary}")
