@@ -93,7 +93,6 @@ Results:
 import logging
 from sibreg.bin.preprocess_data import *
 from sibreg.bin.impute_from_sibs import *
-import time
 import argparse
 import h5py
 import random
@@ -101,6 +100,7 @@ import pandas as pd
 import os
 from multiprocessing import Pool
 import git
+from time import time
 random.seed(1567924)
 
 def run_imputation(data):
@@ -185,7 +185,7 @@ def run_imputation(data):
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
-    start_time = time.time()
+    start_time = time()
     #Doing imputation chunk by chunk
     if start is None:
         start = 0
@@ -252,7 +252,7 @@ def run_imputation(data):
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
-    end_time = time.time()
+    end_time = time()
     return (end_time-start_time)
 
 #does the imputation and writes the results
@@ -438,5 +438,10 @@ if __name__ == "__main__":
     #TODO output more information about the imputation inside the hdf5 filehf
     with Pool(args.processes) as pool:
         logging.info("staring process pool")
-        consumed_time = pool.map(run_imputation, inputs)
+        if len(inputs)>1:
+            consumed_time = pool.map(run_imputation, inputs)
+        else:
+            start = time()
+            run_imputation(inputs[0])
+            consumed_time = time()-start
         logging.info("imputation time: "+str(np.sum(consumed_time)))

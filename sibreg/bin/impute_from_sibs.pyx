@@ -259,7 +259,7 @@ cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef float impute_snp_from_offsprings(int snp,
+cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       int[:] sib_indexes,
                       int sib_count,
                       int[:, :] snp_ibd0,
@@ -316,15 +316,17 @@ cdef float impute_snp_from_offsprings(int snp,
             The number of sibling pairs in snp_ibd2.
 
     Returns:
-        float
-            Imputed parent sum divided by two. NAN if all the children are NAN in this SNP.
+        cpair[double, bint]
+            First value is imputed parent sum divided by two. NAN if all the children are NAN in this SNP. Second value is whether the regression has been done using backup imputation.
 
     """
 
-    cdef float result = nan_float
+    cdef double result = nan_float
     cdef float additive
     cdef int sibsum = 0
     cdef int counter, sib1, sib2, pair_index, sib_index1, sib_index2, hap_index, h00, h01, h10, h11, gs10, gs11, gs20, gs21, gp1, gp2
+    cdef bint is_backup = False
+    cdef cpair[double, bint] return_val
 
 
     if phased_gts != None:
@@ -359,21 +361,22 @@ cdef float impute_snp_from_offsprings(int snp,
                     if h11==1:
                         result += (f + gs11 + gs10 + gs20)/2
                     counter += 1
-                    
+            #TODO make sure things won't fall apart at the end of ibd segment
             if counter>0:
-                return result/counter
-
+                result = result/counter
+                return_val.first = result
+                return_val.second = is_backup
+                return return_val
+    
     if len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
-        result = 0        
+        result = 0
         for pair_index in range(len_snp_ibd0):
             sib1 = sib_indexes[snp_ibd0[pair_index, 0]]
             sib2 = sib_indexes[snp_ibd0[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])
         result = result/len_snp_ibd0
-        if result>4 or result <0:
-            result = nan_float
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
@@ -405,17 +408,20 @@ cdef float impute_snp_from_offsprings(int snp,
         result = result/len_snp_ibd2
 
     if isnan(result):
+        is_backup = True
         result = 0
         for gp1 in range(3):
             for gp2 in range(3):
                 result += (gp1+gp2)*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
-
-    return result/2
+    result = result/2
+    return_val.first = result
+    return_val.second = is_backup
+    return return_val
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
 @cython.cdivision(True)
-cdef float impute_snp_from_parent_offsprings(int snp,
+cdef cpair[double, bint] impute_snp_from_parent_offsprings(int snp,
                       int parent,
                       int[:] sib_indexes,
                       int sib_count,
@@ -484,8 +490,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
             The number of sibling pairs in snp_ibd2.
 
     Returns:
-        float
-            Imputed missing parent. NAN if all the children are NAN in this SNP.
+        cpair[double, bint]
+            First value is imputed missing parent. NAN if all the children are NAN in this SNP. Second value is whether the regression has been done using backup imputation.
 
     """    
 
@@ -498,6 +504,8 @@ cdef float impute_snp_from_parent_offsprings(int snp,
     cdef int parent_sib1_h00, parent_sib1_h01, parent_sib1_h10, parent_sib1_h11, parent_offspring1_shared_allele_parent, parent_offspring1_shared_allele_offspring
     cdef int parent_sib2_h00, parent_sib2_h01, parent_sib2_h10, parent_sib2_h11, parent_offspring2_shared_allele_parent, parent_offspring2_shared_allele_offspring
     cdef int gp = unphased_gts[parent, snp]
+    cdef bint is_backup = False
+    cdef cpair[double, bint] return_val
     if phased_gts != None:
         #having phased data does not matter with IBD state 0
         if len_snp_ibd0==0 and len_snp_ibd1>0:
@@ -552,7 +560,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                     # printf("here is the bug")
 
             if counter > 0:
-                return result/counter
+                result = result/counter
+                return_val.first = result
+                return_val.second = is_backup
+                return return_val
 
         if len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2>0:
             result = 0
@@ -574,7 +585,10 @@ cdef float impute_snp_from_parent_offsprings(int snp,
                 result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+f
                 counter += 1
             if counter > 0:
-                return result/counter
+                result = result/counter
+                return_val.first = result
+                return_val.second = is_backup
+                return return_val
 
     result = nan_float
     counter = 0
@@ -719,11 +733,13 @@ cdef float impute_snp_from_parent_offsprings(int snp,
         else:
             result = nan_float
     if isnan(result):
+        is_backup = True
         result = 0
         for gp1 in range(3):
             result += (gp1)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp1, gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
-
-    return result    
+    return_val.first = result
+    return_val.second = is_backup
+    return return_val
 
 cdef int get_IBD_type(cstring id1,
                       cstring id2,
@@ -827,6 +843,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                 'pedigree' : pedigree table
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
+                'sib_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among offspring imputations in each snp.
+                'parent_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among parent-offspring imputations in each snp.
                     Its columns are has_father, has_mother, single_parent respectively.
         
         threads : int, optional
@@ -912,6 +930,10 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef float ibd_threshold_c = ibd_threshold
     cdef long[:] counter_ibd0 = np.zeros(number_of_snps).astype(long)
     cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype(long)
+    cdef bint is_backup
+    cdef cpair[double, bint] return_val
+    cdef long[:] sib_backup_count = np.zeros(number_of_snps).astype(long)
+    cdef long[:] single_parent_backup_count = np.zeros(number_of_snps).astype(long)
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -994,7 +1016,13 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             parent_genotype_prob[2] = f**2
 
             if single_parent[index] and c_unphased_gts[c_iid_to_bed_index[parents[index]], snp] != nan_integer:
-                imputed_par_gts[index, snp] = impute_snp_from_parent_offsprings(snp,
+                #2 time MAF of offspring is MAF of sum of the parents. That minus the existing parent results in MAF of the missing parent.
+                f = 2*f-c_freqs[c_iid_to_bed_index[parents[index]], snp]
+                if f>1.:
+                    f=1.
+                elif f<0.:
+                    f=0.
+                return_val = impute_snp_from_parent_offsprings(snp,
                                                                                 c_iid_to_bed_index[parents[index]],
                                                                                 sibs_index[this_thread, :],
                                                                                 sib_count[index],
@@ -1011,8 +1039,11 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 len_snp_ibd1,
                                                                                 len_snp_ibd2
                                                                                 )
+                imputed_par_gts[index, snp] = return_val.first
+                is_backup = return_val.second
+                single_parent_backup_count[snp] += is_backup
             else:
-                imputed_par_gts[index, snp] = impute_snp_from_offsprings(snp,
+                return_val = impute_snp_from_offsprings(snp,
                                                                          sibs_index[this_thread, :],
                                                                          sib_count[index],
                                                                          snp_ibd0[this_thread,:,:],
@@ -1026,10 +1057,17 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          len_snp_ibd0,
                                                                          len_snp_ibd1,
                                                                          len_snp_ibd2)
+                imputed_par_gts[index, snp] = return_val.first
+                is_backup = return_val.second
+                sib_backup_count[snp] += is_backup
             snp = snp+1
     destroy()
     multi_sib_fams = sum(sibships["sib_count"]>1)
+    single_parent_fams = np.sum(single_parent)
+    no_parent_fams = number_of_fams - single_parent_fams
     multi_sib_fams_ratio = multi_sib_fams/number_of_fams
+    sib_ratio_backup = np.array([b/no_parent_fams  if no_parent_fams>0 else 0. for b in sib_backup_count])
+    parent_ratio_backup = np.array([b/single_parent_fams  if single_parent_fams>0 else 0. for b in single_parent_backup_count])
     ratio_ibd0 = np.array([<float>counter_ibd0[i]/multi_sib_fams for i in range(number_of_snps)])
     total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(number_of_fams*number_of_snps)
     expected_total_ibd0 = 0
@@ -1060,4 +1098,6 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             file["non_duplicates"] =  np.array(hdf5_output_dict["non_duplicates"], dtype=int)
             #Todo automate this for all possible output_dicts
             file["ratio_ibd0"] = ratio_ibd0
+            file["sib_ratio_backup"] = sib_ratio_backup
+            file["parent_ratio_backup"] = parent_ratio_backup
     return sibships["FID"].values.tolist(), np.array(imputed_par_gts)

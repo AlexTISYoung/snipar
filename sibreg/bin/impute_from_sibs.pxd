@@ -10,7 +10,7 @@ cdef int get_IBD_type(cstring id1,
                       int loc,
                       cmap[cpair[cstring, cstring], vector[int]]& ibd_dict) nogil
 
-cdef float impute_snp_from_offsprings(int snp,
+cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       int[:] sib_indexes,
                       int sib_count,
                       int[:, :] snp_ibd0,
@@ -26,7 +26,7 @@ cdef float impute_snp_from_offsprings(int snp,
                       int len_snp_ibd2) nogil
 
 
-cdef float impute_snp_from_parent_offsprings(int snp,
+cdef cpair[double, bint] impute_snp_from_parent_offsprings(int snp,
                       int parent,
                       int[:] sib_indexes,
                       int sib_count,

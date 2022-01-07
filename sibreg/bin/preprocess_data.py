@@ -19,7 +19,6 @@ from bgen_reader import open_bgen, read_bgen
 from config import nan_integer
 from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
-import torch
 from tqdm import tqdm
 import statsmodels.api as sm
 from scipy.stats import norm
