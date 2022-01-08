@@ -19,20 +19,20 @@ Inferring IBD between siblings
 ------------------------------
 
 The first step is to infer the identity-by-descent segments shared between siblings. SNIPar contains a script, ibd.py, that
-employs a Hidden Markov Model (HMM) to infer the IBD segments for the sibling pairs. To infer the IBD segments from the genotype data in example/sample.bed,
+employs a Hidden Markov Model (HMM) to infer the IBD segments for the sibling pairs. (The genotyping error probability will be inferred from parent-offspring pairs when available; alternatively, a genotyping error probability can be provided using the --p_error option.)  To infer the IBD segments from the genotype data in example/sample.bed,
 use the following command
 
     ``python ibd.py example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
 
 This will output the IBD segments to a gzipped text file example/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
-inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with column 'FID' (family ID), 'IID'
+inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with columns 'FID' (family ID), 'IID'
 (individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). It is necessary to provide the genetic map positions in centiMorgans (cM) of the SNPs:
 the *--map* argument allows the user to specify a genetic map (in the same format as used by SHAPEIT: https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats); otherwise,
 the script can use the genetic map positions (in cM) provided by the bim file. The *--threads* argument controls the number of threads used for computation.
 
 If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID),
 they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred
-as individuals in the pedigree that share both parents. Using the example pedigree in example/sample.ped, you can infer IBD using this command:
+as individuals in the pedigree that share both parents. (Warning: MZ twins should be removed from the pedigree.) Using the example pedigree in example/sample.ped, you can infer IBD using this command:
 
     ``python ibd.py example/sample --pedigree example/sample.ped --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
 
@@ -65,7 +65,7 @@ in certain situations. To perform imputation from the phased .bgen file in examp
 It is necessary to provide the *--from_chr* and *--to_chr* arguments when imputing from .bgen files since they often do not contain information on which chromosome
 the SNPs are located on, and we need to match up the IBD segments to the SNPs on the same chromosome.
 
-To use IBD segments output by KING (example/sample.king.segments.gz), use the following command:
+To use IBD segments output by KING with the --ibdseg argument (example/sample.king.segments.gz), use the following command:
 
     ``python impute_runner.py example/sample.king --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2``
 
