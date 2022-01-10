@@ -392,8 +392,8 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #keeping individuals with no parents
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"]) & pedigree["FATHER_ID"].isin(fam["IID"])
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"]) & pedigree["MOTHER_ID"].isin(fam["IID"])
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"]) & pedigree["FATHER_ID"].isin(fam["IID"].astype(str))
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"]) & pedigree["MOTHER_ID"].isin(fam["IID"].astype(str))
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     #removing individual whose parents are nan
     no_parent_pedigree = no_parent_pedigree[(no_parent_pedigree["MOTHER_ID"] != pedigree_nan) & (no_parent_pedigree["FATHER_ID"] != pedigree_nan)]
@@ -428,7 +428,6 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
                 result = result+el
             return result
         ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info(f"with chromosomes {chromosomes} loading genotype file ...")
 
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)

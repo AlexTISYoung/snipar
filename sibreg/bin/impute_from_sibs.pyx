@@ -1036,7 +1036,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     nan_ratio = output_nan_count/imputed_par_gts.size
     logging.info("with chromosome " + str(chromosome)+f": total number of nans: {output_nan_count}, ratio of nan snps to all snps is {nan_ratio}")
     if nan_ratio > 0.01:
-        logging.warning("Too much inconsistencies in the data")        
+        logging.warning("Too much inconsistencies in the data")
     if output_address is not None:
         logging.info("with chromosome " + str(chromosome)+": " + "Writing the results as a hdf5 file to "+output_address + ".hdf5")
         with h5py.File(output_address+".hdf5",'w') as f:
