@@ -101,6 +101,10 @@ def run_imputation(data):
             Keys:
                 pedigree: pd.Dataframe
                     The standard pedigree table
+                
+                control : bool
+                    Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
+                    These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
                 unphased_address: str, optional
                     Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
@@ -147,6 +151,7 @@ def run_imputation(data):
     """
     chunks = data["chunks"]
     pedigree = data["pedigree"]
+    control = data["control"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     snipar_ibd = data["snipar_ibd"]
@@ -163,7 +168,7 @@ def run_imputation(data):
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time.time()
     #Doing imputation chunk by chunk
@@ -337,11 +342,6 @@ if __name__ == "__main__":
         pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
     logging.info("pedigree loaded.")
 
-    if args.c:
-        logging.info("Adding control to the pedigree ...")
-        pedigree = add_control(pedigree)
-        logging.info("Control Added.")
-    
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
     snipar_ibd = None
@@ -373,6 +373,7 @@ if __name__ == "__main__":
             return a.replace(b, c)
         return None
     inputs = [{"pedigree": pedigree,
+            "control":args.c,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "snipar_ibd": snipar_ibd,
@@ -392,7 +393,14 @@ if __name__ == "__main__":
             }
             for chromosome in chromosomes]
     #TODO output more information about the imputation inside the hdf5 filehf
-    with Pool(args.processes) as pool:
-        logging.info("staring process pool")
-        consumed_time = pool.map(run_imputation, inputs)
-        logging.info("imputation time: "+str(np.sum(consumed_time)))
+    if args.processes > 1:
+        with Pool(args.processes) as pool:
+            logging.info("staring process pool")        
+            consumed_time = pool.map(run_imputation, inputs)
+            logging.info("imputation time: "+str(np.sum(consumed_time)))
+    else:
+        start_time = time.time()
+        for args in inputs:
+            run_imputation(args)
+        end_time = time.time()
+        logging.info(f"imputation time: {end_time-start_time}")

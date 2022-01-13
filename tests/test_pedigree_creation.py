@@ -46,6 +46,8 @@ class TestPedigree(unittest.TestCase):
     
     def test_add_control(self):
         pedigree = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
+        pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
+        pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
         controlled_pedigree = add_control(pedigree).astype(str)
         controlled_fams = [fid[3:] for fid in controlled_pedigree["FID"] if fid.startswith("_")]
         has_father = pedigree["FATHER_ID"].isin(pedigree["IID"])
