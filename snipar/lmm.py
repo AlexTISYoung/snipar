@@ -215,7 +215,6 @@ def lik_and_grad(pars, *args):
     mod = model(y, X, labels)
     return mod.likelihood_and_gradient(pars[0], pars[1])
 
-
 def simulate(n, alpha, sigma2, tau):
     """Simulate from a linear model with correlated observations within-class. The mean for each class
      is drawn from a normal distribution.
