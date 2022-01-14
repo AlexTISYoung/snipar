@@ -14,3 +14,6 @@ sibreg.egg-info/*
 **/.nfs*
 env/*
 graphs/*
+gitignore/*
+.pytest_cache/*
+.idea/*

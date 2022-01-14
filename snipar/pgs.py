@@ -1,7 +1,8 @@
 from snipar.gtarray import gtarray
 import numpy as np
-from snipar.preprocess import make_id_dict
 from snipar.read import get_gts_matrix
+from snipar.utilities import make_id_dict
+
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.

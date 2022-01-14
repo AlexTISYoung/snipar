@@ -4,6 +4,7 @@ from numba import config as numba_config
 from snipar.bin.preprocess_data import create_pedigree
 import snipar.preprocess as preprocess
 import snipar.ibd
+import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('bedfiles', type=str,
@@ -94,4 +95,4 @@ else:
 
 ######### Infer IBD ###########
 for i in range(bedfiles.shape[0]):
-    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, p, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing)
+    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, p, outprefix, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing)

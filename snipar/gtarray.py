@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.ma as ma
-from snipar.preprocess import make_id_dict
+from snipar.utilities import make_id_dict
 
 class gtarray(object):
     """Define a genotype or PGS array that stores individual IDs, family IDs, and SNP information.

@@ -1,12 +1,12 @@
 import argparse, h5py
 import numpy as np
 from bgen_reader import open_bgen
+from pysnptools.snpreader import Bed
 from scipy.stats import chi2
 from math import log10
-from pysnptools.snpreader import Bed
-import snipar.preprocess as preprocess
 import snipar.read as read
 import snipar.lmm as lmm
+from snipar.utilities import *
 
 def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
@@ -46,7 +46,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     print('Writing output to ' + outprefix + '.sumstats.hdf5')
     outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
-    outfile['bim'] = preprocess.encode_str_array(outbim)
+    outfile['bim'] = encode_str_array(outbim)
     X_length = 1
     outcols = ['direct']
     if sib:
@@ -65,7 +65,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     outfile.create_dataset('estimate_ses', (snp_ids.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile['estimate'][:] = alpha
-    outfile['estimate_cols'] = preprocess.encode_str_array(np.array(outcols))
+    outfile['estimate_cols'] = encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2
@@ -297,7 +297,7 @@ if __name__ == '__main__':
         pos = pos[not_duplicated]
         chrom = chrom[not_duplicated]
         alleles = alleles[not_duplicated,:]
-    snp_dict = preprocess.make_id_dict(snp_ids)
+    snp_dict = make_id_dict(snp_ids)
     # Compute batches
     batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
     if batch_bounds.shape[0] == 1:

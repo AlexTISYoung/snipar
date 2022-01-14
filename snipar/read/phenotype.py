@@ -1,7 +1,7 @@
 from pysnptools.snpreader import Pheno
 import numpy as np
 from snipar.gtarray import gtarray
-from snipar.preprocess import make_id_dict
+from snipar.utilities import make_id_dict
 
 def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
     """Read a phenotype file and remove missing values.

@@ -2,6 +2,7 @@ import snipar.preprocess as preprocess
 import numpy as np
 from snipar.gtarray import gtarray
 from bgen_reader import open_bgen
+from snipar.utilities import *
 
 def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end=None):
     """
@@ -26,9 +27,9 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
     if len(snp_set) < snp_ids.shape[0]:
         print(str(snp_ids.shape[0]-len(snp_set))+' SNPs with duplicate IDs removed')
     ## Read and match SNP ids
-    imp_bim = preprocess.convert_str_array(np.array(par_gts_f['bim_values']))
+    imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
     # Find relevant column for SNP ids in imputed data
-    imp_bim_cols = preprocess.convert_str_array(np.array(par_gts_f['bim_columns']))
+    imp_bim_cols = convert_str_array(np.array(par_gts_f['bim_columns']))
     if 'rsid' in imp_bim_cols:
         id_col = np.where('rsid' == imp_bim_cols)[0][0]
     elif 'id' in imp_bim_cols:
@@ -39,7 +40,7 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
     obs_sid = gts_f.ids
     if np.unique(obs_sid).shape[0] == 1:
         obs_sid = gts_f.rsids
-    obs_sid_dict = preprocess.make_id_dict(obs_sid)
+    obs_sid_dict = make_id_dict(obs_sid)
     in_obs_sid = np.zeros((imp_sid.shape[0]), dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]), dtype=int)
     for i in range(0, imp_sid.shape[0]):
@@ -68,7 +69,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     # get ids of genotypes and make dict
     gts_ids = gts_f.samples
     # Get families with imputed parental genotypes
-    fams = preprocess.convert_str_array(np.array(par_gts_f['families']))
+    fams = convert_str_array(np.array(par_gts_f['families']))
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib, verbose=print_sample_info)
     ### Match observed and imputed SNPs ###
@@ -90,7 +91,7 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
         print('Reading observed genotypes')
     gts = np.sum(gts_f.read((observed_indices,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
     gts_ids = gts_ids[observed_indices]
-    gts_id_dict = preprocess.make_id_dict(gts_ids)
+    gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
     par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, fams, gts_id_dict)
     if verbose:

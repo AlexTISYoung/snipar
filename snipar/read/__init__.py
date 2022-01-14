@@ -1,9 +1,9 @@
-import bed
-import bgen
-import phenotype
+import snipar.read.bed as bed
+import snipar.read.bgen as bgen
+import snipar.read.phenotype as phenotype
 import h5py
 import numpy as np
-import snipar.preprocess as preprocess
+from snipar.utilities import convert_str_array
 
 def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
@@ -40,7 +40,7 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
     ### Imputed parental file ###
     par_gts_f = h5py.File(par_gts_f,'r')
     # Get pedigree
-    ped = preprocess.convert_str_array(np.array(par_gts_f['pedigree']))
+    ped = convert_str_array(np.array(par_gts_f['pedigree']))
     ped = ped[1:ped.shape[0],:]
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])

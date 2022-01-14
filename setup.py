@@ -31,7 +31,7 @@ setup(name='snipar',
             'Programming Language :: Python :: 3.9',
       ],
       keywords='statistics genetics',
-      packages=['snipar', 'snipar.bin'],
+      packages=['snipar', 'snipar.bin','snipar.read'],
       setup_requires=['pytest-runner', 'numpy>=1.19.3', 'Cython>=0.29.21'],
       install_requires=[
             'bgen_reader==4.0.7',

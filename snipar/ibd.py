@@ -3,6 +3,8 @@ from numba import njit, prange
 from snipar.bin.preprocess_data import create_pedigree
 import snipar.preprocess as preprocess
 import numpy as np
+from snipar.read.bed import read_sibs_from_bed
+from snipar.utilities import make_id_dict
 
 ####### Transition Matrix ######
 @njit
@@ -274,7 +276,7 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     write_segs(sibpairs,allsegs,chr,snps,outfile)
     return allsegs
 
-def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5):
+def infer_ibd_chr(bedfile, sibpairs, p, outprefix, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
@@ -287,7 +289,7 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
         chr = chr[0]
     print('Inferring IBD for chromosome ' + str(chr))
     # Read sibling genotypes from bed file
-    gts = preprocess.read_sibs_from_bed(bedfile, sibpairs)
+    gts = read_sibs_from_bed(bedfile, sibpairs)
     # Calculate allele frequencies
     print('Calculating allele frequencies')
     gts.compute_freqs()
@@ -312,7 +314,7 @@ def infer_ibd_chr(bedfile, sibpairs, p, min_length = 0.01, mapfile=None, ibdmatr
     if mapfile is None:
         print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
         map = np.loadtxt(bimfile, usecols=2)
-        map_snp_dict = preprocess.make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
+        map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
         # Check for NAs
         if np.sum(np.isnan(map)) > 0:
             raise (ValueError('Map cannot have NAs'))
