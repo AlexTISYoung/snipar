@@ -2,7 +2,7 @@ from bgen_reader import open_bgen
 import numpy as np
 from numba import njit, prange, set_num_threads
 from numba import config as numba_config
-from sibreg.sibreg import *
+from snipar.sibreg import *
 import gzip, h5py, os
 
 @njit

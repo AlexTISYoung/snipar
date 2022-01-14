@@ -1,6 +1,6 @@
 import numpy as np
 import h5py, argparse, gzip
-from sibreg.sibreg import *
+from snipar.sibreg import *
 
 def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))

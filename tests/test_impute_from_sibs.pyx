@@ -1,6 +1,6 @@
 import sys
-from sibreg.bin.impute_from_sibs import *
-from sibreg.bin.impute_from_sibs cimport *
+from snipar.bin.impute_from_sibs import *
+from snipar.bin.impute_from_sibs cimport *
 import numpy as np
 import unittest
 from config import nan_integer

@@ -1,37 +1,10 @@
-from sibreg.sibreg import *
 import argparse
-from os import path
-
-def pgs_write(pg,filename,scale_PGS = False):
-    if scale_PGS:
-        # Rescale by observed proband PGS
-        pg.gts = pg.gts / np.std(pg.gts[:, 0])
-    ####### Write PGS to file ########
-    pg_out = np.column_stack((pg.fams,pg.ids,pg.gts))
-    pg_header = np.column_stack((np.array(['FID','IID']).reshape(1,2),pg.sid.reshape(1,pg.sid.shape[0])))
-    pg_out = np.row_stack((pg_header,pg_out))
-    print('Writing PGS to ' + filename)
-    np.savetxt(filename, pg_out, fmt='%s')
-    return None
-
-def parse_filelist(obsfiles, impfiles, obsformat):
-    obs_files = []
-    imp_files = []
-    if '~' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('~')
-        imp_ixes = impfiles.split('~')
-        for i in range(1,23):
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
-            if path.exists(impfile) and path.exists(obsfile):
-                obs_files.append(obsfile)
-                imp_files.append(impfile)
-        print(str(len(imp_files))+' matched observed and imputed genotype files found')
-    else:
-            obs_files = [obsfiles+'.'+obsformat]
-            imp_files = [impfiles+'.hdf5']
-    return np.array(obs_files), np.array(imp_files)
-
+import numpy as np
+import snipar.pgs as pgs
+import snipar.preprocess as preprocess
+from snipar.gtarray import gtarray
+import snipar.read as read
+import snipar.lmm as lmm
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -77,39 +50,39 @@ if __name__ == '__main__':
         print('Read weights for '+str(weights.shape[0])+' variants')
         beta = np.array(weights[:,np.where(colnames==args.beta_col)[0][0]],dtype=np.float64)
         allele_indices = np.array([np.where(colnames==args.A1)[0][0],np.where(colnames==args.A2)[0][0]])
-        p = pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
+        p = pgs.pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
                 beta,
                 weights[:,allele_indices])
 
         ###### Compute PGS ########
         G_list = []
         if args.bedfiles is not None:
-            gts_list, pargts_list = parse_filelist(args.bedfiles, args.impfiles, 'bed')
+            gts_list, pargts_list = preprocess.parse_filelist(args.bedfiles, args.impfiles, 'bed')
         elif args.bgenfiles is not None:
-            gts_list, pargts_list = parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
+            gts_list, pargts_list = preprocess.parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
         if gts_list.shape[0]==0:
             raise(ValueError('No input genotype files found'))
         if not gts_list.shape[0] == pargts_list.shape[0]:
             raise ValueError('Lists of imputed and observed genotype files not of same length')
         print('Computing PGS')
         print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
-        pg = compute_pgs(pargts_list[0],gts_list[0], p, sib=args.fit_sib, compute_controls=args.compute_controls)
+        pg = pgs.compute(pargts_list[0],gts_list[0], p, sib=args.fit_sib, compute_controls=args.compute_controls)
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
             if args.compute_controls:
-                pg_i = compute_pgs(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls)
+                pg_i = pgs.compute(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls)
                 pg = [pg[x].add(pg_i[x]) for x in range(0,len(pg))]
             else:
-                pg = pg.add(compute_pgs(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls))
+                pg = pg.add(pgs.compute(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls))
         print('PGS computed')
         ####### Write PGS to file ########
         if args.compute_controls:
-            pgs_write(pg[0], args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
-            pgs_write(pg[1],args.outprefix + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
-            pgs_write(pg[2], args.outprefix + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
-            pgs_write(pg[3],args.outprefix + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[0], args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[1],args.outprefix + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[2], args.outprefix + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[3],args.outprefix + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
         else:
-            pgs_write(pg, args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg, args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
     elif args.pgs is not None:
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
@@ -129,12 +102,12 @@ if __name__ == '__main__':
     if args.phenofile is not None:
         print('Fitting PGS for '+str(args.phenofile))
         # Read phenotype
-        y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+        y, pheno_ids = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
         # Remove individuals without phenotype observations from PGS
         pg.filter_ids(pheno_ids)
         # Match phenotype to PGS
-        y = match_phenotype(pg, y, pheno_ids)
+        y = read.phenotype.match_phenotype(pg, y, pheno_ids)
         print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
         # Parental sum
         if args.parsum:
@@ -155,10 +128,10 @@ if __name__ == '__main__':
             pg.gts = pg.gts / np.std(pg.gts[:, 0])
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
-        alpha_imp = fit_sibreg_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        alpha_imp = lmm.fit_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = fit_sibreg_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        alpha_proband = lmm.fit_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]

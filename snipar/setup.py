@@ -2,5 +2,5 @@ from setuptools import setup
 from Cython.Build import cythonize
 
 setup(
-	ext_modules = cythonize('sibreg.pyx',annotate=True),
+	ext_modules = cythonize('snipar.pyx',annotate=True),
 )

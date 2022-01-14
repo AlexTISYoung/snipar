@@ -1,6 +1,6 @@
 """Setup for just compiling the cython code
 
-Just run "python sibreg/bin/impute_from_sibs.py build_ext --inplace"
+Just run "python snipar/bin/impute_from_sibs.py build_ext --inplace"
 """
 
 from setuptools import Extension, setup
@@ -9,10 +9,10 @@ import numpy
 
 ext_modules = [
     Extension(
-        "sibreg.bin.impute_from_sibs",
-        ["sibreg/bin/impute_from_sibs.pyx"],
-        extra_compile_args=['-fopenmp'],
-        extra_link_args=['-fopenmp'],
+        "snipar.bin.impute_from_sibs",
+        ["snipar/bin/impute_from_sibs.pyx"],
+        extra_compile_args=['-Xpreprocessor -fopenmp'],
+        extra_link_args=['-Xpreprocessor -fopenmp'],
         language = "c++"
     )
 ]

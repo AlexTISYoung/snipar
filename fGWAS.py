@@ -1,10 +1,12 @@
-from sibreg.sibreg import *
 import argparse, h5py
 import numpy as np
 from bgen_reader import open_bgen
 from scipy.stats import chi2
 from math import log10
 from pysnptools.snpreader import Bed
+import snipar.preprocess as preprocess
+import snipar.read as read
+import snipar.lmm as lmm
 
 def transform_phenotype(inv_root,y, fam_indices, null_mean = None):
     """
@@ -44,7 +46,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     print('Writing output to ' + outprefix + '.sumstats.hdf5')
     outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
-    outfile['bim'] = encode_str_array(outbim)
+    outfile['bim'] = preprocess.encode_str_array(outbim)
     X_length = 1
     outcols = ['direct']
     if sib:
@@ -63,7 +65,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     outfile.create_dataset('estimate_ses', (snp_ids.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
                            compression_opts=9)
     outfile['estimate'][:] = alpha
-    outfile['estimate_cols'] = encode_str_array(np.array(outcols))
+    outfile['estimate_cols'] = preprocess.encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
     outfile['sigma2'] = sigma2
@@ -156,7 +158,7 @@ def compute_batch_boundaries(snp_ids,batch_size):
 def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=None, sigma2=None, null_alpha=None, covar=None, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, tau_init=1, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
-    G = get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
+    G = read.get_gts_matrix(pargts_f+'.hdf5', gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
@@ -182,21 +184,21 @@ def process_batch(snp_ids, y, pheno_ids, pargts_f, gts_f, fit_null=False, tau=No
         print('Imputing missing values with population frequencies')
     NAs = G.fill_NAs()
     #### Match phenotype ####
-    y = match_phenotype(G,y,pheno_ids)
+    y = read.phenotype.match_phenotype(G,y,pheno_ids)
     #### Fit null model ####
     if fit_null:
         print('Estimating variance components')
     if covar is not None and fit_null:
         # Match covariates #
         covariates.filter_ids(G.ids, verbose=False)
-        null_model, sigma2, tau, null_alpha, null_alpha_cov = fit_sibreg_model(y, covariates.gts, G.fams, add_intercept=True,
+        null_model, sigma2, tau, null_alpha, null_alpha_cov = lmm.fit_model(y, covariates.gts, G.fams, add_intercept=True,
                                                    tau_init=tau_init)
 
     elif fit_null:
-        null_model, sigma2, tau = fit_sibreg_model(y, np.ones((y.shape[0], 1)), G.fams,
+        null_model, sigma2, tau = lmm.fit_model(y, np.ones((y.shape[0], 1)), G.fams,
                                                                                tau_init = tau_init, return_fixed = False)
     else:
-        null_model = model(y, np.ones((y.shape[0], 1)), G.fams)
+        null_model = lmm.model(y, np.ones((y.shape[0], 1)), G.fams)
     if fit_null:
         print('Family variance estimate: '+str(round(sigma2/tau,4)))
         print('Residual variance estimate: ' + str(round(sigma2,4)))
@@ -246,11 +248,11 @@ if __name__ == '__main__':
     args=parser.parse_args()
 
     ######### Read Phenotype ########
-    y, pheno_ids = read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+    y, pheno_ids = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
     ######## Read covariates ########
     if args.covar is not None:
         print('Reading covariates')
-        covariates = read_covariates(args.covar, missing_char=args.missing_char)
+        covariates = read.phenotype.read_covariates(args.covar, missing_char=args.missing_char)
         # Match to pheno ids
         covariates.filter_ids(pheno_ids)
     ######## Check for bed/bgen #######
@@ -295,7 +297,7 @@ if __name__ == '__main__':
         pos = pos[not_duplicated]
         chrom = chrom[not_duplicated]
         alleles = alleles[not_duplicated,:]
-    snp_dict = make_id_dict(snp_ids)
+    snp_dict = preprocess.make_id_dict(snp_ids)
     # Compute batches
     batch_bounds = compute_batch_boundaries(snp_ids,args.batch_size)
     if batch_bounds.shape[0] == 1:

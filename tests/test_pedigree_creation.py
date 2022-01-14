@@ -1,7 +1,7 @@
 import unittest
 import subprocess
 import pandas as pd
-from sibreg.bin.preprocess_data import create_pedigree, add_control
+from snipar.bin.preprocess_data import create_pedigree, add_control
 import networkx as nx
 import numpy as np
 

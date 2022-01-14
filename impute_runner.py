@@ -82,8 +82,8 @@ Results:
         
 """
 import logging
-from sibreg.bin.preprocess_data import *
-from sibreg.bin.impute_from_sibs import *
+from snipar.bin.preprocess_data import *
+from snipar.bin.impute_from_sibs import *
 import time
 import argparse
 import h5py

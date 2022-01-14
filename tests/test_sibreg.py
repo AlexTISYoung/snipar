@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from numpy import testing
-from sibreg import sibreg
+from snipar import sibreg
 
 def random_design(labels):
     unique_labels = np.unique(labels)

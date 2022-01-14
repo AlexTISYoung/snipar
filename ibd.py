@@ -1,9 +1,9 @@
 from pysnptools.snpreader import Bed
-from sibreg.sibreg import *
+from snipar.sibreg import *
 import argparse, gzip
 from numba import njit, prange, set_num_threads
 from numba import config as numba_config
-from sibreg.bin.preprocess_data import create_pedigree
+from snipar.bin.preprocess_data import create_pedigree
 from os import path
 
 def get_sibpairs_from_ped(ped):
