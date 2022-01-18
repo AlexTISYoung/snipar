@@ -39,55 +39,70 @@ def transform_phenotype(inv_root, y, fam_indices, null_mean=None):
     return y
 
 
-def find_common_ind_ids(obsfiles, impfiles, pheno_ids):
-    # for now impfiles and obsfiles contain all chromosome filenames
-    ids, fam_labels = get_ids_with_par(impfiles[1], obsfiles[1], pheno_ids)
+def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None, impute_unrel=True):
     if len(obsfiles) == 1:
+        if from_chr is None:
+            raise TypeError('from_chr should not be None.')
+        ids, fam_labels = get_ids_with_par(impfiles[from_chr], obsfiles[from_chr], pheno_ids, impute_unrel=impute_unrel)
         return ids, fam_labels
+    # for now impfiles and obsfiles contain all chromosome filenames
+    ids, fam_labels = get_ids_with_par(impfiles[1], obsfiles[1], pheno_ids, impute_unrel=impute_unrel)
     df = pd.DataFrame({'fam_labels_1': fam_labels}, index=ids)
     # for obs, imp in zip(obsfiles[1:], impfiles[1:]):
     for i in range(2, 23):
+        if i not in impfiles or i not in obsfiles:
+            continue
         imp = impfiles[i]
         obs = obsfiles[i]
-        ids_, fam_labels_ = get_ids_with_par(imp, obs, pheno_ids)
+        ids_, fam_labels_ = get_ids_with_par(imp, obs, pheno_ids, impute_unrel=impute_unrel)
         df_ = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
+        # merge on index, i.e., ids
         df = df.merge(df_, how='inner', left_index=True, right_index=True)
     if len(df.index) == 0:
         raise ValueError('No commond ids among chromosome files.')
-    logger.info(f'{len(df.index)} commond individuals among all chromosome files.')
-    for j in range(1, 22):
-        if not df[f'fam_labels_{j}'].equals(df[f'fam_labels_{j + 1}']):
-            raise ValueError('fam_labels are not consistent across chromosome files.')
+    logger.info(
+        f'{len(df.index)} commond individuals among all chromosome files.')
+    # for j in range(1, 22):
+    #     if not df[f'fam_labels_{j}'].equals(df[f'fam_labels_{j + 1}']):
+    #         raise ValueError(
+    #             'fam_labels are not consistent across chromosome files.')
+    if covar is not None:
+        df_covar = pd.DataFrame(index=covar.ids)
+        df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
     df = df.reset_index()
     ids = df['index'].values
     fam_labels = df['fam_labels_1'].values
+    logger.info(f'Found {len(ids)} common ids.')
     return ids, fam_labels
 
 
-def parse_filelist(obsfiles, impfiles, obsformat, from_chr, to_chr):
+def parse_filelist(obsfile, impfile, obsformat, from_chr, to_chr, match_all=True):
     obs_files = {}  # []
     imp_files = {}  # []
-    if '~' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('~')
-        imp_ixes = impfiles.split('~')
-        for i in range(1, 23):  # from_chr, to_chr
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
-            if path.exists(impfile) and path.exists(obsfile):
-                obs_files[i] = obsfile
-                imp_files[i] = impfile
+    if ('~' in obsfile and '~' in impfile):
+        bed_ixes = obsfile.split('~')
+        imp_ixes = impfile.split('~')
+        start = 1 if match_all else from_chr
+        end = 23 if match_all else to_chr
+        for i in range(start, end):  # from_chr, to_chr
+            obsfile_ = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
+            impfile_ = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
+            if path.exists(impfile_) and path.exists(obsfile_):
+                obs_files[i] = obsfile_
+                imp_files[i] = impfile_
                 # obs_files.append(obsfile)
                 # imp_files.append(impfile)
         logger.info(str(len(imp_files)) +
-              ' matched observed and imputed genotype files found')
+                    ' matched observed and imputed genotype files found')
     else:
-        obs_files = {from_chr: obsfiles+'.'+obsformat}  # [obsfiles+'.'+obsformat]
-        imp_files = {from_chr: impfiles+'.hdf5'}  # [impfiles+'.hdf5']
+        # [obsfiles+'.'+obsformat]
+        obs_files = {from_chr: obsfile+'.'+obsformat}
+        imp_files = {from_chr: impfile+'.hdf5'}  # [impfiles+'.hdf5']
     # return np.array(obs_files), np.array(imp_files)
     return obs_files, imp_files
 
 
-def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma_grm, sigma_sib, sigma_res, freqs):
+def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigmas, freqs):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -116,9 +131,8 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     outfile['estimate_cols'] = encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
-    outfile['sigma_grm'] = sigma_grm
-    outfile['sigma_sib'] = sigma_sib
-    outfile['sigma_res'] = sigma_res
+    for i in range(len(sigmas)):
+        outfile[f'sigma_{i}'] = sigmas[i]
     outfile['freqs'] = freqs
     outfile.close()
 
@@ -133,7 +147,7 @@ def outarray_effect(est, ses, freqs, vy):
     return array_out
 
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigma_grm, sigma_sib, sigma_res, freqs):
+def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigmas, freqs):
     outbim = np.column_stack(
         (chrom, snp_ids, pos, alleles, np.round(freqs, 3)))
     header = ['chromosome', 'SNP', 'pos', 'A1', 'A2', 'freq']
@@ -188,7 +202,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
                 (alpha_ses_out[i, maternal_index]
                  * alpha_ses_out[i, paternal_index])
     # Create output array
-    vy = sigma_grm + sigma_sib + sigma_res
+    vy = sum(sigmas)
     outstack = [outbim]
     for i in range(len(effects)):
         outstack.append(outarray_effect(
@@ -203,12 +217,13 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     np.savetxt(outprefix+'.sumstats.gz', outarray, fmt='%s')
 
 
-def split_batches(nsnp, nbytes, num_cpus, parsum=False, fit_sib=False):
+def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, fit_sib=False):
     max_nbytes = 2147483647
     if nbytes > max_nbytes:
         raise ValueError('Too many bytes to handle for multiprocessing.')
     n_tasks = num_cpus
-    while int(nsnp / n_tasks) * nbytes > max_nbytes / 2:
+    f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
+    while int(nsnp / n_tasks) * nbytes > max_nbytes / 2 or f(nsnp, niid, n_tasks) > max_nbytes:
         n_tasks += num_cpus
     return np.array_split(np.arange(nsnp), n_tasks)
 
@@ -216,30 +231,50 @@ def split_batches(nsnp, nbytes, num_cpus, parsum=False, fit_sib=False):
 _var_dict = {}
 
 
-def _init_worker(y_, varcomp_mat_, varcomps_, covar_, covar_shape):
+def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
     _var_dict['y_'] = y_
-    _var_dict['varcomp_mat_'] = varcomp_mat_
     _var_dict['varcomps_'] = varcomps_
-    _var_dict['covar_']= covar_
-    _var_dict['covar_shape'] = covar_shape
+    for i in range(len(varcomps_) - 1):
+        _var_dict[f'varcomp_data_{i}_'] = kwargs[f'varcomp_data_{i}_']
+        _var_dict[f'varcomp_row_ind_{i}_'] = kwargs[f'varcomp_row_ind_{i}_']
+        _var_dict[f'varcomp_col_ind_{i}_'] = kwargs[f'varcomp_col_ind_{i}_']
+    if covar_ is not None and covar_shape is not None:
+        _var_dict['covar_'] = covar_
+        _var_dict['covar_shape'] = covar_shape
 
 
 def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False):
+                  fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False,
+                  impute_unrel=True):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
-    varcomp_mat = np.frombuffer(_var_dict['varcomp_mat_'], dtype='float').reshape((len(varcomps) - 1, -1))  # no need to provide residual var arr
-    varcomp_arrs = tuple(varcomp_mat[i, :] for i in range(len(varcomps) - 1))
-    covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(_var_dict['covar_shape'])
-    lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_arrs, varcomps=varcomps, covar_X=covar)
+    # no need to provide residual var arr
+    varcomp_arr_lst = tuple(
+        (
+            np.frombuffer(_var_dict[f'varcomp_data_{i}_'], dtype='float'),
+            np.frombuffer(_var_dict[f'varcomp_row_ind_{i}_'], dtype='uint32'),
+            np.frombuffer(_var_dict[f'varcomp_col_ind_{i}_'], dtype='uint32'),
+        ) for i in range(len(varcomps) - 1)
+    )
+    covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(
+        _var_dict['covar_shape']) \
+            if 'covar_' in _var_dict else None
+    lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
+                           varcomps=varcomps, covar_X=covar)
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(pargts_f, gts_f, snp_ids=snp_ids, ids=pheno_ids,
-                       parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
+                       parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info, impute_unrel=impute_unrel)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
     G.compute_freqs()
+    # impute parental genotypes of unrelated individuals
+    if impute_unrel:
+        logger.info('imputing unrelated ind parental geno.')
+        G = impute_unrel_par_gts(G, sib=fit_sib, parsum=parsum)
+    else:
+        logger.info('Not imputing unrelated individuals parental geno.')
     #### Filter SNPs ####
     if verbose:
         logger.info('Filtering based on MAF')
@@ -329,20 +364,28 @@ if __name__ == '__main__':
                         help='Number of cpus to distribute batches across', default=1)
 
     parser.add_argument('--from_chr',
-                        type=int,                        
-                        help='Which chromosome (<=). Should be used with to_chr parameter.')
+                        type=int,
+                        help='Which chromosome (>=). Should be used with to_chr parameter.')
     parser.add_argument('--to_chr',
                         type=int,
                         help='Which chromosome (<). Should be used with from_chr parameter.')
 
+    parser.add_argument('--match_all',
+                        action='store_true', default=False,
+                        help='Match individual IDs from all genotype files or not.')
+    
+    parser.add_argument('--impute_unrel',
+                        action='store_true', default=False,
+                        help='Whether to impute parental genotype of unrelated individuals or not.')
     args = parser.parse_args()
 
-    if args.ibdrel_path is not None and (args.grm_path is not None or args.gcta_path is not None):
+    if (args.ibdrel_path is not None) + (args.grm_path is not None) + (args.gcta_path is not None) > 1:
         raise parser.error(
             'Only one of ibdrel_path and grm_path/gcta_path should be supplied.')
-    if args.ibdrel_path is None and (args.grm_path is None or args.gcta_path is None):
-        raise parser.error(
-            'One of ibdrel_path and grm_path/gcta_path should be supplied.')
+    if args.ibdrel_path is None and args.grm_path is None and args.gcta_path is None:
+        # raise parser.error(
+        #     'One of ibdrel_path and grm_path/gcta_path should be supplied.')
+        logger.info('Only sibship variance component is modelled.')
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error(
             'Should provide plink_path and hapmap_bed is gcta_path is supplied.')
@@ -379,9 +422,11 @@ if __name__ == '__main__':
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
     ######## Find commond ind ids #####
     if args.bed is not None:
-        gts_list, pargts_list = parse_filelist(args.bed, args.pargts, 'bed', args.from_chr, args.to_chr)
+        gts_list, pargts_list = parse_filelist(
+            args.bed, args.pargts, 'bed', args.from_chr, args.to_chr, args.match_all)
     elif args.bgen is not None:
-        gts_list, pargts_list = parse_filelist(args.bgen, args.pargts, 'bgen', args.from_chr, args.to_chr)
+        gts_list, pargts_list = parse_filelist(
+            args.bgen, args.pargts, 'bgen', args.from_chr, args.to_chr, args.match_all)
     # if gts_list.shape[0] == 0:
     if len(gts_list) == 0:
         raise(ValueError('No input genotype files found'))
@@ -389,16 +434,19 @@ if __name__ == '__main__':
     if len(gts_list) != len(pargts_list):
         raise ValueError(
             f'Lists of imputed and observed genotype files not of same length {len(gts_list)} and {len(pargts_list)}')
-    ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids)
-    ########## Construct GRM/IBD and sibship matrix ##########
-    logger.info('Building GRM...')
-    if args.ibdrel_path is not None:
-        ids, fam_labels = match_grm_ids(
-            ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
-        id_dict = make_id_dict(ids)
-        grm = build_ibdrel_arr(
-            args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
+    if args.covar:
+        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=covariates, impute_unrel=args.impute_unrel)
     else:
+        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=None, impute_unrel=args.impute_unrel)
+    ########## Construct GRM/IBD and sibship matrix ##########
+    # logger.info('Building GRM...')
+    if args.ibdrel_path is not None:
+        # ids, fam_labels = match_grm_ids(
+        #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
+        id_dict = make_id_dict(ids)
+        grm_data, grm_row_ind, grm_col_ind = build_ibdrel_arr(
+            args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
+    elif args.grm_path is not None or args.gcta_path is not None:
         if args.grm_path is None:
             run_gcta_grm(args.plink_path, args.gcta_path,
                          args.hapmap_bed, args.outprefix, ids)
@@ -408,22 +456,31 @@ if __name__ == '__main__':
         ids, fam_labels = match_grm_ids(
             ids, fam_labels, grm_path=grm_path, grm_source='gcta')
         id_dict = make_id_dict(ids)
-        grm = build_grm_arr(grm_path, id_dict=id_dict, thres=args.sparse_thres)
-    sib = build_sib_arr(fam_labels)
+        grm_data, grm_row_ind, grm_col_ind = build_grm_arr(
+            grm_path, id_dict=id_dict, thres=args.sparse_thres)
+    sib_data, sib_row_ind, sib_col_ind = build_sib_arr(fam_labels)
     ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
+    if 'grm_data' in locals():
+        varcomp_lst = (
+            (grm_data, grm_row_ind, grm_col_ind),
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    else:
+        varcomp_lst = (
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
     if args.covar is None:
-        raise NotImplementedError('Please specify covariates.')
-        # lmm = LinearMixedModel(y, (grm, sib,), covar_X=None)
+        lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_lst, covar_X=None)
     else:
         covariates.filter_ids(ids)
-        lmm = LinearMixedModel(y, (grm, sib,), covar_X=covariates.gts)
+        lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts)
     logger.info('Optimizing variance components...')
     lmm.scipy_optimize()
-    sigma_grm, sigma_sib, sigma_res = lmm.varcomps
+    logger.info(f'{lmm.varcomps}')
+    sigmas = lmm.varcomps
     ####### Iterate through all chromosomes #######
     chr_ = int(args.from_chr)
-    # for gts_f, pargts_f in zip(gts_list, pargts_list):
     while chr_ < args.to_chr:
         gts_f = gts_list[chr_]
         pargts_f = pargts_list[chr_]
@@ -432,10 +489,10 @@ if __name__ == '__main__':
             snp_ids = bed.sid
             pos = bed.pos[:, 2]
             chrom = bed.pos[:, 0]
-            alleles = np.loadtxt(args.bed+'.bim', dtype=str, usecols=(4, 5))
+            alleles = np.loadtxt(gts_f[:-4]+'.bim', dtype=str, usecols=(4, 5))
         elif args.bgen is not None:
             bgen = open_bgen(gts_f, verbose=False)
-            snp_ids = bgen.ids
+            snp_ids = bgen.rsids # ids
             pos = np.array(bgen.positions)
             chrom = np.array(bgen.chromosomes)
             # If chromosomse unknown, set to zero
@@ -481,7 +538,7 @@ if __name__ == '__main__':
                      alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
         # Compute batches
         batches = split_batches(
-            snp_ids.shape[0], nbytes, args.num_cpus, parsum=args.parsum, fit_sib=args.fit_sib)
+            snp_ids.shape[0], len(ids), nbytes, args.num_cpus, parsum=args.parsum, fit_sib=args.fit_sib)
         if len(batches) == 1:
             logger.info('Using 1 batch')
         else:
@@ -490,19 +547,52 @@ if __name__ == '__main__':
         y_ = RawArray('d', y.shape[0])
         y_buffer = np.frombuffer(y_, dtype='float')
         np.copyto(y_buffer, y)
-        varcomp_mat_ = RawArray('d', int(2 * grm.shape[0]))
-        varcomp_mat_buffer = np.frombuffer(varcomp_mat_, dtype='float').reshape((2, grm.shape[0]))
-        np.copyto(varcomp_mat_buffer, np.array([grm, sib], dtype='float'))
-        covar_ = RawArray('d', int(covariates.gts.shape[0] * covariates.gts.shape[1]))
-        covar_buffer = np.frombuffer(covar_, dtype='float').reshape((covariates.gts.shape[0], covariates.gts.shape[1]))
-        np.copyto(covar_buffer, covariates.gts)
-        covar_shape = covariates.gts.shape
+        # varcomp_mat_ = RawArray('f', int(2 * grm.shape[0]))
+        # varcomp_mat_buffer = np.frombuffer(
+        #     varcomp_mat_, dtype='float').reshape((2, grm.shape[0]))
+        # np.copyto(varcomp_mat_buffer, np.array([grm, sib], dtype='float'))
+        if args.covar:
+            covar_ = RawArray(
+                'd', int(covariates.gts.shape[0] * covariates.gts.shape[1]))
+            covar_buffer = np.frombuffer(covar_, dtype='float').reshape(
+                (covariates.gts.shape[0], covariates.gts.shape[1]))
+            np.copyto(covar_buffer, covariates.gts)
+            covar_shape = covariates.gts.shape
+        else: covar_ = None; covar_shape = None
         varcomps_ = lmm.varcomps
+        varcomp_dict = {}
+        for i in range(len(varcomps_) - 1):
+            l = len(varcomp_lst[i][0])
+            # data
+            varcomp_dict[f'varcomp_data_{i}_'] = RawArray('d', l)
+            varcomp_dict[f'varcomp_data_{i}_buffer'] = np.frombuffer(
+                varcomp_dict[f'varcomp_data_{i}_'], dtype='float')
+            np.copyto(
+                varcomp_dict[f'varcomp_data_{i}_buffer'], varcomp_lst[i][0])
+            # row indices
+            varcomp_dict[f'varcomp_row_ind_{i}_'] = RawArray(ctypes.c_uint32, l)
+            varcomp_dict[f'varcomp_row_ind_{i}_buffer'] = np.frombuffer(
+                varcomp_dict[f'varcomp_row_ind_{i}_'], dtype='uint32')
+            np.copyto(
+                varcomp_dict[f'varcomp_row_ind_{i}_buffer'], varcomp_lst[i][1])
+            # col indices
+            varcomp_dict[f'varcomp_col_ind_{i}_'] = RawArray(ctypes.c_uint32, l)
+            varcomp_dict[f'varcomp_col_ind_{i}_buffer'] = np.frombuffer(
+                varcomp_dict[f'varcomp_col_ind_{i}_'], dtype='uint32')
+            np.copyto(
+                varcomp_dict[f'varcomp_col_ind_{i}_buffer'], varcomp_lst[i][2])
         process_batch_ = partial(process_batch, pheno_ids=ids, pargts_f=pargts_f, gts_f=gts_f,
                                  parsum=args.parsum, fit_sib=args.fit_sib,
-                                 max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,)
-        with Pool(processes=args.num_cpus, initializer=_init_worker, initargs=(y_, varcomp_mat_, varcomps_, covar_, covar_shape)) as pool:
-            result = pool.map(process_batch_, [snp_ids[ind] for ind in batches])
+                                 max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,
+                                 impute_unrel=args.impute_unrel)
+        _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
+        with Pool(
+            processes=args.num_cpus,
+            initializer=_init_worker_,
+            initargs=(y_, varcomps_, covar_, covar_shape,)
+        ) as pool:
+            result = pool.map(
+                process_batch_, [snp_ids[ind] for ind in batches])
         # varcomp_mat = np.array([grm, sib], dtype='float32').T
         # varcomps = varcomps_
         # covar = covariates.gts
@@ -510,7 +600,8 @@ if __name__ == '__main__':
         # for ind in batches:
         #     result.append(process_batch_(snp_ids[ind]))
         for i in range(0, len(result)):
-            batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = result[i]
+            batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = result[
+                i]
             # Fill in fitted SNPs
             batch_indices = np.array([snp_dict[x] for x in batch_snps])
             alpha[batch_indices, :] = batch_alpha
@@ -521,8 +612,8 @@ if __name__ == '__main__':
         ######## Save output #########
         if not args.no_hdf5_out:
             write_output(chrom, snp_ids, pos, alleles, args.outprefix.replace('~', str(chr_)), args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
-                         sigma_grm, sigma_sib, sigma_res, freqs)
+                         sigmas, freqs)
         if not args.no_txt_out:
             write_txt_output(chrom, snp_ids, pos, alleles, args.outprefix.replace('~', str(chr_)), args.parsum, args.fit_sib, alpha, alpha_cov,
-                             sigma_grm, sigma_sib, sigma_res, freqs)
+                             sigmas, freqs)
         chr_ += 1
