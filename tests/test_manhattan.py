@@ -14,6 +14,7 @@ def imputation_test(chromosomes,
                    start = None,
                    end = None,
                    backup_threshold=0.01,
+                   genotyping_error_ratio=0.01,
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"
     chromosomes_expected_genes_o = []
@@ -21,6 +22,9 @@ def imputation_test(chromosomes,
     chromosomes_imputed_genes_o = []
     chromosomes_imputed_genes_pm = []
     chrom_sizes = []
+    parent_ratio_backups = []
+    sib_ratio_backups = []
+    estimated_genotyping_errors = []
     for chromosome in tqdm(chromosomes):
         with h5py.File(imputed_prefix+str(chromosome)+".hdf5",'r') as f:
             gts = np.array(f["imputed_par_gts"]).astype(float)
@@ -30,9 +34,14 @@ def imputation_test(chromosomes,
             non_duplicates = np.array(f["non_duplicates"])
             parent_ratio_backup = np.array(f["parent_ratio_backup"])
             sib_ratio_backup = np.array(f["sib_ratio_backup"])
+            estimated_genotyping_error = np.array(f["estimated_genotyping_error"])
+            breakpoint()
             #Fix backup ratio start end
             if start is not None:
                 non_duplicates = non_duplicates+start
+        parent_ratio_backups.append(parent_ratio_backup)
+        sib_ratio_backups.append(sib_ratio_backup)
+        estimated_genotyping_errors.append(estimated_genotyping_error)
         expected = Bed(expected_prefix+str(chromosome)+".bed", count_A1 = True)
         expected_gts = expected[:, non_duplicates].read().val.astype(float)
         chrom_sizes.append(gts.shape[1])
@@ -77,6 +86,9 @@ def imputation_test(chromosomes,
     whole_imputed_genes_o = np.hstack(chromosomes_imputed_genes_o)
     whole_expected_genes_pm = np.hstack(chromosomes_expected_genes_pm)
     whole_imputed_genes_pm = np.hstack(chromosomes_imputed_genes_pm)
+    parent_ratio_backup = np.hstack(parent_ratio_backups)
+    sib_ratio_backup = np.hstack(sib_ratio_backups)
+    estimated_genotyping_error = np.hstack(estimated_genotyping_errors)
     pm_coefs = []
     pm_pvals = []
     pop_size, nsnps = whole_imputed_genes_pm.shape
@@ -88,7 +100,7 @@ def imputation_test(chromosomes,
         pm_coefs.append(result.params[0])
         pm_pvals.append(result.t_test(([1],1)).pvalue)
     pm_pvals_log10 = -np.log10(pm_pvals)
-    numerical = ~(np.isnan(pm_pvals_log10) | np.isinf(pm_pvals_log10) | (parent_ratio_backup > backup_threshold))
+    numerical = ~(np.isnan(pm_pvals_log10) | np.isinf(pm_pvals_log10) | (parent_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_ratio))
     counter = 0
     pm_chrom_sizes = [i for i in chrom_sizes]
     for i in range(len(chrom_sizes)):
@@ -184,7 +196,7 @@ def imputation_test(chromosomes,
         # t=(result.slope-1)/result.stderr
         # o_pvals.append(2*(1-norm.cdf(abs(t))))
     o_pvals_log10 = -np.log10(o_pvals)
-    numerical = ~(np.isnan(o_pvals_log10) | np.isinf(o_pvals_log10) | (sib_ratio_backup > backup_threshold))
+    numerical = ~(np.isnan(o_pvals_log10) | np.isinf(o_pvals_log10) | (sib_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_ratio))
     counter = 0
     o_chrom_sizes = [i for i in chrom_sizes]
     for i in range(len(chrom_sizes)):

@@ -207,32 +207,27 @@ def run_imputation(data):
         logging.info("merging chunks...")
         logging.info(f"merging chunks 1/{chunks}...")
         chunk_output_address = f"{output_address}_chunk{0}.hdf5"
+        hdf5_results = {}
         with h5py.File(chunk_output_address, "r") as hf:
-            imputed_par_gts = np.array(hf['imputed_par_gts'])
-            families = np.array(hf['families'])
-            parental_status = np.array(hf['parental_status'])
-            pos = np.array(hf['pos'])
-            bim_columns = np.array(hf["bim_columns"])
-            bim_values = np.array(hf["bim_values"])
-            pedigree = np.array(hf["pedigree"])
-            ratio_ibd0 = np.array(hf["ratio_ibd0"])
-            non_duplicates = np.array(hf["non_duplicates"])
+            for key, val in hf.items():
+                hdf5_results[key] = np.array(val)
         os.remove(chunk_output_address)
         for i in range(1, chunks):
             logging.info(f"merging chunks {i+1}/{chunks}...")
             chunk_output_address = f"{output_address}_chunk{i}.hdf5"
             with h5py.File(chunk_output_address, "r") as hf:
-                new_imputed_par_gts = np.array(hf['imputed_par_gts'])
-                new_pos = np.array(hf['pos'])
-                new_bim_values = np.array(hf["bim_values"])
-                new_ratio_ibd0 = np.array(hf["ratio_ibd0"])
-                new_non_duplicates = np.array(hf["non_duplicates"])
-                new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
-                imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
-                pos = np.hstack((pos, new_pos))
-                non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
-                bim_values = np.vstack((bim_values, new_bim_values))
-                ratio_ibd0 = np.hstack((ratio_ibd0, new_ratio_ibd0))
+                for key in ["imputed_par_gts",
+                            "pos",
+                            "non_duplicates",
+                            "bim_values",
+                            "ratio_ibd0",
+                            "mendelian_error_ratio",
+                            "estimated_genotyping_error",]:
+                    new_val = np.array(hf[key])
+                    hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
+                non_duplicates = np.array(hf["non_duplicates"])
+                non_duplicates = hdf5_results["non_duplicates"][-1] + non_duplicates + 1
+                hdf5_results["non_duplicates"] = np.hstack((hdf5_results["non_duplicates"], non_duplicates))                
             os.remove(chunk_output_address)
         logging.info(f"writing results of the merge")
         #Writing the merged output

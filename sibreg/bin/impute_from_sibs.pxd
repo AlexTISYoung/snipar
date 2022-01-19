@@ -26,7 +26,7 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       int len_snp_ibd2) nogil
 
 
-cdef cpair[double, bint] impute_snp_from_parent_offsprings(int snp,
+cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                       int parent,
                       int[:] sib_indexes,
                       int sib_count,

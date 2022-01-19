@@ -53,6 +53,7 @@ class TestSibImpute(unittest.TestCase):
 
     def test_impute_snp_from_offsprings_unphased(self):
         bed = np.array([[0],[1],[2]]).astype("b")
+        sib_indexes = np.array([0, 1]).astype("i")
         snp_ibd0 = np.ones((10,2)).astype("i")
         snp_ibd1 = np.ones((10,2)).astype("i")
         snp_ibd2 = np.ones((10,2)).astype("i")
@@ -63,37 +64,57 @@ class TestSibImpute(unittest.TestCase):
         for i in range(3):
             for j in range(3):
                 for count in range(10):
-                    snp_ibd0[count] = [i, j]
-                    sib_indexes = np.array([0, 1, 2]).astype("i")
-                    t = impute_snp_from_offsprings(snp, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0)                    
-                    result = t.first
-                    is_backup = t.second
+                    bed[0, snp] = i
+                    bed[1, snp] = j
+                    snp_ibd0[count] = [0, 1]
+                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0)
+                    result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
-                    self.assertAlmostEqual(result, sibsum/2, 4, msg = "problem with type0")
+                    expected = sibsum/2
+                    error_message = f"problem with type0, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
+                    self.assertAlmostEqual(result, expected, 4, msg = "problem with type0")
+                    self.assertTrue(not is_backup, error_message)
 
         for i in range(3):
             for j in range(3):
                 for count in range(10):
-                    snp_ibd1[count] = [i, j]
-                    sib_indexes = np.array([0, 1, 2]).astype("i")
-                    t = impute_snp_from_offsprings(snp, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1)
+                    bed[0, snp] = i
+                    bed[1, snp] = j
+                    snp_ibd1[count] = [0, 1]
+                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1)
                     result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
-                    self.assertAlmostEqual(result, expected_results[int(sibsum)]/2, 4, msg = "problem with type1"+str((result, expected_results[int(sibsum)]))+str((i,j))+ str(sibsum))
+                    expected = expected_results[int(sibsum)]/2
+                    error_message = f"problem with type1, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
+                    if abs(i-j) == 2:
+                        self.assertTrue(is_backup, error_message)
+                        self.assertTrue(not np.isnan(result), error_message)
+                    else:
+                        self.assertAlmostEqual(result, expected, 4, msg = error_message)
+                        self.assertTrue(not is_backup, error_message)
 
         for i in range(3):
             for j in range(3):
                 for count in range(10):
-                    snp_ibd2[count] = [i, j]
-                    sib_indexes = np.array([0, 1, 2]).astype("i")
-                    t = impute_snp_from_offsprings(snp, sib_indexes,  3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1)
+                    bed[0, snp] = i
+                    bed[1, snp] = j
+                    snp_ibd2[count] = [0, 1]
+                    t = impute_snp_from_offsprings(snp, sib_indexes,  2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1)
                     result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
-                    self.assertAlmostEqual(result, (sibsum/2. + 2*f)/2, 4, msg = "problem with type2")
+                    expected = sibsum/4+f
+                    error_message = f"problem with type2, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
+                    if i!=j:
+                        self.assertTrue(is_backup, error_message)
+                        self.assertTrue(not np.isnan(result), error_message)
+                    else:
+                        self.assertTrue(not is_backup, error_message)
+                        self.assertAlmostEqual(result, expected, 4, msg = error_message)
 
     def test_impute_snp_from_parent_offsprings_unphased(self):
         bed = np.array([[0],[1],[2]]).astype("b")
+        sib_indexes = np.array([0, 1]).astype("i")
         snp_ibd0 = np.ones((10,2)).astype("i")
         snp_ibd1 = np.ones((10,2)).astype("i")
         snp_ibd2 = np.ones((10,2)).astype("i")
@@ -106,19 +127,23 @@ class TestSibImpute(unittest.TestCase):
             {
                 (0,0) : 0.05263157894736842,
                 (0,1) : 1,
+                (1,0) : 1,
                 (1,1) : 1.1818181818181819,
             },
             {
                 (0,0):0,
                 (0,1):0.18181818181818182,
+                (1,0):0.18181818181818182,
                 (1,1):0.024390243902439022,
                 (1,2):1.0526315789473684,
+                (2,1):1.0526315789473684,
                 (2,2):2,
 
             },
             {
                 (1,1):0.05263157894736841,
                 (1,2):1,
+                (2,1):1,
                 (2,2):1.1818181818181819,
             },
         ]
@@ -141,48 +166,87 @@ class TestSibImpute(unittest.TestCase):
         ]
 
         for i in range(3):
-            for j in range(i,3):
+            for j in range(3):
                 for count in range(10):
                     for par in range(3):
-                        if par == 2 and (i == 0 or j == 0):
-                            continue                        
-                        if par == 0 and (i == 2 or j == 2):
-                            continue
-                        sib_indexes = np.array([0, 1, 2]).astype("i")
-                        snp_ibd0[count] = [i, j]
-                        t = impute_snp_from_parent_offsprings(snp, par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, count+1, 1, 1)
-                        result, is_backup = t.first, t.second
+                        bed[0, snp] = i
+                        bed[1, snp] = j
+                        bed[2, snp] = par
+                        snp_ibd0[count] = [0, 1]
+                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, count+1, 1, 1)
+                        result, data = t.first, t.second
+                        mendelian_error_count = data.first
+                        is_backup = data.second
                         sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                         expected = sibsum - par
-                        if expected<0 or expected>2:
-                            expected = np.nan
-                        if not np.isnan(result) or not np.isnan(expected):
-                            self.assertAlmostEqual(result, expected, 4, msg = "problem with type0, with parent = "+str(par)+", and sibs = "+str([i,j]) + " result, expected = "+str((result, expected)))
+                        error_message = f"problem with type0, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        if abs(par - i)>1 or abs(par - j)>1:                            
+                            self.assertTrue(np.isnan(result), error_message)
+                            self.assertTrue(mendelian_error_count>0, error_message)
+                            self.assertTrue(not is_backup, error_message)
+                        elif expected > 2 or expected <0:
+                            self.assertTrue(is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertTrue(not np.isnan(result), error_message)
+                        else:
+                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
 
         for i in range(3):
-            for j in range(i, 3):
+            for j in range(3):
                 for count in range(10):
                     for par in range(3):
-                        sib_indexes = np.array([0, 1, 2]).astype("i")
-                        snp_ibd1[count] = [i, j]
-                        t = impute_snp_from_parent_offsprings(snp,  par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, count+1, 1)
-                        result, is_backup = t.first, t.second
+                        bed[0, snp] = i
+                        bed[1, snp] = j
+                        bed[2, snp] = par
+                        snp_ibd1[count] = [0, 1]
+                        t = impute_snp_from_parent_offsprings(snp,  2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, count+1, 1)
+                        result, data = t.first, t.second
+                        mendelian_error_count = data.first
+                        is_backup = data.second
                         expected = expected_result_IBD1[par].get((i, j), np.nan)
-                        if not np.isnan(result) or not np.isnan(expected):
-                            self.assertAlmostEqual(result, expected, 4, msg = "problem with type1, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected,result = "+str((expected, result)))
+                        error_message = f"problem with type1, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        if abs(par - i)>1 or abs(par - j)>1:                            
+                            self.assertTrue(np.isnan(result), error_message)
+                            self.assertTrue(mendelian_error_count>0, error_message)
+                            self.assertTrue(not is_backup, error_message)
+                        elif (j==0 and i==2) or (j==2 and i==0):
+                            self.assertTrue(is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertTrue(not np.isnan(result), error_message)
+                        else:
+                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
                             
 
         for i in range(3):
-            for j in range(i, 3):
+            for j in range(3):
                 for count in range(10):
                     for par in range(3):
-                        sib_indexes = np.array([0, 1, 2]).astype("i")
-                        snp_ibd2[count] = [i, j]
-                        t = impute_snp_from_parent_offsprings(snp, par, sib_indexes, 3, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, 0, count+1)
-                        result, is_backup = t.first, t.second
+                        bed[0, snp] = i
+                        bed[1, snp] = j
+                        bed[2, snp] = par
+                        snp_ibd2[count] = [0, 1]
+                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, 0, count+1)
+                        result, data = t.first, t.second
+                        mendelian_error_count = data.first
+                        is_backup = data.second
                         expected = expected_result_IBD2[par].get((i, j), np.nan)
-                        if not np.isnan(result) or not np.isnan(expected):
-                            self.assertAlmostEqual(result, expected, 4, msg = "problem with type2, with parent = "+str(par)+", and sibs = "+str([i,j])+", expected, result = "+str((expected, result)))
+                        error_message = f"problem with type2, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        if abs(par - i)>1 or abs(par - j)>1:                            
+                            self.assertTrue(np.isnan(result), error_message)
+                            self.assertTrue(mendelian_error_count>0, error_message)
+                            self.assertTrue(not is_backup, error_message)
+                        elif (j!=i):
+                            self.assertTrue(is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertTrue(not np.isnan(result), error_message)
+                        else:
+                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(mendelian_error_count==0, error_message)
+                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
     def test_get_IBD(self):
         length = 1000
         half_window = 100

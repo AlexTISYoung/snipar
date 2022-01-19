@@ -437,7 +437,7 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
 
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
-    pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values))
+    pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values)).astype('S')
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
 def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
@@ -582,7 +582,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             pos: np.array[int]
                 A numpy array with the position of each SNP in the order of appearance in gts.
 
-            freqs: np.array[float]
+            practical_f: np.array[float]
                 A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
 
             hdf5_output_dict: dict
@@ -641,8 +641,6 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
         phased_gts = phased_gts[ids_in_ped_pc,:]
         if not unphased_gts:
             unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
-            nanmask = (phased_gts[:,:,0] == nan_integer) | (phased_gts[:,:,1]==nan_integer)
-            phased_gts[nanmask] = nan_integer                
     if not pcs is None:
         set_gts_ids = set(gts_ids[:, 1].astype("S"))
         pc_ids_gts_ids =  [id in set_gts_ids for id in pc_ids]
@@ -660,41 +658,48 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
     if num_unphased_gts_greater2>0:
         logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are greater than 2 in {num_unphased_gts_greater2} locations. Converted to NaN")  
-        unphased_gts[unphased_gts_greater2] = nan_integer
+        unphased_gts[unphased_gts_greater2] = np.nan
         
     unphased_gts_less0 = unphased_gts<0
     num_unphased_gts_less0 = np.sum(unphased_gts_less0)
     if num_unphased_gts_less0>0:
         logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
-        unphased_gts[unphased_gts_less0] = nan_integer
+        unphased_gts[unphased_gts_less0] = np.nan
 
     if not phased_gts is None:
         phased_gts_less0 = phased_gts<0
         num_phased_gts_less0 = np.sum(phased_gts_less0)
         if num_phased_gts_less0>0:
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes are less than 0 in {num_phased_gts_less0} locations. Converted to NaN")  
-            phased_gts[phased_gts_less0] = nan_integer
+            phased_gts[phased_gts_less0] = np.nan
         
         phased_gts_greater1 = phased_gts>1
         num_phased_gts_greater1 = np.sum(phased_gts_greater1)
         if num_phased_gts_greater1>0:
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
-            phased_gts[phased_gts_greater1] = nan_integer
+            phased_gts[phased_gts_greater1] = np.nan
     
-    freqs = unphased_gts.copy()
-    freqs[:] = np.nanmean(unphased_gts,axis=0)/2.0
-    nanmask = np.isnan(unphased_gts) 
+    standard_f = np.nanmean(unphased_gts,axis=0)/2.0
+    practical_f = unphased_gts.copy()
+    practical_f[:] = standard_f
+
+    #transforming genotypes into int8
+    unphased_gts[np.isnan(unphased_gts)] = nan_integer
     unphased_gts = unphased_gts.astype(np.int8)
-    unphased_gts[nanmask] = nan_integer
     if not phased_gts is None:
-        nanmask = np.isnan(phased_gts)
-        phased_gts = phased_gts.astype(np.int8)
-        phased_gts[nanmask] = nan_integer
+        phased_gts[np.isnan(phased_gts)] = nan_integer
+        phased_gts = phased_gts.astype(np.int8)    
     iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
     selected_bim = bim.iloc[indexes+start, :]
     bim_values = selected_bim.to_numpy().astype('S')
-    bim_columns = selected_bim.columns
-    hdf5_output_dict = {"bim_columns":bim_columns, "bim_values":bim_values, "pedigree":pedigree_output, "non_duplicates":indexes}
+    bim_columns = selected_bim.columns.to_numpy().astype('S')
+    #value types should be hdf5 compatible
+    hdf5_output_dict = {"bim_columns":bim_columns,
+                        "bim_values":bim_values,
+                        "pedigree":pedigree_output,
+                        "non_duplicates":indexes,
+                        "standard_f":standard_f,
+                        }
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")    
     if not pcs is None:
         logging.info("estimating MAF using PCs ...")
@@ -703,9 +708,9 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             optimal_pc_num = compute_aics(unphased_gts, pcs, sample_size=1000)
             logging.info(f"optimal number of PCs is {optimal_pc_num}")
             logging.info("finding optimal number of PCs using aic done")
-            freqs = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
+            practical_f = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
         else:
-            freqs = estimate_f(unphased_gts, pcs)
+            practical_f = estimate_f(unphased_gts, pcs)
         logging.info("estimating MAF using PCs done")
     if unphased_gts.shape[0] == 0:
         logging.warning(f"with chromosomes {chromosomes}: 0 individuals in unphased genotypes")
@@ -720,4 +725,4 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             logging.warning(f"with chromosomes {chromosomes}: 0 snps in phased genotypes")
         if phased_gts.max()>1 or phased_gts.min()<0:
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes has values out of 0-1 range")
-    return phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict
+    return phased_gts, unphased_gts, iid_to_bed_index, pos, practical_f, hdf5_output_dict
