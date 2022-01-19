@@ -6,6 +6,7 @@ from numba import njit, prange
 import numpy as np
 from snipar.utilities import make_id_dict
 import pandas as pd
+import logging
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
@@ -61,6 +62,25 @@ def get_sibpairs_from_ped(ped):
                 sibpairs[paircount,:] = np.array([ped[sib_indices[i],1],ped[sib_indices[j],1]])
                 paircount += 1
     return sibpairs
+
+class Person:
+    """Just a simple data structure representing individuals
+
+    Args:
+        id : str
+            IID of the individual.
+        fid : str
+            FID of the individual.
+        pid : str
+            IID of the father of that individual.
+        mid : str
+            IID of the mother of that individual.
+    """
+    def __init__(self, id, fid=None, pid=None, mid=None):
+        self.id = id
+        self.fid = fid
+        self.pid = pid
+        self.mid = mid
 
 
 def create_pedigree(king_address, agesex_address):
