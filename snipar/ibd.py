@@ -1,6 +1,5 @@
-import gzip
+import gzip, os
 from numba import njit, prange
-from snipar.bin.preprocess_data import create_pedigree
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
@@ -91,10 +90,10 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
                             [p, 1.0 - p, p],
                             [0.0,   p / 2.0, 1.0 - p]])
     # Get probabilities of true genotypes given IBD
-    probs = np.zeros((3,3,3))
-    probs[0,...] = p_ibd_0(f)
-    probs[1,...] = p_ibd_1(f)
-    probs[2,...] = p_ibd_2(f)
+    probs = np.zeros((3, 3, 3))
+    probs[0, ...] = p_ibd_0(f)
+    probs[1, ...] = p_ibd_1(f)
+    probs[2, ...] = p_ibd_2(f)
     # Compute probabilities conditional on IBD
     for i in range(3):
         P_out[i] = err_vectors[g1_obs, ...].T @ probs[i,...] @ err_vectors[g2_obs, ...]
@@ -102,7 +101,7 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
     return np.log(P_out)
 
 @njit
-def make_dynamic(g1,g2,freqs,map,weights,p):
+def make_dynamic(g1, g2, freqs, map, weights, p):
     """Make state-matrix and pointer matrix for a sibling pair by dynamic programming
     Args:
         g1 : :class:`~numpy:numpy.array`
@@ -253,13 +252,10 @@ def write_segs(sibpairs,allsegs,chr,outfile):
                 seg_out.write(allsegs[i][j].to_text(sibpairs[i, 0], sibpairs[i, 1], chr, end=False).encode())
     seg_out.close()
 
-def write_segs_from_matrix(ibd,bimfile,outfile):
-    # Get IBD
-    sibpairs = ibd[1:ibd.shape[0],0:2]
-    snps = ibd[0,2:ibd.shape[1]]
-    ibd = np.array(ibd[1:ibd.shape[0],2:ibd.shape[1]],dtype=np.int8)
+def write_segs_from_matrix(ibd,sibpairs,snps,bimfile,outfile):
     # Get map and chr from bim
     bim = np.loadtxt(bimfile, dtype=str)
+    pos = np.loadtxt(bimfile,usecols=3,dtype=int)
     bim_dict = make_id_dict(bim,1)
     bim_indices = np.array([bim_dict[x] for x in snps])
     map = np.array(bim[bim_indices,2],dtype=float)
@@ -271,23 +267,68 @@ def write_segs_from_matrix(ibd,bimfile,outfile):
     # Get segments
     allsegs = []
     for i in range(sibpairs.shape[0]):
-        allsegs.append(find_segments(ibd[i,:], map))
+        allsegs.append(find_segments(ibd[i,:],map,snps,pos))
     # Write segments
-    write_segs(sibpairs,allsegs,chr,snps,outfile)
+    write_segs(sibpairs,allsegs,chr,outfile)
     return allsegs
+
+# def write_segs_from_matrix(ibd,bimfile,outfile):
+#     # Get IBD
+#     sibpairs = ibd[1:ibd.shape[0],0:2]
+#     snps = ibd[0,2:ibd.shape[1]]
+#     ibd = np.array(ibd[1:ibd.shape[0],2:ibd.shape[1]],dtype=np.int8)
+#     # Get map and chr from bim
+#     bim = np.loadtxt(bimfile, dtype=str)
+#     bim_dict = make_id_dict(bim,1)
+#     bim_indices = np.array([bim_dict[x] for x in snps])
+#     map = np.array(bim[bim_indices,2],dtype=float)
+#     chr = np.unique(bim[bim_indices,0])
+#     if chr.shape[0]>1:
+#         raise(ValueError('Must be one chromosome only'))
+#     else:
+#         chr = chr[0]
+#     # Get segments
+#     allsegs = []
+#     for i in range(sibpairs.shape[0]):
+#         allsegs.append(find_segments(ibd[i,:], map))
+#     # Write segments
+#     write_segs(sibpairs,allsegs,chr,snps,outfile)
+#     return allsegs
+
+@njit
+def pos_to_cM(pos,boundaries,cM_pos):
+    cM_out = np.zeros((pos.shape[0]), dtype=np.float_)
+    cM_out[...] = np.nan
+    current_seg = 0
+    for i in range(pos.shape[0]):
+        if boundaries[cM_pos.shape[0]] > pos[i] >= boundaries[0]:
+            unmapped = True
+            while unmapped:
+                if boundaries[current_seg + 1] > pos[i] >= boundaries[current_seg]:
+                    cM_out[i] = cM_pos[current_seg]
+                    unmapped = False
+                else:
+                    current_seg += 1
+    return cM_out
+
+def decode_map_from_pos(chrom,pos):
+    map = np.loadtxt(os.path.dirname(snipar.__file__)+'/../decode_map/chr_'+str(chrom)+'.gz', dtype=float, skiprows=1)
+    boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
+    return pos_to_cM(pos, boundaries, map[:, 2])
+
 
 def infer_ibd_chr(bedfile, sibpairs, p, outprefix, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
     bimfile = bedfile.split('.bed')[0] + '.bim'
-    chr = np.loadtxt(bimfile, usecols=0, dtype=str)
-    chr = np.unique(chr)
-    if chr.shape[0] > 1:
+    chrom = np.loadtxt(bimfile, usecols=0, dtype=str)
+    chrom = np.unique(chrom)
+    if chrom.shape[0] > 1:
         raise (ValueError('More than 1 chromosome in input bedfile'))
     else:
-        chr = chr[0]
-    print('Inferring IBD for chromosome ' + str(chr))
+        chrom = chrom[0]
+    print('Inferring IBD for chromosome ' + str(chrom))
     # Read sibling genotypes from bed file
     gts = read_sibs_from_bed(bedfile, sibpairs)
     # Calculate allele frequencies
@@ -316,23 +357,29 @@ def infer_ibd_chr(bedfile, sibpairs, p, outprefix, min_length = 0.01, mapfile=No
         map = np.loadtxt(bimfile, usecols=2)
         map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
         # Check for NAs
-        if np.sum(np.isnan(map)) > 0:
-            raise (ValueError('Map cannot have NAs'))
-        if np.min(map) < 0:
-            raise (ValueError('Map file cannot have negative values'))
         if np.var(map) == 0:
-            raise (ValueError('Map file has no variation'))
-        # Check ordering
-        ordered_map = np.sort(map)
-        if np.array_equal(map, ordered_map):
-            pass
+            print('Map information not found in bim file.')
+            print('Using default map (decode sex averaged map on Hg19 coordinates)')
+            gts.map = decode_map_from_pos(chrom, gts.pos)
+            pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
+            print('Found map positions for '+str(pc_mapped)+'% of SNPs')
+            gts.filter(~np.isnan(gts.map))
         else:
-            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
-        # Check scale
-        if np.max(map) > 5000:
-            raise (ValueError('Maximum value of map too large'))
-        gts.filter(np.array([x in map_snp_dict for x in gts.sid]))
-        gts.map = map[[map_snp_dict[x] for x in gts.sid]]
+            if np.sum(np.isnan(map)) > 0:
+                raise (ValueError('Map cannot have NAs'))
+            if np.min(map) < 0:
+                raise (ValueError('Map file cannot have negative values'))
+            # Check ordering
+            ordered_map = np.sort(map)
+            if np.array_equal(map, ordered_map):
+                pass
+            else:
+                raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
+            # Check scale
+            if np.max(map) > 5000:
+                raise (ValueError('Maximum value of map too large'))
+            gts.filter(np.array([x in map_snp_dict for x in gts.sid]))
+            gts.map = map[[map_snp_dict[x] for x in gts.sid]]
     else:
         print('Reading map from ' + str(mapfile))
         gts.map = preprocess.get_map_positions(mapfile, gts)

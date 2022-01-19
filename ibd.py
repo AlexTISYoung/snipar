@@ -1,7 +1,6 @@
 import argparse, gzip
 from numba import set_num_threads
 from numba import config as numba_config
-from snipar.bin.preprocess_data import create_pedigree
 import snipar.preprocess as preprocess
 import snipar.ibd
 import numpy as np
@@ -44,10 +43,19 @@ bedfiles = preprocess.parse_obsfiles(args.bedfiles,obsformat='bed')
 # Set parameters
 min_length = args.min_length
 kinfile = args.king
-min_maf = args.min_maf
+
+if 0 <= args.min_maf <= 0.5:
+    min_maf = args.min_maf
+else:
+    raise(ValueError('Min MAF must be between 0 and 0.5'))
+
 mapfile = args.map
 outprefix = args.outprefix
-max_missing = args.max_missing
+
+if 0 <= args.max_missing <= 100:
+    max_missing = args.max_missing
+else:
+    raise(ValueError('Max missing % must be between 0 and 100'))
 
 #### Find sibling pairs ####
 if args.pedigree is not None:
@@ -81,7 +89,7 @@ if args.p_error is None:
     if args.pedigree is None:
         if args.agesex is not None:
             print('Constructing pedigree from '+str(kinfile)+' and age and sex information from '+str(args.agesex))
-            ped = np.array(create_pedigree(kinfile,args.agesex),dtype=str)
+            ped = np.array(preprocess.create_pedigree(kinfile, args.agesex), dtype=str)
         else:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     else:
@@ -95,4 +103,7 @@ else:
 
 ######### Infer IBD ###########
 for i in range(bedfiles.shape[0]):
-    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, p, outprefix, min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix, ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing)
+    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, p, outprefix,
+                             min_length=min_length, mapfile=args.map,
+                             ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
+                             min_maf=min_maf, max_missing=max_missing)
