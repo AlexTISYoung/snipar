@@ -1,10 +1,9 @@
-import gzip, os
+import gzip, os, snipar, code
 from numba import njit, prange
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
 from snipar.utilities import make_id_dict
-import snipar
 
 ####### Transition Matrix ######
 @njit
@@ -318,7 +317,7 @@ def decode_map_from_pos(chrom,pos):
     return pos_to_cM(pos, boundaries, map[:, 2])
 
 
-def infer_ibd_chr(bedfile, sibpairs, p, outprefix, min_length = 0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5):
+def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_length=0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5, max_error=0.01):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
@@ -347,11 +346,22 @@ def infer_ibd_chr(bedfile, sibpairs, p, outprefix, min_length = 0.01, mapfile=No
     sibpair_indices = np.zeros((sibpairs.shape), dtype=int)
     sibpair_indices[:, 0] = np.array([gts.id_dict[x] for x in sibpairs[:, 0]])
     sibpair_indices[:, 1] = np.array([gts.id_dict[x] for x in sibpairs[:, 1]])
-    # Filtering on MAF and LD score
-    print('Before filtering on MAF and missingness, there were ' + str(gts.shape[1]) + ' SNPs')
+    # Filtering on MAF, LD score, and genotyping error
+    # Find error probabilities
+    p_error = np.zeros((gts.sid.shape[0]))
+    p_error[:] = error_prob
+    if error_probs is not None:
+        in_error_probs = np.array([x in error_probs.sid_dict for x in gts.sid])
+        error_index = np.array([error_probs.sid_dict[x] for x in gts.sid[in_error_probs]])
+        p_error[in_error_probs] = error_probs.error_ests[error_index]
+    gts.error_probs = p_error
+    code.interact(local=locals())
+    # Filter
+    print('Before filtering on MAF, missingness, and genotyping error, there were ' + str(gts.shape[1]) + ' SNPs')
     gts.filter_maf(min_maf)
     gts.filter_missingness(max_missing)
-    print('After filtering on MAF and missingness, there are ' + str(gts.shape[1]) + ' SNPs')
+    gts.filter(gts.error_probs < max_error)
+    print('After filtering, there are ' + str(gts.shape[1]) + ' SNPs')
     # Read map file
     if mapfile is None:
         print('Separate genetic map not provided, so attempting to read map from ' + bimfile)

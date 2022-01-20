@@ -31,8 +31,8 @@ class gtarray(object):
         G : :class:`snipar.gtarray`
 
     """
-    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, fams=None, par_status=None):
-        if type(garray) == np.ndarray or type(garray)==np.ma.core.MaskedArray:
+    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None):
+        if type(garray) == np.ndarray or type(garray) == np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
             else:
@@ -99,6 +99,16 @@ class gtarray(object):
                 raise(ValueError('Must provide SNP ids'))
         else:
             self.map = None
+        if error_probs is not None:
+            if self.sid is not None:
+                if error_probs.shape[0] == self.sid.shape[0]:
+                    self.error_probs = error_probs
+                else:
+                    raise ValueError('Size of map does not match number of SNPs')
+            else:
+                raise(ValueError('Must provide SNP ids'))
+        else:
+            self.error_probs = None
         if fams is not None:
             if fams.shape[0] == ids.shape[0] and fams.ndim==1:
                 self.fams = fams
@@ -152,6 +162,8 @@ class gtarray(object):
             self.chrom = self.chrom[filter_pass]
         if self.map is not None:
             self.map = self.map[filter_pass]
+        if self.error_probs is not None:
+            self.error_probs = self.error_probs[filter_pass]
 
     def filter_maf(self, min_maf = 0.01, verbose=False):
         """

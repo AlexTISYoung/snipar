@@ -277,6 +277,7 @@ class g_error(object):
             self.ME = ME
             self.sum_het = sum_het
             self.sid = sid
+            self.sid_dict = make_id_dict(self.sid)
     def bayes_shrink(self, alpha, beta):
         self.error_ests = (self.ME+alpha)/(self.sum_het+beta)
 
@@ -303,14 +304,13 @@ def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
     var_error = np.var(genome_error_rates)
     mean_inv_het = np.mean(1/sum_het)
     beta = 1/(var_error/mean_error-mean_inv_het)
-    code.interact(local=locals())
-    if beta < 0:
-        return mean_error
-    else:
+    if beta > 0:
         alpha = mean_error*beta
         for i in range(bedfiles.shape[0]):
-            genome_errors[i].bayes_shrink(alpha,beta)
-        return genome_errors
+            genome_errors[i].bayes_shrink(alpha, beta)
+        return mean_error, genome_errors
+    else:
+        return mean_error, None
 
 def mendelian_errors_from_bed(bedfile, ped, min_maf):
     # Read bed

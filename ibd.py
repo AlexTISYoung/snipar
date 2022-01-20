@@ -33,6 +33,7 @@ parser.add_argument('--threads',type=int,help='Number of threads to use for IBD 
 parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency',default=0.01)
 parser.add_argument('--max_missing', type=float,
                     help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
+parser.add_argument('--max_error', type=float, help='Maximum per-SNP genotyping error probability', default=0.01)
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 args = parser.parse_args()
@@ -54,6 +55,11 @@ outprefix = args.outprefix
 
 if 0 <= args.max_missing <= 100:
     max_missing = args.max_missing
+else:
+    raise(ValueError('Max missing % must be between 0 and 100'))
+
+if 0 <= args.max_error <= 1:
+    max_error = args.max_error
 else:
     raise(ValueError('Max missing % must be between 0 and 100'))
 
@@ -94,16 +100,21 @@ if args.p_error is None:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     else:
         ped = np.loadtxt(args.pedigree, dtype=str)
-    p = preprocess.estimate_genotyping_error_rate(bedfiles, ped, min_maf)
-    print('Estimated genotyping error probability: '+str(round(p,6)))
-    if p > 0.05:
+    error_prob, error_probs = preprocess.estimate_genotyping_error_rate(bedfiles, ped, min_maf)
+    print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
+    if p > 0.01:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
 else:
-    p = args.p_error
+    error_prob = args.p_error
+    error_probs = None
 
 ######### Infer IBD ###########
 for i in range(bedfiles.shape[0]):
-    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, p, outprefix,
+    if error_probs is None:
+        error_probs_i = None
+    else:
+        error_probs_i = error_probs[i]
+    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, error_prob, error_probs_i, outprefix,
                              min_length=min_length, mapfile=args.map,
                              ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
-                             min_maf=min_maf, max_missing=max_missing)
+                             min_maf=min_maf, max_missing=max_missing, max_error=max_error)
