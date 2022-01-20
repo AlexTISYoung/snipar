@@ -7,7 +7,6 @@ import numpy as np
 from snipar.utilities import make_id_dict
 import pandas as pd
 import logging
-import snipar
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []

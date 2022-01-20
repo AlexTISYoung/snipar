@@ -4,6 +4,7 @@ import snipar.preprocess as preprocess
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
 from snipar.utilities import make_id_dict
+import snipar
 
 ####### Transition Matrix ######
 @njit
