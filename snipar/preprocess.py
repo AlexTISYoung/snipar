@@ -6,7 +6,7 @@ from numba import njit, prange
 import numpy as np
 from snipar.utilities import make_id_dict
 import pandas as pd
-import logging
+import logging, code
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
@@ -291,24 +291,28 @@ def estimate_genotyping_error_rate(bedfiles,ped):
     ## Estimate empirical bayes prior parameters
     # Collect MLE error rates across genome
     genome_error_rates = np.zeros((np.sum(nsnp)))
+    sum_het = np.zeros((np.sum(nsnp)))
     snp_start = 0
     for i in range(bedfiles.shape[0]):
         snp_end = snp_start+nsnp[i]
         genome_error_rates[snp_start:snp_end] = genome_errors[i].error_ests
+        sum_het[snp_start:snp_end] = genome_errors[i].sum_het
         snp_start = snp_end
     # Estimate mean and variance of MLE error estimates
     mean_error = np.mean(genome_error_rates)
     var_error = np.var(genome_error_rates)
-    if var_error <= mean_error:
+    mean_inv_het = np.mean(1/sum_het)
+    beta = var_error/mean_error-mean_inv_het
+    code.interact(local=locals())
+    if beta < 0:
         return mean_error
     else:
-        beta = mean_error/(var_error-mean_error)
         alpha = mean_error*beta
         for i in range(bedfiles.shape[0]):
             genome_errors[i].bayes_shrink(alpha,beta)
         return genome_errors
 
-def mendelian_errors_from_bed(bedfile,ped):
+def mendelian_errors_from_bed(bedfile, ped, min_maf):
     # Read bed
     bed = Bed(bedfile, count_A1=True)
     ids = bed.iid
@@ -353,13 +357,14 @@ def mendelian_errors_from_bed(bedfile,ped):
     ME = count_ME(gts, pair_indices)
     # Compute allele frequencies
     gts = ma.array(gts, mask=np.isnan(gts))
-    N_pair = np.sum(np.logical_not(gts[par_indices[:, 0], :].mask) * np.logical_not(gts[par_indices[:, 1], :].mask),
+    N_pair = np.sum(np.logical_not(gts[pair_indices[:, 0], :].mask) * np.logical_not(gts[pair_indices[:, 1], :].mask),
                     axis=0)
     freqs = ma.mean(gts, axis=0) / 2.0
+    freq_pass = (1-min_maf) > freqs > min_maf
     # Estimate error probability
-    sum_het = N_pair*freqs * (1 - freqs)
+    sum_het = N_pair * freqs * (1 - freqs)
     error_mle = ME/sum_het
-    return g_error(error_mle, ME, sum_het, bed.sid)
+    return g_error(error_mle[freq_pass], ME[freq_pass], sum_het[freq_pass], bed.sid[freq_pass])
 
 @njit(parallel=True)
 def count_ME(gts,pair_indices):
