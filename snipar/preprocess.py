@@ -269,55 +269,44 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = Fal
     # Return ids with imputed/observed parents
     return ids, observed_indices, imp_indices
 
-def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = False):
-    """
-    Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
-    It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
-    and the indices of the imputed parental genotypes for those individuals.
-    """
-    # Made dictionary for observed genotypes
-    gts_id_dict = make_id_dict(gts_ids)
-    # If IDs not provided, use all individuals with observed genotypes
-    if ids is None:
-        ids = gts_ids
-    # Find individuals with siblings
-    if sib:
-        ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
-        if verbose:
-            print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
-    ### Find parental status
-    if verbose:
-        print('Checking for observed/imputed parental genotypes')
-    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, fams, gts_id_dict)
-    # Find which individuals can be used
-    none_missing = np.min(gt_indices, axis=1)
-    none_missing = none_missing >= 0
-    N = np.sum(none_missing)
-    if N == 0:
-        raise ValueError(
-            'No individuals with phenotype observations and complete observed/imputed genotype observations')
-    if verbose:
-        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
-    # Take those that can be used
-    gt_indices = gt_indices[none_missing, :]
-    par_status = par_status[none_missing, :]
-    ids = ids[none_missing]
-    # Find indices of individuals and their parents in observed genotypes
-    observed_indices = np.sort(np.unique(np.hstack((gt_indices[:, 0],
-                                                    gt_indices[par_status[:, 0] == 0, 1],
-                                                    gt_indices[par_status[:, 1] == 0, 2]))))
-    # Get indices of imputed parents
-    imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:, 0] == 1, 1],
-                                               gt_indices[par_status[:, 1] == 1, 2]))))
-    # Return ids with imputed/observed parents
-    return ids, observed_indices, imp_indices
+
+class g_error(object):
+    def __init__(self, error_ests, ME, sum_het, sid):
+        if error_ests.shape[0] == ME.shape[0] and ME.shape[0] == sum_het.shape[0] and sum_het.shape[0] ==sid.shape[0]:
+            self.error_ests = error_ests
+            self.ME = ME
+            self.sum_het = sum_het
+            self.sid = sid
+    def bayes_shrink(self, alpha, beta):
+        self.error_ests = (self.ME+alpha)/(self.sum_het+beta)
 
 def estimate_genotyping_error_rate(bedfiles,ped):
-    ME_het = np.zeros((2))
-    for bedfile in bedfiles:
-        ME_het += mendelian_errors_from_bed(bedfile,ped)
-    p = ME_het[0]/ME_het[1]
-    return p
+    genome_errors = []
+    nsnp = np.zeros((bedfiles.shape[0]), dtype=int)
+    # Estimate per-SNP errors for each chromosome
+    for i in range(bedfiles.shape[0]):
+        ME_chr = mendelian_errors_from_bed(bedfiles[i], ped)
+        genome_errors.append(ME_chr)
+        nsnp[i] = ME_chr.sid.shape[0]
+    ## Estimate empirical bayes prior parameters
+    # Collect MLE error rates across genome
+    genome_error_rates = np.zeros((np.sum(nsnp)))
+    snp_start = 0
+    for i in range(bedfiles.shape[0]):
+        snp_end = snp_start+nsnp[i]
+        genome_error_rates[snp_start:snp_end] = genome_errors[i].error_ests
+        snp_start = snp_end
+    # Estimate mean and variance of MLE error estimates
+    mean_error = np.mean(genome_error_rates)
+    var_error = np.var(genome_error_rates)
+    if var_error <= mean_error:
+        return mean_error
+    else:
+        beta = mean_error/(var_error-mean_error)
+        alpha = mean_error*beta
+        for i in range(bedfiles.shape[0]):
+            genome_errors[i].bayes_shrink(alpha,beta)
+        return genome_errors
 
 def mendelian_errors_from_bed(bedfile,ped):
     # Read bed
@@ -361,22 +350,25 @@ def mendelian_errors_from_bed(bedfile,ped):
             pair_indices[pair_count,:] = np.array([o_index,id_dict[opg_ped[i,3]]])
             pair_count += 1
     ## Count Mendelian errors
-    ME = count_ME(gts,pair_indices)
+    ME = count_ME(gts, pair_indices)
     # Compute allele frequencies
     gts = ma.array(gts, mask=np.isnan(gts))
+    N_pair = np.sum(np.logical_not(gts[par_indices[:, 0], :].mask) * np.logical_not(gts[par_indices[:, 1], :].mask),
+                    axis=0)
     freqs = ma.mean(gts, axis=0) / 2.0
     # Estimate error probability
-    sum_het = np.sum(freqs * (1 - freqs))
-    return np.array([ME,sum_het*pair_count])
+    sum_het = N_pair*freqs * (1 - freqs)
+    error_mle = ME/sum_het
+    return g_error(error_mle, ME, sum_het, bed.sid)
 
 @njit(parallel=True)
 def count_ME(gts,pair_indices):
-    ME = 0
+    ME = np.zeros((gts.shape[1]), dtype=np.int_)
     # Count Mendelian errors
-    for i in prange(pair_indices.shape[0]):
-        for j in range(gts.shape[1]):
-                if np.abs(gts[pair_indices[i,0],j]-gts[pair_indices[i,1],j])>1:
-                    ME += 1
+    for j in prange(gts.shape[1]):
+        for i in range(pair_indices.shape[0]):
+            if np.abs(gts[pair_indices[i, 0], j] - gts[pair_indices[i, 1], j]) > 1:
+                ME[j] += 1
     return ME
 
 # Read header of mapfile

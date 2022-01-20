@@ -98,7 +98,7 @@ class gtarray(object):
             else:
                 raise(ValueError('Must provide SNP ids'))
         else:
-            self.chrom = None
+            self.map = None
         if fams is not None:
             if fams.shape[0] == ids.shape[0] and fams.ndim==1:
                 self.fams = fams
