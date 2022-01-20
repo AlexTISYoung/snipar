@@ -302,7 +302,7 @@ def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
     mean_error = np.mean(genome_error_rates)
     var_error = np.var(genome_error_rates)
     mean_inv_het = np.mean(1/sum_het)
-    beta = var_error/mean_error-mean_inv_het
+    beta = 1/(var_error/mean_error-mean_inv_het)
     code.interact(local=locals())
     if beta < 0:
         return mean_error
