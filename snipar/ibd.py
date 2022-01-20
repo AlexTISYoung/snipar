@@ -156,9 +156,9 @@ def viterbi(state_matrix,pointers):
             integer vector giving the Viterbi path through the IBD states
     """
     path = np.zeros(state_matrix.shape[1],dtype=np.int8)
-    path[path.shape[0]-1] = np.argmax(state_matrix[:,state_matrix.shape[1]-1])
+    path[path.shape[0]-1] = np.argmax(state_matrix[:, state_matrix.shape[1]-1])
     for i in range(1,path.shape[0]):
-        path[path.shape[0]-(i+1)] = pointers[path[path.shape[0]-i],path.shape[0]-i]
+        path[path.shape[0]-(i+1)] = pointers[path[path.shape[0]-i], path.shape[0]-i]
     return path
 
 @njit(parallel=True)
@@ -404,18 +404,18 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments
-    segs_outfile = outprefix + 'chr_'+str(chr)+'.ibd.segments.gz'
+    segs_outfile = outprefix + 'chr_'+str(chrom)+'.ibd.segments.gz'
     print('Writing segments to ' + segs_outfile)
-    write_segs(sibpairs, allsegs, chr, segs_outfile)
+    write_segs(sibpairs, allsegs, chrom, segs_outfile)
     # Write matrix
     if ibdmatrix:
-        outfile = outprefix + 'chr_'+str(chr)+'.ibd.gz'
+        outfile = outprefix + 'chr_'+str(chrom)+'.ibd.gz'
         print('Writing matrix output to ' + str(outfile))
         ibd = np.row_stack(
             (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')
     if ld_out:
-        print('Writing LD-scores to '+outprefix+str(chr)+'.l2.ldscore.gz')
-        ld_out = np.vstack((np.array(['CHR','SNP','BP','L2']).reshape((1,4)),np.vstack((np.array([chr for x in gts.sid]), gts.sid, gts.pos, ld)).T))
-        np.savetxt(outprefix+str(chr)+'.l2.ldscore.gz',ld_out,fmt='%s')
+        print('Writing LD-scores to '+outprefix+str(chrom)+'.l2.ldscore.gz')
+        ld_out = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in gts.sid]), gts.sid, gts.pos, ld)).T))
+        np.savetxt(outprefix+str(chrom)+'.l2.ldscore.gz', ld_out, fmt='%s')
