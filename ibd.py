@@ -94,7 +94,7 @@ if args.p_error is None:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     else:
         ped = np.loadtxt(args.pedigree, dtype=str)
-    p = preprocess.estimate_genotyping_error_rate(bedfiles, ped)
+    p = preprocess.estimate_genotyping_error_rate(bedfiles, ped, min_maf)
     print('Estimated genotyping error probability: '+str(round(p,6)))
     if p > 0.05:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')

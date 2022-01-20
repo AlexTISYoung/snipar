@@ -280,12 +280,12 @@ class g_error(object):
     def bayes_shrink(self, alpha, beta):
         self.error_ests = (self.ME+alpha)/(self.sum_het+beta)
 
-def estimate_genotyping_error_rate(bedfiles,ped):
+def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
     genome_errors = []
     nsnp = np.zeros((bedfiles.shape[0]), dtype=int)
     # Estimate per-SNP errors for each chromosome
     for i in range(bedfiles.shape[0]):
-        ME_chr = mendelian_errors_from_bed(bedfiles[i], ped)
+        ME_chr = mendelian_errors_from_bed(bedfiles[i], ped, min_maf)
         genome_errors.append(ME_chr)
         nsnp[i] = ME_chr.sid.shape[0]
     ## Estimate empirical bayes prior parameters
