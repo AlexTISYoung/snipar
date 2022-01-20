@@ -133,7 +133,7 @@ class gtarray(object):
         elif self.ndim == 3:
             self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
 
-    def filter(self,filter_pass):
+    def filter(self, filter_pass):
         if self.freqs is not None:
             self.freqs = self.freqs[filter_pass]
         if self.ndim == 2:

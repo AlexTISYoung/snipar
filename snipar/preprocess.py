@@ -360,7 +360,7 @@ def mendelian_errors_from_bed(bedfile, ped, min_maf):
     N_pair = np.sum(np.logical_not(gts[pair_indices[:, 0], :].mask) * np.logical_not(gts[pair_indices[:, 1], :].mask),
                     axis=0)
     freqs = ma.mean(gts, axis=0) / 2.0
-    freq_pass = (1-min_maf) > freqs > min_maf
+    freqs_pass = np.logical_and(freqs > min_maf, freqs < (1 - min_maf))
     # Estimate error probability
     sum_het = N_pair * freqs * (1 - freqs)
     error_mle = ME/sum_het
