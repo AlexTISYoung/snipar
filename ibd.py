@@ -102,7 +102,7 @@ if args.p_error is None:
         ped = np.loadtxt(args.pedigree, dtype=str)
     error_prob, error_probs = preprocess.estimate_genotyping_error_rate(bedfiles, ped, min_maf)
     print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
-    if p > 0.01:
+    if error_prob > 0.01:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
 else:
     error_prob = args.p_error
