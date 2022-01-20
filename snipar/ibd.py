@@ -101,7 +101,7 @@ def p_obs_given_IBD(g1_obs,g2_obs,f,p):
     return np.log(P_out)
 
 @njit
-def make_dynamic(g1, g2, freqs, map, weights, p):
+def make_dynamic(g1, g2, freqs, map, weights, error_probs):
     """Make state-matrix and pointer matrix for a sibling pair by dynamic programming
     Args:
         g1 : :class:`~numpy:numpy.array`
@@ -122,25 +122,25 @@ def make_dynamic(g1, g2, freqs, map, weights, p):
         pointers : :class:`~numpy:numpy.array`
             integer vector giving the pointer to which state from previous position lead to max at this position
     """
-    state_matrix = np.zeros((3,g1.shape[0]),dtype=np.float64)
-    pointers = np.zeros((3,g1.shape[0]),dtype=np.int8)
+    state_matrix = np.zeros((3, g1.shape[0]), dtype=np.float64)
+    pointers = np.zeros((3, g1.shape[0]), dtype=np.int8)
     # Check for nans
-    not_nan = np.logical_not(np.logical_or(np.isnan(g1),np.isnan(g2)))
+    not_nan = np.logical_not(np.logical_or(np.isnan(g1), np.isnan(g2)))
     # Initialise
-    state_matrix[:,0] = np.log(np.array([0.25,0.5,0.25],dtype=np.float64))
+    state_matrix[:,0] = np.log(np.array([0.25, 0.5, 0.25],dtype=np.float64))
     if not_nan[0]:
-        state_matrix[:,0] += weights[0]*p_obs_given_IBD(np.int8(g1[0]),np.int8(g2[0]),freqs[0],p)
+        state_matrix[:, 0] += weights[0]*p_obs_given_IBD(np.int8(g1[0]), np.int8(g2[0]), freqs[0], error_probs[0])
     # Compute
-    for l in range(1,g1.shape[0]):
+    for l in range(1, g1.shape[0]):
         if not_nan[l]:
-            probs = weights[l]*p_obs_given_IBD(np.int8(g1[l]),np.int8(g2[l]),freqs[l],p)
+            probs = weights[l]*p_obs_given_IBD(np.int8(g1[l]), np.int8(g2[l]), freqs[l], error_probs[l])
         else:
             probs = np.zeros((3))
         tmatrix = transition_matrix(map[l]-map[l-1])
         for i in range(3):
-            tprobs = tmatrix[:,i]+state_matrix[:,l-1]
-            state_matrix[i,l] = np.max(tprobs)+probs[i]
-            pointers[i,l] = np.argmax(tprobs)
+            tprobs = tmatrix[:, i]+state_matrix[:, l-1]
+            state_matrix[i, l] = np.max(tprobs)+probs[i]
+            pointers[i, l] = np.argmax(tprobs)
     return state_matrix, pointers
 
 @njit
@@ -162,12 +162,12 @@ def viterbi(state_matrix,pointers):
     return path
 
 @njit(parallel=True)
-def infer_ibd(sibpairs,gts,freqs,map,weights,p):
-    ibd = np.zeros((sibpairs.shape[0],gts.shape[1]),dtype=np.int8)
+def infer_ibd(sibpairs, gts, freqs, map, weights, error_probs):
+    ibd = np.zeros((sibpairs.shape[0], gts.shape[1]), dtype=np.int8)
     for i in prange(sibpairs.shape[0]):
-        sibpair = sibpairs[i,:]
-        state_matrix, pointers = make_dynamic(gts[sibpair[0],:],gts[sibpair[1],:],freqs,map,weights,p)
-        ibd[i,...] = viterbi(state_matrix,pointers)
+        sibpair = sibpairs[i, :]
+        state_matrix, pointers = make_dynamic(gts[sibpair[0], :], gts[sibpair[1], :], freqs, map, weights, error_probs)
+        ibd[i, ...] = viterbi(state_matrix, pointers)
     return ibd
 
 class segment(object):
@@ -355,7 +355,6 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
         error_index = np.array([error_probs.sid_dict[x] for x in gts.sid[in_error_probs]])
         p_error[in_error_probs] = error_probs.error_ests[error_index]
     gts.error_probs = p_error
-    code.interact(local=locals())
     # Filter
     print('Before filtering on MAF, missingness, and genotyping error, there were ' + str(gts.shape[1]) + ' SNPs')
     gts.filter_maf(min_maf)
@@ -401,7 +400,7 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')
-    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float_), gts.freqs, gts.map, gts.weights, p)
+    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float_), gts.freqs, gts.map, gts.weights, gts.error_probs)
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments
