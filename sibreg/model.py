@@ -20,7 +20,7 @@ from time import time
 from typing import List, NamedTuple, Optional, Dict, Tuple, Callable, Hashable, Union
 from typing_extensions import Literal
 from collections import defaultdict
-from itertools import product, combinations_with_replacement
+from itertools import product, combinations_with_replacement, combinations
 from functools import lru_cache
 import pandas as pd
 from operator import attrgetter
@@ -355,6 +355,7 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
     row_ind = []
     col_ind = []
 
+    logger.info('Building grm...')
     with gzip.open(f'{grm_path}.grm.gz', 'rt') as f:
         for line in f:
             id1, id2, _, gr = line.strip().split('\t')
@@ -371,7 +372,7 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
             data.append(gr_)
             row_ind.append(ind1)
             col_ind.append(ind2)
-
+    logger.info(f'Done building grm. nnz={len(data)}')
     return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
 
 
@@ -474,7 +475,7 @@ def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
     logger.info('Finished writing.')
 
 
-def build_sib_arr_(fam_labels: List[str]) -> np.ndarray:
+def build_sib_arr_(fam_labels: List[str], y) -> np.ndarray:
     """Build sibship array for HE regression.
 
     Args:
@@ -486,16 +487,25 @@ def build_sib_arr_(fam_labels: List[str]) -> np.ndarray:
     logger.info('Building sibship arr...')
     n = len(fam_labels)
     sib_arr = np.zeros(n_tril(n))
-
+    # sib_arr = np.zeros(n_tril(n) - n)
+    # # y_arr_ = np.zeros(n_tril(n))
+    # y = y - y.mean()
+    # y_i = np.tril_indices(n, k=-1)
+    # y_arr = y[y_i[0]] * y[y_i[1]]
     label_indices = defaultdict(list)
     for l, f in enumerate(fam_labels):
         label_indices[f].append(l)
 
     for f, indices_lst in label_indices.items():
+        # for pair in combinations(indices_lst, 2):
         for pair in combinations_with_replacement(indices_lst, 2):
             arr_ind = coord2linear(*pair)
             sib_arr[arr_ind] = 1.
+            # y_arr_[arr_ind] = y_arr[arr_ind]
     logger.info('Done building sibship arr.')
+    # v = y_arr.var()
+    # print(v, y_arr.dot(sib_arr).sum() / y_arr.std() / sib_arr.std() / len(y_arr))
+    # return sib_arr, y_arr
     return sib_arr
 
 
@@ -702,7 +712,7 @@ class LinearMixedModel:
     """Wrapper of data and functions that compute estimates of variance components or SNP effects.
     """
 
-    jitter = 1e-3  # 1e-3
+    # jitter = 1e-6  # 1e-3
     _vec_linear2coord: Callable[..., Tuple[np.ndarray, np.ndarray]] = np.vectorize(
         linear2coord)
     _vec_coord2linear: Callable[..., np.ndarray] = np.vectorize(coord2linear)
@@ -758,14 +768,19 @@ class LinearMixedModel:
         self.n_varcomps: int = len(varcomp_arr_lst) + 1
         self._varcomps: Tuple[float, ...]
         self.optimized: bool
+        self.jitter: float
+        y_var: float = self.y.var()
+        self.jitter = y_var / 1000.
         if varcomps is not None:
             if len(varcomps) != self.n_varcomps:
                 raise ValueError('varcomps and varcomps_arr_lst must have the same length.')
-            self._varcomps = varcomps
+            self._varcomps = varcomps 
             self.optimized = True
         else:
             self._varcomps = tuple(
                 self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
+            # self._varcomps = tuple(
+            #     y_var / self.n_varcomps for i in range(self.n_varcomps))
             self.optimized = False
         logger.info(f'Number of variance components: {self.n_varcomps}.')
 
@@ -1406,7 +1421,7 @@ class LinearMixedModel:
             self._varcomps = tuple(res.x)
             logger.info('Finished LBFGS-B.')
         else:
-            raise ValueError('Scipy minimize failed.')
+            raise ValueError(f'Scipy minimize failed: {res.message}')
 
     # TODO: add Z
     def test_grad_hessian(self) -> Tuple[float, np.ndarray, np.ndarray]:

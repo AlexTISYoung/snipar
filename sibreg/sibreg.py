@@ -1163,12 +1163,12 @@ def match_observed_and_imputed_snps_bgen(gts_f, par_gts_f, snp_ids=None, start=0
     imp_bim_cols = convert_str_array(np.array(par_gts_f['bim_columns']))
     if 'rsid' in imp_bim_cols:
         id_col = np.where('rsid' == imp_bim_cols)[0][0]
-    elif 'id' in imp_bim_cols:
-        id_col = np.where('id' == imp_bim_cols)[0][0]
+    # elif 'id' in imp_bim_cols:
+    #     id_col = np.where('id' == imp_bim_cols)[0][0]
     else:
         raise(ValueError('Could not find SNP ids in imputed parental genotypes'))
     imp_sid = imp_bim[:, id_col]
-    obs_sid = gts_f.ids
+    obs_sid = gts_f.rsids  # .ids
     obs_sid_dict = make_id_dict(obs_sid)
     in_obs_sid = np.zeros((imp_sid.shape[0]), dtype=bool)
     obs_sid_index = np.zeros((imp_sid.shape[0]), dtype=int)

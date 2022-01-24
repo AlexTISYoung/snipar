@@ -46,6 +46,7 @@ def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None
         ids, fam_labels = get_ids_with_par(impfiles[from_chr], obsfiles[from_chr], pheno_ids, impute_unrel=impute_unrel)
         return ids, fam_labels
     # for now impfiles and obsfiles contain all chromosome filenames
+    # TODO: if from_chr is not 1, keyerror
     ids, fam_labels = get_ids_with_par(impfiles[1], obsfiles[1], pheno_ids, impute_unrel=impute_unrel)
     df = pd.DataFrame({'fam_labels_1': fam_labels}, index=ids)
     # for obs, imp in zip(obsfiles[1:], impfiles[1:]):
@@ -245,7 +246,7 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 
 def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False,
-                  impute_unrel=True):
+                  impute_unrel=True, no_mean_normalise=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
     # no need to provide residual var arr
@@ -293,7 +294,13 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     #### Fill NAs ####
     if verbose:
         logger.info('Imputing missing values with population frequencies')
-    NAs = G.fill_NAs()
+    if not no_mean_normalise:
+        NAs = G.fill_NAs()
+    else:
+        def _fill_NAs(G):
+            # NAs = np.sum(G.gts.mask, axis=0)
+            G.gts[G.gts.mask] = 0
+        _fill_NAs(G)
     alpha, alpha_cov, alpha_ses = lmm.fit_snps_eff(G.gts)
     return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
@@ -377,6 +384,11 @@ if __name__ == '__main__':
     parser.add_argument('--impute_unrel',
                         action='store_true', default=False,
                         help='Whether to impute parental genotype of unrelated individuals or not.')
+
+    parser.add_argument('--no_mean_normalise',
+                        action='store_true', default=False,
+                        help='Whether to mean-normalise genotype or not (for testin purposes).')
+
     args = parser.parse_args()
 
     if (args.ibdrel_path is not None) + (args.grm_path is not None) + (args.gcta_path is not None) > 1:
@@ -414,7 +426,7 @@ if __name__ == '__main__':
         covariates = read_covariates(
             args.covar, missing_char=args.missing_char)
         # Match to pheno ids
-        covariates.filter_ids(pheno_ids)
+        # covariates.filter_ids(pheno_ids)
     ######## Check for bed/bgen #######
     if args.bed is None and args.bgen is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -584,7 +596,8 @@ if __name__ == '__main__':
         process_batch_ = partial(process_batch, pheno_ids=ids, pargts_f=pargts_f, gts_f=gts_f,
                                  parsum=args.parsum, fit_sib=args.fit_sib,
                                  max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,
-                                 impute_unrel=args.impute_unrel)
+                                 impute_unrel=args.impute_unrel,
+                                 no_mean_normalise=args.no_mean_normalise)
         _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
         with Pool(
             processes=args.num_cpus,
