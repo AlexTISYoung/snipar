@@ -396,7 +396,7 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
     print('Read map')
     # Weights
     print('Computing LD weights')
-    ld = preprocess.compute_ld_scores(np.array(gts.gts,dtype=np.float_), gts.map, max_dist=1)
+    ld = preprocess.compute_ld_scores(np.array(gts.gts, dtype=np.float_), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')

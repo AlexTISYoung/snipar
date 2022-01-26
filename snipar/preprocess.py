@@ -302,13 +302,16 @@ def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
     # Estimate mean and variance of MLE error estimates
     mean_error = np.mean(genome_error_rates)
     var_error = np.var(genome_error_rates)
-    mean_inv_het = np.mean(1/sum_het)
-    beta = 1/(var_error/mean_error-mean_inv_het)
-    if beta > 0:
-        alpha = mean_error*beta
-        for i in range(bedfiles.shape[0]):
-            genome_errors[i].bayes_shrink(alpha, beta)
-        return mean_error, genome_errors
+    if var_error>0:
+        mean_inv_het = np.mean(1/sum_het)
+        beta = 1/(var_error/mean_error-mean_inv_het)
+        if beta > 0:
+            alpha = mean_error*beta
+            for i in range(bedfiles.shape[0]):
+                genome_errors[i].bayes_shrink(alpha, beta)
+            return mean_error, genome_errors
+        else:
+            return mean_error, None
     else:
         return mean_error, None
 
