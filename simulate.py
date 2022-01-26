@@ -3,8 +3,8 @@ from bgen_reader import open_bgen
 import numpy as np
 from numba import set_num_threads
 from numba import config as numba_config
-from snipar.sibreg import *
 import gzip, h5py, os
+import snipar.preprocess as preprocess
 
 parser = argparse.ArgumentParser()
 parser.add_argument('h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
@@ -61,7 +61,7 @@ if args.h2_total is not None:
 beta_vert = args.beta_vert
 ncausal = args.n_causal
 
-bgenfiles = preprocess.parse_obsfiles(args.bedfiles,obsformat='bed')
+bgenfiles = preprocess.parse_obsfiles(args.bgenfiles, obsformat='bgen')
 
 # Read genotypes
 haps = []

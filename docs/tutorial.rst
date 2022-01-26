@@ -18,17 +18,20 @@ data in .bgen format (example/sample.bgen with associated sample file example/sa
 Inferring IBD between siblings
 ------------------------------
 
-The first step is to infer the identity-by-descent segments shared between siblings. SNIPar contains a script, ibd.py, that
-employs a Hidden Markov Model (HMM) to infer the IBD segments for the sibling pairs. (The genotyping error probability will be inferred from parent-offspring pairs when available; alternatively, a genotyping error probability can be provided using the --p_error option.)  To infer the IBD segments from the genotype data in example/sample.bed,
-use the following command
+The first step is to infer the identity-by-descent segments shared between siblings.
+SNIPar contains a script, ibd.py, that employs a Hidden Markov Model (HMM) to infer the IBD segments for the sibling pairs.
+The per-SNP genotyping error probability will be inferred from parent-offspring pairs when available;
+alternatively, a genotyping error probability can be provided using the --p_error option. By default, SNPs with
+genotyping error probabilities greater than 0.01 will be filtered out, but this threshold can be changed with the --max_error argument.
+To infer the IBD segments from the genotype data in example/sample.bed,use the following command
 
     ``python ibd.py example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
 
 This will output the IBD segments to a gzipped text file example/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
 inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with columns 'FID' (family ID), 'IID'
-(individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). It is necessary to provide the genetic map positions in centiMorgans (cM) of the SNPs:
-the *--map* argument allows the user to specify a genetic map (in the same format as used by SHAPEIT: https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats); otherwise,
-the script can use the genetic map positions (in cM) provided by the bim file. The *--threads* argument controls the number of threads used for computation.
+(individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). If no genetic map is provided, either using the *--map* argument or in the .bim file,
+then the script will use the deCODE sex-averaged map on Hg19 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
+which is stored in SNIPar/decode_map/. The *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT: https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats).
 
 If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID),
 they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred
@@ -38,7 +41,7 @@ as individuals in the pedigree that share both parents. (Warning: MZ twins shoul
 
 While the script can be run for a .bed file containing a single chromosome, it can also be run for multiple bed files each containing a single chromosome. If the bed files are
 chr_1.bed, chr_2.bed, ..., chr_22.bed, then you can specify these files to the script as 'chr_~', where '~' is interpreted as a numerical wildcard character.
-The script first infers a genotyping error probability from Mendelian Errors between parents and offspring across all the input chromosomes,
+The script first infers genotyping error probabilities from Mendelian Errors between parents and offspring across all the input chromosomes,
 then it will infer the IBD segments shared between siblings for each chromosome.
 
 The IBD inference can be performed on a smaller set of SNPs than will be imputed to save computation time.

@@ -317,7 +317,7 @@ def decode_map_from_pos(chrom,pos):
     return pos_to_cM(pos, boundaries, map[:, 2])
 
 
-def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_length=0.01, mapfile=None, ibdmatrix = False, ld_out = False, min_maf = 0.01, max_missing = 5, max_error=0.01):
+def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
     ## Read bed
     print('Reading genotypes from ' + bedfile)
     # Determine chromosome
