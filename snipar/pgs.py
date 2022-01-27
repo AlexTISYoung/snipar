@@ -3,7 +3,6 @@ import numpy as np
 from snipar.read import get_gts_matrix
 from snipar.utilities import make_id_dict
 
-
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
@@ -28,7 +27,7 @@ class pgs(object):
         else:
             raise ValueError('All inputs must have the same dimension')
 
-    def compute(self,garray, cols = None):
+    def compute(self, garray, cols=None):
         """Compute polygenic score values from a given genotype array. Finds the SNPs in the genotype array
         that have weights in the pgs and matching alleles, and computes the PGS based on these SNPs and the
         weights after allele-matching.
@@ -80,13 +79,13 @@ class pgs(object):
 
         ### Compute PGS
         if garray.ndim == 2:
-            pgs_val = garray.gts[:,in_pgs_snps].dot(weights_compute)
-        elif garray.ndim ==3:
-            pgs_val = np.zeros((garray.gts.shape[0],garray.gts.shape[1]),garray.dtype)
-            for i in range(0,garray.gts.shape[1]):
-                pgs_val[:,i] = garray.gts[:,i,in_pgs_snps].dot(weights_compute)
+            pgs_val = garray.gts[:, in_pgs_snps].dot(weights_compute)
+        elif garray.ndim == 3:
+            pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
+            for i in range(0, garray.gts.shape[1]):
+                pgs_val[:, i] = garray.gts[:, i, in_pgs_snps].dot(weights_compute)
 
-        return gtarray(pgs_val, garray.ids, sid = cols, fams = garray.fams)
+        return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
 
 def compute(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.

@@ -10,16 +10,18 @@ import logging, code
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
+    chroms = []
     if '~' in obsfiles:
         bed_ixes = obsfiles.split('~')
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):
                 obs_files.append(obsfile)
+                chroms.append(i)
         print(str(len(obs_files))+' observed genotype files found')
     else:
             obs_files = [obsfiles+'.'+obsformat]
-    return np.array(obs_files)
+    return np.array(obs_files), chroms
 
 def parse_filelist(obsfiles, impfiles, obsformat):
     obs_files = []
@@ -268,6 +270,27 @@ def get_indices_given_ped(ped, fams, gts_ids, ids=None, sib=False, verbose = Fal
                                                gt_indices[par_status[:, 1] == 1, 2]))))
     # Return ids with imputed/observed parents
     return ids, observed_indices, imp_indices
+
+@njit
+def pos_to_cM(pos,boundaries, cM_pos):
+    cM_out = np.zeros((pos.shape[0]), dtype=np.float_)
+    cM_out[...] = np.nan
+    current_seg = 0
+    for i in range(pos.shape[0]):
+        if boundaries[cM_pos.shape[0]] > pos[i] >= boundaries[0]:
+            unmapped = True
+            while unmapped:
+                if boundaries[current_seg + 1] > pos[i] >= boundaries[current_seg]:
+                    cM_out[i] = cM_pos[current_seg]
+                    unmapped = False
+                else:
+                    current_seg += 1
+    return cM_out
+
+def decode_map_from_pos(chrom,pos):
+    map = np.loadtxt(os.path.dirname(snipar.__file__)+'/../decode_map/chr_'+str(chrom)+'.gz', dtype=float, skiprows=1)
+    boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
+    return pos_to_cM(pos, boundaries, map[:, 2])
 
 
 class g_error(object):

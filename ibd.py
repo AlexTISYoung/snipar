@@ -39,7 +39,7 @@ parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD
 args = parser.parse_args()
 
 # Find bed files
-bedfiles = preprocess.parse_obsfiles(args.bedfiles,obsformat='bed')
+bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, obsformat='bed')
 
 # Set parameters
 min_length = args.min_length

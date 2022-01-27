@@ -282,7 +282,7 @@ class gtarray(object):
 
         # Match IDs
         common_ids = list(self.id_dict.keys() & garray.id_dict.keys())
-        if len(common_ids)==0:
+        if len(common_ids) == 0:
             raise ValueError('No IDs in common')
         self_index = np.array([self.id_dict[x] for x in common_ids])
         other_index = np.array([garray.id_dict[x] for x in common_ids])
@@ -291,14 +291,14 @@ class gtarray(object):
         if self.ids.ndim == 1:
             ids_out = self.ids[self_index]
         else:
-            ids_out = self.ids[self_index,:]
+            ids_out = self.ids[self_index, :]
 
         if self.gts.ndim ==2:
-            add_gts = self.gts[self_index,:]+garray.gts[other_index,:]
+            add_gts = self.gts[self_index, :]+garray.gts[other_index, :]
         else:
-            add_gts = self.gts[self_index, :,:] + garray.gts[other_index, :,:]
+            add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
 
-        return gtarray(add_gts,ids_out,self.sid,alleles = self.alleles, fams = self.fams[self_index])
+        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index])
 
     def diagonalise(self,inv_root):
         """

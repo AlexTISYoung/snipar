@@ -48,7 +48,7 @@ if __name__ == '__main__':
         colnames = weights[0,:]
         weights = weights[1:weights.shape[0],:]
         print('Read weights for '+str(weights.shape[0])+' variants')
-        beta = np.array(weights[:,np.where(colnames==args.beta_col)[0][0]],dtype=np.float64)
+        beta = np.array(weights[:,np.where(colnames == args.beta_col)[0][0]],dtype=np.float64)
         allele_indices = np.array([np.where(colnames==args.A1)[0][0],np.where(colnames==args.A2)[0][0]])
         p = pgs.pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
                 beta,
@@ -70,10 +70,12 @@ if __name__ == '__main__':
         for i in range(1,gts_list.shape[0]):
             print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
             if args.compute_controls:
-                pg_i = pgs.compute(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls)
-                pg = [pg[x].add(pg_i[x]) for x in range(0,len(pg))]
+                pg_i = pgs.compute(pargts_list[i], gts_list[i], p, sib=args.fit_sib,
+                                   compute_controls=args.compute_controls)
+                pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
             else:
-                pg = pg.add(pgs.compute(pargts_list[i],gts_list[i], p, sib=args.fit_sib, compute_controls=args.compute_controls))
+                pg = pg.add(pgs.compute(pargts_list[i], gts_list[i], p, sib=args.fit_sib,
+                                        compute_controls=args.compute_controls))
         print('PGS computed')
         ####### Write PGS to file ########
         if args.compute_controls:
