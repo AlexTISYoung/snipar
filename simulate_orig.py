@@ -1,13 +1,10 @@
 from bgen_reader import open_bgen
 import numpy as np
-from numba import njit, prange, set_num_threads
-from numba import config as numba_config
-from sibreg.sibreg import *
-import gzip, h5py, os
+from numba import njit, prange
+import h5py, argparse
 import snipar.preprocess as preprocess
-import snipar.ibd as ibd
+from snipar.ibd import write_segs_from_matrix
 from snipar.utilities import *
-import argparse
 
 @njit
 def impute_from_sibs(g1, g2, ibd, f):
@@ -167,12 +164,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('bgenfiles', type=str,
                     help='Address of genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
+parser.add_argument('n_causal',type=int,help='Number of causal loci')
 parser.add_argument('h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
 parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
 parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
 parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating',default=0)
 parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating)',default=None)
-parser.add_argument('--n_causal',type=int,help='Number of causal loci',default=None)
 parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
 parser.add_argument('--h2_total',type=float,help='Total variance explained by direct effects and indirect genetic effects from parents',default=None)
 parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
@@ -181,20 +178,21 @@ args=parser.parse_args()
 if args.beta_vert > 0 and args.h2_total is not None:
     raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
 
-if args.ngen_random >= 0:
-    ngen_random = args.ngen_random
+if args.n_random >= 0:
+    ngen_random = args.n_random
 else:
     raise(ValueError('Number of generations cannot be negative'))
 
-if args.n_am >= 0:
-    ngen_am = args.n_am
-else:
-    raise(ValueError('Number of generations cannot be negative'))
+if args.n_am > 0:
+    if args.r_par is not None:
+        if (args.r_par**2) <= 1:
+            r_y = args.r_par
+        else:
+            raise(ValueError('Parental correlation must be between -1 and 1'))
+    else:
+        raise(ValueError('Must specify parental phenotypic correlation for assortative mating'))
 
-if (args.r_par**2) <= 1:
-    r_y = args.r_par
-else:
-    raise(ValueError('Parental correlation must be between -1 and 1'))
+ngen_am = args.n_am
 
 if 0 <= args.h2_direct <= 1:
     h2 = args.h2_direct
@@ -213,6 +211,8 @@ if args.h2_total is not None:
         h2_total = args.h2_total
     else:
         raise(ValueError('Heritability must be between 0 and 1'))
+else:
+    h2_total = 0
 
 
 beta_vert = args.beta_vert
@@ -228,15 +228,15 @@ alleles = []
 positions = []
 for i in range(bgenfiles.shape[0]):
     print('Reading in chromosome '+str(chroms[i]))
+    # Read bgen
+    bgen = open_bgen(bgenfiles[i], verbose=True)
     # Read map
-    positions.append(bgen.positions)
     map = preprocess.decode_map_from_pos(chroms[i], bgen.positions)
     not_nan = np.logical_not(np.isnan(map))
     maps.append(map[not_nan])
-    # Read bgen
-    bgen = open_bgen(bgenfiles[i], verbose=True)
+    positions.append(bgen.positions[not_nan])
     # Snp
-    snp_ids.append(bgen.ids[not_nan])
+    snp_ids.append(bgen.rsids[not_nan])
     # Alleles
     alleles.append(np.array([x.split(',') for x in bgen.allele_ids[not_nan]]))
     # Read genotypes
@@ -343,8 +343,6 @@ print('Sibling phenotypic correlation: ' + str(round(np.corrcoef(Y_males, Y_fema
 # Final offspring generation
 V[a_count,:] = np.array([np.var(np.hstack((G_males,G_females))),np.var(np.hstack((Y_males, Y_females)))])
 
-print(a)
-
 print('Saving output to file')
 # Save variance
 vcf = args.outprefix+'VCs.txt'
@@ -372,10 +370,9 @@ hf = h5py.File(args.outprefix+'genotypes.hdf5','w')
 # save pedigree
 hf['ped'] = encode_str_array(ped)
 # save offspring genotypes
-chr_count = 0
 for i in range(len(haps)):
     print('Writing genotypes for chromosome '+str(chroms[i]))
-    bim_i = np.hstack((snp_ids[i], maps[i], positions[i], alleles[i]))
+    bim_i = np.vstack((snp_ids[i], maps[i], positions[i], alleles[i][:,0],alleles[i][:,1])).T
     hf['chr_'+str(chroms[i])+'_bim'] = encode_str_array(bim_i)
     gts_chr = np.sum(new_haps[i], axis=3, dtype=np.uint8)
     hf['chr_'+str(chroms[i])] = gts_chr.reshape((gts_chr.shape[0]*2,gts_chr.shape[2]),order='C')
@@ -383,19 +380,18 @@ for i in range(len(haps)):
     # print('Imputing parental genotypes and saving')
     # freqs = np.mean(gts_chr, axis=(0, 1)) / 2.0
     # # Phased
-    # phased_imp = impute_all_fams_phased(new_haps[chr_count],freqs,ibd[chr_count])
+    # phased_imp = impute_all_fams_phased(new_haps[i],freqs,ibd[i])
     # hf['phased_imp_chr'+str(chr)] = phased_imp
     # # Unphased
-    # ibd[chr_count] = np.sum(ibd[chr_count],axis=2)
-    # imp = impute_all_fams(gts_chr, freqs, ibd[chr_count])
+    # ibd[i] = np.sum(ibd[i],axis=2)
+    # imp = impute_all_fams(gts_chr, freqs, ibd[i])
     # hf['imp_chr_'+str(chr)] = imp
     # Parental genotypes
     # print('Saving true parental genotypes')
-    # par_gts_chr = np.zeros((old_haps[chr_count].shape[0],2,old_haps[chr_count].shape[2]),dtype=np.uint8)
-    # par_gts_chr[:,0,:] = np.sum(old_haps[chr_count][father_indices,0,:,:],axis=2)
-    # par_gts_chr[:,1,:] = np.sum(old_haps[chr_count][mother_indices,1,:,:],axis=2)
+    # par_gts_chr = np.zeros((old_haps[i].shape[0],2,old_haps[i].shape[2]),dtype=np.uint8)
+    # par_gts_chr[:,0,:] = np.sum(old_haps[i][father_indices,0,:,:],axis=2)
+    # par_gts_chr[:,1,:] = np.sum(old_haps[i][mother_indices,1,:,:],axis=2)
     # hf['par_chr_'+str(chr)] = par_gts_chr
-    chr_count += 1
 
 hf.close()
 
@@ -403,24 +399,26 @@ hf.close()
 snp_count = 0
 
 if h2_total>0:
-    causal_out = np.zeros((ab.shape[0], 8), dtype='U30')
+    causal_out = np.zeros((ab.shape[0], 5), dtype='U30')
 else:
-    causal_out = np.zeros((a.shape[0],7),dtype='U30')
+    causal_out = np.zeros((a.shape[0],4),dtype='U30')
 for i in range(len(haps)):
     print('Writing IBD segments for chromosome '+str(chroms[i]))
     # Segments
-    segs = ibd.write_segs_from_matrix(ibd[chr_count], sibpairs,
+    ibd[i] = np.sum(ibd[i],axis=2)
+    segs = write_segs_from_matrix(ibd[i], sibpairs,
                                   snp_ids[i], positions[i],maps[i],chroms[i],
-                                  args.outprefix+'chr_'+str(chr)+'.segments.gz')
+                                  args.outprefix+'chr_'+str(chroms[i])+'.segments.gz')
     # Causal effects
     if h2_total==0:
         a_chr = a[snp_count:(snp_count + snp_ids[i].shape[0])]
-        causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.hstack((snp_ids[i],alleles[i],a_chr.reshape((snp_ids[i].shape[0],1))))
+        causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],
+                                                                                a_chr)).T
     else:
         ab_chr = ab[snp_count:(snp_count + snp_ids[i].shape[0]),:]
-        causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.hstack((snp_ids[i],alleles[i],ab_chr.reshape((snp_ids[i].shape[0],2))))
+        causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],
+                                                                                ab_chr[:,0],ab_chr[:,1])).T
     snp_count += snp_ids[i].shape[0]
     # count
-    chr_count += 1
 
 np.savetxt(args.outprefix+'causal_effects.txt',causal_out,fmt='%s')

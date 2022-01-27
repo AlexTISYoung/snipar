@@ -6,7 +6,7 @@ from numba import njit, prange
 import numpy as np
 from snipar.utilities import make_id_dict
 import pandas as pd
-import logging, code
+import logging, snipar
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
@@ -288,7 +288,7 @@ def pos_to_cM(pos,boundaries, cM_pos):
     return cM_out
 
 def decode_map_from_pos(chrom,pos):
-    map = np.loadtxt(os.path.dirname(snipar.__file__)+'/../decode_map/chr_'+str(chrom)+'.gz', dtype=float, skiprows=1)
+    map = np.loadtxt(path.dirname(snipar.__file__)+'/../decode_map/chr_'+str(chrom)+'.gz', dtype=float, skiprows=1)
     boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
     return pos_to_cM(pos, boundaries, map[:, 2])
 
