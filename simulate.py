@@ -1,182 +1,37 @@
 from bgen_reader import open_bgen
 import numpy as np
-from numba import njit, prange
 import h5py, argparse
 import snipar.preprocess as preprocess
 from snipar.ibd import write_segs_from_matrix
 from snipar.utilities import *
-
-@njit
-def impute_from_sibs(g1, g2, ibd, f):
-    if ibd==2:
-        return g1+2*f
-    elif ibd==0:
-        return g1+g2
-    elif ibd==1:
-        gsum = g1+g2
-        if gsum==0:
-            return f
-        elif gsum==1:
-            return 1+f
-        elif gsum==2:
-            return 1+2*f
-        elif gsum==3:
-            return 2+f
-        elif gsum==4:
-            return 3+f
-@njit
-def impute_from_sibs_phased(g1,g2,ibd,f):
-    imp = 0.0
-    if ibd[0]:
-        imp += int(g1[0])+f
-    else:
-        imp += int(g1[0])+int(g2[0])
-    if ibd[1]:
-        imp += int(g1[1]) + f
-    else:
-        imp += int(g1[1]) + int(g2[1])
-    return imp
-
-@njit(parallel=True)
-def impute_all_fams(gts,freqs,ibd):
-    imp = np.zeros((gts.shape[0],gts.shape[2]),dtype=np.float_)
-    for i in prange(gts.shape[0]):
-        for j in range(gts.shape[2]):
-            imp[i,j] = impute_from_sibs(gts[i,0,j],gts[i,1,j],ibd[i,j],freqs[j])
-    return imp
-
-@njit(parallel=True)
-def impute_all_fams_phased(haps,freqs,ibd):
-    imp = np.zeros((haps.shape[0],haps.shape[2]),dtype=np.float_)
-    for i in prange(haps.shape[0]):
-        for j in range(haps.shape[2]):
-            imp[i,j] = impute_from_sibs_phased(haps[i,0,j,:],haps[i,1,j,:],ibd[i,j,:],freqs[j])
-    return imp
-
-@njit
-def simulate_recombinations(map):
-    map_start = map[0]
-    map_end = map[map.shape[0]-1]
-    map_length = map_end-map_start
-    n_recomb = np.random.poisson(map_length/100)
-    recomb_points = map_start+np.sort(np.random.uniform(0,1,n_recomb))*map_length
-    return n_recomb,recomb_points
-
-@njit
-def meiosis(map,n=1):
-    # Recomb vector
-    recomb_vector = np.zeros((n,map.shape[0]), dtype=np.bool_)
-    # Do recombinations
-    for r in range(n):
-        n_recomb, recomb_points = simulate_recombinations(map)
-        # Initialize
-        last_hap = np.bool_(np.random.binomial(1,0.5,1)[0])
-        recomb_vector[r,:] = np.bool_(last_hap)
-        # Recombine
-        if n_recomb>0:
-            for i in range(n_recomb):
-                first_snp = np.argmax(map>recomb_points[i])
-                recomb_vector[r,first_snp:recomb_vector.shape[1]] = ~recomb_vector[r,first_snp:recomb_vector.shape[1]]
-    # Return
-    return recomb_vector
-
-
-@njit(parallel=True)
-def produce_next_gen(father_indices,mother_indices,males,females,map):
-    ngen = np.zeros((father_indices.shape[0],2,males.shape[1],2),dtype=np.bool_)
-    ibd = np.zeros((father_indices.shape[0],males.shape[1],2),dtype=np.bool_)
-    for i in prange(father_indices.shape[0]):
-        # recombinations
-        recomb_i = meiosis(map,n=4)
-        # sib haplotypes and ibd
-        for j in range(ibd.shape[1]):
-            # paternal sib 1
-            if recomb_i[0,j]:
-                ngen[i, 0, j, 0] =  males[father_indices[i], j, 0]
-            else:
-                ngen[i, 0, j, 0] = males[father_indices[i], j, 1]
-            # paternal sib 2
-            if recomb_i[1,j]:
-                ngen[i, 1, j, 0] =  males[father_indices[i], j, 0]
-            else:
-                ngen[i, 1, j, 0] = males[father_indices[i], j, 1]
-            # maternal sib 1
-            if recomb_i[2,j]:
-                ngen[i, 0, j, 1] =  females[mother_indices[i], j, 0]
-            else:
-                ngen[i, 0, j, 1] = females[mother_indices[i], j, 1]
-            # maternal sib 2
-            if recomb_i[3,j]:
-                ngen[i, 1, j, 1] =  females[mother_indices[i], j, 0]
-            else:
-                ngen[i, 1, j, 1] = females[mother_indices[i], j, 1]
-            ibd[i,j,0] = recomb_i[0,j]==recomb_i[1,j]
-            ibd[i,j,1] = recomb_i[2,j]==recomb_i[3,j]
-    return ngen, ibd
-
-@njit
-def random_mating_indices(nfam):
-    return np.random.choice(np.array([x for x in range(nfam)],dtype=np.int_),size=nfam,replace=False)
-
-def am_indices(yp,ym,r):
-    v = np.sqrt(np.var(yp)*np.var(ym))
-    s2 = (1/r-1)*v
-    zp = yp+np.sqrt(s2)*np.random.randn(yp.shape[0])
-    zm = ym+np.sqrt(s2)*np.random.randn(ym.shape[0])
-    rank_p = np.argsort(zp)
-    rank_m = np.argsort(zm)
-    return rank_p, rank_m
-
-def compute_genetic_component(haps,causal,a):
-    causal = set(causal)
-    G_m = np.zeros((haps[0].shape[0]))
-    G_p = np.zeros((haps[0].shape[0]))
-    snp_count = 0
-    for chr in range(len(haps)):
-        snp_index = np.array([snp_count+x for x in range(haps[chr].shape[2])])
-        in_causal = np.array([snp_index[x] in causal for x in range(haps[chr].shape[2])])
-        causal_gts = np.sum(haps[chr][:,:,in_causal,:],axis=3)
-        G_p += causal_gts[:, 0, :].dot(a[snp_index[in_causal]])
-        G_m += causal_gts[:, 1, :].dot(a[snp_index[in_causal]])
-        snp_count += haps[chr].shape[2]
-    return G_p, G_m
-
-def compute_phenotype(haps,causal,a,sigma2):
-    G_p, G_m = compute_genetic_component(haps,causal,a)
-    Y_p = G_p+np.sqrt(sigma2)*np.random.randn(G_p.shape[0])
-    Y_m = G_m+np.sqrt(sigma2)*np.random.randn(G_m.shape[0])
-    return G_p, G_m, Y_p, Y_m
-
-def compute_phenotype_vert(haps,causal,a,sigma2,beta_vert,Y_p,Y_m):
-    G_males, G_females = compute_genetic_component(haps, causal, a)
-    Y_males = G_males + beta_vert*(Y_p+Y_m)+np.sqrt(sigma2) * np.random.randn(G_males.shape[0])
-    Y_females = G_females + beta_vert*(Y_p+Y_m)+np.sqrt(sigma2) * np.random.randn(G_females.shape[0])
-    return G_males, G_females, Y_males, Y_females
-
-def compute_phenotype_indirect(haps,old_haps,father_indices,mother_indices,causal,a,b,sigma2):
-    G_males, G_females = compute_genetic_component(haps,causal,a)
-    G_p, G_m = compute_genetic_component(old_haps, causal, b)
-    Y_males = G_males+G_p[father_indices]+G_m[mother_indices]+np.sqrt(sigma2)*np.random.randn(G_males.shape[0])
-    Y_females = G_females+G_p[father_indices]+G_m[mother_indices]+np.sqrt(sigma2)*np.random.randn(G_males.shape[0])
-    return G_males, G_females, Y_males, Y_females
+from snipar.simulate import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('bgenfiles', type=str,
                     help='Address of genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
 parser.add_argument('n_causal',type=int,help='Number of causal loci')
-parser.add_argument('h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
 parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
 parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
 parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating',default=0)
 parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating)',default=None)
-parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
+parser.add_argument('--h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
 parser.add_argument('--h2_total',type=float,help='Total variance explained by direct effects and indirect genetic effects from parents',default=None)
 parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
+parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
+parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
+parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
+parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
 args=parser.parse_args()
 
 if args.beta_vert > 0 and args.h2_total is not None:
     raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
+if args.beta_vert > 0 and args.h2_direct is None:
+    raise(ValueError('Must provide h2_direct if simulating vertical transmission'))
+if args.h2_direct is None and args.h2_total is None:
+    raise(ValueError('Must provide one of h2_direct or h2_total'))
+if args.h2_direct is not None and args.h2_total is not None:
+    raise(ValueError('Must provide one of h2_direct or h2_total'))
 
 if args.n_random >= 0:
     ngen_random = args.n_random
@@ -194,10 +49,11 @@ if args.n_am > 0:
 
 ngen_am = args.n_am
 
-if 0 <= args.h2_direct <= 1:
-    h2 = args.h2_direct
-else:
-    raise(ValueError('Heritability must be between 0 and 1'))
+if args.h2_direct is not None:
+    if 0 <= args.h2_direct <= 1:
+        h2 = args.h2_direct
+    else:
+        raise(ValueError('Heritability must be between 0 and 1'))
 
 if args.h2_total is not None:
     if args.r_dir_indir is None:
@@ -252,7 +108,10 @@ for i in range(bgenfiles.shape[0]):
 
 # Simulate population
 total_matings = ngen_random+ngen_am
-V = np.zeros((total_matings+1,2))
+if h2_total == 0:
+    V = np.zeros((total_matings+1,2))
+else:
+    V = np.zeros((total_matings,2))
 a_count = 0
 # Produce next generation
 old_haps = haps
@@ -281,10 +140,10 @@ for gen in range(0, total_matings):
     # Record variance components
     if gen>0 or h2_total==0:
         V[a_count, :] = np.array([np.var(np.hstack((G_p, G_m))), np.var(np.hstack((Y_p, Y_m)))])
-    print('Genetic variance: ' + str(round(V[a_count, 0], 4)))
-    print('Phenotypic variance: ' + str(round(V[a_count, 1], 4)))
-    print('Heritability: ' + str(round(V[a_count, 0] / V[a_count, 1], 4)))
-    a_count += 1
+        print('Genetic variance: ' + str(round(V[a_count, 0], 4)))
+        print('Phenotypic variance: ' + str(round(V[a_count, 1], 4)))
+        print('Heritability: ' + str(round(V[a_count, 0] / V[a_count, 1], 4)))
+        a_count += 1
     ## Match parents
     print('Mating ' + str(gen + 1))
     # Random mating
@@ -297,7 +156,7 @@ for gen in range(0, total_matings):
         print('Computing parental phenotypes')
         # Match assortatively
         print('Matching assortatively')
-        father_indices, mother_indices = am_indices(Y_p, Y_m, 0.5)
+        father_indices, mother_indices = am_indices(Y_p, Y_m, r_y)
         # Print variances
         print('Parental phenotypic correlation: '+str(round(np.corrcoef(Y_p[father_indices],Y_m[mother_indices])[0,1],4)))
         print('Parental genotypic correlation: '+str(round(np.corrcoef(G_p[father_indices],G_m[mother_indices])[0,1],4)))
@@ -377,21 +236,25 @@ for i in range(len(haps)):
     gts_chr = np.sum(new_haps[i], axis=3, dtype=np.uint8)
     hf['chr_'+str(chroms[i])] = gts_chr.reshape((gts_chr.shape[0]*2,gts_chr.shape[2]),order='C')
     # # Imputed parental genotypes
-    # print('Imputing parental genotypes and saving')
-    # freqs = np.mean(gts_chr, axis=(0, 1)) / 2.0
-    # # Phased
-    # phased_imp = impute_all_fams_phased(new_haps[i],freqs,ibd[i])
-    # hf['phased_imp_chr'+str(chr)] = phased_imp
-    # # Unphased
-    # ibd[i] = np.sum(ibd[i],axis=2)
-    # imp = impute_all_fams(gts_chr, freqs, ibd[i])
-    # hf['imp_chr_'+str(chr)] = imp
-    # Parental genotypes
-    # print('Saving true parental genotypes')
-    # par_gts_chr = np.zeros((old_haps[i].shape[0],2,old_haps[i].shape[2]),dtype=np.uint8)
-    # par_gts_chr[:,0,:] = np.sum(old_haps[i][father_indices,0,:,:],axis=2)
-    # par_gts_chr[:,1,:] = np.sum(old_haps[i][mother_indices,1,:,:],axis=2)
-    # hf['par_chr_'+str(chr)] = par_gts_chr
+    if args.impute or args.unphased_impute:
+        print('Imputing parental genotypes and saving')
+        freqs = np.mean(gts_chr, axis=(0, 1)) / 2.0
+        # Phased
+        if args.impute:
+            phased_imp = impute_all_fams_phased(new_haps[i],freqs,ibd[i])
+            hf['imp_chr'+str(chroms[i])] = phased_imp
+        # Unphased
+        if args.unphased_impute:
+            ibd[i] = np.sum(ibd[i],axis=2)
+            imp = impute_all_fams(gts_chr, freqs, ibd[i])
+            hf['unphased_imp_chr_'+str(chroms[i])] = imp
+        # Parental genotypes
+    if args.save_par_gts:
+        print('Saving true parental genotypes')
+        par_gts_chr = np.zeros((old_haps[i].shape[0],2,old_haps[i].shape[2]),dtype=np.uint8)
+        par_gts_chr[:,0,:] = np.sum(old_haps[i][father_indices,0,:,:],axis=2)
+        par_gts_chr[:,1,:] = np.sum(old_haps[i][mother_indices,1,:,:],axis=2)
+        hf['par_chr_'+str(chroms[i])] = par_gts_chr
 
 hf.close()
 
@@ -405,7 +268,8 @@ else:
 for i in range(len(haps)):
     print('Writing IBD segments for chromosome '+str(chroms[i]))
     # Segments
-    ibd[i] = np.sum(ibd[i],axis=2)
+    if not args.unphased_impute:
+        ibd[i] = np.sum(ibd[i],axis=2)
     segs = write_segs_from_matrix(ibd[i], sibpairs,
                                   snp_ids[i], positions[i],maps[i],chroms[i],
                                   args.outprefix+'chr_'+str(chroms[i])+'.segments.gz')
