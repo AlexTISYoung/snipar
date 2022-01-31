@@ -14,7 +14,8 @@ def imputation_test(chromosomes,
                    start = None,
                    end = None,
                    backup_threshold=0.01,
-                   genotyping_error_ratio=0.01,
+                   genotyping_error_threshold=0.01,
+                   outname_prefix = "",
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"
     chromosomes_expected_genes_o = []
@@ -35,7 +36,19 @@ def imputation_test(chromosomes,
             parent_ratio_backup = np.array(f["parent_ratio_backup"])
             sib_ratio_backup = np.array(f["sib_ratio_backup"])
             estimated_genotyping_error = np.array(f["estimated_genotyping_error"])
-            breakpoint()
+            rsids = np.array(f["bim_values"])[:,1]
+            if "maf_x" in f:
+                maf_x = np.array(f["maf_x"])
+                maf_coefs = np.array(f["maf_coefs"])
+                maf_TSS = np.array(f["maf_TSS"])
+                maf_RSS1 = np.array(f["maf_RSS1"])
+                maf_RSS2 = np.array(f["maf_RSS2"])
+                maf_R2_1 = np.array(f["maf_R2_1"])
+                maf_R2_2 = np.array(f["maf_R2_2"])
+                maf_larger1 = np.array(f["maf_larger1"])
+                maf_less0 = np.array(f["maf_less0"])
+            #TODO concat these across chroms
+
             #Fix backup ratio start end
             if start is not None:
                 non_duplicates = non_duplicates+start
@@ -91,16 +104,26 @@ def imputation_test(chromosomes,
     estimated_genotyping_error = np.hstack(estimated_genotyping_errors)
     pm_coefs = []
     pm_pvals = []
+    empty = []
+    results = []
     pop_size, nsnps = whole_imputed_genes_pm.shape
     for i in tqdm(range(nsnps)):
         x = whole_imputed_genes_pm[:,i]
         y = whole_expected_genes_pm[:,i]
         mask = ~(np.isnan(x) | np.isnan(y))
-        result = sm.OLS(y[mask], x[mask]).fit()
-        pm_coefs.append(result.params[0])
-        pm_pvals.append(result.t_test(([1],1)).pvalue)
+        noval = (np.sum(mask) < 10)
+        if noval:
+            pm_coefs.append(-1)
+            pm_pvals.append(-1)
+            results.append(None)
+        else:
+            result = sm.OLS(y[mask], x[mask]).fit()
+            pm_coefs.append(result.params[0])
+            pm_pvals.append(result.t_test(([1],1)).pvalue)
+            results.append(result)
+        empty.append(noval)
     pm_pvals_log10 = -np.log10(pm_pvals)
-    numerical = ~(np.isnan(pm_pvals_log10) | np.isinf(pm_pvals_log10) | (parent_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_ratio))
+    numerical = ~(np.array(empty) | np.isnan(pm_pvals_log10) | np.isinf(pm_pvals_log10) | (parent_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_threshold))
     counter = 0
     pm_chrom_sizes = [i for i in chrom_sizes]
     for i in range(len(chrom_sizes)):
@@ -110,25 +133,20 @@ def imputation_test(chromosomes,
     pm_pvals_log10 = pm_pvals_log10[numerical]
     pm_coefs = np.array(pm_coefs)[numerical]
     pm_pvals = np.array(pm_pvals)[numerical]
-    print("pm_coefs.mean()", pm_coefs.mean())
-    tmp = np.random.uniform(size=pm_pvals_log10.shape)
-    qs = -np.log10(tmp)
-    print("coefs", min(pm_coefs), max(pm_coefs))
-    print([np.min(tmp), np.max(tmp)])
-    print([np.min(pm_pvals), np.max(pm_pvals)])
-    print([np.min(qs), np.max(qs)])
-    print([np.min(pm_pvals_log10), np.max(pm_pvals_log10)])
+    pm_pvals_log10_sorted = np.sort(pm_pvals_log10)
+    z = np.arange(len(pm_pvals_log10))/len(pm_pvals_log10)
+    x = -np.log(1-z)/np.log(10)
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111)
-    ax.plot(np.sort(qs), np.sort(pm_pvals_log10), '-b')
-    ax.plot(np.sort(qs), np.sort(pm_pvals_log10), '.r')
-    ax.plot([np.min(qs), np.max(qs)], [np.min(qs), np.max(qs)], 'y')
+    ax.plot(x, pm_pvals_log10_sorted, '-b')
+    ax.plot(x, pm_pvals_log10_sorted, '.r')
+    ax.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'y')
     plt.xlabel("expected(-log10(p-value))")
     plt.ylabel("observed(-log10(p-value))")
-    plt.title(f"{imputed_prefix}\nqqplot")
-    print(f"{imputed_prefix}_pm_qq.png")
+    plt.title(f"{outname_prefix}\nqqplot")
+    print(f"{imputed_prefix}_{outname_prefix}_pm_qq.png")
 
-    plt.savefig(f"{imputed_prefix}_pm_qq")
+    plt.savefig(f"{imputed_prefix}_{outname_prefix}_pm_qq")
     plt.clf()
 
 
@@ -174,29 +192,32 @@ def imputation_test(chromosomes,
 
         # x axis label
         ax.set_xlabel('Chromosome')
-        ax.set_title(f"{imputed_prefix}\n{col}")
-        plt.savefig(f"{imputed_prefix}_pm_manhattan_{col}")
+        ax.set_title(f"{outname_prefix}\n{col}")
+        plt.savefig(f"{imputed_prefix}_{outname_prefix}_pm_manhattan_{col}")
         plt.clf()
-        print(f"{imputed_prefix}_pm_manhattan_{col}.png")
+        print(f"{imputed_prefix}_{outname_prefix}_pm_manhattan_{col}.png")
 
 
         #------------------------------------------------------------------
     o_coefs = []
     o_pvals = []
+    empty = []
     pop_size, nsnps = whole_imputed_genes_o.shape
     for i in tqdm(range(nsnps)):
         x = whole_imputed_genes_o[:,i]
         y = whole_expected_genes_o[:,i]
         mask = ~(np.isnan(x) | np.isnan(y))
-        result = sm.OLS(y[mask], x[mask]).fit()
-        o_coefs.append(result.params[0])
-        o_pvals.append(result.t_test(([1],1)).pvalue)
-        # result = linregress(x[mask],y[mask])
-        # o_coefs.append(result.slope)
-        # t=(result.slope-1)/result.stderr
-        # o_pvals.append(2*(1-norm.cdf(abs(t))))
+        noval = (np.sum(mask) < 10)
+        if noval:
+            o_coefs.append(-1)
+            o_pvals.append(-1)
+        else:
+            result = sm.OLS(y[mask], x[mask]).fit()
+            o_coefs.append(result.params[0])
+            o_pvals.append(result.t_test(([1],1)).pvalue)
+        empty.append(noval)
     o_pvals_log10 = -np.log10(o_pvals)
-    numerical = ~(np.isnan(o_pvals_log10) | np.isinf(o_pvals_log10) | (sib_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_ratio))
+    numerical = ~(np.array(empty) | np.isnan(o_pvals_log10) | np.isinf(o_pvals_log10) | (sib_ratio_backup > backup_threshold) | (estimated_genotyping_error > genotyping_error_threshold))
     counter = 0
     o_chrom_sizes = [i for i in chrom_sizes]
     for i in range(len(chrom_sizes)):
@@ -206,24 +227,21 @@ def imputation_test(chromosomes,
     o_pvals_log10 = o_pvals_log10[numerical]
     o_coefs = np.array(o_coefs)[numerical]
     o_pvals = np.array(o_pvals)[numerical]
-    print("o_coefs.mean()", o_coefs.mean())
 
-    tmp = np.random.uniform(size=o_pvals_log10.shape)
-    qs = -np.log10(tmp)
-    print([np.min(tmp), np.max(tmp)])
-    print([np.min(o_pvals), np.max(o_pvals)])
-    print([np.min(qs), np.max(qs)])
-    print([np.min(o_pvals_log10), np.max(o_pvals_log10)])
+    o_pvals_log10_sorted = np.sort(o_pvals_log10)
+    z = np.arange(len(o_pvals_log10))/len(o_pvals_log10)
+    x = -np.log(1-z)/np.log(10)
+
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111)    
-    ax.plot(np.sort(qs), np.sort(o_pvals_log10), '-b')
-    ax.plot(np.sort(qs), np.sort(o_pvals_log10), '.r')
-    ax.plot([np.min(qs), np.max(qs)], [np.min(qs), np.max(qs)], 'y')
+    ax.plot(x, o_pvals_log10_sorted, '-b')
+    ax.plot(x, o_pvals_log10_sorted, '.r')
+    ax.plot([np.min(x), np.max(x)], [np.min(x), np.max(x)], 'y')
     plt.xlabel("expected(-log10(p-value))")
     plt.ylabel("observed(-log10(p-value))")
-    plt.title(f"{imputed_prefix}\nqqplot")
-    print(f"{imputed_prefix}_o_qq.png")
-    plt.savefig(f"{imputed_prefix}_o_qq")
+    plt.title(f"{outname_prefix}\nqqplot")
+    print(f"{imputed_prefix}_{outname_prefix}_o_qq.png")
+    plt.savefig(f"{imputed_prefix}_{outname_prefix}_o_qq")
     plt.clf()
 
 
@@ -233,9 +251,6 @@ def imputation_test(chromosomes,
     all_chrom_names = []
     for i in range(len(chromosomes)):
         all_chrom_names += [f'ch-{chromosomes[i]}']*o_chrom_sizes[i]
-    print(nsnps)
-    print(o_coefs.shape, o_pvals.shape, o_pvals_log10.shape)
-    print(len(all_chrom_names))
     df = DataFrame({'gene' : [f'gene-{i}' % i for i in np.arange(nsnps)],
     'o_coef' : o_coefs,
     'o_pvals' : o_pvals,
@@ -272,7 +287,7 @@ def imputation_test(chromosomes,
 
         # x axis label
         ax.set_xlabel('Chromosome')
-        ax.set_title(f"{imputed_prefix}\n{col}")
-        plt.savefig(f"{imputed_prefix}_o_manhattan_{col}")
+        ax.set_title(f"{outname_prefix}\n{col}")
+        plt.savefig(f"{imputed_prefix}_{outname_prefix}_o_manhattan_{col}")
         plt.clf()
-        print(f"{imputed_prefix}_o_manhattan_{col}.png")
+        print(f"{imputed_prefix}_{outname_prefix}_o_manhattan_{col}.png")
