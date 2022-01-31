@@ -508,11 +508,29 @@ def estimate_f(unphased_gts, pc_scores, linear=True):
     unphased_pc_gts = unphased_gts.copy().astype(np.float)
     unphased_pc_gts[unphased_gts==nan_integer] = 0.
     x = np.hstack((pc_scores, np.ones((pop_size, 1))))
+    data = {}
     if linear:
-        coefs, _, _, _ = np.linalg.lstsq(x, unphased_pc_gts/2)
+        y = unphased_pc_gts/2
+        coefs, _, _, _ = np.linalg.lstsq(x, y)
         fs = x@coefs
+        residuals1 = y-fs
+        larger1 = np.sum(fs>1., axis=0)/pop_size
+        less0 = np.sum(fs<0., axis=0)/pop_size
         fs[fs>1] = 1
         fs[fs<0] = 0
+        residuals2 = y-fs
+        TSS = np.sum(y*y, axis=0)
+        RSS1 = np.sum(residuals1*residuals1, axis=0)
+        RSS2 = np.sum(residuals2*residuals2, axis=0)
+        data["x"] = x
+        data["coefs"] = coefs
+        data["TSS"] = TSS
+        data["RSS1"] = RSS1
+        data["RSS2"] = RSS2
+        data["R2_1"] = 1-(RSS1/TSS)
+        data["R2_2"] = 1-(RSS2/TSS)
+        data["larger1"] = larger1
+        data["less0"] = less0
     else:
         models = []
         model_results = []
@@ -526,7 +544,7 @@ def estimate_f(unphased_gts, pc_scores, linear=True):
             models.append(binom_model)
             model_results.append(binom_result)
             fs[:,i] = binom_result.predict(x)
-    return fs
+    return fs, data
 
 
 def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None, pcs=None, pc_ids=None, find_optimal_pc=None):
@@ -693,25 +711,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     selected_bim = bim.iloc[indexes+start, :]
     bim_values = selected_bim.to_numpy().astype('S')
     bim_columns = selected_bim.columns.to_numpy().astype('S')
-    #value types should be hdf5 compatible
-    hdf5_output_dict = {"bim_columns":bim_columns,
-                        "bim_values":bim_values,
-                        "pedigree":pedigree_output,
-                        "non_duplicates":indexes,
-                        "standard_f":standard_f,
-                        }
-    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")    
-    if not pcs is None:
-        logging.info("estimating MAF using PCs ...")
-        if find_optimal_pc:
-            logging.info("finding optimal number of PCs using aic...")
-            optimal_pc_num = compute_aics(unphased_gts, pcs, sample_size=1000)
-            logging.info(f"optimal number of PCs is {optimal_pc_num}")
-            logging.info("finding optimal number of PCs using aic done")
-            practical_f = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
-        else:
-            practical_f = estimate_f(unphased_gts, pcs)
-        logging.info("estimating MAF using PCs done")
+    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
     if unphased_gts.shape[0] == 0:
         logging.warning(f"with chromosomes {chromosomes}: 0 individuals in unphased genotypes")
     if unphased_gts.shape[1] == 0:
@@ -725,4 +725,24 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             logging.warning(f"with chromosomes {chromosomes}: 0 snps in phased genotypes")
         if phased_gts.max()>1 or phased_gts.min()<0:
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes has values out of 0-1 range")
+    #value types should be hdf5 compatible
+    hdf5_output_dict = {"bim_columns":bim_columns,
+                        "bim_values":bim_values,
+                        "pedigree":pedigree_output,
+                        "non_duplicates":indexes,
+                        "standard_f":standard_f,
+                        }
+    if not pcs is None:
+        logging.info("estimating MAF using PCs ...")
+        if find_optimal_pc:
+            logging.info("finding optimal number of PCs using aic...")
+            optimal_pc_num = compute_aics(unphased_gts, pcs, sample_size=1000)
+            logging.info(f"optimal number of PCs is {optimal_pc_num}")
+            logging.info("finding optimal number of PCs using aic done")
+            practical_f, maf_estimator_data = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
+        else:
+            practical_f, maf_estimator_data = estimate_f(unphased_gts, pcs)
+        for key, val in maf_estimator_data.items():
+            hdf5_output_dict[f"maf_{key}"] = val
+        logging.info("estimating MAF using PCs done")
     return phased_gts, unphased_gts, iid_to_bed_index, pos, practical_f, hdf5_output_dict
