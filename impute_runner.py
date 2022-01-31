@@ -99,7 +99,6 @@ import random
 import pandas as pd
 import os
 from multiprocessing import Pool
-import git
 from time import time
 random.seed(1567924)
 
@@ -111,6 +110,10 @@ def run_imputation(data):
             Keys:
                 pedigree: pd.Dataframe
                     The standard pedigree table
+                
+                control : bool
+                    Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
+                    These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
                 unphased_address: str, optional
                     Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
@@ -165,6 +168,7 @@ def run_imputation(data):
     """
     chunks = data["chunks"]
     pedigree = data["pedigree"]
+    control = data["control"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     snipar_ibd = data["snipar_ibd"]
@@ -177,13 +181,14 @@ def run_imputation(data):
     start = data.get("start")
     end = data.get("end")
     bim = data.get("bim")
+    fam = data.get("fam")
     threads = data.get("threads")
     output_compression = data.get("output_compression")
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time()
     #Doing imputation chunk by chunk
@@ -218,13 +223,16 @@ def run_imputation(data):
             with h5py.File(chunk_output_address, "r") as hf:
                 for key in ["imputed_par_gts",
                             "pos",
-                            "non_duplicates",
-                            "bim_values",
                             "ratio_ibd0",
                             "mendelian_error_ratio",
                             "estimated_genotyping_error",]:
-                    new_val = np.array(hf[key])
+                    #TODO fix max estimator loggigng
+                    new_val = np.array(hf[key])                
                     hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
+                for key in ["bim_values"]:
+                    #TODO fix max estimator loggigng
+                    new_val = np.array(hf[key])                
+                    hdf5_results[key] = np.vstack((hdf5_results[key], new_val))
                 non_duplicates = np.array(hf["non_duplicates"])
                 non_duplicates = hdf5_results["non_duplicates"][-1] + non_duplicates + 1
                 hdf5_results["non_duplicates"] = np.hstack((hdf5_results["non_duplicates"], non_duplicates))                
@@ -232,15 +240,11 @@ def run_imputation(data):
         logging.info(f"writing results of the merge")
         #Writing the merged output
         with h5py.File(f"{output_address}.hdf5", "w") as hf:
-            hf.create_dataset('imputed_par_gts', imputed_par_gts.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
-            hf['families'] = np.array(families, dtype='S')
-            hf['parental_status'] = parental_status
-            hf['pos'] = pos
-            hf["bim_columns"] = bim_columns
-            hf["bim_values"] = bim_values
-            hf["pedigree"] =  pedigree
-            hf["ratio_ibd0"] = ratio_ibd0
-            hf["non_duplicates"] = non_duplicates
+            for key, val in hdf5_results.items():
+                if key=='imputed_par_gts':
+                    hf.create_dataset(key, val.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = val)
+                else:
+                    hf[key] = val
         logging.info(f"merging chunks done")
     elif chunks == 1:
         phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
@@ -276,6 +280,10 @@ if __name__ == "__main__":
                         type=str,
                         default = None,
                         help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
+    parser.add_argument('--fam',
+                        type=str,
+                        default = None,
+                        help='Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes')
     parser.add_argument('--output_address',
                         type=str,
                         default = "parent_imputed",
@@ -342,11 +350,12 @@ if __name__ == "__main__":
     
     try:
         dir_name = os.path.dirname(os.path.realpath(__file__))
+        import git
         repo = git.Repo(dir_name)
         logging.info(f"Last commit is: {repo.head.commit}")
         logging.info(f"summary is: {repo.head.commit.summary}")
         logging.info(f"Active branch is: {repo.active_branch.name}")        
-    except git.exc.InvalidGitRepositoryError:
+    except :
         pass
 
     #fids starting with _ are reserved for control
@@ -358,11 +367,6 @@ if __name__ == "__main__":
         pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
     logging.info("pedigree loaded.")
 
-    if args.c:
-        logging.info("Adding control to the pedigree ...")
-        pedigree = add_control(pedigree)
-        logging.info("Control Added.")
-    
     logging.info("Loading ibd ...")
     ibd_pd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
     snipar_ibd = None
@@ -410,6 +414,7 @@ if __name__ == "__main__":
             return a.replace(b, c)
         return None
     inputs = [{"pedigree": pedigree,
+            "control":args.c,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "snipar_ibd": snipar_ibd,
@@ -422,6 +427,7 @@ if __name__ == "__main__":
             "start": args.start,
             "end": args.end,
             "bim": none_tansform(args.bim, "~", str(chromosome)),
+            "fam": none_tansform(args.fam, "~", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
@@ -431,12 +437,14 @@ if __name__ == "__main__":
             }
             for chromosome in chromosomes]
     #TODO output more information about the imputation inside the hdf5 filehf
-    with Pool(args.processes) as pool:
-        logging.info("staring process pool")
-        if len(inputs)>1:
+    if args.processes > 1:
+        with Pool(args.processes) as pool:
+            logging.info("staring process pool")        
             consumed_time = pool.map(run_imputation, inputs)
-        else:
-            start = time()
-            run_imputation(inputs[0])
-            consumed_time = time()-start
-        logging.info("imputation time: "+str(np.sum(consumed_time)))
+            logging.info("imputation time: "+str(np.sum(consumed_time)))
+    else:
+        start_time = time()
+        for args in inputs:
+            run_imputation(args)
+        end_time = time()
+        logging.info(f"imputation time: {end_time-start_time}")

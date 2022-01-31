@@ -17,7 +17,6 @@ import numpy as np
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen, read_bgen
 from config import nan_integer
-from sklearn.impute import SimpleImputer
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 import statsmodels.api as sm
@@ -182,7 +181,7 @@ def add_control(pedigree):
 
     Args:
         pedigree : pd.DataFrame
-            A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
+            A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID', 'has_father', 'has_mother'. Each row represents an individual.
             fids starting with "_" are reserved for control.
         
     Returns:
@@ -192,8 +191,6 @@ def add_control(pedigree):
 
     """
 
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
     families_with_both_parents = pedigree[pedigree["has_father"] & pedigree["has_mother"]]
     count_of_sibs_in_fam = families_with_both_parents.groupby(["FID", "FATHER_ID", "MOTHER_ID"]).count().reset_index()
     FIDs_with_multiple_sibs = count_of_sibs_in_fam[count_of_sibs_in_fam["IID"] > 1][["FID"]]
@@ -202,16 +199,23 @@ def add_control(pedigree):
     families_with_multiple_sibs["FID"] = "_o_" + families_with_multiple_sibs["FID"].astype(str)
     families_with_multiple_sibs["MOTHER_ID"] = families_with_multiple_sibs["FID"].astype(str) + "_M"
     families_with_multiple_sibs["FATHER_ID"] = families_with_multiple_sibs["FID"].astype(str) + "_P"
+    families_with_multiple_sibs["has_father"] = False
+    families_with_multiple_sibs["has_mother"] = False
 
     keep_mother = families_with_both_parents.copy()
     keep_mother["FID"] = "_m_" + keep_mother["FID"].astype(str)
     keep_mother["FATHER_ID"] = keep_mother["FID"].astype(str) + "_P"
+    keep_mother["has_father"] = False
+    keep_mother["has_mother"] = True
+
 
     keep_father = families_with_both_parents.copy()
     keep_father["FID"] = "_p_" + keep_father["FID"].astype(str)
     keep_father["MOTHER_ID"] = keep_father["FID"].astype(str) + "_M"
+    keep_father["has_father"] = True
+    keep_father["has_mother"] = False
+
     pedigree = pedigree.append(families_with_multiple_sibs).append(keep_father).append(keep_mother)
-    pedigree = pedigree[['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']]
     return pedigree
 
 #TODO raise error if file is multi chrom
@@ -298,7 +302,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, fam_address = None, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -367,9 +371,9 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
+        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         if fam_address is None:
             fam_address = unphased_address+'.fam'
-        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         fam = pd.read_csv(fam_address, delim_whitespace=True, header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
 
     else:
@@ -396,9 +400,15 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     chromosomes = bim["Chr"].unique().astype(int)
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
+    #Keep individuals in fam
+    pedigree = pedigree[pedigree["IID"].isin(fam["IID"].astype(str))]
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(fam["IID"].astype(str))
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(fam["IID"].astype(str))
+    if control:
+        logging.info("Adding control to the pedigree ...")
+        pedigree = add_control(pedigree)
+        logging.info("Control Added.")
     #keeping individuals with no parents
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"]) & pedigree["FATHER_ID"].isin(fam["IID"])
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"]) & pedigree["MOTHER_ID"].isin(fam["IID"])
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
     #removing individual whose parents are nan
     no_parent_pedigree = no_parent_pedigree[(no_parent_pedigree["MOTHER_ID"] != pedigree_nan) & (no_parent_pedigree["FATHER_ID"] != pedigree_nan)]
@@ -433,7 +443,6 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
                 result = result+el
             return result
         ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-    logging.info(f"with chromosomes {chromosomes} loading genotype file ...")
 
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
@@ -609,7 +618,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
     phased_gts = None
     unphased_gts = None
-    unphased_pc_gts = None
+    unphased_pc_gts = None    
     if unphased_address:
         bim_as_csv = pd.read_csv(unphased_address+".bim", delim_whitespace=True, header=None)
         gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
