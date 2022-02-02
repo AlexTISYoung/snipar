@@ -18,7 +18,7 @@ def parse_obsfiles(obsfiles, obsformat='bed'):
             if path.exists(obsfile):
                 obs_files.append(obsfile)
                 chroms.append(i)
-        print(str(len(obs_files))+' observed genotype files found')
+        print(str(len(obs_files))+' files found')
     else:
             obs_files = [obsfiles+'.'+obsformat]
     return np.array(obs_files), chroms
@@ -448,6 +448,36 @@ def get_map_positions(mapfile,gts,min_map_prop = 0.5):
     else:
         raise(ValueError('Map file must contain columns pposition and gposition'))
 
+def map_from_bed(bedfile, chrom):
+    bimfile = bedfile.split('.bed')[0]+'.bim'
+    print('Attempting to read map from ' + bimfile)
+    bim = np.loadtxt(bimfile, usecols=(1,2,3), dtype=str)
+    bim_map = np.array(bim[:,1],dtype=float)
+    bim_pos = np.array(bim[:,2],dtype=int)
+    # Check for NAs
+    if np.var(bim_map) == 0:
+        print('Map information not found in bim file.')
+        print('Using default map (decode sex averaged map on Hg19 coordinates)')
+        map = decode_map_from_pos(chrom, bim_pos)
+        pc_mapped = str(round(100*(1-np.mean(np.isnan(map))),2))
+        print('Found map positions for '+str(pc_mapped)+'% of SNPs')
+    else:
+        if np.sum(np.isnan(bim_map)) > 0:
+            raise (ValueError('Map cannot have NAs'))
+        if np.min(bim_map) < 0:
+            raise (ValueError('Map file cannot have negative values'))
+        # Check ordering
+        ordered_map = np.sort(bim_map)
+        if np.array_equal(bim_map, ordered_map):
+            pass
+        else:
+            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
+        # Check scale
+        if np.max(bim_map) > 500:
+            raise (ValueError('Maximum value of map too large'))
+        map = bim_map
+    return bim[:,0], map
+
 #### Compute LD-scores ####
 @njit(parallel=True)
 def compute_ld_scores(gts,map,max_dist = 1):
@@ -479,6 +509,23 @@ def r2_est(g1,g2):
     not_nan = np.logical_not(np.logical_or(np.isnan(g1), np.isnan(g2)))
     r2 = np.power(np.corrcoef(g1[not_nan],g2[not_nan])[0,1],2)
     return r2-(1-r2)/(np.sum(not_nan)-2)
+
+def ldscores_from_bed(bedfile, chrom, ld_wind):
+    # Get map
+    map_snps, map = map_from_bed(bedfile, chrom)
+    not_na = ~np.isnan(map)
+    map = map[not_na]
+    map_snps = map_snps[not_na]
+    map_snp_dict = make_id_dict(map_snps)
+    # Read genotypes
+    print('Reading genotypes')
+    bed = Bed(bedfile, count_A1 = True)
+    bed_in_map = np.array([x in map_snp_dict for x in bed.sid])
+    gts = bed[:,bed_in_map].read().val
+    sid = gts.sid[bed_in_map]
+    map = map[np.array([map_snp_dict[x] for x in sid])]
+    ldscores = compute_ld_scores(gts,map,ld_wind)
+    return ldscores, sid
 
 def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
     """
