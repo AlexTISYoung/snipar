@@ -476,6 +476,7 @@ def map_from_bed(bedfile, chrom):
         if np.max(bim_map) > 500:
             raise (ValueError('Maximum value of map too large'))
         map = bim_map
+        print('Read map from bim file')
     return bim[:,0], map
 
 #### Compute LD-scores ####
@@ -522,8 +523,9 @@ def ldscores_from_bed(bedfile, chrom, ld_wind):
     bed = Bed(bedfile, count_A1 = True)
     bed_in_map = np.array([x in map_snp_dict for x in bed.sid])
     gts = bed[:,bed_in_map].read().val
-    sid = gts.sid[bed_in_map]
+    sid = bed.sid[bed_in_map]
     map = map[np.array([map_snp_dict[x] for x in sid])]
+    print('Computing LD scores')
     ldscores = compute_ld_scores(gts,map,ld_wind)
     return ldscores, sid
 
