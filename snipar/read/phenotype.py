@@ -23,19 +23,14 @@ def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
     pheno = Pheno(phenofile, missing=missing_char).read()
     y = np.array(pheno.val)
     pheno_ids = np.array(pheno.iid)[:,1]
-    if y.ndim == 1:
-        pass
-    elif y.ndim == 2:
-        y = y[:, phen_index - 1]
-    else:
-        raise (ValueError('Incorrect dimensions of phenotype array'))
+    y = y.reshape((y.shape[0],1))
     # Remove y NAs
     y_not_nan = np.logical_not(np.isnan(y))
     if np.sum(y_not_nan) < y.shape[0]:
-        y = y[y_not_nan]
+        y = y[y_not_nan,:]
         pheno_ids = pheno_ids[y_not_nan]
     print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
-    return y, pheno_ids
+    return gtarray(y,ids=pheno_ids)
 
 def match_phenotype(G,y,pheno_ids):
     """Match a phenotype to a genotype array by individual IDs.
@@ -60,9 +55,13 @@ def match_phenotype(G,y,pheno_ids):
     y = y[[pheno_id_dict[x] for x in G.ids]]
     return y
 
-def read_covariates(covar, missing_char = 'NA'):
+def read_covariates(covar, pheno_ids=None, missing_char = 'NA'):
     covar = Pheno(covar, missing=missing_char).read()
     X = np.array(covar.val)
     X = gtarray(X, ids=np.array(covar.iid)[:,1])
+    if pheno_ids is not None:
+        in_covar = np.array([x in X.id_dict for x in pheno_ids])
+        if np.sum((~in_covar))>0:
+            raise(ValueError('Missing covariate values for some phenotyped individuals'))
     X.fill_NAs()
     return X

@@ -15,6 +15,7 @@ parser.add_argument('--corr_filter',type=float,help='Filter out SNPs with outlyi
 parser.add_argument('--n_blocks',type=int,help='Number of blocks to use for block-jacknife variance estimate (default 200)',default=200)
 parser.add_argument('--save_delete',action='store_true',help='Save jacknife delete values',default=False)
 parser.add_argument('--ld_wind',type=float,help='The window, in cM, within which LD scores are computed (default 1cM)',default=1.0)
+parser.add_argument('--ld_out',type=str,help='Output LD scores in LDSC format to this address',default=None)
 args=parser.parse_args()
 
 if args.ldscores is None and args.bedfiles is None:
@@ -42,7 +43,8 @@ if args.ldscores is not None:
     s.filter_NAs()
 elif args.bedfiles is not None:
     bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, obsformat='bed')
-    s.compute_ld_scores(bedfiles, chroms, args.ld_wind)
+    s.compute_ld_scores(bedfiles, chroms, args.ld_wind, args.ld_out)
+    s.filter_NAs()
 
 # Compute correlations 
 print('Using '+str(s.sid.shape[0])+' SNPs to compute correlations')

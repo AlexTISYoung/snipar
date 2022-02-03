@@ -15,6 +15,7 @@ def convert_str_array(x):
     """
     Convert an ascii array to unicode array (UTF-8)
     """
+    x = np.array(x)
     x_shape = x.shape
     x = x.flatten()
     x_out = np.array([y.decode('UTF-8') for y in x])
@@ -24,6 +25,7 @@ def encode_str_array(x):
     """
     Encode a unicode array as an ascii array
     """
+    x = np.array(x)
     x_shape = x.shape
     x = x.flatten()
     x_out = np.array([y.encode('ascii') for y in x])

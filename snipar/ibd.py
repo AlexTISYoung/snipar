@@ -1,4 +1,4 @@
-import gzip, os, snipar, code
+import gzip
 from numba import njit, prange
 import snipar.preprocess as preprocess
 import numpy as np
@@ -260,30 +260,6 @@ def write_segs_from_matrix(ibd,sibpairs,snps,pos,map,chrom,outfile):
     # Write segments
     write_segs(sibpairs,allsegs,chrom,outfile)
     return allsegs
-
-# def write_segs_from_matrix(ibd,bimfile,outfile):
-#     # Get IBD
-#     sibpairs = ibd[1:ibd.shape[0],0:2]
-#     snps = ibd[0,2:ibd.shape[1]]
-#     ibd = np.array(ibd[1:ibd.shape[0],2:ibd.shape[1]],dtype=np.int8)
-#     # Get map and chr from bim
-#     bim = np.loadtxt(bimfile, dtype=str)
-#     bim_dict = make_id_dict(bim,1)
-#     bim_indices = np.array([bim_dict[x] for x in snps])
-#     map = np.array(bim[bim_indices,2],dtype=float)
-#     chr = np.unique(bim[bim_indices,0])
-#     if chr.shape[0]>1:
-#         raise(ValueError('Must be one chromosome only'))
-#     else:
-#         chr = chr[0]
-#     # Get segments
-#     allsegs = []
-#     for i in range(sibpairs.shape[0]):
-#         allsegs.append(find_segments(ibd[i,:], map))
-#     # Write segments
-#     write_segs(sibpairs,allsegs,chr,snps,outfile)
-#     return allsegs
-
 
 def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
     ## Read bed

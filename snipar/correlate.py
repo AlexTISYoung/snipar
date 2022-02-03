@@ -113,18 +113,16 @@ class sumstats(object):
         print('Computing correlation between direct and average parental effects')
         r_dir_avg_par, r_dir_avg_par_SE, r_dir_avg_par_delete = jacknife_est(self.direct,self.avg_parental,self.r_direct_avg_parental,1/self.ldscores, n_blocks)
         return r_dir_avg_par, r_dir_avg_par_SE, r_dir_avg_par_delete
-    def compute_ld_scores(self, bedfiles, chroms, ld_wind):
+    def compute_ld_scores(self, bedfiles, chroms, ld_wind, ld_out=None):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(bedfiles.shape[0]):
             print('Computing LD scores for chromosome '+str(chroms[i]))
-            ld_chr, ld_snps_chr = preprocess.ldscores_from_bed(bedfiles[i], chroms[i], ld_wind)
+            ld_chr, ld_snps_chr = preprocess.ldscores_from_bed(bedfiles[i], chroms[i], ld_wind, ld_out)
             in_sid_dict = np.array([x in self.sid_dict for x in ld_snps_chr])
             if in_sid_dict.shape[0] > 0:
                 ld_indices = np.array([self.sid_dict[x] for x in ld_snps_chr[in_sid_dict]])
                 self.ldscores[ld_indices] = np.array(ld_chr[in_sid_dict],dtype=float)
                 self.ldscores.mask[ld_indices] = False
-
-
 
 def read_sumstats_file(sumstats_file, chrom):
     print('Reading sumstats from '+sumstats_file)

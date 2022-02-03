@@ -72,7 +72,9 @@ if args.pedigree is not None:
     elif ped.shape[1] > 4:
         print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
     # Remove rows with missing parents
-    sibpairs = preprocess.get_sibpairs_from_ped(ped)
+    sibpairs, ped = preprocess.get_sibpairs_from_ped(ped)
+    if sibpairs is None:
+        raise(ValueError('No sibpairs found'))
 elif kinfile is not None:
     print('Reading relationships from '+str(kinfile))
     sibpairs = preprocess.get_sibpairs_from_king(kinfile)
