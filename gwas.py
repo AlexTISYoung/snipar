@@ -213,7 +213,7 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         snp_ids = bed.sid
         pos = bed.pos[:,2]
         alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5))
-        chrom = bed.pos[:,0]
+        chrom = np.array(bed.pos[:,0],dtype=int)
     elif bgenfile is not None:
         bgen = open_bgen(bgenfile, verbose=False)
         snp_ids = bgen.ids
@@ -222,7 +222,7 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
             snp_ids = bgen.rsids
         pos = np.array(bgen.positions)
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
-        chrom = np.array(bgen.chromosomes)
+        chrom = np.array(bgen.chromosomes,dtype='U2')
         # If chromosomse unknown, set to chromosome inferred from filename
         chrom[[len(x)==0 for x in chrom]] = chrom_out
     ####### Compute batches #######
