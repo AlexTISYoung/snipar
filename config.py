@@ -1,0 +1,1 @@
+nan_integer = -11

@@ -1,4 +1,4 @@
-import argparse, h5py
+import argparse, h5py, code
 import numpy as np
 from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
@@ -146,7 +146,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
 
 def compute_batch_boundaries(snp_ids,batch_size):
     nsnp = snp_ids.shape[0]
-    n_blocks = np.int(np.ceil(float(nsnp)/float(batch_size)))
+    n_blocks = int(np.ceil(float(nsnp)/float(batch_size)))
     block_bounds = np.zeros((n_blocks,2),dtype=int)
     start = 0
     for i in range(n_blocks-1):
@@ -156,10 +156,10 @@ def compute_batch_boundaries(snp_ids,batch_size):
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
     return block_bounds
 
-def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile=None, pargts_f=None, parsum=False,
+def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
-    G = read.get_gts_matrix(pedigree, bedfile=bedfile, bgenfile=bgenfile, pargts_f=pargts_f, snp_ids=snp_ids, 
+    G = read.get_gts_matrix(ped=pedigree, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                                 ids=y.ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
     G.compute_freqs()
     #### Filter SNPs ####
@@ -190,7 +190,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     alpha, alpha_cov, alpha_ses = fit_models(transformed_y,G)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
-def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None, bgenfile=None, pargts_f=None, covar=None, 
+def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
                         fit_sib=False, parsum=False, max_missing=5, min_maf=0.01, batch_size=10000, 
                         no_hdf5_out=False, no_txt_out=False):
     ######## Check for bed/bgen #######
@@ -203,6 +203,7 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
         snp_ids = bed.sid
         pos = bed.pos[:,2]
         alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5))
+        chrom = bed.pos[:,0]
     elif bgenfile is not None:
         bgen = open_bgen(bgenfile, verbose=False)
         snp_ids = bgen.ids
@@ -211,6 +212,10 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
             snp_ids = bgen.rsids
         pos = np.array(bgen.positions)
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
+        bgen_chrom = np.array(bgen.chromosomes)
+        # If chromosomse unknown, set to chromosome inferred from filename
+        bgen_chrom[[len(x)==0 for x in chrom]] = chrom
+        chrom = bgen_chrom
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
     # Remove duplicates
@@ -221,6 +226,7 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
         not_duplicated = np.array([x in non_duplicate for x in snp_ids])
         snp_ids = snp_ids[not_duplicated]
         pos = pos[not_duplicated]
+        chrom = chrom[not_duplicated]
         alleles = alleles[not_duplicated,:]
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
@@ -245,9 +251,14 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
     freqs[:] = np.nan
     ##############  Process batches of SNPs ##############
     for i in range(0,batch_bounds.shape[0]):
+        if i==0:
+            print_sample_info = True
+        else:
+            print_sample_info = False
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(y, pedigree, 
                     tau, sigma2, snp_ids=snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], bedfile=bedfile, bgenfile=bgenfile, 
-                    pargts_f = pargts_f, parsum=parsum, fit_sib=fit_sib,max_missing=max_missing, min_maf=min_maf)
+                    par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib,max_missing=max_missing, min_maf=min_maf,
+                    print_sample_info=print_sample_info)
         # Fill in fitted SNPs
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
@@ -337,13 +348,13 @@ if args.impfiles is None:
     # Remove rows with missing parents
     sibpairs, ped = preprocess.get_sibpairs_from_ped(ped)
     if sibpairs is not None:
-        print('Found '+str(sibpairs.shape[0])+' sibling pairs')
+        print('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
     else:
         print('Found 0 sibling pairs')
 else:
     # Read pedigree
-    pargts_f = h5py.File(pargts_list[0],'r')
-    ped = convert_str_array(pargts_f['pedigree'])
+    par_gts_f = h5py.File(pargts_list[0],'r')
+    ped = convert_str_array(par_gts_f['pedigree'])
     ped = ped[1:ped.shape[0]]
     # Remove control fams
     controls = np.array([x[0]=='_' for x in ped[:,0]])
@@ -375,7 +386,7 @@ print('Residual variance estimate: ' + str(round(sigma2,4)))
 
 for i in range(chroms.shape[0]):
     print('Fitting models for chromosome '+str(chroms[i]))
-    process_chromosome(chroms[i], y, tau, sigma2, args.outprefix, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
-                        pargts=pargts_list[i], covar=covariates, fit_sib=args.fit_sib, parsum=args.parsum, 
+    process_chromosome(chroms[i], y, ped, tau, sigma2, args.outprefix, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
+                        par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
                         max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                         no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)

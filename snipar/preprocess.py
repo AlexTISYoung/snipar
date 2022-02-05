@@ -21,6 +21,7 @@ def parse_obsfiles(obsfiles, obsformat='bed'):
         print(str(len(obs_files))+' files found')
     else:
             obs_files = [obsfiles+'.'+obsformat]
+            chroms = [0]
     return np.array(obs_files), np.array(chroms,dtype=int)
 
 def parse_filelist(obsfiles, impfiles, obsformat):
@@ -41,6 +42,7 @@ def parse_filelist(obsfiles, impfiles, obsformat):
     else:
             obs_files = [obsfiles+'.'+obsformat]
             imp_files = [impfiles+'.hdf5']
+            chroms = [0]
     return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
 
 def get_sibpairs_from_ped(ped):
@@ -261,12 +263,16 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
     if N == 0:
         raise ValueError(
             'No individuals with phenotype observations and complete observed/imputed genotype observations')
-    if verbose:
-        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
     # Take those that can be used
     gt_indices = gt_indices[none_missing, :]
     par_status = par_status[none_missing, :]
     ids = ids[none_missing]
+    if verbose:
+        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotype observations')
+        parcount = np.sum(par_status==0,axis=1)
+        print(str(np.sum(parcount==0))+' individuals with imputed but no observed parental genotypes')
+        print(str(np.sum(parcount==1))+' individuals with one observed and one imputed parent')
+        print(str(np.sum(parcount==2))+' individuals with both parents observed')
     # Find indices of individuals and their parents in observed genotypes
     observed_indices = np.sort(np.unique(np.hstack((gt_indices[:, 0],
                                                     gt_indices[par_status[:, 0] == 0, 1],
@@ -595,7 +601,7 @@ def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     if imp_fams is not None:
         fam_dict = make_id_dict(imp_fams)
     # Store family ID of each individual
-    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=imp_fams.dtype)
+    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=ped.dtype)
     # Find status and find indices
     for i in range(0,pheno_ids.shape[0]):
         # Find index in genotypes

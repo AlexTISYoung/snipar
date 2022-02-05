@@ -11,7 +11,7 @@ setup(name='snipar',
       author='Alexander I. Young',
       author_email='alextisyoung@gmail.com',
       license='MIT',
-      scripts=['fGWAS.py', 'fPGS.py', 'impute_runner.py'],
+      scripts=['gwas.py', 'pgs.py', 'impute.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
