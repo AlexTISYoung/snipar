@@ -41,13 +41,13 @@ def fit_models(y,G):
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
 
-@njit(parallel=True)
-def fit_models(y,G):
-    alpha = np.zeros((G.shape[2],G.shape[1]),dtype=np.float_)
-    alpha_cov = np.zeros((G.shape[2],G.shape[1],G.shape[1]),dtype=np.float_)
-    for i in prange(G.shape[2]):
-        not_na = np.sum(np.isnan(G[:,:,i]),axis=1)==0
-        xtx = G[not_na,:,i].T
+# @njit(parallel=True)
+# def fit_models(y,G):
+#     alpha = np.zeros((G.shape[2],G.shape[1]),dtype=np.float_)
+#     alpha_cov = np.zeros((G.shape[2],G.shape[1],G.shape[1]),dtype=np.float_)
+#     for i in prange(G.shape[2]):
+#         not_na = np.sum(np.isnan(G[:,:,i]),axis=1)==0
+#         xtx = G[not_na,:,i].T
 
 
 def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
