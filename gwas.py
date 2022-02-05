@@ -211,7 +211,7 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
     if bedfile is not None:
         bed = Bed(bedfile,count_A1 = True)
         snp_ids = bed.sid
-        pos = bed.pos[:,2]
+        pos = np.array(bed.pos[:,2],dtype=int)
         alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5))
         chrom = np.array(bed.pos[:,0],dtype=int)
     elif bgenfile is not None:
@@ -220,7 +220,7 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         # If SNP IDs are broken, try rsids
         if np.unique(snp_ids).shape[0] == 1:
             snp_ids = bgen.rsids
-        pos = np.array(bgen.positions)
+        pos = np.array(bgen.positions,dtype=int)
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
         chrom = np.array(bgen.chromosomes,dtype='U2')
         # If chromosomse unknown, set to chromosome inferred from filename
@@ -378,7 +378,7 @@ y.filter_ids(ped[:,1])
 print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
 ped_indices = np.array([ped_dict[x] for x in y.ids])
 y.fams = ped[ped_indices,0]
-print(' Fitting variance components')
+print('Fitting variance components')
 if args.covar is not None:
     # Match covariates
     covariates.filter_ids(y.ids)
