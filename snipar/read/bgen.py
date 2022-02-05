@@ -14,6 +14,8 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
     # Match SNPs from imputed and observed and restrict to those in list
     if snp_ids is None:
         snp_ids = gts_f.ids
+        if np.unique(snp_ids).shape[0] == 1:
+            snp_ids = gts_f.rsids
         if end is None:
             end = snp_ids.shape[0]
         snp_ids = snp_ids[start:end]
@@ -60,32 +62,74 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False, print_sample_info = False):
+def get_snps(gts_f, snp_ids=None):
+    """
+    Used in get_gts_matrix_given_ped to match observed and imputed SNPs and return SNP information on shared SNPs.
+    Removes SNPs that have duplicated SNP ids.
+    in_obs_sid contains the SNPs in the imputed genotypes that are present in the observed SNPs
+    obs_sid_index contains the index in the observed SNPs of the common SNPs
+    """
+    # Match SNPs from imputed and observed and restrict to those in list
+    if snp_ids is None:
+        snp_ids = gts_f.ids
+        if np.unique(snp_ids).shape[0] == 1:
+            snp_ids = gts_f.rsids
+    # Get bim info
+    alleles = np.array([x.split(',') for x in gts_f.allele_ids])
+    pos = np.array(gts_f.positions)
+    chromosome = np.array(gts_f.chromosomes)
+    # Remove duplicate ids
+    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
+    snp_ids = snp_ids[snp_indices[snp_counts == 1]]
+    ## Read and match SNP ids
+    obs_sid = gts_f.ids
+    if np.unique(obs_sid).shape[0] == 1:
+        obs_sid = gts_f.rsids
+    obs_sid_dict = make_id_dict(obs_sid)
+    in_obs_sid = np.array([x in obs_sid_dict for x in snp_ids])
+    if np.sum(in_obs_sid) == 0:
+        raise ValueError('No SNPs found in bgen file')
+    obs_sid_index = np.array([obs_sid_dict[x] for x in snp_ids[in_obs_sid]])
+    sid = obs_sid[obs_sid_index]
+    alleles = alleles[obs_sid_index, :]
+    chromosome = chromosome[obs_sid_index]
+    pos = pos[obs_sid_index]
+    return chromosome, sid, pos, alleles, obs_sid_index
+
+def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
     ### Genotype file ###
-    gts_f = open_bgen(gts_f, verbose=verbose)
+    gts_f = open_bgen(bgenfile, verbose=verbose)
     # get ids of genotypes and make dict
     gts_ids = gts_f.samples
     # Get families with imputed parental genotypes
-    fams = convert_str_array(np.array(par_gts_f['families']))
-    ### Find ids with observed/imputed parents and indices of those in observed/imputed data
-    ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped, fams, gts_ids, ids=ids, sib=sib, verbose=print_sample_info)
-    ### Match observed and imputed SNPs ###
-    if verbose:
-        print('Matching observed and imputed SNPs')
-    chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
-    # Read imputed parental genotypes
-    if verbose:
-        print('Reading imputed parental genotypes')
-    if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*fams.shape[0]):
-        imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
-        imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
+    if par_gts_f is not None:
+        imp_fams = convert_str_array(np.array(par_gts_f['families']))
     else:
-        imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
-        imp_gts = imp_gts[imp_indices,:]
-    fams = fams[imp_indices]
+        imp_fams = None
+    ### Find ids with observed/imputed parents and indices of those in observed/imputed data
+    ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
+                                                                                sib=sib, verbose=print_sample_info)    
+    ### Match observed and imputed SNPs ###
+    if par_gts_f is not None:
+        if verbose:
+            print('Matching observed and imputed SNPs')
+        chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
+        # Read imputed parental genotypes
+        if verbose:
+            print('Reading imputed parental genotypes')
+        if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*imp_fams.shape[0]):
+            imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
+            imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
+        else:
+            imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
+            imp_gts = imp_gts[imp_indices,:]
+        imp_fams = imp_fams[imp_indices]
+    else:
+        chromosome, sid, pos, alleles, obs_sid_index = get_snps(gts_f, snp_ids=snp_ids)
+        imp_gts = None
     # Read observed genotypes
     if verbose:
         print('Reading observed genotypes')
@@ -93,22 +137,23 @@ def get_gts_matrix_given_ped(ped, par_gts_f, gts_f, snp_ids=None, ids=None, sib=
     gts_ids = gts_ids[observed_indices]
     gts_id_dict = make_id_dict(gts_ids)
     # Find indices in reduced data
-    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, fams, gts_id_dict)
+    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     if verbose:
         print('Constructing family based genotype matrix')
     ### Make genotype design matrix
     if sib:
         if parsum:
             G = np.zeros((ids.shape[0], 3, gts.shape[1]), dtype=np.float32)
-            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         else:
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
-            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     else:
-        G = preprocess.make_gts_matrix(gts, imp_gts, par_status, gt_indices, parsum=parsum)
+        G = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
     del gts
-    del imp_gts
+    if imp_gts is not None:
+        del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 
