@@ -8,6 +8,7 @@ import snipar.read as read
 import snipar.lmm as lmm
 from snipar.utilities import *
 import snipar.preprocess as preprocess
+from numba import njit, prange
 
 def transform_phenotype(inv_root, y, fam_indices, null_mean = None):
     """
@@ -39,6 +40,15 @@ def fit_models(y,G):
     alpha_cov = np.linalg.inv(XTX)
     alpha_ses = np.sqrt(np.diagonal(alpha_cov,axis1=1,axis2=2))
     return alpha, alpha_cov, alpha_ses
+
+@njit(parallel=True)
+def fit_models(y,G):
+    alpha = np.zeros((G.shape[2],G.shape[1]),dtype=np.float_)
+    alpha_cov = np.zeros((G.shape[2],G.shape[1],G.shape[1]),dtype=np.float_)
+    for i in prange(G.shape[2]):
+        not_na = np.sum(np.isnan(G[:,:,i]),axis=1)==0
+        xtx = G[not_na,:,i].T
+
 
 def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
     """
@@ -190,7 +200,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     alpha, alpha_cov, alpha_ses = fit_models(transformed_y,G)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
-def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
+def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
                         fit_sib=False, parsum=False, max_missing=5, min_maf=0.01, batch_size=10000, 
                         no_hdf5_out=False, no_txt_out=False):
     ######## Check for bed/bgen #######
@@ -212,10 +222,9 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
             snp_ids = bgen.rsids
         pos = np.array(bgen.positions)
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
-        bgen_chrom = np.array(bgen.chromosomes)
+        chrom = np.array(bgen.chromosomes)
         # If chromosomse unknown, set to chromosome inferred from filename
-        bgen_chrom[[len(x)==0 for x in chrom]] = chrom
-        chrom = bgen_chrom
+        chrom[[len(x)==0 for x in chrom]] = chrom_out
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
     # Remove duplicates
@@ -267,6 +276,8 @@ def process_chromosome(chrom, y, pedigree, tau, sigma2, outprefix, bedfile=None,
         freqs[batch_indices] = batch_freqs
         print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
+    if not chrom_out==0:
+        outprefix = outprefix+'chr_'+str(chrom_out)
     if not no_hdf5_out:
         write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, fit_sib, alpha, alpha_ses, alpha_cov,
                      sigma2, tau, freqs)
@@ -385,7 +396,16 @@ print('Family variance estimate: '+str(round(sigma2/tau,4)))
 print('Residual variance estimate: ' + str(round(sigma2,4)))
 
 for i in range(chroms.shape[0]):
-    print('Fitting models for chromosome '+str(chroms[i]))
+    if args.bedfiles is not None:
+        print('Reading observed genotypes from '+bedfiles[i])
+    if args.bgenfiles is not None:
+        print('Reading observed genotypes from '+bgenfiles[i])
+    if args.impfiles is not None:
+        print('Reading imputed genotypes from '+pargts_list[i])
+    if chroms.shape[0]>1:
+        print('Estimating SNP effects for chromosome '+str(chroms[i]))
+    else:
+        print('Estimaing SNP effects')
     process_chromosome(chroms[i], y, ped, tau, sigma2, args.outprefix, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
                         par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
                         max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 

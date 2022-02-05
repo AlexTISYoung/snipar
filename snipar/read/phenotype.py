@@ -20,12 +20,12 @@ def read_phenotype(phenofile, missing_char = 'NA', phen_index = 1):
         pheno_ids: :class:`~numpy:numpy.array`
             corresponding vector of individual IDs (IID)
     """
-    pheno = Pheno(phenofile, missing=missing_char).read()
+    pheno = Pheno(phenofile, missing=missing_char)[:,phen_index-1].read()
     y = np.array(pheno.val)
+    y.reshape((y.shape[0],1))
     pheno_ids = np.array(pheno.iid)[:,1]
-    y = y.reshape((y.shape[0],1))
     # Remove y NAs
-    y_not_nan = np.logical_not(np.isnan(y))
+    y_not_nan = np.logical_not(np.isnan(y[:,0]))
     if np.sum(y_not_nan) < y.shape[0]:
         y = y[y_not_nan,:]
         pheno_ids = pheno_ids[y_not_nan]
