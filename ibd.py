@@ -1,4 +1,4 @@
-import argparse, gzip
+import argparse
 from numba import set_num_threads
 from numba import config as numba_config
 import snipar.preprocess as preprocess

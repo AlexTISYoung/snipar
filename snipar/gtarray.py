@@ -309,8 +309,6 @@ class gtarray(object):
             raise(ValueError('Family labels needed for diagonalization'))
         if not self.mean_normalised:
             self.mean_normalise()
-        if self.has_NAs:
-            self.fill_NAs()
         unique_fams, famsizes = np.unique(self.fams, return_counts = True)
         fam_indices = dict()
         # Transform
