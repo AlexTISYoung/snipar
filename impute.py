@@ -91,8 +91,8 @@ Results:
         
 """
 import logging
-from snipar.bin.preprocess_data import *
-from snipar.bin.impute_from_sibs import *
+from snipar.imputation.preprocess_data import *
+from snipar.imputation.impute_from_sibs import *
 import argparse
 import h5py
 import random

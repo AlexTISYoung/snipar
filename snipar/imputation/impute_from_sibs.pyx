@@ -10,7 +10,6 @@ Functions
     impute
 """
 # distutils: language = c++
-#!/well/kong/users/wiw765/anaconda2/bin/python
 import numpy as np
 import pandas as pd
 import logging
@@ -750,7 +749,7 @@ cdef int get_IBD_type(cstring id1,
             A dictionary containing flattened IBD segments for each pair of related individuals.
             Each segment consists of three integers, start, end, and IBD_status (start and end are inclusive).
             Values are lists of integers in this fashion: [start0, end0, ibd_status0, start2, end2, ibd_status2, ...]
-            Sibreg.bin.preprocess_data.prepare_data can be used to create this.
+            Sibreg.imputation.preprocess_data.prepare_data can be used to create this.
 
     Returns:
         int
