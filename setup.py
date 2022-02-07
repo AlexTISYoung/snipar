@@ -45,6 +45,7 @@ setup(name='snipar',
             'pooch==1.5.1',
             'numba==0.50.0',
             'gitpython==3.1.24',
+            'sklearn==1.0',
             ],
       tests_require=['pytest'],
       extras_require={

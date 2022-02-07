@@ -4,7 +4,28 @@ from tests.test_imputation import imputation_test
 #TODO add tests with nan
 class TestCommanline(unittest.TestCase):
     p_value_threshold = 0.01
-    def test_impute_runner_with_unphased_pedigree(self):
+    def test_impute_with_unphased_pedigree_control(self):
+        command = ["python",
+                   "impute.py",
+                   "-c",
+                   "test_data/sample.our",
+                   "--snipar_ibd",
+                   "--bed", "test_data/sample_reduced~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--pedigree", "test_data/sample.ped",
+                   "--threads", "10",
+                   "--output_address", "outputs/tmp/test_impute_with_unphased_pedigree_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1],
+                imputed_prefix = "outputs/tmp/test_impute_with_unphased_pedigree_control",
+                expected_prefix = "test_data/sample",
+                )
+        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
+        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+    def test_impute_with_unphased_pedigree(self):
         command = ["python",
                    "impute.py",
                    "test_data/sample.our",
@@ -40,26 +61,6 @@ class TestCommanline(unittest.TestCase):
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
-    def test_impute_with_unphased_pedigree_control(self):
-        command = ["python",
-                   "impute.py",
-                   "-c",
-                   "test_data/sample.our",
-                   "--snipar_ibd",
-                   "--bed", "test_data/sample_reduced~",
-                   "--from_chr", "1",
-                   "--to_chr", "3",
-                   "--pedigree", "test_data/sample.ped",
-                   "--threads", "10",
-                   "--output_address", "outputs/tmp/test_impute_with_unphased_pedigree_control~",
-                   ]
-        subprocess.check_call(command)
-        coef, z, p_value = imputation_test([1],
-                imputed_prefix = "outputs/tmp/test_impute_with_unphased_pedigree_control",
-                expected_prefix = "test_data/sample",
-                )
-        self.assertGreaterEqual(p_value[0], self.p_value_threshold)
-        self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
     def test_impute_with_unphased_pedigree_control_legacy_ibd(self):
         command = ["python",
@@ -161,6 +162,32 @@ class TestCommanline(unittest.TestCase):
                 )
         self.assertGreaterEqual(p_value[0], self.p_value_threshold)
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
+
+    def test_impute_with_unphased_king_control_pca(self):
+        command = ["python",
+                   "impute.py",
+                   "-c",
+                   "test_data/sample.our",
+                   "--snipar_ibd",
+                   "--bed", "test_data/sample~",
+                   "--from_chr", "1",
+                   "--to_chr", "3",
+                   "--king", "test_data/sample.king",
+                   "--agesex", "test_data/sample.agesex",
+                   "--pcs", "test_data/sample1_2_pca.eigenvec",
+                   "--pc_num", "8",
+                   "-find_optimal_pc",
+                   "--threads", "10",
+                   "--output_address", "outputs/tmp/test_impute_with_unphased_king_control~",
+                   ]
+        subprocess.check_call(command)
+        coef, z, p_value = imputation_test([1, 2],
+                imputed_prefix = "outputs/tmp/test_impute_with_unphased_king_control",
+                expected_prefix = "test_data/sample",
+                )
+        #TODO use pvals
+        self.assertAlmostEqual(coef[0], 1., delta=0.02)
+        self.assertAlmostEqual(coef[1], 1., delta=0.02)
 
     def test_impute_with_unphased_king_control_legacy_ibd(self):
         command = ["python",

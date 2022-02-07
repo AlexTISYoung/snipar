@@ -26,8 +26,17 @@ Args:
     --bed : str
         Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
-    bim : str
+    --bim : str
         Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
+
+    --pcs : str, optional
+        Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs
+
+    --pc_num : int, optional
+        Number of PCs to consider.
+
+    -find_optimal_pc: optional
+        It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
     --from_chr : int, optional
         Which chromosome (<=). Should be used with to_chr parameter.
@@ -84,13 +93,13 @@ Results:
 import logging
 from snipar.bin.preprocess_data import *
 from snipar.bin.impute_from_sibs import *
-import time
 import argparse
 import h5py
 import random
 import pandas as pd
 import os
 from multiprocessing import Pool
+from time import time
 random.seed(1567924)
 
 def run_imputation(data):
@@ -112,6 +121,14 @@ def run_imputation(data):
                 phased_address: str, optional
                     Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
 
+                pcs : np.array[float], optional
+                    A two-dimensional array containing pc scores for all individuals and SNPs respectively.
+
+                pc_ids : set, optional
+                    Set of ids of individuals in the pcs.
+
+                find_optimal_pc : bool, optional
+                    It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
                 king_ibd: pd.Dataframe
                     IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, StartSNP, StopSNP
@@ -157,6 +174,9 @@ def run_imputation(data):
     snipar_ibd = data["snipar_ibd"]
     king_ibd = data["king_ibd"]
     king_seg = data["king_seg"]
+    pcs = data["pcs"]
+    pc_ids = data["pc_ids"]
+    find_optimal_pc = data["find_optimal_pc"]
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -170,7 +190,7 @@ def run_imputation(data):
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
-    start_time = time.time()
+    start_time = time()
     #Doing imputation chunk by chunk
     if start is None:
         start = 0
@@ -184,7 +204,7 @@ def run_imputation(data):
             interval = ((end-start+chunks-1)//chunks)
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
-            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end)
+            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end, pcs, pc_ids, find_optimal_pc)
             imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
             logging.info(f"imputing chunk {i}/{chunks} done")
         
@@ -192,52 +212,46 @@ def run_imputation(data):
         logging.info("merging chunks...")
         logging.info(f"merging chunks 1/{chunks}...")
         chunk_output_address = f"{output_address}_chunk{0}.hdf5"
+        hdf5_results = {}
         with h5py.File(chunk_output_address, "r") as hf:
-            imputed_par_gts = np.array(hf['imputed_par_gts'])
-            families = np.array(hf['families'])
-            parental_status = np.array(hf['parental_status'])
-            pos = np.array(hf['pos'])
-            bim_columns = np.array(hf["bim_columns"])
-            bim_values = np.array(hf["bim_values"])
-            pedigree = np.array(hf["pedigree"])
-            ratio_ibd0 = np.array(hf["ratio_ibd0"])
-            non_duplicates = np.array(hf["non_duplicates"])
+            for key, val in hf.items():
+                hdf5_results[key] = np.array(val)
         os.remove(chunk_output_address)
         for i in range(1, chunks):
             logging.info(f"merging chunks {i+1}/{chunks}...")
             chunk_output_address = f"{output_address}_chunk{i}.hdf5"
             with h5py.File(chunk_output_address, "r") as hf:
-                new_imputed_par_gts = np.array(hf['imputed_par_gts'])
-                new_pos = np.array(hf['pos'])
-                new_bim_values = np.array(hf["bim_values"])
-                new_ratio_ibd0 = np.array(hf["ratio_ibd0"])
-                new_non_duplicates = np.array(hf["non_duplicates"])
-                new_non_duplicates = non_duplicates[-1] + new_non_duplicates + 1
-                imputed_par_gts = np.hstack((imputed_par_gts, new_imputed_par_gts))
-                pos = np.hstack((pos, new_pos))
-                non_duplicates = np.hstack((non_duplicates, new_non_duplicates))
-                bim_values = np.vstack((bim_values, new_bim_values))
-                ratio_ibd0 = np.hstack((ratio_ibd0, new_ratio_ibd0))
+                for key in ["imputed_par_gts",
+                            "pos",
+                            "ratio_ibd0",
+                            "mendelian_error_ratio",
+                            "estimated_genotyping_error",]:
+                    #TODO fix max estimator loggigng
+                    new_val = np.array(hf[key])
+                    hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
+                for key in ["bim_values"]:
+                    #TODO fix max estimator loggigng
+                    new_val = np.array(hf[key])
+                    hdf5_results[key] = np.vstack((hdf5_results[key], new_val))
+                non_duplicates = np.array(hf["non_duplicates"])
+                non_duplicates = hdf5_results["non_duplicates"][-1] + non_duplicates + 1
+                hdf5_results["non_duplicates"] = np.hstack((hdf5_results["non_duplicates"], non_duplicates))
             os.remove(chunk_output_address)
         logging.info(f"writing results of the merge")
         #Writing the merged output
         with h5py.File(f"{output_address}.hdf5", "w") as hf:
-            hf.create_dataset('imputed_par_gts', imputed_par_gts.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = imputed_par_gts)
-            hf['families'] = np.array(families, dtype='S')
-            hf['parental_status'] = parental_status
-            hf['pos'] = pos
-            hf["bim_columns"] = bim_columns
-            hf["bim_values"] = bim_values
-            hf["pedigree"] =  pedigree
-            hf["ratio_ibd0"] = ratio_ibd0
-            hf["non_duplicates"] = non_duplicates
+            for key, val in hdf5_results.items():
+                if key=='imputed_par_gts':
+                    hf.create_dataset(key, val.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = val)
+                else:
+                    hf[key] = val
         logging.info(f"merging chunks done")
     elif chunks == 1:
-        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end)
+        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
         imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
-    end_time = time.time()
+    end_time = time()
     return (end_time-start_time)
 
 #does the imputation and writes the results
@@ -294,6 +308,17 @@ if __name__ == "__main__":
                         type=str,
                         default = None,
                         help='Address of the agesex file with header "FID IID age sex"')
+    parser.add_argument('--pcs',
+                        type=str,
+                        default = None,
+                        help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
+    parser.add_argument('--pc_num',
+                        type=int,
+                        default = None,
+                        help='Number of PCs to consider')
+    parser.add_argument('-find_optimal_pc',
+                        action='store_true',
+                        help='It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.')
     parser.add_argument('--threads',
                         type=int,
                         default=1, 
@@ -347,6 +372,8 @@ if __name__ == "__main__":
     snipar_ibd = None
     king_ibd = None
     king_seg = None
+    pcs = None
+    pc_ids = None
     if args.snipar_ibd:
         snipar_ibd = ibd_pd
         if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
@@ -355,6 +382,20 @@ if __name__ == "__main__":
         king_ibd = ibd_pd
         king_seg = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)    
     logging.info("ibd loaded.")
+
+    logging.info("loading pcs ...")
+    if args.pcs:
+        #ordering should be the same
+        pcs = pd.read_csv(f"{args.pcs}", delim_whitespace=True)
+        pc_ids = pcs.iloc[:, 1].values.astype("S").tolist()
+        pcs = pcs.iloc[:, 2:].values
+        if not args.pc_num is None:
+            if args.pc_num > pcs.shape[1]:
+                raise Exception(f"pc_num={args.pc_num} more than {pcs.shape} PCs available in pcs")
+            else:
+                pcs = pcs[:,:args.pc_num]
+    logging.info("pcs loaded")
+
     if (args.from_chr is not None) and (args.to_chr is not None):
         chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
     else:
@@ -379,6 +420,9 @@ if __name__ == "__main__":
             "snipar_ibd": snipar_ibd,
             "king_ibd": king_ibd,
             "king_seg": king_seg,
+            "pcs": pcs,
+            "pc_ids": pc_ids,
+            "find_optimal_pc": args.find_optimal_pc,
             "output_address":none_tansform(args.output_address, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
@@ -399,8 +443,8 @@ if __name__ == "__main__":
             consumed_time = pool.map(run_imputation, inputs)
             logging.info("imputation time: "+str(np.sum(consumed_time)))
     else:
-        start_time = time.time()
+        start_time = time()
         for args in inputs:
             run_imputation(args)
-        end_time = time.time()
+        end_time = time()
         logging.info(f"imputation time: {end_time-start_time}")
