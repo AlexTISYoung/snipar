@@ -18,9 +18,17 @@ def parse_obsfiles(obsfiles, obsformat='bed'):
             if path.exists(obsfile):
                 obs_files.append(obsfile)
                 chroms.append(i)
-        print(str(len(obs_files))+' files found')
+        if len(obs_files)==0:
+            raise(ValueError('Observed genotype files not found'))
+        else:
+            print(str(len(obs_files))+' files found')
     else:
-            obs_files = [obsfiles+'.'+obsformat]
+            obsfile = obsfiles+'.'+obsformat
+            if path.exists(obsfile):
+                obs_files = [obsfile]
+                chroms = [0]
+            else:
+                raise(ValueError(obsfile+' not found'))
     return np.array(obs_files), np.array(chroms,dtype=int)
 
 def parse_filelist(obsfiles, impfiles, obsformat):
@@ -37,16 +45,32 @@ def parse_filelist(obsfiles, impfiles, obsformat):
                 obs_files.append(obsfile)
                 imp_files.append(impfile)
                 chroms.append(i)
-        print(str(len(imp_files))+' matched observed and imputed genotype files found')
+        if len(imp_files)==0:
+            raise(ValueError('Observed/imputed genotype files not found'))
+        else:
+            print(str(len(imp_files))+' matched observed and imputed genotype files found')
     else:
-            obs_files = [obsfiles+'.'+obsformat]
-            imp_files = [impfiles+'.hdf5']
+            obsfile = obsfiles+'.'+obsformat
+            impfile = impfiles+'.hdf5'
+            if path.exists(obsfile) and path.exists(impfile):
+                obs_files = [obsfile]
+                imp_files = [impfile]
+                chroms = [0]
+            else:
+                if not path.exists(obsfile):
+                    raise(ValueError(obsfile+' not found'))
+                if not path.exists(impfile):
+                    raise(ValueError(impfile+' not found'))
     return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
 
 def get_sibpairs_from_ped(ped):
+    # Remove rows with missing parents
     parent_missing = np.array([ped[i,2]=='0' or ped[i,3]=='0' for i in range(ped.shape[0])])
     #print('Removing '+str(np.sum(parent_missing))+' rows from pedigree due to missing parent(s)')
     ped = ped[np.logical_not(parent_missing),:]
+    # Remove control families
+    controls = np.array([x[0]=='_' for x in ped[:,0]])
+    ped = ped[~controls,:]
     # Find unique parent-pairs
     parent_pairs = np.array([ped[i,2]+ped[i,3] for i in range(ped.shape[0])])
     unique_pairs, sib_counts = np.unique(parent_pairs, return_counts=True)
@@ -261,12 +285,16 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
     if N == 0:
         raise ValueError(
             'No individuals with phenotype observations and complete observed/imputed genotype observations')
-    if verbose:
-        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotypes observations')
     # Take those that can be used
     gt_indices = gt_indices[none_missing, :]
     par_status = par_status[none_missing, :]
     ids = ids[none_missing]
+    if verbose:
+        print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotype observations')
+        parcount = np.sum(par_status==0,axis=1)
+        print(str(np.sum(parcount==0))+' individuals with imputed but no observed parental genotypes')
+        print(str(np.sum(parcount==1))+' individuals with one observed and one imputed parent')
+        print(str(np.sum(parcount==2))+' individuals with both parents observed')
     # Find indices of individuals and their parents in observed genotypes
     observed_indices = np.sort(np.unique(np.hstack((gt_indices[:, 0],
                                                     gt_indices[par_status[:, 0] == 0, 1],
@@ -595,7 +623,7 @@ def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     if imp_fams is not None:
         fam_dict = make_id_dict(imp_fams)
     # Store family ID of each individual
-    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=imp_fams.dtype)
+    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=ped.dtype)
     # Find status and find indices
     for i in range(0,pheno_ids.shape[0]):
         # Find index in genotypes

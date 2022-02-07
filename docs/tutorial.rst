@@ -25,7 +25,7 @@ alternatively, a genotyping error probability can be provided using the --p_erro
 genotyping error probabilities greater than 0.01 will be filtered out, but this threshold can be changed with the --max_error argument.
 To infer the IBD segments from the genotype data in example/sample.bed,use the following command
 
-    ``python ibd.py example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
+    ``python ibd.py example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --map example/sample.genetic_map.txt --outprefix example/ --threads 4 --ld_out``
 
 This will output the IBD segments to a gzipped text file example/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
 inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with columns 'FID' (family ID), 'IID'
@@ -37,7 +37,7 @@ If the user has a pedigree file with columns FID (family ID), IID (individual ID
 they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred
 as individuals in the pedigree that share both parents. (Warning: MZ twins should be removed from the pedigree.) Using the example pedigree in example/sample.ped, you can infer IBD using this command:
 
-    ``python ibd.py example/sample --pedigree example/sample.ped --map example/sample.genetic_map.txt --outprefix example/ --threads 4``
+    ``python ibd.py example/sample --pedigree example/sample.ped --map example/sample.genetic_map.txt --outprefix example/ --threads 4 --ld_out``
 
 While the script can be run for a .bed file containing a single chromosome, it can also be run for multiple bed files each containing a single chromosome. If the bed files are
 chr_1.bed, chr_2.bed, ..., chr_22.bed, then you can specify these files to the script as 'chr_~', where '~' is interpreted as a numerical wildcard character.
@@ -54,7 +54,7 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes without using phase information, type:
 
-    ``python impute_runner.py example/chr_1.ibd --bed example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --snipar_ibd``
+    ``python impute.py example/chr_1.ibd --bed example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --snipar_ibd``
 
 The script constructs a pedigree from the output of KING's relatedness inference (example/sample.king),
 and age and sex information (example/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in example/chr_1.ibd.segments.gz are used to impute missing parental genotypes
@@ -63,14 +63,14 @@ from the observed sibling and parental genotypes in example/sample1.bed. The imp
 If phased haplotypes are available in .bgen format, the imputation can use these as input, which improves the information gained by imputation
 in certain situations. To perform imputation from the phased .bgen file in example/, use the following command:
 
-    ``python impute_runner.py example/chr_1.ibd --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
+    ``python impute.py example/chr_1.ibd --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
 
 It is necessary to provide the *--from_chr* and *--to_chr* arguments when imputing from .bgen files since they often do not contain information on which chromosome
 the SNPs are located on, and we need to match up the IBD segments to the SNPs on the same chromosome.
 
 To use IBD segments output by KING with the --ibdseg argument (example/sample.king.segments.gz), use the following command:
 
-    ``python impute_runner.py example/sample.king --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2``
+    ``python impute.py example/sample.king --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2``
 
 As with the ibd.py script, the impute_runner.py script can use a user input pedigree (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
@@ -79,7 +79,7 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python fGWAS.py example/sample example/h2_quad_0.8.txt --outprefix example/h2_quad_0.8 --bed example/sample``
+    ``python gwas.py example/h2_quad_0.8.txt example/h2_quad_0.8 --bedfiles example/sample --impfiles example/sample``
 
 This takes the observed genotypes in example/sample.bed and the imputed parental genotypes in example/sample.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -89,7 +89,7 @@ output is the  phenotypic variance explained by mean differences between sibship
 
 To use the .bgen file instead, type:
 
-    ``python fGWAS.py example/sample example/h2_quad_0.8.txt --outprefix example/h2_quad_0.8 --bgen example/sample``
+    ``python gwas.py example/h2_quad_0.8.txt example/h2_quad_0.8 --bgenfiles example/sample --impfiles example/sample``
 
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
@@ -132,6 +132,27 @@ collinear. This is because the imputation is the same for paternal and maternal 
 onto proband and sum of imputed paternal and maternal genotypes. This can be achieved by providing the *--parsum* option to the script. 
 The script can also estimate indirect sibling effects for each SNP by providing the *--fit_sib* option; however, this
 will reduce power for estimating other effects.
+
+Correlations between effects
+----------------------------
+
+SNIPar provides a script to compute correlations between direct and population effects and between direct effects and average NTCs. 
+To compute these correlations from the effects estimated in this tutorial (output by gwas.py to h2_quad_0.8.sumstats.gz) 
+using the LD scores computed by ibd.py (and output to example/1.l2.ldscore.gz), use the following command: 
+
+    ``python correlate.py example/h2_quad_0.8 example/effect --ldscores example/1``
+
+This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
+and their standard errors, estimated by block-jacknife, are output to example/effect_corrs.txt. 
+
+The method is similar to LDSC ([ref]), but correlates the marginal effects, adjusting for the known sampling variance-covariance matrix of the effects. 
+The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
+computed from .bed files by providing them through the --bedfiles argument. Summary statistics and LD score files split over
+multiple chromosomes can be specified by using '~'; for example, 
+
+    ``python correlate.py chr_~ outfile/effect --ldscores ld_dir/~``
+would read in summary statistics from chr_1.sumstats.gz, chr_2.sumstats.gz, ..., and LD scores from 
+ld_dir/1.l2.ldscore.gz, ld_dir/2.l2.ldscore.gz, ...
 
 
 Polygenic score analyses

@@ -5,9 +5,9 @@ import snipar.preprocess as preprocess
 import numpy as np
 
 class sumstats(object):
-    def __init__(self,chrom,sid,pos,A1,A2,freqs,direct,avg_parental,population,r_direct_avg_parental,r_direct_pop,ldscores = None, map=None):
+    def __init__(self,chrom,sid,pos,A1,A2,freqs,direct,avg_NTC,population,r_direct_avg_NTC,r_direct_pop,ldscores = None, map=None):
         sizes = np.array([sid.shape[0],pos.shape[0],A1.shape[0],A2.shape[0],freqs.shape[0],direct.shape[0],
-                            avg_parental.shape[0],population.shape[0],r_direct_avg_parental.shape[0],r_direct_pop.shape[0]])
+                            avg_NTC.shape[0],population.shape[0],r_direct_avg_NTC.shape[0],r_direct_pop.shape[0]])
         if np.unique(sizes).shape[0] > 1:
             raise(ValueError('All inputs to sumstats class must have same size'))
         self.chrom = np.zeros(sid.shape,dtype=int)
@@ -21,12 +21,12 @@ class sumstats(object):
         self.freqs.mask = np.isnan(self.freqs)
         self.direct = ma.array(direct, dtype=float)
         self.direct.mask = np.isnan(self.direct)
-        self.avg_parental = ma.array(avg_parental, dtype=float)
-        self.avg_parental.mask = np.isnan(self.avg_parental)
+        self.avg_NTC = ma.array(avg_NTC, dtype=float)
+        self.avg_NTC.mask = np.isnan(self.avg_NTC)
         self.population = ma.array(population, dtype=float)
         self.population.mask = np.isnan(self.population)
-        self.r_direct_avg_parental = ma.array(r_direct_avg_parental, dtype=float)
-        self.r_direct_avg_parental.mask = np.isnan(self.r_direct_avg_parental)
+        self.r_direct_avg_NTC = ma.array(r_direct_avg_NTC, dtype=float)
+        self.r_direct_avg_NTC.mask = np.isnan(self.r_direct_avg_NTC)
         self.r_direct_pop = ma.array(r_direct_pop, dtype=float)
         self.r_direct_pop.mask = np.isnan(self.r_direct_pop)
         if ldscores is not None:
@@ -52,9 +52,9 @@ class sumstats(object):
         self.A2 = np.hstack((self.A2, s2.A2))
         self.freqs = ma.concatenate([self.freqs, s2.freqs])
         self.direct = ma.concatenate([self.direct, s2.direct])
-        self.avg_parental = ma.concatenate([self.avg_parental, s2.avg_parental])
+        self.avg_NTC = ma.concatenate([self.avg_NTC, s2.avg_NTC])
         self.population = ma.concatenate([self.population, s2.population])
-        self.r_direct_avg_parental = ma.concatenate([self.r_direct_avg_parental, s2.r_direct_avg_parental])
+        self.r_direct_avg_NTC = ma.concatenate([self.r_direct_avg_NTC, s2.r_direct_avg_NTC])
         self.r_direct_pop = ma.concatenate([self.r_direct_pop, s2.r_direct_pop])
         if self.ldscores is not None and s2.ldscores is not None:
             self.ldscores = ma.concatenate([self.ldscores, s2.ldscores])
@@ -69,16 +69,16 @@ class sumstats(object):
         self.A2 = self.A2[filter_pass]
         self.freqs = self.freqs[filter_pass]
         self.direct = self.direct[filter_pass]
-        self.avg_parental = self.avg_parental[filter_pass]
+        self.avg_NTC = self.avg_NTC[filter_pass]
         self.population = self.population[filter_pass]
-        self.r_direct_avg_parental = self.r_direct_avg_parental[filter_pass]
+        self.r_direct_avg_NTC = self.r_direct_avg_NTC[filter_pass]
         self.r_direct_pop = self.r_direct_pop[filter_pass]
         if self.ldscores is not None:
             self.ldscores = self.ldscores[filter_pass]
         if self.map is not None:
             self.map = self.map[filter_pass]
     def filter_NAs(self):
-        no_NAs = (~self.freqs.mask)*(~self.direct.mask)*(~self.avg_parental.mask)*(~self.population.mask)*(~self.r_direct_pop.mask)*(~self.r_direct_avg_parental.mask)
+        no_NAs = (~self.freqs.mask)*(~self.direct.mask)*(~self.avg_NTC.mask)*(~self.population.mask)*(~self.r_direct_pop.mask)*(~self.r_direct_avg_NTC.mask)
         if self.ldscores is not None:
             no_NAs = no_NAs*(~self.ldscores.mask)
         if self.map is not None:
@@ -90,9 +90,9 @@ class sumstats(object):
         good_maf = np.logical_and(min_maf < self.freqs, self.freqs < (1-min_maf))
         self.filter(good_maf)
     def filter_corrs(self,max_Z):
-        r_dir_avg_parental_Z = (self.r_direct_avg_parental-np.mean(self.r_direct_avg_parental))/np.std(self.r_direct_avg_parental)
+        r_dir_avg_NTC_Z = (self.r_direct_avg_NTC-np.mean(self.r_direct_avg_NTC))/np.std(self.r_direct_avg_NTC)
         r_dir_pop_Z = (self.r_direct_pop-np.mean(self.r_direct_pop))/np.std(self.r_direct_pop)
-        good_corrs = np.logical_and(np.abs(r_dir_avg_parental_Z) < max_Z, np.abs(r_dir_pop_Z) < max_Z)
+        good_corrs = np.logical_and(np.abs(r_dir_avg_NTC_Z) < max_Z, np.abs(r_dir_pop_Z) < max_Z)
         self.filter(good_corrs)
     def scores_from_ldsc(self,ld_files):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
@@ -109,10 +109,10 @@ class sumstats(object):
         print('Computing correlation between direct and population effects')
         r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = jacknife_est(self.direct,self.population,self.r_direct_pop,1/self.ldscores, n_blocks)
         return r_dir_pop, r_dir_pop_SE, r_dir_pop_delete
-    def cor_direct_avg_par(self, n_blocks):
-        print('Computing correlation between direct and average parental effects')
-        r_dir_avg_par, r_dir_avg_par_SE, r_dir_avg_par_delete = jacknife_est(self.direct,self.avg_parental,self.r_direct_avg_parental,1/self.ldscores, n_blocks)
-        return r_dir_avg_par, r_dir_avg_par_SE, r_dir_avg_par_delete
+    def cor_direct_avg_NTC(self, n_blocks):
+        print('Computing correlation between direct effects and average NTCs')
+        r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = jacknife_est(self.direct,self.avg_NTC,self.r_direct_avg_NTC,1/self.ldscores, n_blocks)
+        return r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete
     def compute_ld_scores(self, bedfiles, chroms, ld_wind, ld_out=None):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(bedfiles.shape[0]):
@@ -139,21 +139,22 @@ def read_sumstats_file(sumstats_file, chrom):
     A2_index = np.where(sumstats_header=='A2')[0][0]
     freq_index = np.where(sumstats_header=='freq')[0][0]
     direct_index = np.where(sumstats_header=='direct_Z')[0][0]
-    avg_parental_index = np.where(sumstats_header=='avg_parental_Z')[0][0]
+    avg_NTC_index = np.where(sumstats_header=='avg_NTC_Z')[0][0]
     population_index = np.where(sumstats_header=='population_Z')[0][0]
-    r_direct_avg_parental_index = np.where(sumstats_header=='r_direct_avg_parental')[0][0]
+    r_direct_avg_NTC_index = np.where(sumstats_header=='r_direct_avg_NTC')[0][0]
     r_direct_pop_index = np.where(sumstats_header=='r_direct_population')[0][0]
     # Read summary statistics
     s = np.loadtxt(sumstats_file,dtype=str,skiprows=1)
     # Return sumstats class
     return sumstats(chrom, s[:,sid_index],s[:,pos_index],s[:,A1_index],s[:,A2_index],s[:,freq_index],
-                    s[:,direct_index],s[:,avg_parental_index],s[:,population_index],
-                    s[:,r_direct_avg_parental_index],s[:,r_direct_pop_index])
+                    s[:,direct_index],s[:,avg_NTC_index],s[:,population_index],
+                    s[:,r_direct_avg_NTC_index],s[:,r_direct_pop_index])
 
 def read_sumstats_files(sumstats_files, chroms):
     s = read_sumstats_file(sumstats_files[0], chroms[0])
-    for i in range(1,sumstats_files.shape[0]):
-        s.concatenate(read_sumstats_file(sumstats_files[i], chroms[i]))
+    if chroms.shape[0]>1:
+        for i in range(1,sumstats_files.shape[0]):
+            s.concatenate(read_sumstats_file(sumstats_files[i], chroms[i]))
     return s
 
 @njit

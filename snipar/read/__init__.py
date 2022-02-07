@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 from snipar.utilities import convert_str_array
 
-def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, compute_controls = False, parsum = False, start=0, end=None, print_sample_info=False):
+def get_gts_matrix(ped=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, compute_controls = False, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
@@ -37,51 +37,56 @@ def get_gts_matrix(par_gts_f, gts_f, snp_ids = None,ids = None, sib = False, com
 
     """
     ####### Find parental status #######
-    ### Imputed parental file ###
-    par_gts_f = h5py.File(par_gts_f,'r')
-    # Get pedigree
-    ped = convert_str_array(np.array(par_gts_f['pedigree']))
-    ped = ped[1:ped.shape[0],:]
-    # Remove control families
+    if ped is None and par_gts_f is None:
+        raise(ValueError('Must provide one of pedigree and imputed parental genotypes file'))
+    if bedfile is None and bgenfile is None:
+        raise(ValueError('Must provide one bed file or one bgen file'))
+    if bedfile is not None and bgenfile is not None:
+        raise(ValueError('Must provide one bed file or one bgen file'))
+    if par_gts_f is not None:
+        ### Imputed parental file ###
+        par_gts_f = h5py.File(par_gts_f,'r')
+        # Get pedigree
+        ped = convert_str_array(par_gts_f['pedigree'])
+        ped = ped[1:ped.shape[0],:]
+    # Control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
     # Compute genotype matrices
-    if gts_f[(len(gts_f)-4):len(gts_f)] == '.bed':
-        G = [bed.get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
+    if bedfile is not None:
+        G = [bed.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], bedfile, par_gts_f=par_gts_f,
+                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum,
                                       print_sample_info = print_sample_info)]
         if compute_controls:
-            G.append(bed.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                              print_sample_info = print_sample_info))
+            G.append(bed.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),], bedfile,
+                                                par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, 
+                                                parsum=parsum, print_sample_info = print_sample_info))
             G.append(
-                bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                         print_sample_info = print_sample_info))
+                bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], bedfile, 
+                                            par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum,
+                                            print_sample_info = print_sample_info))
             G.append(
-                bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                         print_sample_info = print_sample_info))
+                bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], bedfile, 
+                                            par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, 
+                                            print_sample_info = print_sample_info))
             return G
         else:
             return G[0]
-    elif gts_f[(len(gts_f)-5):len(gts_f)]  == '.bgen':
-        G = [bgen.get_gts_matrix_given_ped(ped[np.logical_not(controls),:],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                           print_sample_info = print_sample_info)]
+    elif bgenfile is not None:
+        G = [bgen.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], bgenfile,
+                                                    par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
+                                                    parsum=parsum,print_sample_info = print_sample_info)]
         if compute_controls:
-            G.append(bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],par_gts_f,gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                                   print_sample_info = print_sample_info))
+            G.append(bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],bgenfile,
+                                                    par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
+                                                    parsum=parsum,print_sample_info = print_sample_info))
             G.append(
-                bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                              print_sample_info = print_sample_info))
+                bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], bgenfile,
+                                                    par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
+                                                    parsum=parsum,print_sample_info = print_sample_info))
             G.append(
-                bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], par_gts_f, gts_f,
-                                      snp_ids=snp_ids, ids=ids, sib=sib, parsum=parsum, start=start, end=end,
-                                              print_sample_info = print_sample_info))
+                bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], bgenfile,
+                                                    par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
+                                                    parsum=parsum,print_sample_info = print_sample_info))
             return G
         else:
             return G[0]
-    else:
-        raise(ValueError('Unknown filetype for observed genotypes file: '+str(gts_f)))
