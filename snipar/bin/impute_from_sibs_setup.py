@@ -11,9 +11,9 @@ ext_modules = [
     Extension(
         "snipar.bin.impute_from_sibs",
         ["snipar/bin/impute_from_sibs.pyx"],
-        extra_compile_args=['-Xpreprocessor -fopenmp'],
-        extra_link_args=['-Xpreprocessor -fopenmp'],
-        language = "c++"
+        extra_compile_args=['-fopenmp'],
+        extra_link_args=['-fopenmp'],
+        language="c++"
     )
 ]
 

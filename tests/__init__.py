@@ -8,7 +8,5 @@ from tests.test_impute_from_sibs import *
 from tests.test_commandline import *
 from tests.test_pedigree_creation import *
 
-#from tests.test_pedigree_creation import *
-
 if __name__ == '__main__':
     unittest.main()
