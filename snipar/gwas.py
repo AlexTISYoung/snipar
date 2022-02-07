@@ -167,7 +167,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
                   fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
     G = read.get_gts_matrix(ped=pedigree, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
-                                ids=y.ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
+                                ids=y.ids, parsum=parsum, sib=fit_sib, verbose=verbose, print_sample_info=print_sample_info)
     G.compute_freqs()
     #### Filter SNPs ####
     if verbose:
