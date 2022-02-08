@@ -45,7 +45,7 @@ setup(name='snipar',
       ],
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation','snipar.read','snipar.tests'],
-      setup_requires=['pytest-runner', 'setuptools>=60.0.0', 'numpy==1.19.3', 'Cython==0.29.21'],
+      setup_requires=['pytest-runner', 'setuptools>=50.0.0', 'numpy==1.19.3', 'Cython==0.29.21'],
       install_requires=[
             'bgen_reader==4.0.7',
             'pandas==1.1.1',
