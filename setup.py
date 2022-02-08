@@ -1,8 +1,20 @@
 from setuptools import setup, find_packages, Extension
 from setuptools import dist
-dist.Distribution().fetch_build_eggs(['numpy==1.19.3', 'Cython==0.29.21'])
-import numpy
-#from Cython.Build import cythonize
+
+class MyExt(Extension):
+    def __init__(self, *args, **kwargs):
+        self.__include_dirs = []
+        super().__init__(*args, **kwargs)
+
+    @property
+    def include_dirs(self):
+        import numpy
+        return self.__include_dirs + [numpy.get_include()]
+
+    @include_dirs.setter
+    def include_dirs(self, dirs):
+        self.__include_dirs = dirs
+
 setup(name='snipar',
       # version='1.2.0a1',
       # description='Functions for performing robust GWAS using sibpairs in a random effects model',
@@ -33,7 +45,7 @@ setup(name='snipar',
       ],
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation','snipar.read','snipar.tests'],
-      setup_requires=['pytest-runner', 'numpy==1.19.3', 'Cython==0.29.21'],
+      setup_requires=['pytest-runner', 'setuptools>=60.0.0', 'numpy==1.19.3', 'Cython==0.29.21'],
       install_requires=[
             'bgen_reader==4.0.7',
             'pandas==1.1.1',
@@ -55,16 +67,14 @@ setup(name='snipar',
       },
       test_suite="snipar/tests",
       zip_safe=False,
-      ext_modules=[Extension("snipar.imputation.impute_from_sibs",
+      ext_modules=[MyExt("snipar.imputation.impute_from_sibs",
 			     ["snipar/imputation/impute_from_sibs.pyx"],
-			     include_dirs=[numpy.get_include()],
 			     language='c++',
 			     extra_compile_args=['-fopenmp'],
 			     extra_link_args=['-fopenmp'],
 			     ),
-                  Extension("snipar.tests.test_impute_from_sibs",
+                  MyExt("snipar.tests.test_impute_from_sibs",
 			     ["snipar/tests/test_impute_from_sibs.pyx"],
-			     include_dirs=[numpy.get_include()],
 			     language='c++',
 			     extra_compile_args=['-fopenmp'],
 			     extra_link_args=['-fopenmp'],
