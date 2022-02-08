@@ -1,9 +1,8 @@
-import sys
 from snipar.imputation.impute_from_sibs import *
 from snipar.imputation.impute_from_sibs cimport *
 import numpy as np
 import unittest
-from config import nan_integer
+from snipar.config import nan_integer
 
 class TestSibImpute(unittest.TestCase):
     def test_get_IBD_type(self):

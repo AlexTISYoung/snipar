@@ -16,8 +16,7 @@ import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen, read_bgen
-from config import nan_integer
-from sklearn.decomposition import PCA
+from snipar.config import nan_integer
 from tqdm import tqdm
 import statsmodels.api as sm
 from scipy.stats import norm

@@ -11,7 +11,6 @@ Functions
 """
 # distutils: language = c++
 import numpy as np
-import pandas as pd
 import logging
 from libcpp.map cimport map as cmap
 from libcpp.string cimport string as cstring
@@ -19,12 +18,10 @@ from libcpp.pair cimport pair as cpair
 cimport numpy as cnp
 from libcpp.vector cimport vector
 import cython
-from libc.math cimport isnan
 import h5py
 from cython.parallel import prange
 cimport openmp
-from libc.stdio cimport printf
-from config import nan_integer as python_integer_nan
+from snipar.config import nan_integer as python_integer_nan
 cdef float nan_float = np.nan
 cdef int nan_integer = python_integer_nan
 #[gp1,gp2,gs]

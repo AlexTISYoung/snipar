@@ -3,8 +3,9 @@ import subprocess
 import pandas as pd
 from snipar.imputation.preprocess_data import create_pedigree, add_control
 import networkx as nx
+import os
 import numpy as np
-
+tests_root = os.path.dirname(__file__)
 
 def node_match(node1, node2):
     return node1["observed"] == node2["observed"]
@@ -34,10 +35,10 @@ def create_graph_from_pedigree(pedigree):
 
 class TestPedigree(unittest.TestCase):
     def test_create_pedigree(self):
-        result = create_pedigree("test_data/pedigree_creation_sample.king",
-                                   "test_data/pedigree_creation_sample.agesex",
+        result = create_pedigree(f"{tests_root}/test_data/pedigree_creation_sample.king",
+                                   f"{tests_root}/test_data/pedigree_creation_sample.agesex",
         ).sort_values(by=['FID', "IID"])
-        expected = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"])
+        expected = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"])
         result_graph = create_graph_from_pedigree(result)
         expected_graph = create_graph_from_pedigree(expected)
 
@@ -45,7 +46,7 @@ class TestPedigree(unittest.TestCase):
         self.assertTrue(equality)
     
     def test_add_control(self):
-        pedigree = pd.read_csv("test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
+        pedigree = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
         pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
         pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
         controlled_pedigree = add_control(pedigree).astype(str)

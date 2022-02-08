@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Runs the sib-regression for the specified source and writes the result in an HDF5 file.
 
 This script performs imputation of missing parental genotypes from observed genotypes in a family. It can impute missing parents from families with no genotyped parents but at least two genotyped siblings, or one genotyped parent and one or more genotyped offspring. To specify the siblings, one can either provide a pedigree file (--pedigree option) or

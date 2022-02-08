@@ -4,8 +4,8 @@ import numpy
 
 ext_modules = [
     Extension(
-        "tests.test_impute_from_sibs",
-        ["tests/test_impute_from_sibs.pyx"],
+        "snipar.tests.test_impute_from_sibs",
+        ["snipar/tests/test_impute_from_sibs.pyx"],
         extra_compile_args=['-Xpreprocessor', '-fopenmp'],
         extra_link_args=['-Xpreprocessor', '-fopenmp'],
         language = "c++"

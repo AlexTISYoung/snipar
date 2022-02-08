@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import argparse, h5py
 import snipar.preprocess as preprocess
 import snipar.read as read
