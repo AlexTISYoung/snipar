@@ -24,7 +24,7 @@ setup(name='snipar',
       # author_email='alextisyoung@gmail.com',
       # license='MIT',
       include_package_data=True,
-      scripts=['gwas.py', 'pgs.py', 'impute.py'],
+      scripts=['gwas.py', 'pgs.py', 'impute.py', 'ibd.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
@@ -44,7 +44,7 @@ setup(name='snipar',
             'Programming Language :: Python :: 3.9',
       ],
       keywords='statistics genetics',
-      packages=['snipar', 'snipar.imputation','snipar.read','snipar.tests'],
+      packages=['snipar', 'snipar.imputation','snipar.read','snipar.tests','snipar.example'],
       setup_requires=['numpy==1.19.3', 'Cython==0.29.21'],
       install_requires=[
             'bgen_reader==4.0.7',
