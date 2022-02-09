@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from numpy import testing
-from snipar import sibreg
+from snipar import lmm
 
 def random_design(labels):
     unique_labels = np.unique(labels)
@@ -45,7 +45,7 @@ class test_regrnd_functions(unittest.TestCase):
         for i in range(0, 100):
             alpha = np.random.randn((2))
             tau = sigma2 / sigmau
-            m = sibreg.simulate(n, alpha, sigma2, tau)
+            m = lmm.simulate(n, alpha, sigma2, tau)
             Z = random_design(m.labels)
             # code.interact(local=locals())
             Sigma = sigmau * Z.dot(Z.T) + sigma2 * np.identity(n)
@@ -60,7 +60,7 @@ class test_regrnd_functions(unittest.TestCase):
         for i in range(0,100):
             alpha=np.random.randn((2))
             tau = sigma2/sigmau
-            m = sibreg.simulate(n,alpha,sigma2,tau)
+            m = lmm.simulate(n,alpha,sigma2,tau)
             Z = random_design(m.labels)
             #code.interact(local=locals())
             Sigma = sigmau*Z.dot(Z.T)+sigma2*np.identity(n)
@@ -76,7 +76,7 @@ class test_regrnd_functions(unittest.TestCase):
         for i in range(0, 100):
             alpha = np.random.randn((c))
             tau = sigma2 / sigmau
-            m = sibreg.simulate(n, alpha, sigma2, tau)
+            m = lmm.simulate(n, alpha, sigma2, tau)
             lik, grad = m.likelihood_and_gradient(sigma2, tau)
 
             # Numerical gradient
@@ -95,7 +95,7 @@ class test_regrnd_functions(unittest.TestCase):
         for i in range(0, 100):
             alpha = np.random.randn((c))
             tau = sigma2 / sigmau
-            m = sibreg.simulate(n, alpha, sigma2, tau)
+            m = lmm.simulate(n, alpha, sigma2, tau)
             lik, grad = m.likelihood_and_gradient(sigma2, tau)
 
             # Numerical gradient

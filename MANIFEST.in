@@ -1,2 +1,4 @@
-include *.txt
+include README.md
 recursive-include docs *.txt
+recursive-include snipar tests/test_data/*
+recursive-include snipar example/example_data/*

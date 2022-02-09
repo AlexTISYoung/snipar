@@ -97,3 +97,4 @@ cat test_data/sample2.kingallsegs.txt | tail -n +2 >> test_data/sample.kingallse
 
 
 plink1 --bfile test_data/sample1 --bmerge test_data/sample2 --out test_data/sample1_2
+plink2 --bfile test_data/sample1_2 --pca 10  approx --out test_data/sample1_2_pca
