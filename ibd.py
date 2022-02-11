@@ -5,6 +5,7 @@ from numba import config as numba_config
 import snipar.preprocess as preprocess
 import snipar.ibd
 import numpy as np
+from snipar.errors import estimate_genotyping_error_rate
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bedfiles', type=str,
@@ -115,9 +116,9 @@ if args.p_error is None:
         else:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     if args.bedfiles is not None:
-        error_prob, error_probs = preprocess.estimate_genotyping_error_rate(ped, bedfiles=bedfiles, min_maf=min_maf)
+        error_prob, error_probs = estimate_genotyping_error_rate(ped, bedfiles=bedfiles, min_maf=min_maf)
     elif args.bgenfiles:
-        error_prob, error_probs = preprocess.estimate_genotyping_error_rate(ped, bgenfiles=bgenfiles, min_maf=min_maf)
+        error_prob, error_probs = estimate_genotyping_error_rate(ped, bgenfiles=bgenfiles, min_maf=min_maf)
     print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
     if error_prob > 0.01:
         print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
