@@ -7,6 +7,8 @@ import numpy as np
 from snipar.utilities import make_id_dict
 import pandas as pd
 import logging, snipar
+from snipar.read.bed import read_PO_pairs_from_bed
+from snipar.read.bgen import read_PO_pairs_from_bgen
 
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
@@ -338,20 +340,29 @@ class g_error(object):
     def bayes_shrink(self, alpha, beta):
         self.error_ests = (self.ME+alpha)/(self.sum_het+beta)
 
-def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
+def estimate_genotyping_error_rate(ped, bedfiles=None, bgenfiles=None, min_maf=0.01):
     genome_errors = []
-    nsnp = np.zeros((bedfiles.shape[0]), dtype=int)
     # Estimate per-SNP errors for each chromosome
-    for i in range(bedfiles.shape[0]):
-        ME_chr = mendelian_errors_from_bed(bedfiles[i], ped, min_maf)
-        genome_errors.append(ME_chr)
-        nsnp[i] = ME_chr.sid.shape[0]
+    if bedfiles is not None:
+        nsnp = np.zeros((bedfiles.shape[0]), dtype=int)
+        for i in range(bedfiles.shape[0]):
+            ME_chr = mendelian_errors(ped, bedfile=bedfiles[i], min_maf=min_maf)
+            genome_errors.append(ME_chr)
+            nsnp[i] = ME_chr.sid.shape[0]
+    elif bgenfiles is not None:
+        nsnp = np.zeros((bgenfiles.shape[0]), dtype=int)
+        for i in range(bgenfiles.shape[0]):
+            ME_chr = mendelian_errors(ped, bgenfile=bgenfiles[i], min_maf=min_maf)
+            genome_errors.append(ME_chr)
+            nsnp[i] = ME_chr.sid.shape[0]
+    else:
+        raise(ValueError('Must provide bed files or bgen files'))
     ## Estimate empirical bayes prior parameters
     # Collect MLE error rates across genome
     genome_error_rates = np.zeros((np.sum(nsnp)))
     sum_het = np.zeros((np.sum(nsnp)))
     snp_start = 0
-    for i in range(bedfiles.shape[0]):
+    for i in range(nsnp.shape[0]):
         snp_end = snp_start+nsnp[i]
         genome_error_rates[snp_start:snp_end] = genome_errors[i].error_ests
         sum_het[snp_start:snp_end] = genome_errors[i].sum_het
@@ -364,7 +375,7 @@ def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
         beta = 1/(var_error/mean_error-mean_inv_het)
         if beta > 0:
             alpha = mean_error*beta
-            for i in range(bedfiles.shape[0]):
+            for i in range(nsnp.shape[0]):
                 genome_errors[i].bayes_shrink(alpha, beta)
             return mean_error, genome_errors
         else:
@@ -372,59 +383,36 @@ def estimate_genotyping_error_rate(bedfiles, ped, min_maf):
     else:
         return mean_error, None
 
-def mendelian_errors_from_bed(bedfile, ped, min_maf):
-    # Read bed
-    bed = Bed(bedfile, count_A1=True)
-    ids = bed.iid
-    id_dict = make_id_dict(ids, 1)
-    ## Find parent-offspring pairs
-    # genotyped individuals
-    genotyped = np.array([x in id_dict for x in ped[:, 1]])
-    ped = ped[genotyped, :]
-    # with genotyped father
-    father_genotyped = np.array([x in id_dict for x in ped[:, 2]])
-    # with genotyped mother
-    mother_genotyped = np.array([x in id_dict for x in ped[:, 3]])
-    # either
-    opg = np.logical_or(father_genotyped, mother_genotyped)
-    opg_ped = ped[opg, :]
-    # number of pairs
-    npair = np.sum(father_genotyped) + np.sum(mother_genotyped)
-    if npair == 0:
-        raise(ValueError('No parent-offspring pairs in  '+str(bedfile)+' for genotype error probability estimation'))
-    print(str(npair)+' parent-offspring pairs found in '+bedfile)
-    if npair*bed.sid.shape[0] < 10**5:
-        print('Warning: limited information for estimation of genotyping error probability.')
-    ## Read genotypes
-    all_ids = np.unique(np.hstack((opg_ped[:, 1],
-                                   ped[father_genotyped, 2],
-                                   ped[mother_genotyped, 3])))
-    all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
-    gts = bed[all_ids_indices, :].read().val
-    id_dict = make_id_dict(ids[all_ids_indices, :], 1)
+def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
+    if bedfile is not None:
+        gts, opg_ped, npair = read_PO_pairs_from_bed(ped, bedfile=bedfile)
+    elif bgenfile is not None:
+        gts, opg_ped, npair = read_PO_pairs_from_bgen(ped, bgenfile=bgenfile)
+    print('Finding indices of parent-offspring pairs')
     ## Get indices
     pair_indices = np.zeros((npair,2),dtype=int)
     pair_count = 0
     for i in range(opg_ped.shape[0]):
-        o_index = id_dict[opg_ped[i,1]]
-        if opg_ped[i, 2] in id_dict:
-            pair_indices[pair_count,:] = np.array([o_index,id_dict[opg_ped[i,2]]])
+        o_index = gts.id_dict[opg_ped[i,1]]
+        if opg_ped[i, 2] in gts.id_dict:
+            pair_indices[pair_count,:] = np.array([o_index,gts.id_dict[opg_ped[i,2]]])
             pair_count += 1
-        if opg_ped[i, 3] in id_dict:
-            pair_indices[pair_count,:] = np.array([o_index,id_dict[opg_ped[i,3]]])
+        if opg_ped[i, 3] in gts.id_dict:
+            pair_indices[pair_count,:] = np.array([o_index,gts.id_dict[opg_ped[i,3]]])
             pair_count += 1
+    # Filter on MAF
+    print('Filtering on MAF')
+    gts.filter_maf(min_maf)
     ## Count Mendelian errors
-    ME = count_ME(gts, pair_indices)
-    # Compute allele frequencies
-    gts = ma.array(gts, mask=np.isnan(gts))
-    N_pair = np.sum(np.logical_not(gts[pair_indices[:, 0], :].mask) * np.logical_not(gts[pair_indices[:, 1], :].mask),
-                    axis=0)
-    freqs = ma.mean(gts, axis=0) / 2.0
-    freq_pass = np.logical_and(freqs > min_maf, freqs < (1 - min_maf))
+    print('Counting mendelain errors')
+    ME = count_ME(np.array(gts.gts,dtype=np.float_), pair_indices)
+    print('Counted mendelain errors')
     # Estimate error probability
-    sum_het = N_pair * freqs * (1 - freqs)
+    N_pair = np.sum(np.logical_not(gts.gts[pair_indices[:, 0], :].mask) * np.logical_not(gts.gts[pair_indices[:, 1], :].mask),
+                    axis=0)
+    sum_het = N_pair * gts.freqs * (1 - gts.freqs)
     error_mle = ME/sum_het
-    return g_error(error_mle[freq_pass], ME[freq_pass], sum_het[freq_pass], bed.sid[freq_pass])
+    return g_error(error_mle, ME, sum_het, gts.sid)
 
 @njit(parallel=True)
 def count_ME(gts,pair_indices):

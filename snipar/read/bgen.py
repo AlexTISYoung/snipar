@@ -162,9 +162,9 @@ def read_sibs_from_bgen(bgenfile,sibpairs):
     ids = bgen.samples
     id_dict = make_id_dict(ids)
     # SNP IDs
-    snp_ids = bgen.ids
+    snp_ids = np.array(bgen.ids)
     if np.unique(snp_ids).shape[0] == 1:
-        snp_ids = bgen.rsids
+        snp_ids = np.array(bgen.rsids)
     # Find sibpairs in bed
     in_bgen = np.vstack((np.array([x in id_dict for x in sibpairs[:,0]]),
                         np.array([x in id_dict for x in sibpairs[:, 1]]))).T
@@ -178,3 +178,40 @@ def read_sibs_from_bgen(bgenfile,sibpairs):
     gts = np.zeros((sibindices.shape[0],snp_ids.shape[0]),dtype=np.float32)
     gts[:] = np.sum(bgen.read((sibindices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
     return gtarray(garray = gts, ids = ids[sibindices], sid = snp_ids, pos = np.array(bgen.positions))
+
+def read_PO_pairs_from_bgen(ped,bgenfile):
+    # Read bed
+    bgen = open_bgen(bgenfile, verbose=True)
+    ids = bgen.samples
+    id_dict = make_id_dict(ids)
+    # SNP IDs
+    snp_ids = np.array(bgen.ids)
+    if np.unique(snp_ids).shape[0] == 1:
+        snp_ids = np.array(bgen.rsids)
+    ## Find parent-offspring pairs
+    # genotyped individuals
+    genotyped = np.array([x in id_dict for x in ped[:, 1]])
+    ped = ped[genotyped, :]
+    # with genotyped father
+    father_genotyped = np.array([x in id_dict for x in ped[:, 2]])
+    # with genotyped mother
+    mother_genotyped = np.array([x in id_dict for x in ped[:, 3]])
+    # either
+    opg = np.logical_or(father_genotyped, mother_genotyped)
+    opg_ped = ped[opg, :]
+    # number of pairs
+    npair = np.sum(father_genotyped) + np.sum(mother_genotyped)
+    if npair == 0:
+        raise(ValueError('No parent-offspring pairs in  '+str(bgenfile)+' for genotype error probability estimation'))
+    print(str(npair)+' parent-offspring pairs found in '+bgenfile)
+    if npair*snp_ids.shape[0] < 10**5:
+        print('Warning: limited information for estimation of genotyping error probability.')
+    ## Read genotypes
+    all_ids = np.unique(np.hstack((opg_ped[:, 1],
+                                   ped[father_genotyped, 2],
+                                   ped[mother_genotyped, 3])))
+    all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
+    gts = np.zeros((all_ids_indices.shape[0],snp_ids.shape[0]),dtype=np.float32)
+    gts[:] = np.sum(bgen.read((all_ids_indices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
+    print('Read genotypes from '+str(bgenfile))
+    return gtarray(gts,ids = ids[all_ids_indices], sid=snp_ids), opg_ped, npair

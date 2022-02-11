@@ -285,7 +285,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         gts = read_sibs_from_bed(bedfile, sibpairs)
     elif bgenfile is not None:
         ## Read bed
-        print('Reading genotypes from ' + bedfile)
+        print('Reading genotypes from ' + bgenfile)
         # Determine chromosome
         if chrom is None:
             bgen = open_bgen(bgenfile,verbose=False)
@@ -295,6 +295,8 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
                 raise (ValueError('More than 1 chromosome in input bgenfile'))
             else:
                 chrom = chrom[0]
+                if chrom=='':
+                    chrom = 0
         print('Inferring IBD for chromosome ' + str(chrom))
         # Read sibling genotypes from bed file
         gts = read_sibs_from_bgen(bgenfile, sibpairs)

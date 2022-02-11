@@ -35,10 +35,18 @@ This will output the IBD segments to a gzipped text file example_data/chr_1.ibd.
 inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with columns 'FID' (family ID), 'IID'
 (individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). 
 
-The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. If the genetic map positions (in cM) are provided in .bim file, the script will use these. Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is provided in example_data/sample.genetic_map.txt. 
+The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. 
+If the genetic map positions (in cM) are provided in .bim file, the script will use these. 
+Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
+(https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is 
+provided in example_data/sample.genetic_map.txt. 
 
 If no genetic map is provided, then the deCODE sex-averaged map on Hg19 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
 which is stored in SNIPar/decode_map/, will be used. 
+
+The user can also input a phased .bgen file. For example, to infer IBD from example_data/sample.bgen using the genetic map in example_data/sample.genetic_map.txt, use this command:
+
+    ``python ibd.py --bgenfiles example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --outprefix example_data/ --threads 4 --ld_out --map example_data/sample.genetic_map.txt``
 
 The algorithm computes LD scores of SNPs in order to account for correlations between SNPs. The '--ld_out' argument writes the LD scores to file in the same format as LDSC (https://github.com/bulik/ldsc). 
 

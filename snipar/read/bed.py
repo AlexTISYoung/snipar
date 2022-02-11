@@ -150,3 +150,33 @@ def read_sibs_from_bed(bedfile,sibpairs):
     gts[:] = bed[sibindices,:].read().val
     return gtarray(garray = gts, ids = ids[sibindices, 1], sid = bed.sid, pos = np.array(bed.pos[:,2],dtype=int))
 
+def read_PO_pairs_from_bed(ped,bedfile):
+    # Read bed
+    bed = Bed(bedfile, count_A1=True)
+    ids = bed.iid
+    id_dict = make_id_dict(ids, 1)
+    ## Find parent-offspring pairs
+    # genotyped individuals
+    genotyped = np.array([x in id_dict for x in ped[:, 1]])
+    ped = ped[genotyped, :]
+    # with genotyped father
+    father_genotyped = np.array([x in id_dict for x in ped[:, 2]])
+    # with genotyped mother
+    mother_genotyped = np.array([x in id_dict for x in ped[:, 3]])
+    # either
+    opg = np.logical_or(father_genotyped, mother_genotyped)
+    opg_ped = ped[opg, :]
+    # number of pairs
+    npair = np.sum(father_genotyped) + np.sum(mother_genotyped)
+    if npair == 0:
+        raise(ValueError('No parent-offspring pairs in  '+str(bedfile)+' for genotype error probability estimation'))
+    print(str(npair)+' parent-offspring pairs found in '+bedfile)
+    if npair*bed.sid.shape[0] < 10**5:
+        print('Warning: limited information for estimation of genotyping error probability.')
+    ## Read genotypes
+    all_ids = np.unique(np.hstack((opg_ped[:, 1],
+                                   ped[father_genotyped, 2],
+                                   ped[mother_genotyped, 3])))
+    all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
+    gts = bed[all_ids_indices, :].read().val
+    return gtarray(gts,ids = ids[all_ids_indices, 1], sid=bed.sid), opg_ped, npair
