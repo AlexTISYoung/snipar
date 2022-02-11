@@ -186,7 +186,6 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     null_model = lmm.model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams)
     L = null_model.sigma_inv_root(tau, sigma2)
     G.diagonalise(L)
-    code.interact(local=locals())
     y.diagonalise(L)
     ### Fit models for SNPs ###
     if verbose:
