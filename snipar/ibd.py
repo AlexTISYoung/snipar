@@ -3,7 +3,9 @@ from numba import njit, prange
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
+from snipar.read.bgen import read_sibs_from_bgen
 from snipar.utilities import make_id_dict
+from bgen_reader import open_bgen
 
 ####### Transition Matrix ######
 @njit
@@ -261,20 +263,41 @@ def write_segs_from_matrix(ibd,sibpairs,snps,pos,map,chrom,outfile):
     write_segs(sibpairs,allsegs,chrom,outfile)
     return allsegs
 
-def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
-    ## Read bed
-    print('Reading genotypes from ' + bedfile)
-    # Determine chromosome
-    bimfile = bedfile.split('.bed')[0] + '.bim'
-    chrom = np.loadtxt(bimfile, usecols=0, dtype=str)
-    chrom = np.unique(chrom)
-    if chrom.shape[0] > 1:
-        raise (ValueError('More than 1 chromosome in input bedfile'))
-    else:
-        chrom = chrom[0]
-    print('Inferring IBD for chromosome ' + str(chrom))
-    # Read sibling genotypes from bed file
-    gts = read_sibs_from_bed(bedfile, sibpairs)
+def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
+    if bedfile is None and bgenfile is None:
+        raise(ValueError('Must provide either bed file or bgenfile'))
+    if bedfile is not None and bgenfile is not None:
+        raise(ValueError('Provide either bed file or bgen file. Not both.'))
+    if bedfile is not None:
+        ## Read bed
+        print('Reading genotypes from ' + bedfile)
+        bimfile = bedfile.split('.bed')[0] + '.bim'
+        # Determine chromosome
+        if chrom is None:
+            chrom = np.loadtxt(bimfile, usecols=0, dtype=str)
+            chrom = np.unique(chrom)
+            if chrom.shape[0] > 1:
+                raise (ValueError('More than 1 chromosome in input bedfile'))
+            else:
+                chrom = chrom[0]
+        print('Inferring IBD for chromosome ' + str(chrom))
+        # Read sibling genotypes from bed file
+        gts = read_sibs_from_bed(bedfile, sibpairs)
+    elif bgenfile is not None:
+        ## Read bed
+        print('Reading genotypes from ' + bedfile)
+        # Determine chromosome
+        if chrom is None:
+            bgen = open_bgen(bgenfile,verbose=False)
+            chrom = bgen.chromosomes
+            chrom = np.unique(chrom)
+            if chrom.shape[0] > 1:
+                raise (ValueError('More than 1 chromosome in input bgenfile'))
+            else:
+                chrom = chrom[0]
+        print('Inferring IBD for chromosome ' + str(chrom))
+        # Read sibling genotypes from bed file
+        gts = read_sibs_from_bgen(bgenfile, sibpairs)
     # Calculate allele frequencies
     print('Calculating allele frequencies')
     gts.compute_freqs()
@@ -285,7 +308,7 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
     sibpairs = sibpairs[np.sum(sibpair_indices, axis=1) == 2, :]
     if sibpairs.shape[0] == 0:
         raise (ValueError('No genotyped sibling pairs found'))
-    print(str(np.sum(sibpairs.shape[0])) + ' sibpairs have genotypes in ' + bedfile)
+    print(str(np.sum(sibpairs.shape[0])) + ' sibpairs have genotypes')
     # Find indices of sibpairs
     sibpair_indices = np.zeros((sibpairs.shape), dtype=int)
     sibpair_indices[:, 0] = np.array([gts.id_dict[x] for x in sibpairs[:, 0]])
@@ -306,7 +329,7 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
     gts.filter(gts.error_probs < max_error)
     print('After filtering, there are ' + str(gts.shape[1]) + ' SNPs')
     # Read map file
-    if mapfile is None:
+    if mapfile is None and bedfile is not None:
         print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
         map = np.loadtxt(bimfile, usecols=2)
         map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
@@ -334,6 +357,13 @@ def infer_ibd_chr(bedfile, sibpairs, error_prob, error_probs, outprefix, min_len
                 raise (ValueError('Maximum value of map too large'))
             gts.filter(np.array([x in map_snp_dict for x in gts.sid]))
             gts.map = map[[map_snp_dict[x] for x in gts.sid]]
+    elif mapfile is None and bgenfile is not None:
+        print('Map file not provided.')
+        print('Using default map (decode sex averaged map on Hg19 coordinates)')
+        gts.map = preprocess.decode_map_from_pos(chrom, gts.pos)
+        pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
+        print('Found map positions for '+str(pc_mapped)+'% of SNPs')
+        gts.filter(~np.isnan(gts.map))
     else:
         print('Reading map from ' + str(mapfile))
         gts.map = preprocess.get_map_positions(mapfile, gts)

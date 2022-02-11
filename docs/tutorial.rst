@@ -6,14 +6,18 @@ Tutorial on inferring IBD between siblings, imputing missing parental genotypes,
 Test data
 --------------------
 
-In the example/ directory, there is some example data. The file h2_quad_0.8.txt is a simulated phenotype with direct, paternal, and maternal effects, where 80% of the phenotypic
+To load the example data into ./example_data, use the command:
+
+    ``python snipar/example/load_data.py``
+
+In the example_data/ directory, there is some example data. The file h2_quad_0.8.txt is a simulated phenotype with direct, paternal, and maternal effects, where 80% of the phenotypic
 variance is explained by the combined direct, paternal and maternal effects of the SNPs; and the
 pairwise correlations between the direct, paternal, and maternal effects are 0.5.
 
 The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
-chance of having a genotyped sibling. The example data includes genotype data formatted in both PLINK .bed format (example/sample.bed) and phased genotype
-data in .bgen format (example/sample.bgen with associated sample file example/sample.sample).
+chance of having a genotyped sibling. The example data includes genotype data formatted in both PLINK .bed format (example_data/sample.bed) and phased genotype
+data in .bgen format (example_data/sample.bgen with associated sample file example_data/sample.sample).
 
 Inferring IBD between siblings
 ------------------------------
@@ -23,24 +27,24 @@ SNIPar contains a script, ibd.py, that employs a Hidden Markov Model (HMM) to in
 The per-SNP genotyping error probability will be inferred from parent-offspring pairs when available;
 alternatively, a genotyping error probability can be provided using the --p_error option. By default, SNPs with
 genotyping error rates greater than 0.01 will be filtered out, but this threshold can be changed with the --max_error argument.
-To infer the IBD segments from the genotype data in example/sample.bed,use the following command
+To infer the IBD segments from the genotype data in example_data/sample.bed,use the following command
 
-    ``python ibd.py example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --outprefix example/ --threads 4 --ld_out``
+    ``python ibd.py --bedfiles example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --outprefix example_data/ --threads 4 --ld_out``
 
-This will output the IBD segments to a gzipped text file example/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
+This will output the IBD segments to a gzipped text file example_data/chr_1.ibd.segments.gz. The *--king* argument requires the address of the relations (parent-offspring, sibling)
 inferred by KING by using the --related command, and the *--agesex* argument requires the address of a white-space separated text file with columns 'FID' (family ID), 'IID'
 (individual ID), 'age', 'sex' (coded as 'M' for male and 'F' for female). 
 
-The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. If the genetic map positions (in cM) are provided in .bim file, the script will use these. Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is provided in example/sample.genetic_map.txt. 
+The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. If the genetic map positions (in cM) are provided in .bim file, the script will use these. Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is provided in example_data/sample.genetic_map.txt. 
 
 If no genetic map is provided, then the deCODE sex-averaged map on Hg19 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
 which is stored in SNIPar/decode_map/, will be used. 
 
 The algorithm computes LD scores of SNPs in order to account for correlations between SNPs. The '--ld_out' argument writes the LD scores to file in the same format as LDSC (https://github.com/bulik/ldsc). 
 
-If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID), they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred as individuals in the pedigree that share both parents. (Warning: MZ twins should be removed from the pedigree to avoid confusing them with full-siblings.) Using the example pedigree in example/sample.ped, you can infer IBD using this command:
+If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID), they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred as individuals in the pedigree that share both parents. (Warning: MZ twins should be removed from the pedigree to avoid confusing them with full-siblings.) Using the example pedigree in example_data/sample.ped, you can infer IBD using this command:
 
-    ``python ibd.py example/sample --pedigree example/sample.ped --map example/sample.genetic_map.txt --outprefix example/ --threads 4 --ld_out``
+    ``python ibd.py example_data/sample --pedigree example_data/sample.ped --map example_data/sample.genetic_map.txt --outprefix example_data/ --threads 4 --ld_out``
 
 While the script can be run for a .bed file containing a single chromosome, it can also be run for multiple bed files each containing a single chromosome. If the bed files are
 chr_1.bed, chr_2.bed, ..., chr_22.bed, then you can specify these files to the script as 'chr_~', where '~' is interpreted as a numerical wildcard character.
@@ -55,23 +59,23 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes without using phase information, type:
 
-    ``python impute.py example/chr_1.ibd --bed example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --snipar_ibd``
+    ``python impute.py example_data/chr_1.ibd --bed example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --output_address example_data/sample --threads 4 --snipar_ibd``
 
-The script constructs a pedigree from the output of KING's relatedness inference (example/sample.king),
-and age and sex information (example/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in example/chr_1.ibd.segments.gz are used to impute missing parental genotypes
-from the observed sibling and parental genotypes in example/sample.bed. The imputed parental genotypes are in a HDF5 file example/sample.hdf5. The *--snipar_ibd* flag indicates the IBD segments are formatted as output by SNIPar.
+The script constructs a pedigree from the output of KING's relatedness inference (example_data/sample.king),
+and age and sex information (example_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in example_data/chr_1.ibd.segments.gz are used to impute missing parental genotypes
+from the observed sibling and parental genotypes in example_data/sample.bed. The imputed parental genotypes are in a HDF5 file example_data/sample.hdf5. The *--snipar_ibd* flag indicates the IBD segments are formatted as output by SNIPar.
 
 If phased haplotypes are available in .bgen format, the imputation can use these as input, which improves the information gained by imputation
-in certain situations. To perform imputation from the phased .bgen file in example/, use the following command:
+in certain situations. To perform imputation from the phased .bgen file in example_data/, use the following command:
 
-    ``python impute.py example/chr_1.ibd --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
+    ``python impute.py example_data/chr_1.ibd --bgen example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --output_address example_data/sample --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
 
 It is necessary to provide the *--from_chr* and *--to_chr* arguments when imputing from .bgen files since they often do not contain information on which chromosome
 the SNPs are located on, and it's necessary to match the IBD segments to the SNPs on the same chromosome.
 
-To use IBD segments output by KING with the --ibdseg argument (example/sample.king.segments.gz), use the following command:
+To use IBD segments output by KING with the --ibdseg argument (example_data/sample.king.segments.gz), use the following command:
 
-    ``python impute.py example/sample.king --bgen example/sample --king example/sample.king.kin0 --agesex example/sample.agesex --output_address example/sample --threads 4 --from_chr 1 --to_chr 2``
+    ``python impute.py example_data/sample.king --bgen example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --output_address example_data/sample --threads 4 --from_chr 1 --to_chr 2``
 
 As with the ibd.py script, the impute_runner.py script can use a user input pedigree (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
@@ -82,16 +86,16 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``python gwas.py example/h2_quad_0.8.txt example/h2_quad_0.8 --bedfiles example/sample --impfiles example/sample --threads 4``
+    ``python gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bedfiles example_data/sample --impfiles example_data/sample --threads 4``
 
-This takes the observed genotypes in example/sample.bed and the imputed parental genotypes in example/sample.hdf5 and uses
+This takes the observed genotypes in example_data/sample.bed and the imputed parental genotypes in example_data/sample.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
 (imputed) genotype. This is done using a linear mixedl model that models phenotypic correlations between siblings,
-where sibling relations in the pedigree are stored in the output of the imputation script: example/sample.hdf5. The 'family variance estimate' output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance. 
+where sibling relations in the pedigree are stored in the output of the imputation script: example_data/sample.hdf5. The 'family variance estimate' output is the  phenotypic variance explained by mean differences between sibships, and the residual variance is the remaining phenotypic variance. 
 
 To use the .bgen file instead, type:
 
-    ``python gwas.py example/h2_quad_0.8.txt example/h2_quad_0.8 --bgenfiles example/sample --impfiles example/sample --threads 4``
+    ``python gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bgenfiles example_data/sample --impfiles example_data/sample --threads 4``
 
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
@@ -105,7 +109,7 @@ and the population effect estimate, which is equivalent to what is estimated by 
 regress phenotype onto genotype without control for parental genotypes. The final columns give the sampling
 correlations between the different effect estimates at that SNP.
 
-In addition to the plain text output, the effects and their sampling variance-covariance matrices are output in example/h2_quad_0.8.sumstats.hdf5.
+In addition to the plain text output, the effects and their sampling variance-covariance matrices are output in example_data/h2_quad_0.8.sumstats.hdf5.
 The contents of the HDF5 file can be read into Python (using `h5py <https://www.h5py.org>`_) and R (using `rhdf5 <https://www.bioconductor.org/packages/release/bioc/html/rhdf5.html>`_) easily.
 The output contains different datasets:
 
@@ -120,7 +124,7 @@ The output contains different datasets:
 
 Now we have estimated SNP specific summary statistics. To compare to the true effects, run
 
-    ``python example/estimate_sim_effects.py example/h2_quad_0.8.sumstats.hdf5 example/h2_quad_0.8.effects.txt``
+    ``python example_data/estimate_sim_effects.py example_data/h2_quad_0.8.sumstats.hdf5 example_data/h2_quad_0.8.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
@@ -135,19 +139,19 @@ will reduce power for estimating other effects.
 
 GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents available will be used. In order to do this, one must provide a pedigree to gwas.py, as in:
 
-    ``python gwas.py example/h2_quad_0.8.txt example/h2_quad_0.8 --bgenfiles example/sample --pedigree example/sample.ped --threads 4``
+    ``python gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bgenfiles example_data/sample --pedigree example_data/sample.ped --threads 4``
 
 Correlations between effects
 ----------------------------
 
 SNIPar provides a script to compute correlations between direct and population effects and between direct effects and average NTCs. 
 To compute these correlations from the effects estimated in this tutorial (output by gwas.py to h2_quad_0.8.sumstats.gz) 
-using the LD scores computed by ibd.py (and output to example/1.l2.ldscore.gz), use the following command: 
+using the LD scores computed by ibd.py (and output to example_data/1.l2.ldscore.gz), use the following command: 
 
-    ``python correlate.py example/h2_quad_0.8 example/effect --ldscores example/1``
+    ``python correlate.py example_data/h2_quad_0.8 example_data/effect --ldscores example_data/1``
 
 This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
-and their standard errors, estimated by block-jacknife, are output to example/effect_corrs.txt. 
+and their standard errors, estimated by block-jacknife, are output to example_data/effect_corrs.txt. 
 
 The method is similar to LDSC ([ref]), but correlates the marginal effects, adjusting for the known sampling variance-covariance matrix of the effects. 
 The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
@@ -165,15 +169,15 @@ Polygenic score analyses
 In addition to family based GWAS, SNIPar provides a script (fPGS.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 and for performing family based polygenic score analyses. Here, we give some examples of how to use this script. The script computes a PGS
 from weights provided in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format . The true direct genetic effects for the simulated trait are given as PGS weights in this format
-in example/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file with a header and columns 'chrom' (chromosome), 'pos' (position), 'sid' (SNP ID), 'nt1' (allele 1),
+in example_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file with a header and columns 'chrom' (chromosome), 'pos' (position), 'sid' (SNP ID), 'nt1' (allele 1),
 'nt2' (allele 2), 'raw_beta' (raw effect estimates), 'ldpred_beta' (LD-pred adjusted weight). The script uses as weights the 'ldpred_beta' column.
 
 To compute the PGS from the true direct effects, use the following command:
 
-    ``python fPGS.py example/direct --bedfiles example/sample --impfiles example/sample --weights example/h2_quad_0.8.direct_weights.txt``
+    ``python fPGS.py example_data/direct --bedfiles example_data/sample --impfiles example_data/sample --weights example_data/h2_quad_0.8.direct_weights.txt``
     
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
-It outputs the PGS to example/direct.pgs.txt, which is a white-space delimited text file with columns FID (family ID, shared between siblings), IID (individual ID),
+It outputs the PGS to example_data/direct.pgs.txt, which is a white-space delimited text file with columns FID (family ID, shared between siblings), IID (individual ID),
 proband (PGS of individual with given IID), maternal (observed or imputed PGS of that individual's mother), paternal (observed or imputed PGS of that individual's father).
 The script also supports bed files and imputed files split by chromosome. If you had bed files as chr_1.bed, chr_2.bed, ..., chr_22.bed; and imputed parental genotype files
 as chr_1.hdf5, chr_2.hdf5, ..., chr_22.hdf5, then you can specify this in a command as:
@@ -185,12 +189,12 @@ To use .bgen input, replace the *--bedfiles* argument with *--bgenfiles*.
 
 To estimate direct, paternal, and maternal effects of the PGS, use the following command:
 
-    ``python fPGS.py example/direct --pgs example/direct.pgs.txt --phenofile example/h2_quad_0.8.txt``
+    ``python fPGS.py example_data/direct --pgs example_data/direct.pgs.txt --phenofile example_data/h2_quad_0.8.txt``
 
 This uses a linear mixed model that has a random effect for mean differences between families (defined as sibships here) and fixed effects for the direct,
 paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
-The estimated effects and their standard errors are output to example/direct.pgs_effects.txt, with the effect names (direct, paternal, maternal, population) in the first column,
-their estimates in the second column, and their standard errors in the final column. The sampling variance-covariance matrix of direct, paternal, and maternal effects is output in example/direct.pgs_vcov.txt.
+The estimated effects and their standard errors are output to example_data/direct.pgs_effects.txt, with the effect names (direct, paternal, maternal, population) in the first column,
+their estimates in the second column, and their standard errors in the final column. The sampling variance-covariance matrix of direct, paternal, and maternal effects is output in example_data/direct.pgs_vcov.txt.
 
 Estimates of the direct effect of the PGS should be equal to 1 in expectation since
 we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
@@ -203,11 +207,11 @@ PGS becomes co-linear. To deal with this, add the --parsum option to the above c
 It is also possible to estimate indirect effects from siblings. We can compute the PGS for genotyped individuals with genotyped siblings and estimate direct, indirect sibling, paternal and maternal effects in
 one command with the addition of the --fit_sib option:
 
-   ``python fPGS.py example/direct_sib --bedfiles example/sample --impfiles example/sample --weights example/h2_quad_0.8.direct_weights.txt --phenofile example/h2_quad_0.8.txt --fit_sib``
+   ``python fPGS.py example_data/direct_sib --bedfiles example_data/sample --impfiles example_data/sample --weights example_data/h2_quad_0.8.direct_weights.txt --phenofile example_data/h2_quad_0.8.txt --fit_sib``
 
-This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to example/direct_sib.pgs.txt.
+This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to example_data/direct_sib.pgs.txt.
 (If an individual has multiple genotyped siblings, the average of the siblings' PGS is used for the PGS of the sibling.)
-It outputs estimates of direct, indirect sibling, paternal, and maternal effects of the PGS to example/direct_sib.pgs_effects.txt and their sampling variance-covariance matrix to example/direct_sib.pgs_vcov.txt.
+It outputs estimates of direct, indirect sibling, paternal, and maternal effects of the PGS to example_data/direct_sib.pgs_effects.txt and their sampling variance-covariance matrix to example_data/direct_sib.pgs_vcov.txt.
 Since indirect effects from siblings were zero in this simulation, the estimated sibling effect should be close to zero.
 
 Note that the standard error for the direct effect estimate increases: this is due both to a drop in sample size since only those probands with genotyped siblings are included, and due to the fact that adding the sibling effect to the regression

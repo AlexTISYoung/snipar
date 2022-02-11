@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from bgen_reader import open_bgen
 import numpy as np
 import h5py, argparse

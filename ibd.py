@@ -7,9 +7,12 @@ import snipar.ibd
 import numpy as np
 
 parser = argparse.ArgumentParser()
-parser.add_argument('bedfiles', type=str,
+parser.add_argument('--bedfiles', type=str,
                     help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
+parser.add_argument('--bgenfiles',type=str,
+                    help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', 
+                    default = None)
 parser.add_argument('--king',
                     type=str,
                     default = None,
@@ -39,9 +42,25 @@ parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 args = parser.parse_args()
 
-# Find bed files
-bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, obsformat='bed')
+# Set number of threads
+if args.threads is not None:
+    if args.threads < numba_config.NUMBA_NUM_THREADS:
+        set_num_threads(args.threads)
+        print('Number of threads: '+str(args.threads))
 
+# Check arguments
+if args.bedfiles is None and args.bgenfiles is None:
+    raise(ValueError('Must provide one of --bedfiles and --bgenfiles'))
+if args.bedfiles is not None and args.bgenfiles is not None:
+    raise(ValueError('Both bedfiles and bgenfiles provided. Please provide only one'))
+
+# Find bed files
+if args.bedfiles is not None:
+    bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, 'bed')
+    bgenfiles = [None for x in range(chroms.shape[0])]
+elif args.bgenfiles is not None:
+    bgenfiles, chroms = preprocess.parse_obsfiles(args.bgenfiles, 'bgen')
+    bedfiles = [None for x in range(chroms.shape[0])]
 # Set parameters
 min_length = args.min_length
 kinfile = args.king
@@ -86,12 +105,6 @@ if sibpairs.shape[0]==0:
     raise(ValueError('No sibling pairs found'))
 print('Found '+str(sibpairs.shape[0])+' full sibling pairs')
 
-# Set number of threads
-if args.threads is not None:
-    if args.threads < numba_config.NUMBA_NUM_THREADS:
-        set_num_threads(args.threads)
-        print('Number of threads: '+str(args.threads))
-
 #### Get genotyping error probability ####
 if args.p_error is None:
     print('No genotyping error probability provided. Will attempt to estimate from parent-offspring pairs.')
@@ -101,8 +114,6 @@ if args.p_error is None:
             ped = np.array(preprocess.create_pedigree(kinfile, args.agesex), dtype=str)
         else:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
-    else:
-        ped = np.loadtxt(args.pedigree, dtype=str)
     error_prob, error_probs = preprocess.estimate_genotyping_error_rate(bedfiles, ped, min_maf)
     print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
     if error_prob > 0.01:
@@ -112,12 +123,17 @@ else:
     error_probs = None
 
 ######### Infer IBD ###########
-for i in range(bedfiles.shape[0]):
+for i in range(chroms.shape[0]):
     if error_probs is None:
         error_probs_i = None
     else:
         error_probs_i = error_probs[i]
-    snipar.ibd.infer_ibd_chr(bedfiles[i], sibpairs, error_prob, error_probs_i, outprefix,
+    if chroms.shape[0] == 1:
+        chrom = None
+    else:
+        chrom = chroms[i]
+    snipar.ibd.infer_ibd_chr(sibpairs, error_prob, error_probs_i, outprefix,
+                             bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chrom,
                              min_length=min_length, mapfile=args.map,
                              ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
                              min_maf=min_maf, max_missing=max_missing, max_error=max_error)

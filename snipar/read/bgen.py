@@ -156,4 +156,25 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
         del imp_gts
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
-
+def read_sibs_from_bgen(bgenfile,sibpairs):
+    bgen = open_bgen(bgenfile, verbose=True)
+    # IIDs
+    ids = bgen.samples
+    id_dict = make_id_dict(ids)
+    # SNP IDs
+    snp_ids = bgen.ids
+    if np.unique(snp_ids).shape[0] == 1:
+        snp_ids = bgen.rsids
+    # Find sibpairs in bed
+    in_bgen = np.vstack((np.array([x in id_dict for x in sibpairs[:,0]]),
+                        np.array([x in id_dict for x in sibpairs[:, 1]]))).T
+    both_in_bgen = np.sum(in_bgen,axis=1)==2
+    # Remove pairs without both in bedfile
+    if np.sum(both_in_bgen)<sibpairs.shape[0]:
+        print(str(sibpairs.shape[0]-np.sum(both_in_bgen))+' sibpairs do not both have genotypes')
+        sibpairs = sibpairs[both_in_bgen,:]
+    # Find indices of sibpairs
+    sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
+    gts = np.zeros((sibindices.shape[0],snp_ids.shape[0]),dtype=np.float32)
+    gts[:] = np.sum(bgen.read((sibindices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
+    return gtarray(garray = gts, ids = ids[sibindices], sid = snp_ids, pos = np.array(bgen.positions))
