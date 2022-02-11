@@ -190,7 +190,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     ### Fit models for SNPs ###
     if verbose:
         print('Estimating SNP effects')
-    alpha, alpha_cov = fit_models(y.gts[:,0],G.gts)
+    alpha, alpha_cov = fit_models(np.array(y.gts[:,0],dtype=np.float32),G.gts)
     alpha_ses = compute_ses(alpha_cov)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
