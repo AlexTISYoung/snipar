@@ -5,7 +5,6 @@ from numba import config as numba_config
 import snipar.preprocess as preprocess
 import snipar.ibd
 import numpy as np
-
 parser = argparse.ArgumentParser()
 parser.add_argument('bedfiles', type=str,
                     help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',

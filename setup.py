@@ -57,6 +57,7 @@ setup(name='snipar',
             'h5py==2.10.0',
             'pooch==1.5.1',
             'numba==0.50.0',
+          #TODO ibd.py doesn't work from commandline, give seg fault
             'gitpython==3.1.24',
             'scikit-learn==1.0.2',
             'statsmodels==0.13.1',

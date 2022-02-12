@@ -1,3 +1,4 @@
+import os.path
 from os import path
 from snipar.gtarray import gtarray
 from pysnptools.snpreader import Bed
@@ -322,7 +323,8 @@ def pos_to_cM(pos,boundaries, cM_pos):
     return cM_out
 
 def decode_map_from_pos(chrom,pos):
-    map = np.loadtxt(path.dirname(snipar.__file__)+'/../decode_map/chr_'+str(chrom)+'.gz', dtype=float, skiprows=1)
+    decode_map_path = path.join(path.dirname(snipar.__file__), f'decode_map/chr_{chrom}.gz')
+    map = np.loadtxt(decode_map_path, dtype=float, skiprows=1)
     boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
     return pos_to_cM(pos, boundaries, map[:, 2])
 
