@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import snipar.preprocess as preprocess
 import numpy as np
 import argparse

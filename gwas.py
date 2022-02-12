@@ -116,22 +116,22 @@ if args.covar is not None:
     null_model, sigma2, tau, null_alpha, null_alpha_cov = lmm.fit_model(y.gts[:,0], covariates.gts, y.fams, add_intercept=True,
                                                                         tau_init=args.tau_init)
     # Adjust for covariates
-    y.gts = y.gts-(null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]]))
+    y.gts[:,0] = y.gts[:,0]-(null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]]))
 else:
     # Fit null model
     null_model, sigma2, tau = lmm.fit_model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams,
                                             tau_init = args.tau_init, return_fixed = False)
-    y.gts = y.gts-np.mean(y.gts)
+    y.gts[:,0] = y.gts[:,0]-np.mean(y.gts[:,0])
 print('Family variance estimate: '+str(round(sigma2/tau,4)))
 print('Residual variance estimate: ' + str(round(sigma2,4)))
 
 for i in range(chroms.shape[0]):
     if args.bedfiles is not None:
-        print('Reading observed genotypes from '+bedfiles[i])
+        print('Observed genotypes file: '+bedfiles[i])
     if args.bgenfiles is not None:
-        print('Reading observed genotypes from '+bgenfiles[i])
+        print('Observed genotypes file: '+bgenfiles[i])
     if args.impfiles is not None:
-        print('Reading imputed genotypes from '+pargts_list[i])
+        print('Imputed genotypes file: '+pargts_list[i])
     if chroms.shape[0]>1:
         print('Estimating SNP effects for chromosome '+str(chroms[i]))
     else:

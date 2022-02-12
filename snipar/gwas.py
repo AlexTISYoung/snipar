@@ -167,7 +167,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
                   fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False):
     ####### Construct family based genotype matrix #######
     G = read.get_gts_matrix(ped=pedigree, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
-                                ids=y.ids, parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info)
+                                ids=y.ids, parsum=parsum, sib=fit_sib, verbose=verbose, print_sample_info=print_sample_info)
     G.compute_freqs()
     #### Filter SNPs ####
     if verbose:
@@ -179,7 +179,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     if verbose:
         print(str(G.shape[2])+' SNPs that pass filters')
     #### Match phenotype ####
-    G.filter_ids(y.ids)
+    y.filter_ids(G.ids)
     ##### Transform genotypes and phenotypes ######
     if verbose:
         print('Transforming genotypes and phenotypes')
@@ -190,7 +190,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
     ### Fit models for SNPs ###
     if verbose:
         print('Estimating SNP effects')
-    alpha, alpha_cov = fit_models(np.array(y.gts[:,0],dtype=np.float_),np.array(G.gts,dtype=np.float_))
+    alpha, alpha_cov = fit_models(np.array(y.gts[:,0],dtype=np.float32),G.gts)
     alpha_ses = compute_ses(alpha_cov)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
