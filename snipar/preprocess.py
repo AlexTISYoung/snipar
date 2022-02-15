@@ -1,263 +1,7 @@
-import os.path
-from os import path
-from snipar.gtarray import gtarray
-from pysnptools.snpreader import Bed
-import numpy.ma as ma
-from numba import njit, prange
 import numpy as np
 from snipar.utilities import make_id_dict
-import pandas as pd
-import logging, snipar
-
-def parse_obsfiles(obsfiles, obsformat='bed'):
-    obs_files = []
-    chroms = []
-    if '~' in obsfiles:
-        bed_ixes = obsfiles.split('~')
-        for i in range(1,23):
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            if path.exists(obsfile):
-                obs_files.append(obsfile)
-                chroms.append(i)
-        if len(obs_files)==0:
-            raise(ValueError('Observed genotype files not found'))
-        else:
-            print(str(len(obs_files))+' files found')
-    else:
-            obsfile = obsfiles+'.'+obsformat
-            if path.exists(obsfile):
-                obs_files = [obsfile]
-                chroms = [0]
-            else:
-                raise(ValueError(obsfile+' not found'))
-    return np.array(obs_files), np.array(chroms,dtype=int)
-
-def parse_filelist(obsfiles, impfiles, obsformat):
-    obs_files = []
-    imp_files = []
-    chroms = []
-    if '~' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('~')
-        imp_ixes = impfiles.split('~')
-        for i in range(1,23):
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
-            if path.exists(impfile) and path.exists(obsfile):
-                obs_files.append(obsfile)
-                imp_files.append(impfile)
-                chroms.append(i)
-        if len(imp_files)==0:
-            raise(ValueError('Observed/imputed genotype files not found'))
-        else:
-            print(str(len(imp_files))+' matched observed and imputed genotype files found')
-    else:
-            obsfile = obsfiles+'.'+obsformat
-            impfile = impfiles+'.hdf5'
-            if path.exists(obsfile) and path.exists(impfile):
-                obs_files = [obsfile]
-                imp_files = [impfile]
-                chroms = [0]
-            else:
-                if not path.exists(obsfile):
-                    raise(ValueError(obsfile+' not found'))
-                if not path.exists(impfile):
-                    raise(ValueError(impfile+' not found'))
-    return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
-
-def get_sibpairs_from_ped(ped):
-    # Remove rows with missing parents
-    parent_missing = np.array([ped[i,2]=='0' or ped[i,3]=='0' for i in range(ped.shape[0])])
-    #print('Removing '+str(np.sum(parent_missing))+' rows from pedigree due to missing parent(s)')
-    ped = ped[np.logical_not(parent_missing),:]
-    # Remove control families
-    controls = np.array([x[0]=='_' for x in ped[:,0]])
-    ped = ped[~controls,:]
-    # Find unique parent-pairs
-    parent_pairs = np.array([ped[i,2]+ped[i,3] for i in range(ped.shape[0])])
-    unique_pairs, sib_counts = np.unique(parent_pairs, return_counts=True)
-    # Fill in sibships
-    for i in range(unique_pairs.shape[0]):
-        ped[np.where(parent_pairs==unique_pairs[i])[0],0] = i 
-    # Parent pairs with more than one offspring
-    sib_parent_pairs = unique_pairs[sib_counts>1]
-    fam_sizes = np.array([x*(x-1)/2 for x in sib_counts[sib_counts>1]])
-    npairs = int(np.sum(fam_sizes))
-    if npairs==0:
-        return None, ped
-    else:    
-        # Find all sibling pairs
-        sibpairs = np.zeros((npairs,2),dtype=ped.dtype)
-        paircount = 0
-        for ppair in sib_parent_pairs:
-            sib_indices = np.where(parent_pairs==ppair)[0]
-            for i in range(0,sib_indices.shape[0]-1):
-                for j in range(i+1,sib_indices.shape[0]):
-                    sibpairs[paircount,:] = np.array([ped[sib_indices[i],1],ped[sib_indices[j],1]])
-                    paircount += 1
-        return sibpairs, ped
-
-class Person:
-    """Just a simple data structure representing individuals
-
-    Args:
-        id : str
-            IID of the individual.
-        fid : str
-            FID of the individual.
-        pid : str
-            IID of the father of that individual.
-        mid : str
-            IID of the mother of that individual.
-    """
-    def __init__(self, id, fid=None, pid=None, mid=None):
-        self.id = id
-        self.fid = fid
-        self.pid = pid
-        self.mid = mid
-
-
-def create_pedigree(king_address, agesex_address):
-    """Creates pedigree table from agesex file and kinship file in KING format.
-
-    Args:
-        king_address : str
-            Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
-            Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
-            The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
-            This file is used in creating a pedigree file and can be generated using KING.
-            As fids starting with '_' are reserved for control there should be no fids starting with '_'.
-
-        agesex_address : str
-            Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
-            Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
-            Age column is used for distinguishing between parent and child in a parent-offspring relationship inferred from the kinship file.
-            ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
-
-    Returns:
-        pd.DataFrame:
-            A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
-    """
-
-    kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
-    logging.info("loaded kinship file")
-    agesex = pd.read_csv(agesex_address, delim_whitespace=True)
-    agesex["IID"] = agesex["IID"].astype(str)
-    agesex["FID"] = agesex["FID"].astype(str)
-    logging.info("loaded agesex file")
-    agesex = agesex.set_index("IID")
-    logging.info("creating age and sex dictionaries")
-    kinship = pd.merge(kinship, agesex.rename(columns={"sex": "sex1", "age": "age1"}), left_on="ID1", right_index=True)
-    kinship = pd.merge(kinship, agesex.rename(columns={"sex": "sex2", "age": "age2"}), left_on="ID2", right_index=True)
-    logging.info("dictionaries created")
-    people = {}
-    fid_counter = 0
-    dropouts = []
-    kinship_cols = kinship.columns.tolist()
-    index_id1 = kinship_cols.index("ID1")
-    index_id2 = kinship_cols.index("ID2")
-    index_sex1 = kinship_cols.index("sex1")
-    index_sex2 = kinship_cols.index("sex2")
-    index_age1 = kinship_cols.index("age1")
-    index_age2 = kinship_cols.index("age2")
-    index_inftype = kinship_cols.index("InfType")
-    logging.info("creating pedigree objects")
-    pop_size = kinship.values.shape[0]
-    t = kinship.values.tolist()
-    for row in range(pop_size):
-        relation = t[row][index_inftype]
-        id1 = t[row][index_id1]
-        id2 = t[row][index_id2]
-        age1 = t[row][index_age1]
-        age2 = t[row][index_age2]
-        sex1 = t[row][index_sex1]
-        sex2 = t[row][index_sex2]
-        p1 = people.get(id1)
-        if p1 is None:
-            p1 = Person(id1)
-            people[id1] = p1
-
-        p2 = people.get(id2)
-        if p2 is None:
-            p2 = Person(id2)
-            people[id2] = p2
-
-        if relation == "PO":
-            if age1 > age2 + 12:
-                if sex1 == "F":
-                    p2.mid = p1.id
-                if sex1 == "M":
-                    p2.pid = p1.id
-
-            if age2 > age1 + 12:
-                if sex2 == "F":
-                    p1.mid = p2.id
-                if sex2 == "M":
-                    p1.pid = p2.id
-        if relation == "FS":
-            if p1.fid is None and p2.fid is None:
-                p1.fid = str(fid_counter)
-                p2.fid = str(fid_counter)
-                fid_counter += 1
-
-            if p1.fid is None and p2.fid is not None:
-                p1.fid = p2.fid
-
-            if p1.fid is not None and p2.fid is None:
-                p2.fid = p1.fid
-
-    for excess in dropouts:
-        people.pop(excess)
-
-    data = []
-    for p in people.values():
-        if p.fid is None:
-            p.fid = str(fid_counter)
-            fid_counter += 1
-
-        if p.mid is None:
-            # default mother id
-            p.mid = p.fid + "___M"
-
-        if p.pid is None:
-            # default father ir
-            p.pid = p.fid + "___P"
-
-        data.append((p.fid, p.id, p.pid, p.mid))
-
-    data = pd.DataFrame(data, columns=['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']).astype(str)
-    return data
-
-def find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only = False):
-    """
-    Used in get_gts_matrix and get_fam_means to find the individuals in ids that have genotyped siblings.
-    """
-    # Find genotyped sibships of size > 1
-    ped_dict = make_id_dict(ped, 1)
-    ids_in_ped = np.array([x in ped_dict for x in gts_ids])
-    gts_fams = np.zeros((gts_ids.shape[0]),dtype=gts_ids.dtype)
-    gts_fams[ids_in_ped] = np.array([ped[ped_dict[x], 0] for x in gts_ids[ids_in_ped]])
-    fams, counts = np.unique(gts_fams[ids_in_ped], return_counts=True)
-    sibships = set(fams[counts > 1])
-    # Find individuals with genotyped siblings
-    ids_in_ped = np.array([x in ped_dict for x in ids])
-    ids = ids[ids_in_ped]
-    ids_fams = np.array([ped[ped_dict[x], 0] for x in ids])
-    ids_with_sibs = np.array([x in sibships for x in ids_fams])
-    ids = ids[ids_with_sibs]
-    ids_fams = ids_fams[ids_with_sibs]
-    if return_ids_only:
-        return ids
-    else:
-        return ids, ids_fams, gts_fams
-
-def get_sibpairs_from_king(kinfile):
-    kin_header = np.array(open(kinfile,'r').readline().split('\t'))
-    inf_type_index = np.where(np.array([x[0:7]=='InfType' for x in kin_header]))[0][0]
-    id1_index = np.where(np.array(kin_header)=='ID1')[0][0]
-    id2_index = np.where(np.array(kin_header)=='ID2')[0][0]
-    sibpairs = np.loadtxt(kinfile,dtype=str,skiprows=1,usecols=(id1_index,id2_index,inf_type_index))
-    sibpairs = sibpairs[sibpairs[:,2]=='FS',0:2]
-    return sibpairs
+from snipar.pedigree import find_individuals_with_sibs
+from snipar.gtarray import gtarray
 
 def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verbose=False):
     """
@@ -305,195 +49,6 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
                                                gt_indices[par_status[:, 1] == 1, 2]))))
     # Return ids with imputed/observed parents
     return ids, observed_indices, imp_indices
-
-@njit
-def pos_to_cM(pos,boundaries, cM_pos):
-    cM_out = np.zeros((pos.shape[0]), dtype=np.float_)
-    cM_out[...] = np.nan
-    current_seg = 0
-    for i in range(pos.shape[0]):
-        if boundaries[cM_pos.shape[0]] > pos[i] >= boundaries[0]:
-            unmapped = True
-            while unmapped:
-                if boundaries[current_seg + 1] > pos[i] >= boundaries[current_seg]:
-                    cM_out[i] = cM_pos[current_seg]
-                    unmapped = False
-                else:
-                    current_seg += 1
-    return cM_out
-
-def decode_map_from_pos(chrom,pos):
-    decode_map_path = path.join(path.dirname(snipar.__file__), f'decode_map/chr_{chrom}.gz')
-    map = np.loadtxt(decode_map_path, dtype=float, skiprows=1)
-    boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
-    return pos_to_cM(pos, boundaries, map[:, 2])
-
-
-# Read header of mapfile
-def get_map_positions(mapfile,gts,min_map_prop = 0.5):
-    map_file = open(mapfile,'r')
-    map_header = map_file.readline()
-    map_header = np.array(map_header.split(' '))
-    map_header[len(map_header)-1] = map_header[len(map_header)-1].split('\n')[0]
-    map_file.close()
-    if 'pposition' in map_header and 'gposition' in map_header:
-        bp_pos = np.loadtxt(mapfile,usecols = np.where(map_header=='pposition')[0][0], dtype=int, skiprows =1)
-        pos_dict = make_id_dict(bp_pos)
-        cm_pos = np.loadtxt(mapfile,usecols = np.where(map_header=='gposition')[0][0], dtype=float, skiprows =1)
-        # Check for NAs
-        if np.sum(np.isnan(cm_pos)) > 0:
-            raise (ValueError('Map cannot have NAs'))
-        if np.min(cm_pos) < 0:
-            raise (ValueError('Map file cannot have negative values'))
-        if np.var(cm_pos) == 0:
-            raise (ValueError('Map file has no variation'))
-        # Check ordering
-        ordered_map = np.sort(cm_pos)
-        if np.array_equal(cm_pos, ordered_map):
-            pass
-        else:
-            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
-        # Check scale
-        if np.max(cm_pos) > 5000:
-            raise (ValueError('Maximum value of map too large'))
-        # Find positions of SNPs in map file
-        map = np.zeros((gts.shape[1]),dtype=float)
-        map[:] = np.nan
-        in_map = np.array([x in pos_dict for x in gts.pos])
-        # Check if we have at least 50% of SNPs in map
-        prop_in_map = np.mean(in_map)
-        if prop_in_map < min_map_prop:
-            raise(ValueError('Only '+str(round(100*prop_in_map))+'% of SNPs have genetic positions in '+mapfile+'. Need at least '+str(round(100*min_map_prop))+'%'))
-        print('Found genetic map positions for '+str(round(100*prop_in_map))+'% of SNPs in '+mapfile)
-        # Fill in map values
-        map[in_map] = cm_pos[[pos_dict[x] for x in gts.pos[in_map]]]
-        # Linearly interpolate map
-        if prop_in_map < 1:
-            print('Linearly interpolating genetic map for SNPs not in input map')
-            map = np.interp(gts.pos, gts.pos[in_map], map[in_map])
-        return map
-    else:
-        raise(ValueError('Map file must contain columns pposition and gposition'))
-
-def map_from_bed(bedfile, chrom):
-    bimfile = bedfile.split('.bed')[0]+'.bim'
-    print('Attempting to read map from ' + bimfile)
-    bim = np.loadtxt(bimfile, usecols=(1,2,3), dtype=str)
-    bim_map = np.array(bim[:,1],dtype=float)
-    bim_pos = np.array(bim[:,2],dtype=int)
-    # Check for NAs
-    if np.var(bim_map) == 0:
-        print('Map information not found in bim file.')
-        print('Using default map (decode sex averaged map on Hg19 coordinates)')
-        map = decode_map_from_pos(chrom, bim_pos)
-        pc_mapped = str(round(100*(1-np.mean(np.isnan(map))),2))
-        print('Found map positions for '+str(pc_mapped)+'% of SNPs')
-    else:
-        if np.sum(np.isnan(bim_map)) > 0:
-            raise (ValueError('Map cannot have NAs'))
-        if np.min(bim_map) < 0:
-            raise (ValueError('Map file cannot have negative values'))
-        # Check ordering
-        ordered_map = np.sort(bim_map)
-        if np.array_equal(bim_map, ordered_map):
-            pass
-        else:
-            raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
-        # Check scale
-        if np.max(bim_map) > 500:
-            raise (ValueError('Maximum value of map too large'))
-        map = bim_map
-        print('Read map from bim file')
-    return bim[:,0], map
-
-#### Compute LD-scores ####
-@njit(parallel=True)
-def compute_ld_scores(gts,map,max_dist = 1):
-    ldscores = np.zeros((gts.shape[1]),dtype=np.float64)
-    for i in prange(gts.shape[1]):
-        ldscore_i = 1
-        if i>0:
-            j = i-1
-            dist = map[i]-map[j]
-            while dist < max_dist and j>=0:
-                ldscore_i += r2_est(gts[...,i],gts[...,j])
-                j -= 1
-                if j>=0:
-                    dist = map[i]-map[j]
-        if i<(gts.shape[1]-1):
-            j = i + 1
-            dist = map[j] - map[i]
-            while dist < max_dist and j < gts.shape[1]:
-                ldscore_i += r2_est(gts[..., i], gts[..., j])
-                j += 1
-                if j < gts.shape[1]:
-                    dist = map[j] - map[i]
-        ldscores[i] = ldscore_i
-    return ldscores
-
-## Unbiased estimator of R^2 between SNPs
-@njit
-def r2_est(g1,g2):
-    not_nan = np.logical_not(np.logical_or(np.isnan(g1), np.isnan(g2)))
-    r2 = np.power(np.corrcoef(g1[not_nan],g2[not_nan])[0,1],2)
-    return r2-(1-r2)/(np.sum(not_nan)-2)
-
-def ldscores_from_bed(bedfile, chrom, ld_wind, ld_out = None):
-    # Get map
-    map_snps, map = map_from_bed(bedfile, chrom)
-    not_na = ~np.isnan(map)
-    map = map[not_na]
-    map_snps = map_snps[not_na]
-    map_snp_dict = make_id_dict(map_snps)
-    # Read genotypes
-    print('Reading genotypes')
-    bed = Bed(bedfile, count_A1 = True)
-    bed_in_map = np.array([x in map_snp_dict for x in bed.sid])
-    gts = bed[:,bed_in_map].read().val
-    sid = bed.sid[bed_in_map]
-    pos = bed.pos[bed_in_map]
-    map = map[np.array([map_snp_dict[x] for x in sid])]
-    print('Computing LD scores')
-    ldscores = compute_ld_scores(gts,map,ld_wind)
-    if ld_out is not None:
-        ld_outfile = ld_out+str(chrom)+'.l2.ldscore.gz'
-        print('Writing LD-scores to '+ld_outfile)
-        ld_outarray = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in sid]), sid, pos, ldscores)).T))
-        np.savetxt(ld_outfile, ld_outarray, fmt='%s')
-    return ldscores, sid
-
-def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
-    """
-    Used in get_gts_matrix to find the mean genotype in each sibship (family) for each SNP or for a PGS.
-    The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
-    If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
-    """
-    ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
-    fams = np.unique(ids_fams)
-    fams_dict = make_id_dict(fams)
-    # Compute sums of genotypes in each family
-    fam_sums = np.zeros((fams.shape[0],gts.shape[1]),dtype=gts.dtype)
-    fam_counts = np.zeros((fams.shape[0]),dtype=int)
-    for i in range(0,fams.shape[0]):
-        fam_indices = np.where(gts_fams==fams[i])[0]
-        fam_sums[i,:] = np.sum(gts[fam_indices,:],axis=0)
-        fam_counts[i] = fam_indices.shape[0]
-    # Place in vector corresponding to IDs
-    if remove_proband:
-        gts_id_dict = make_id_dict(gts_ids)
-    G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
-    for i in range(0,ids.shape[0]):
-        fam_index = fams_dict[ids_fams[i]]
-        G_sib[i,:] = fam_sums[fam_index,:]
-        n_i = fam_counts[fam_index]
-        if remove_proband:
-            G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
-            n_i = n_i-1
-        G_sib[i,:] = G_sib[i,:]/float(n_i)
-    if return_famsizes:
-        return [gtarray(G_sib, ids),fam_counts,fam_sums]
-    else:
-        return gtarray(G_sib,ids)
 
 def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     """
@@ -581,3 +136,35 @@ def make_gts_matrix(gts, par_status, gt_indices, imp_gts=None, parsum = False):
             G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
     return G
 
+def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
+    """
+    Used in get_gts_matrix to find the mean genotype in each sibship (family) for each SNP or for a PGS.
+    The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
+    If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
+    """
+    ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
+    fams = np.unique(ids_fams)
+    fams_dict = make_id_dict(fams)
+    # Compute sums of genotypes in each family
+    fam_sums = np.zeros((fams.shape[0],gts.shape[1]),dtype=gts.dtype)
+    fam_counts = np.zeros((fams.shape[0]),dtype=int)
+    for i in range(0,fams.shape[0]):
+        fam_indices = np.where(gts_fams==fams[i])[0]
+        fam_sums[i,:] = np.sum(gts[fam_indices,:],axis=0)
+        fam_counts[i] = fam_indices.shape[0]
+    # Place in vector corresponding to IDs
+    if remove_proband:
+        gts_id_dict = make_id_dict(gts_ids)
+    G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
+    for i in range(0,ids.shape[0]):
+        fam_index = fams_dict[ids_fams[i]]
+        G_sib[i,:] = fam_sums[fam_index,:]
+        n_i = fam_counts[fam_index]
+        if remove_proband:
+            G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
+            n_i = n_i-1
+        G_sib[i,:] = G_sib[i,:]/float(n_i)
+    if return_famsizes:
+        return [gtarray(G_sib, ids),fam_counts,fam_sums]
+    else:
+        return gtarray(G_sib,ids)

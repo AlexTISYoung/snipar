@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-import snipar.preprocess as preprocess
 import numpy as np
 import argparse
 from snipar.correlate import *
 from numba import set_num_threads
 from numba import config as numba_config
+from snipar.utilities import parse_obsfiles
 
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22')
@@ -34,7 +34,7 @@ if args.ldscores is not None and args.bedfiles is not None:
     raise(ValueError('Both LD scores and genotypes provided. Provided LD scores will be used'))
 
 # Find sumstats files
-sumstats_files, chroms = preprocess.parse_obsfiles(args.sumstats, obsformat='sumstats.gz')
+sumstats_files, chroms = parse_obsfiles(args.sumstats, obsformat='sumstats.gz')
 # Read sumstats
 s = read_sumstats_files(sumstats_files, chroms)
 
@@ -48,11 +48,11 @@ s.filter_corrs(args.corr_filter)
 
 # Get LD scores
 if args.ldscores is not None:
-    ld_files, chroms = preprocess.parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz')
+    ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz')
     s.scores_from_ldsc(ld_files)
     s.filter_NAs()
 elif args.bedfiles is not None:
-    bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, obsformat='bed')
+    bedfiles, chroms = parse_obsfiles(args.bedfiles, obsformat='bed')
     s.compute_ld_scores(bedfiles, chroms, args.ld_wind, args.ld_out)
     s.filter_NAs()
 
@@ -61,7 +61,7 @@ print('Using '+str(s.sid.shape[0])+' SNPs to compute correlations')
 r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = s.cor_direct_pop(args.n_blocks)
 print('Correlation between direct and population effects: '+str(round(r_dir_pop,4))+' (S.E. '+str(round(r_dir_pop_SE,4))+')')
 r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks)
-print('Correlation between direct and average parental effects: '+str(round(r_dir_avg_NTC,4))+' (S.E. '+str(round(r_dir_avg_NTC_SE,4))+')')
+print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC,4))+' (S.E. '+str(round(r_dir_avg_NTC_SE,4))+')')
 
 outfile = str(args.outprefix)+'_corrs.txt'
 print('Saving correlation estimates to '+outfile)

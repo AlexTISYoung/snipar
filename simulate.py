@@ -2,8 +2,8 @@
 from bgen_reader import open_bgen
 import numpy as np
 import h5py, argparse
-import snipar.preprocess as preprocess
 from snipar.ibd import write_segs_from_matrix
+from snipar.map import decode_map_from_pos
 from snipar.utilities import *
 from snipar.simulate import *
 
@@ -75,7 +75,7 @@ else:
 beta_vert = args.beta_vert
 ncausal = args.n_causal
 
-bgenfiles, chroms = preprocess.parse_obsfiles(args.bgenfiles, obsformat='bgen')
+bgenfiles, chroms = parse_obsfiles(args.bgenfiles, obsformat='bgen')
 
 # Read genotypes
 haps = []
@@ -88,7 +88,7 @@ for i in range(bgenfiles.shape[0]):
     # Read bgen
     bgen = open_bgen(bgenfiles[i], verbose=True)
     # Read map
-    map = preprocess.decode_map_from_pos(chroms[i], bgen.positions)
+    map = decode_map_from_pos(chroms[i], bgen.positions)
     not_nan = np.logical_not(np.isnan(map))
     maps.append(map[not_nan])
     positions.append(bgen.positions[not_nan])
