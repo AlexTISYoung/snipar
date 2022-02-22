@@ -31,8 +31,14 @@ jobs:
       env:
         CIBW_BUILD: cp*
         CIBW_SKIP: cp31*
-      run: python -m cibuildwheel --output-dir wheelhouse
+      run: python -m cibuildwheel --output-dir dist
+
+    - name: Publish distribution 📦 to Test PyPI
+        uses: pypa/gh-action-pypi-publish@master
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository_url: https://test.pypi.org/legacy/
 
     - uses: actions/upload-artifact@v2
       with:
-        path: ./wheelhouse/*.whl
+        path: ./dist/*.whl
