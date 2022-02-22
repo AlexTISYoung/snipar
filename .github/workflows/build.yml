@@ -2,9 +2,6 @@ name: make binaries
 
 on:
   push:
-    branches: 
-    - master
-    - tidy
     tags:
     - 'v*'
   pull_request:
