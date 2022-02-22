@@ -12,10 +12,10 @@ from snipar.pedigree import get_sibpairs_from_ped
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
-parser.add_argument('outprefix', type=str, help='Location to output summary statistics files. Outputs text output to outprefix.sumstats.gz and HDF5 output to outprefix.sumstats.hdf5')
-parser.add_argument('--bedfiles',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-parser.add_argument('--bgenfiles',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-parser.add_argument('--impfiles', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+parser.add_argument('out', type=str, help='Location to output summary statistics files. Outputs text output to outprefix.sumstats.gz and HDF5 output to outprefix.sumstats.hdf5')
+parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not provided imputed parental genotypes.',default=None)
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
@@ -40,28 +40,28 @@ if args.threads is not None:
         print('Number of threads: '+str(args.threads))
 
 # Check arguments
-if args.bedfiles is None and args.bgenfiles is None:
+if args.bed is None and args.bgen is None:
     raise(ValueError('Must provide one of --bedfiles and --bgenfiles'))
-if args.bedfiles is not None and args.bgenfiles is not None:
+if args.bed is not None and args.bgen is not None:
     raise(ValueError('Both bedfiles and bgenfiles provided. Please provide only one'))
-if args.impfiles is None and args.pedigree is None:
+if args.imp is None and args.pedigree is None:
     raise(ValueError('Must provide pedigree if not providing imputed parental genotypes file(s)'))
 
 # Find observed and imputed files
-if args.impfiles is None:
-    if args.bedfiles is not None:
-        bedfiles, chroms = parse_obsfiles(args.bedfiles, 'bed')
+if args.imp is None:
+    if args.bed is not None:
+        bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
         bgenfiles = [None for x in range(chroms.shape[0])]
-    elif args.bgenfiles is not None:
-        bgenfiles, chroms = parse_obsfiles(args.bgenfiles, 'bgen')
+    elif args.bgen is not None:
+        bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen')
         bedfiles = [None for x in range(chroms.shape[0])]
     pargts_list = [None for x in range(chroms.shape[0])]
 else:
-    if args.bedfiles is not None:
-        bedfiles, pargts_list, chroms = parse_filelist(args.bedfiles, args.impfiles, 'bed')
+    if args.bed is not None:
+        bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed')
         bgenfiles = [None for x in range(chroms.shape[0])]
-    elif args.bgenfiles is not None:
-        bgenfiles, pargts_list, chroms = parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
+    elif args.bgen is not None:
+        bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen')
         bedfiles = [None for x in range(chroms.shape[0])]
 if chroms.shape[0]==0:
     raise(ValueError('No input genotype files found'))
@@ -79,7 +79,7 @@ else:
     covariates = None
 
 # Read pedigree
-if args.impfiles is None:
+if args.imp is None:
     print('Reading pedigree from '+str(args.pedigree))
     ped = np.loadtxt(args.pedigree,dtype=str)
     if ped.shape[1] < 4:
@@ -126,17 +126,17 @@ print('Family variance estimate: '+str(round(sigma2/tau,4)))
 print('Residual variance estimate: ' + str(round(sigma2,4)))
 
 for i in range(chroms.shape[0]):
-    if args.bedfiles is not None:
+    if args.bed is not None:
         print('Observed genotypes file: '+bedfiles[i])
-    if args.bgenfiles is not None:
+    if args.bgen is not None:
         print('Observed genotypes file: '+bgenfiles[i])
-    if args.impfiles is not None:
+    if args.imp is not None:
         print('Imputed genotypes file: '+pargts_list[i])
     if chroms.shape[0]>1:
         print('Estimating SNP effects for chromosome '+str(chroms[i]))
     else:
         print('Estimaing SNP effects')
-    process_chromosome(chroms[i], y, ped, tau, sigma2, args.outprefix, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
+    process_chromosome(chroms[i], y, ped, tau, sigma2, args.out, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
                         par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
                         max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                         no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)

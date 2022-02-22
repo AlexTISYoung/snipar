@@ -8,9 +8,9 @@ from snipar.utilities import parse_obsfiles
 
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22')
-parser.add_argument('outprefix',type=str,help='Prefix for output file(s)')
+parser.add_argument('out',type=str,help='Prefix for output file(s)')
 parser.add_argument('--ldscores',type=str,help='Address of ldscores as output by LDSC',default=None)
-parser.add_argument('--bedfiles', type=str,
+parser.add_argument('--bed', type=str,
                     help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
 parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
@@ -28,9 +28,9 @@ if args.threads is not None:
         set_num_threads(args.threads)
         print('Number of threads: '+str(args.threads))
 
-if args.ldscores is None and args.bedfiles is None:
+if args.ldscores is None and args.bed is None:
     raise(ValueError('Must provide either LD scores or genotypes to compute ld scores'))
-if args.ldscores is not None and args.bedfiles is not None:
+if args.ldscores is not None and args.bed is not None:
     raise(ValueError('Both LD scores and genotypes provided. Provided LD scores will be used'))
 
 # Find sumstats files
@@ -51,8 +51,8 @@ if args.ldscores is not None:
     ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz')
     s.scores_from_ldsc(ld_files)
     s.filter_NAs()
-elif args.bedfiles is not None:
-    bedfiles, chroms = parse_obsfiles(args.bedfiles, obsformat='bed')
+elif args.bed is not None:
+    bedfiles, chroms = parse_obsfiles(args.bed, obsformat='bed')
     s.compute_ld_scores(bedfiles, chroms, args.ld_wind, args.ld_out)
     s.filter_NAs()
 
@@ -63,7 +63,7 @@ print('Correlation between direct and population effects: '+str(round(r_dir_pop,
 r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks)
 print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC,4))+' (S.E. '+str(round(r_dir_avg_NTC_SE,4))+')')
 
-outfile = str(args.outprefix)+'_corrs.txt'
+outfile = str(args.out)+'_corrs.txt'
 print('Saving correlation estimates to '+outfile)
 first_col = np.array(['r_direct_population','r_direct_avg_NTC']).reshape((2,1))
 header = np.array(['correlation','est','SE']).reshape((1,3))
@@ -74,7 +74,7 @@ outarray = np.vstack((header,np.hstack((first_col,cor_out))))
 np.savetxt(outfile,outarray,fmt='%s')
 
 if args.save_delete:
-    delete_outfile = args.outprefix+'_delete.txt'
+    delete_outfile = args.out+'_delete.txt'
     print('Saving jacknife delete values to '+str(delete_outfile))
     delete_out = np.vstack((r_dir_pop_delete,r_dir_avg_NTC_delete)).T
     delete_out = np.vstack((np.array(['r_direct_population','r_direct_avg_NTC']).reshape((1,2)),delete_out))

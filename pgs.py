@@ -10,10 +10,10 @@ from snipar.utilities import parse_filelist
 ######### Command line arguments #########
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument('outprefix',type=str,help='Prefix for computed PGS file and/or regression results files')
-    parser.add_argument('--bedfiles',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--bgenfiles',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--impfiles', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
+    parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
     parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
     parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
@@ -34,11 +34,11 @@ if __name__ == '__main__':
     args=parser.parse_args()
 
     if args.weights is not None:
-        if args.bedfiles is None and args.bgenfiles is None:
+        if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')
-        if args.bedfiles is not None and args.bgenfiles is not None:
+        if args.bed is not None and args.bgen is not None:
             raise ValueError('Provide only one of --bedfiles and --bgenfiles')
-        if args.impfiles is None:
+        if args.imp is None:
             raise ValueError('Weights provided but no imputed parental genotypes provided')
         print('Computing PGS from weights file')
         ####### Read PGS #######
@@ -57,10 +57,10 @@ if __name__ == '__main__':
 
         ###### Compute PGS ########
         G_list = []
-        if args.bedfiles is not None:
-            gts_list, pargts_list = parse_filelist(args.bedfiles, args.impfiles, 'bed')
-        elif args.bgenfiles is not None:
-            gts_list, pargts_list = parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
+        if args.bed is not None:
+            gts_list, pargts_list = parse_filelist(args.bed, args.imp, 'bed')
+        elif args.bgen is not None:
+            gts_list, pargts_list = parse_filelist(args.bgen, args.imp, 'bgen')
         if gts_list.shape[0]==0:
             raise(ValueError('No input genotype files found'))
         if not gts_list.shape[0] == pargts_list.shape[0]:
@@ -80,12 +80,12 @@ if __name__ == '__main__':
         print('PGS computed')
         ####### Write PGS to file ########
         if args.compute_controls:
-            pgs.write(pg[0], args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[1],args.outprefix + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[2], args.outprefix + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[3],args.outprefix + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[0], args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[1],args.out + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[2], args.out + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg[3],args.out + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
         else:
-            pgs.write(pg, args.outprefix + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pgs.write(pg, args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
     elif args.pgs is not None:
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
@@ -141,10 +141,10 @@ if __name__ == '__main__':
         alpha_out[0:pg.sid.shape[0], 1] = np.sqrt(np.diag(alpha_imp[1])[1:(1+pg.sid.shape[0])])
         alpha_out[pg.sid.shape[0],0] = alpha_proband[0][1]
         alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
-        print('Saving estimates to '+args.outprefix+ '.pgs_effects.txt')
+        print('Saving estimates to '+args.out+ '.pgs_effects.txt')
         outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
-        np.savetxt(args.outprefix + '.pgs_effects.txt',
+        np.savetxt(args.out + '.pgs_effects.txt',
                    np.hstack((outcols, np.array(alpha_out, dtype='S'))),
                    delimiter='\t', fmt='%s')
-        print('Saving sampling covariance matrix of estimates to ' + args.outprefix + '.pgs_vcov.txt')
-        np.savetxt(args.outprefix + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+        print('Saving sampling covariance matrix of estimates to ' + args.out + '.pgs_vcov.txt')
+        np.savetxt(args.out + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])

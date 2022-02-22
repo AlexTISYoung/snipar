@@ -181,7 +181,7 @@ def read_sibs_from_bgen(bgenfile,sibpairs):
 
 def read_PO_pairs_from_bgen(ped,bgenfile):
     # Read bed
-    bgen = open_bgen(bgenfile, verbose=True)
+    bgen = open_bgen(bgenfile, verbose=False)
     ids = bgen.samples
     id_dict = make_id_dict(ids)
     # SNP IDs
@@ -213,5 +213,5 @@ def read_PO_pairs_from_bgen(ped,bgenfile):
     all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
     gts = np.zeros((all_ids_indices.shape[0],snp_ids.shape[0]),dtype=np.float32)
     gts[:] = np.sum(bgen.read((all_ids_indices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
-    print('Read genotypes from '+str(bgenfile))
+    #print('Read genotypes from '+str(bgenfile))
     return gtarray(gts,ids = ids[all_ids_indices], sid=snp_ids), opg_ped, npair

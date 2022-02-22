@@ -24,7 +24,7 @@ setup(name='snipar',
       # author_email='alextisyoung@gmail.com',
       # license='MIT',
       include_package_data=True,
-      scripts=['gwas.py', 'pgs.py', 'impute.py', 'ibd.py'],
+      scripts=['gwas.py', 'pgs.py', 'impute.py', 'ibd.py','correlate.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
