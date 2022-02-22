@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }} ${{ matrix.python-version }}
+    name: testing snipar on ${{ matrix.os }} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     environment: TEST_PYPI_API_TOKEN
     strategy:
@@ -28,4 +28,4 @@ jobs:
       run: python setup.py install
 
     - name: run tests
-      run: python -m unittest snipar.snipar.tests
+      run: python -m unittest snipar.tests
