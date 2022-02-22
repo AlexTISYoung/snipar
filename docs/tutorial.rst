@@ -46,13 +46,13 @@ which is stored in SNIPar/decode_map/, will be used.
 
 The user can also input a phased .bgen file. For example, to infer IBD from example_data/sample.bgen using the genetic map in example_data/sample.genetic_map.txt, use this command:
 
-    ``python ibd.py --bgenfiles example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --outprefix example_data/ --threads 4 --ld_out --map example_data/sample.genetic_map.txt``
+    ``ibd.py --bgenfiles example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --outprefix example_data/ --threads 4 --ld_out --map example_data/sample.genetic_map.txt``
 
 The algorithm computes LD scores of SNPs in order to account for correlations between SNPs. The '--ld_out' argument writes the LD scores to file in the same format as LDSC (https://github.com/bulik/ldsc). 
 
 If the user has a pedigree file with columns FID (family ID), IID (individual ID), FATHER_ID (father ID), MOTHER_ID (mother ID), they can input that instead of the *--king* and *--agesex* arguments. Missing IDs in the pedigree are denoted by 0. Siblings are inferred as individuals in the pedigree that share both parents. (Warning: MZ twins should be removed from the pedigree to avoid confusing them with full-siblings.) Using the example pedigree in example_data/sample.ped, you can infer IBD using this command:
 
-    ``python ibd.py --bedfiles example_data/sample --pedigree example_data/sample.ped --map example_data/sample.genetic_map.txt --outprefix example_data/ --threads 4 --ld_out``
+    ``ibd.py --bedfiles example_data/sample --pedigree example_data/sample.ped --map example_data/sample.genetic_map.txt --outprefix example_data/ --threads 4 --ld_out``
 
 While the script can be run for a .bed file containing a single chromosome, it can also be run for multiple bed files each containing a single chromosome. If the bed files are
 chr_1.bed, chr_2.bed, ..., chr_22.bed, then you can specify these files to the script as 'chr_~', where '~' is interpreted as a numerical wildcard character.
