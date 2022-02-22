@@ -16,23 +16,12 @@ jobs:
       matrix:
         python-version: ['3.7']
         os: [ubuntu-20.04]
-
-
     steps:
     - uses: actions/checkout@v2
 
     - uses: actions/setup-python@v2
       with:
           python-version: ${{ matrix.python-version }}
-
-    - name: test password1
-      run: echo ${{ secrets.TEST_PYPI_API_TOKEN }}
-
-    - name: test password2
-      run: echo ${{ TEST_PYPI_API_TOKEN.secrets.TEST_PYPI_API_TOKEN }}
-
-    - name: test password3
-      run: echo something
 
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel==2.3.1
