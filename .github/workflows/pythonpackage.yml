@@ -17,16 +17,17 @@ jobs:
         python-version: ['3.7']
         os: [ubuntu-20.04]
 
+
+    steps:
     - name: test password1
       run: echo ${{ secrets.TEST_PYPI_API_TOKEN }}
 
     - name: test password2
-        run: echo ${{ TEST_PYPI_API_TOKEN.secrets.TEST_PYPI_API_TOKEN }}
+      run: echo ${{ TEST_PYPI_API_TOKEN.secrets.TEST_PYPI_API_TOKEN }}
 
     - name: test password3
-        run: echo something
+      run: echo something
 
-    steps:
     - uses: actions/checkout@v2
 
     - uses: actions/setup-python@v2
