@@ -12,6 +12,7 @@ jobs:
   build:
     name: Build wheels on ${{ matrix.os }} ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
+    environment: TEST_PYPI_API_TOKEN
     strategy:
       matrix:
         python-version: ['3.7']
@@ -30,8 +31,10 @@ jobs:
       run:
           |
           echo passwords
-          echo secrets ${{ secrets }}
+          echo secrets ${{ secrets }}          
           echo secrets.TEST_PYPI_API_TOKEN ${{ secrets.TEST_PYPI_API_TOKEN }}
+          echo secrets.shaghigheh ${{ secrets.shaghigheh }}
+          echo secrets.shaghigheh ${{ secrets.shaghigheh }}
 
     - name: Build wheels
       env:
