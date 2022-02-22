@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import argparse, h5py
-import snipar.preprocess as preprocess
 import snipar.read as read
 import numpy as np
 import snipar.lmm as lmm
@@ -8,6 +7,7 @@ from snipar.utilities import *
 from snipar.gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
+from snipar.pedigree import get_sibpairs_from_ped
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -50,18 +50,18 @@ if args.impfiles is None and args.pedigree is None:
 # Find observed and imputed files
 if args.impfiles is None:
     if args.bedfiles is not None:
-        bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, 'bed')
+        bedfiles, chroms = parse_obsfiles(args.bedfiles, 'bed')
         bgenfiles = [None for x in range(chroms.shape[0])]
     elif args.bgenfiles is not None:
-        bgenfiles, chroms = preprocess.parse_obsfiles(args.bgenfiles, 'bgen')
+        bgenfiles, chroms = parse_obsfiles(args.bgenfiles, 'bgen')
         bedfiles = [None for x in range(chroms.shape[0])]
     pargts_list = [None for x in range(chroms.shape[0])]
 else:
     if args.bedfiles is not None:
-        bedfiles, pargts_list, chroms = preprocess.parse_filelist(args.bedfiles, args.impfiles, 'bed')
+        bedfiles, pargts_list, chroms = parse_filelist(args.bedfiles, args.impfiles, 'bed')
         bgenfiles = [None for x in range(chroms.shape[0])]
     elif args.bgenfiles is not None:
-        bgenfiles, pargts_list, chroms = preprocess.parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
+        bgenfiles, pargts_list, chroms = parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
         bedfiles = [None for x in range(chroms.shape[0])]
 if chroms.shape[0]==0:
     raise(ValueError('No input genotype files found'))
@@ -87,7 +87,7 @@ if args.impfiles is None:
     elif ped.shape[1] > 4:
         print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
     # Remove rows with missing parents
-    sibpairs, ped = preprocess.get_sibpairs_from_ped(ped)
+    sibpairs, ped = get_sibpairs_from_ped(ped)
     if sibpairs is not None:
         print('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
     else:

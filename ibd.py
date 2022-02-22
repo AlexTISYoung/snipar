@@ -2,10 +2,11 @@
 import argparse
 from numba import set_num_threads
 from numba import config as numba_config
-import snipar.preprocess as preprocess
 import snipar.ibd
 import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
+from snipar.utilities import parse_obsfiles
+from snipar.pedigree import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bedfiles', type=str,
@@ -57,10 +58,10 @@ if args.bedfiles is not None and args.bgenfiles is not None:
 
 # Find bed files
 if args.bedfiles is not None:
-    bedfiles, chroms = preprocess.parse_obsfiles(args.bedfiles, 'bed')
+    bedfiles, chroms = parse_obsfiles(args.bedfiles, 'bed')
     bgenfiles = [None for x in range(chroms.shape[0])]
 elif args.bgenfiles is not None:
-    bgenfiles, chroms = preprocess.parse_obsfiles(args.bgenfiles, 'bgen')
+    bgenfiles, chroms = parse_obsfiles(args.bgenfiles, 'bgen')
     bedfiles = [None for x in range(chroms.shape[0])]
 # Set parameters
 min_length = args.min_length
@@ -93,12 +94,12 @@ if args.pedigree is not None:
     elif ped.shape[1] > 4:
         print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
     # Remove rows with missing parents
-    sibpairs, ped = preprocess.get_sibpairs_from_ped(ped)
+    sibpairs, ped = get_sibpairs_from_ped(ped)
     if sibpairs is None:
         raise(ValueError('No sibpairs found'))
 elif kinfile is not None:
     print('Reading relationships from '+str(kinfile))
-    sibpairs = preprocess.get_sibpairs_from_king(kinfile)
+    sibpairs = get_sibpairs_from_king(kinfile)
 else:
     raise(ValueError('Must provide either KING kinship file or pedigree'))
 
@@ -112,7 +113,7 @@ if args.p_error is None:
     if args.pedigree is None:
         if args.agesex is not None:
             print('Constructing pedigree from '+str(kinfile)+' and age and sex information from '+str(args.agesex))
-            ped = np.array(preprocess.create_pedigree(kinfile, args.agesex), dtype=str)
+            ped = np.array(create_pedigree(kinfile, args.agesex), dtype=str)
         else:
             raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
     if args.bedfiles is not None:

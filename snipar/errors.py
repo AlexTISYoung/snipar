@@ -63,7 +63,7 @@ def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
         gts, opg_ped, npair = read_PO_pairs_from_bed(ped, bedfile=bedfile)
     elif bgenfile is not None:
         gts, opg_ped, npair = read_PO_pairs_from_bgen(ped, bgenfile=bgenfile)
-    print('Finding indices of parent-offspring pairs')
+    #print('Finding indices of parent-offspring pairs')
     ## Get indices
     pair_indices = np.zeros((npair,2),dtype=int)
     pair_count = 0
@@ -76,12 +76,12 @@ def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
             pair_indices[pair_count,:] = np.array([o_index,gts.id_dict[opg_ped[i,3]]])
             pair_count += 1
     # Filter on MAF
-    print('Filtering on MAF')
+    #print('Filtering on MAF')
     gts.filter_maf(min_maf)
     ## Count Mendelian errors
-    print('Counting mendelain errors')
+    #print('Counting mendelain errors')
     ME = count_ME(np.array(gts.gts,dtype=np.float_), pair_indices)
-    print('Counted mendelain errors')
+    #print('Counted mendelain errors')
     # Estimate error probability
     N_pair = np.sum(np.logical_not(gts.gts[pair_indices[:, 0], :].mask) * np.logical_not(gts.gts[pair_indices[:, 1], :].mask),
                     axis=0)

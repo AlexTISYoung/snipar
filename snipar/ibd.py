@@ -1,6 +1,7 @@
 import gzip
 from numba import njit, prange
-import snipar.preprocess as preprocess
+from snipar.map import *
+from snipar.ld import compute_ld_scores
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
 from snipar.read.bgen import read_sibs_from_bgen
@@ -339,7 +340,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         if np.var(map) == 0:
             print('Map information not found in bim file.')
             print('Using default map (decode sex averaged map on Hg19 coordinates)')
-            gts.map = preprocess.decode_map_from_pos(chrom, gts.pos)
+            gts.map = decode_map_from_pos(chrom, gts.pos)
             pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
             print('Found map positions for '+str(pc_mapped)+'% of SNPs')
             gts.filter(~np.isnan(gts.map))
@@ -362,17 +363,17 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     elif mapfile is None and bgenfile is not None:
         print('Map file not provided.')
         print('Using default map (decode sex averaged map on Hg19 coordinates)')
-        gts.map = preprocess.decode_map_from_pos(chrom, gts.pos)
+        gts.map = decode_map_from_pos(chrom, gts.pos)
         pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
         print('Found map positions for '+str(pc_mapped)+'% of SNPs')
         gts.filter(~np.isnan(gts.map))
     else:
         print('Reading map from ' + str(mapfile))
-        gts.map = preprocess.get_map_positions(mapfile, gts)
+        gts.map = get_map_positions(mapfile, gts)
     print('Read map')
     # Weights
     print('Computing LD weights')
-    ld = preprocess.compute_ld_scores(np.array(gts.gts, dtype=np.float_), gts.map, max_dist=1)
+    ld = compute_ld_scores(np.array(gts.gts, dtype=np.float_), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')

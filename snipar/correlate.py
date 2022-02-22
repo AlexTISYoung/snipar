@@ -1,7 +1,8 @@
 import numpy.ma as ma
 from numba import njit, prange
 import gzip
-import snipar.preprocess as preprocess
+from snipar.ld import ldscores_from_bed
+from snipar.utilities import make_id_dict
 import numpy as np
 
 class sumstats(object):
@@ -13,7 +14,7 @@ class sumstats(object):
         self.chrom = np.zeros(sid.shape,dtype=int)
         self.chrom[:] = int(chrom)
         self.sid = np.array(sid,dtype=str)
-        self.sid_dict = preprocess.make_id_dict(self.sid)
+        self.sid_dict = make_id_dict(self.sid)
         self.pos = np.array(pos,dtype=int)
         self.A1 = np.array(A1,dtype=str)
         self.A2 = np.array(A2,dtype=str)
@@ -46,7 +47,7 @@ class sumstats(object):
     def concatenate(self,s2):
         self.chrom = np.hstack((self.chrom,s2.chrom))
         self.sid = np.hstack((self.sid, s2.sid))
-        self.sid_dict = preprocess.make_id_dict(self.sid)
+        self.sid_dict = make_id_dict(self.sid)
         self.pos = np.hstack((self.pos, s2.pos))
         self.A1 = np.hstack((self.A1, s2.A1))
         self.A2 = np.hstack((self.A2, s2.A2))
@@ -63,7 +64,7 @@ class sumstats(object):
     def filter(self,filter_pass):
         self.chrom = self.chrom[filter_pass]
         self.sid = self.sid[filter_pass]
-        self.sid_dict = preprocess.make_id_dict(self.sid)
+        self.sid_dict = make_id_dict(self.sid)
         self.pos = self.pos[filter_pass]
         self.A1 = self.A1[filter_pass]
         self.A2 = self.A2[filter_pass]
@@ -117,7 +118,7 @@ class sumstats(object):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(bedfiles.shape[0]):
             print('Computing LD scores for chromosome '+str(chroms[i]))
-            ld_chr, ld_snps_chr = preprocess.ldscores_from_bed(bedfiles[i], chroms[i], ld_wind, ld_out)
+            ld_chr, ld_snps_chr = ldscores_from_bed(bedfiles[i], chroms[i], ld_wind, ld_out)
             in_sid_dict = np.array([x in self.sid_dict for x in ld_snps_chr])
             if in_sid_dict.shape[0] > 0:
                 ld_indices = np.array([self.sid_dict[x] for x in ld_snps_chr[in_sid_dict]])

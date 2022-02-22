@@ -2,10 +2,10 @@
 import argparse
 import numpy as np
 import snipar.pgs as pgs
-import snipar.preprocess as preprocess
 from snipar.gtarray import gtarray
 import snipar.read as read
 import snipar.lmm as lmm
+from snipar.utilities import parse_filelist
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -58,9 +58,9 @@ if __name__ == '__main__':
         ###### Compute PGS ########
         G_list = []
         if args.bedfiles is not None:
-            gts_list, pargts_list = preprocess.parse_filelist(args.bedfiles, args.impfiles, 'bed')
+            gts_list, pargts_list = parse_filelist(args.bedfiles, args.impfiles, 'bed')
         elif args.bgenfiles is not None:
-            gts_list, pargts_list = preprocess.parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
+            gts_list, pargts_list = parse_filelist(args.bgenfiles, args.impfiles, 'bgen')
         if gts_list.shape[0]==0:
             raise(ValueError('No input genotype files found'))
         if not gts_list.shape[0] == pargts_list.shape[0]:
