@@ -170,6 +170,16 @@ def find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only = False):
     """
     Used in get_gts_matrix and get_fam_means to find the individuals in ids that have genotyped siblings.
     """
+    # Remove rows with missing parents
+    parent_missing = np.array([ped[i,2]=='0' or ped[i,3]=='0' for i in range(ped.shape[0])])
+    #print('Removing '+str(np.sum(parent_missing))+' rows from pedigree due to missing parent(s)')
+    ped = ped[np.logical_not(parent_missing),:]
+    # Find unique parent-pairs
+    parent_pairs = np.array([ped[i,2]+ped[i,3] for i in range(ped.shape[0])])
+    unique_pairs, sib_counts = np.unique(parent_pairs, return_counts=True)
+    # Fill in sibships
+    for i in range(unique_pairs.shape[0]):
+        ped[np.where(parent_pairs==unique_pairs[i])[0],0] = i 
     # Find genotyped sibships of size > 1
     ped_dict = make_id_dict(ped, 1)
     ids_in_ped = np.array([x in ped_dict for x in gts_ids])

@@ -39,8 +39,6 @@ if __name__ == '__main__':
             raise ValueError('Weights provided but no observed genotypes provided')
         if args.bed is not None and args.bgen is not None:
             raise ValueError('Provide only one of --bedfiles and --bgenfiles')
-        if args.imp is None:
-            raise ValueError('Weights provided but no imputed parental genotypes provided')
         print('Computing PGS from weights file')
         ####### Read PGS #######
         if args.sep is None:
@@ -59,6 +57,7 @@ if __name__ == '__main__':
         ###### Compute PGS ########
         # Find observed and imputed files
         if args.imp is None:
+            print('Warning: no imputed parental genotypes provided. Will compute PGS only for individuals with both parents genotyped.')
             if args.bed is not None:
                 bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
                 bgenfiles = [None for x in range(chroms.shape[0])]
@@ -121,12 +120,11 @@ if __name__ == '__main__':
     if args.phenofile is not None:
         print('Fitting PGS for '+str(args.phenofile))
         # Read phenotype
-        y, pheno_ids = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+        y = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
         # Remove individuals without phenotype observations from PGS
-        pg.filter_ids(pheno_ids)
-        # Match phenotype to PGS
-        y = read.phenotype.match_phenotype(pg, y, pheno_ids)
+        pg.filter_ids(y.ids)
+        y.filter_ids(pg.ids)
         print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
         # Parental sum
         if args.parsum:
@@ -142,15 +140,15 @@ if __name__ == '__main__':
                 raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
         # Scale
         if args.scale_phen:
-            y = y/np.std(y)
+            y.scale()
         if args.scale_pgs:
-            pg.gts = pg.gts / np.std(pg.gts[:, 0])
+            pg.scale()
         # Estimate effects
         print('Estimating direct and indirect/parental effects')
-        alpha_imp = lmm.fit_model(y, pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        alpha_imp = lmm.fit_model(y.gts[:,0], pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = lmm.fit_model(y, pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        alpha_proband = lmm.fit_model(y.gts[:,0], pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]

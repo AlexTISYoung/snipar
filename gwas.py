@@ -49,6 +49,7 @@ if args.imp is None and args.pedigree is None:
 
 # Find observed and imputed files
 if args.imp is None:
+    print('Warning: no imputed parental genotypes provided. Will analyse only individuals with both parents genotyped.')
     if args.bed is not None:
         bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
         bgenfiles = [None for x in range(chroms.shape[0])]
