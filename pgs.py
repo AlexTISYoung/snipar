@@ -5,7 +5,7 @@ import snipar.pgs as pgs
 from snipar.gtarray import gtarray
 import snipar.read as read
 import snipar.lmm as lmm
-from snipar.utilities import parse_filelist
+from snipar.utilities import *
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -14,6 +14,7 @@ if __name__ == '__main__':
     parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
     parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
     parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
@@ -56,27 +57,42 @@ if __name__ == '__main__':
                 weights[:,allele_indices])
 
         ###### Compute PGS ########
-        G_list = []
-        if args.bed is not None:
-            gts_list, pargts_list = parse_filelist(args.bed, args.imp, 'bed')
-        elif args.bgen is not None:
-            gts_list, pargts_list = parse_filelist(args.bgen, args.imp, 'bgen')
-        if gts_list.shape[0]==0:
+        # Find observed and imputed files
+        if args.imp is None:
+            if args.bed is not None:
+                bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
+                bgenfiles = [None for x in range(chroms.shape[0])]
+            elif args.bgen is not None:
+                bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen')
+                bedfiles = [None for x in range(chroms.shape[0])]
+            pargts_list = [None for x in range(chroms.shape[0])]
+        else:
+            if args.bed is not None:
+                bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed')
+                bgenfiles = [None for x in range(chroms.shape[0])]
+            elif args.bgen is not None:
+                bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen')
+                bedfiles = [None for x in range(chroms.shape[0])]
+        if chroms.shape[0]==0:
             raise(ValueError('No input genotype files found'))
-        if not gts_list.shape[0] == pargts_list.shape[0]:
-            raise ValueError('Lists of imputed and observed genotype files not of same length')
+        # Get pedigree if no imputed parental genotypes provided
+        if args.imp is None:
+            print('Reading pedigree from '+str(args.pedigree))
+            ped = np.loadtxt(args.pedigree,dtype=str)
+            if ped.shape[1] < 4:
+                raise(ValueError('Not enough columns in pedigree file'))
+            elif ped.shape[1] > 4:
+                print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+        else:
+            ped = None
         print('Computing PGS')
-        print('Using '+str(pargts_list[0])+' and '+str(gts_list[0]))
-        pg = pgs.compute(pargts_list[0],gts_list[0], p, sib=args.fit_sib, compute_controls=args.compute_controls)
-        for i in range(1,gts_list.shape[0]):
-            print('Using ' + str(pargts_list[i]) + ' and ' + str(gts_list[i]))
+        pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+        for i in range(1,chroms.shape[0]):
             if args.compute_controls:
-                pg_i = pgs.compute(pargts_list[i], gts_list[i], p, sib=args.fit_sib,
-                                   compute_controls=args.compute_controls)
+                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
                 pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
             else:
-                pg = pg.add(pgs.compute(pargts_list[i], gts_list[i], p, sib=args.fit_sib,
-                                        compute_controls=args.compute_controls))
+                pg = pg.add(pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls))
         print('PGS computed')
         ####### Write PGS to file ########
         if args.compute_controls:

@@ -1,4 +1,4 @@
-import h5py, code
+import h5py
 import numpy as np
 from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed

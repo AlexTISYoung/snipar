@@ -66,7 +66,7 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes without using phase information, type:
 
-    ``impute.py example_data/chr_1.ibd --bed example_data/chr_~ --king example_data/king.kin0 --agesex example_data/agesex.txt --output_address example_data/chr_~ --threads 4 --snipar_ibd``
+    ``impute.py example_data/chr_1.ibd --bed example_data/chr_1 --king example_data/king.kin0 --agesex example_data/agesex.txt --output_address example_data/chr_1 --threads 4 --snipar_ibd``
 
 The script constructs a pedigree from the output of KING's relatedness inference (example_data/sample.king),
 and age and sex information (example_data/sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in example_data/chr_1.ibd.segments.gz are used to impute missing parental genotypes
@@ -75,14 +75,14 @@ from the observed sibling and parental genotypes in example_data/sample.bed. The
 If phased haplotypes are available in .bgen format, the imputation can use these as input, which improves the information gained by imputation
 in certain situations. To perform imputation from the phased .bgen file in example_data/, use the following command:
 
-    ``impute.py example_data/chr_1.ibd --bgen example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --output_address example_data/sample --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
+    ``impute.py example_data/chr_1.ibd --bgen example_data/chr_1 --king example_data/king.kin0 --agesex example_data/agesex.txt --output_address example_data/chr_1 --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
 
 It is necessary to provide the *--from_chr* and *--to_chr* arguments when imputing from .bgen files since they often do not contain information on which chromosome
 the SNPs are located on, and it's necessary to match the IBD segments to the SNPs on the same chromosome.
 
 To use IBD segments output by KING with the --ibdseg argument (example_data/sample.king.segments.gz), use the following command:
 
-    ``impute.py example_data/sample.king --bgen example_data/sample --king example_data/sample.king.kin0 --agesex example_data/sample.agesex --output_address example_data/sample --threads 4 --from_chr 1 --to_chr 2``
+    ``impute.py example_data/king --bgen example_data/chr_1 --king example_data/king.kin0 --agesex example_data/agesex.txt --output_address example_data/chr_1 --threads 4 --from_chr 1 --to_chr 2``
 
 As with the ibd.py script, the impute_runner.py script can use a user input pedigree (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
@@ -93,7 +93,7 @@ Family based GWAS
 
 To compute summary statistics for direct, paternal, and maternal effects for all SNPs in the .bed file, type:
 
-    ``gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bed example_data/sample --imp example_data/sample --threads 4``
+    ``gwas.py example_data/phenotype.txt example_data/ --bed example_data/chr_~ --imp example_data/chr_~ --threads 4``
 
 This takes the observed genotypes in example_data/sample.bed and the imputed parental genotypes in example_data/sample.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed) genotype, and the mother's
@@ -102,7 +102,7 @@ where sibling relations in the pedigree are stored in the output of the imputati
 
 To use the .bgen file instead, type:
 
-    ``gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bgen example_data/sample --imp example_data/sample --threads 4``
+    ``gwas.py example_data/phenotype.txt example_data/ --bgen example_data/chr_~ --imp example_data/chr_~ --threads 4``
 
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
@@ -131,7 +131,7 @@ The output contains different datasets:
 
 Now we have estimated SNP specific summary statistics. To compare to the true effects, run
 
-    ``python snipar/example/estimate_sim_effects.py example_data/h2_quad_0.8.sumstats.hdf5 example_data/h2_quad_0.8.effects.txt``
+    ``python snipar/example/estimate_sim_effects.py example_data/chr_1.sumstats.hdf5 example_data/phenotype.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
@@ -146,42 +146,37 @@ will reduce power for estimating other effects.
 
 GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents available will be used. In order to do this, one must provide a pedigree to gwas.py, as in:
 
-    ``gwas.py example_data/h2_quad_0.8.txt example_data/h2_quad_0.8 --bgen example_data/sample --pedigree example_data/sample.ped --threads 4``
+    ``gwas.py example_data/phenotype.txt example_data/trios_ --bgen example_data/chr_~ --pedigree example_data/pedigree.txt --threads 4``
 
 Correlations between effects
 ----------------------------
 
-SNIPar provides a script to compute correlations between direct and population effects and between direct effects and average NTCs. 
+*snipar* provides a script to compute correlations between direct and population effects and between direct effects and average NTCs. 
 To compute these correlations from the effects estimated in this tutorial (output by gwas.py to h2_quad_0.8.sumstats.gz) 
 using the LD scores computed by ibd.py (and output to example_data/1.l2.ldscore.gz), use the following command: 
 
-    ``python correlate.py example_data/h2_quad_0.8 example_data/effect --ldscores example_data/1``
+    ``correlate.py example_data/chr_~ example_data/effect --ldscores example_data/~``
 
 This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
 and their standard errors, estimated by block-jacknife, are output to example_data/effect_corrs.txt. 
 
 The method is similar to LDSC ([ref]), but correlates the marginal effects, adjusting for the known sampling variance-covariance matrix of the effects. 
 The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
-computed from .bed files by providing them through the --bed argument. Summary statistics and LD score files split over
-multiple chromosomes can be specified by using '~'; for example, 
-
-    ``python correlate.py chr_~ outfile/effect --ldscores ld_dir/~``
-would read in summary statistics from chr_1.sumstats.gz, chr_2.sumstats.gz, ..., and LD scores from 
-ld_dir/1.l2.ldscore.gz, ld_dir/2.l2.ldscore.gz, ...
+computed from .bed files by providing them through the --bed argument. 
 
 
 Polygenic score analyses
 ------------------------
 
-In addition to family based GWAS, SNIPar provides a script (fPGS.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
+In addition to family based GWAS, *snipar* provides a script (pgs.py) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 and for performing family based polygenic score analyses. Here, we give some examples of how to use this script. The script computes a PGS
 from weights provided in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format . The true direct genetic effects for the simulated trait are given as PGS weights in this format
-in example_data/h2_quad_0.8.direct_weights.txt. This is a tab-delimited text file with a header and columns 'chrom' (chromosome), 'pos' (position), 'sid' (SNP ID), 'nt1' (allele 1),
+in example_data/direct_weights.txt. This is a tab-delimited text file with a header and columns 'chrom' (chromosome), 'pos' (position), 'sid' (SNP ID), 'nt1' (allele 1),
 'nt2' (allele 2), 'raw_beta' (raw effect estimates), 'ldpred_beta' (LD-pred adjusted weight). The script uses as weights the 'ldpred_beta' column.
 
 To compute the PGS from the true direct effects, use the following command:
 
-    ``python pgs.py example_data/direct --bed example_data/sample --imp example_data/sample --weights example_data/h2_quad_0.8.direct_weights.txt``
+    ``pgs.py example_data/direct --bed example_data/chr_~ --imp example_data/chr_~ --weights example_data/direct_weights.txt``
     
 This uses the weights in the weights file to compute the polygenic scores for each genotyped individual for whom observed or imputed parental genotypes are available.
 It outputs the PGS to example_data/direct.pgs.txt, which is a white-space delimited text file with columns FID (family ID, shared between siblings), IID (individual ID),

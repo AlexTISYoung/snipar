@@ -1,7 +1,8 @@
 from snipar.gtarray import gtarray
 import numpy as np
 from snipar.read import get_gts_matrix
-from snipar.utilities import make_id_dict
+from snipar.utilities import *
+import h5py
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -87,7 +88,7 @@ class pgs(object):
 
         return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
 
-def compute(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
+def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
     Args:
@@ -108,7 +109,7 @@ def compute(par_gts_f, gts_f, pgs, sib=False, compute_controls=False):
             observed/imputed maternal PGS
 
     """
-    G = get_gts_matrix(par_gts_f, gts_f, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls)
+    G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=True)
     if sib:
         cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
     else:
