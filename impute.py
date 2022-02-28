@@ -366,6 +366,7 @@ if __name__ == "__main__":
         pedigree = create_pedigree(args.king, args.agesex)
     else:
         pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
+    pedigree = pedigree[['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']]
     logging.info("pedigree loaded.")
 
     logging.info("Loading ibd ...")
