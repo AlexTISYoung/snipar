@@ -46,7 +46,7 @@ Args:
     --to_chr : int, optional
         Which chromosome (<). Should be used with from_chr parameter.
 
-    --output_address: str, optional
+    --out: str, optional
         The script writes the result of imputation to this path. If it contains '~', result of imputation for chromosome i will be written to a similar path where ~ has been replaced with i. The default value for output_address is 'parent_imputed_chr'.
 
     --start: int, optional
@@ -285,7 +285,7 @@ if __name__ == "__main__":
                         type=str,
                         default = None,
                         help='Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes')
-    parser.add_argument('--output_address',
+    parser.add_argument('--out',
                         type=str,
                         default = "parent_imputed",
                         help="Writes the result of imputation for chromosome i to outprefix{i}")
@@ -402,7 +402,7 @@ if __name__ == "__main__":
     else:
         chromosomes = [None]
 
-    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.output_address and "~" in args.output_address):
+    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.out and "~" in args.out):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
@@ -424,7 +424,7 @@ if __name__ == "__main__":
             "pcs": pcs,
             "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
-            "output_address":none_tansform(args.output_address, "~", str(chromosome)),
+            "output_address":none_tansform(args.out, "~", str(chromosome)),
             "start": args.start,
             "end": args.end,
             "bim": none_tansform(args.bim, "~", str(chromosome)),

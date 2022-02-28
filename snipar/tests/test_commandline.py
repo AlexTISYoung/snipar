@@ -19,7 +19,7 @@ class TestCommanline(unittest.TestCase):
                    "--to_chr", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1],
@@ -38,7 +38,7 @@ class TestCommanline(unittest.TestCase):
                    "--to_chr", "2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree~",
                    ]
         subprocess.check_call(command)
 
@@ -53,7 +53,7 @@ class TestCommanline(unittest.TestCase):
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--chunks", "7",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1],
@@ -73,7 +73,7 @@ class TestCommanline(unittest.TestCase):
                    "--to_chr", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1],
@@ -94,7 +94,7 @@ class TestCommanline(unittest.TestCase):
                    "--to_chr", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_phased_pedigree_control~",
+                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -115,7 +115,7 @@ class TestCommanline(unittest.TestCase):
                    "--chunks", "7",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_phased_pedigree_control~",
+                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -135,7 +135,7 @@ class TestCommanline(unittest.TestCase):
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_king~",
+                   "--out", f"{output_root}/test_impute_with_unphased_king~",
                    ]
         subprocess.check_call(command)
 
@@ -150,7 +150,7 @@ class TestCommanline(unittest.TestCase):
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_king_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -174,7 +174,7 @@ class TestCommanline(unittest.TestCase):
                    "--pc_num", "8",
                    "-find_optimal_pc",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_king_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -195,7 +195,7 @@ class TestCommanline(unittest.TestCase):
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_king_control~",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -215,7 +215,7 @@ class TestCommanline(unittest.TestCase):
                    "--from_chr", "1",
                    "--to_chr", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control_multithread~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multithread~",
                    ]
         subprocess.check_call(command)
         coef, z, p_value = imputation_test([1, 2],
@@ -235,7 +235,7 @@ class TestCommanline(unittest.TestCase):
                    "--to_chr", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "10",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control_multiprocess~",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multiprocess~",
                    "--processes", "2",
                    ]
         subprocess.check_call(command)
@@ -253,7 +253,7 @@ class TestCommanline(unittest.TestCase):
                    "--snipar_ibd",
                    "--bed", f"{tests_root}/test_data/sample_reduced1",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
-                   "--output_address", f"{output_root}/test_impute_with_unphased_pedigree_control_notilda1",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_notilda1",
                    "--threads", "10",
                    ]
         subprocess.check_call(command)
