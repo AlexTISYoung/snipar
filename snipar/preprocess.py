@@ -48,7 +48,7 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
     imp_indices = np.sort(np.unique(np.hstack((gt_indices[par_status[:, 0] == 1, 1],
                                                gt_indices[par_status[:, 1] == 1, 2]))))
     # Return ids with imputed/observed parents
-    return ids, observed_indices, imp_indices
+    return ids, observed_indices, imp_indices, parcount
 
 def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     """

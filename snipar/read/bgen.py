@@ -110,8 +110,15 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
     else:
         imp_fams = None
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
-    ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
-                                                                                sib=sib, verbose=print_sample_info)    
+    ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
+                                                                                sib=sib, verbose=print_sample_info) 
+    if np.sum(parcount>0)==0 and not parsum:
+        if verbose:
+            print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
+        parsum = True
+    elif 100 > np.sum(parcount>0) > 0 and not parsum:
+        if verbose:
+            print('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
     ### Match observed and imputed SNPs ###
     if par_gts_f is not None:
         if verbose:

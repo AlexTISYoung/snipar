@@ -8,6 +8,7 @@ import snipar.read as read
 import snipar.lmm as lmm
 from snipar.utilities import *
 from numba import njit, prange
+from snipar.preprocess import find_par_gts
 
 def transform_phenotype(inv_root, y, fam_indices, null_mean = None):
     """
@@ -204,12 +205,14 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
     if bedfile is not None:
         bed = Bed(bedfile,count_A1 = True)
+        gts_id_dict = make_id_dict(bed.iid,1)
         snp_ids = bed.sid
         pos = np.array(bed.pos[:,2],dtype=int)
         alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5))
         chrom = np.array(bed.pos[:,0],dtype=int)
     elif bgenfile is not None:
         bgen = open_bgen(bgenfile, verbose=False)
+        gts_id_dict = make_id_dict(bgen.samples)
         snp_ids = bgen.ids
         # If SNP IDs are broken, try rsids
         if np.unique(snp_ids).shape[0] == 1:
@@ -219,6 +222,15 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         chrom = np.array(bgen.chromosomes,dtype='U2')
         # If chromosomse unknown, set to chromosome inferred from filename
         chrom[[len(x)==0 for x in chrom]] = chrom_out
+    # Check for observed parents if not using parsum
+    if not parsum:
+        par_status, gt_indices, fam_labels = find_par_gts(y.ids, pedigree, gts_id_dict)
+        parcount = np.sum(par_status==0,axis=1)
+        if np.sum(parcount>0)==0:
+            print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
+            parsum = True
+        elif 100 > np.sum(parcount>0) > 0:
+            print('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
     # Remove duplicates
@@ -256,12 +268,14 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
     for i in range(0,batch_bounds.shape[0]):
         if i==0:
             print_sample_info = True
+            verbose = True
         else:
             print_sample_info = False
+            verbose = False
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(y, pedigree, 
                     tau, sigma2, snp_ids=snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], bedfile=bedfile, bgenfile=bgenfile, 
                     par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib,max_missing=max_missing, min_maf=min_maf,
-                    print_sample_info=print_sample_info, verbose=True)
+                    print_sample_info=print_sample_info, verbose=verbose)
         # Fill in fitted SNPs
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
