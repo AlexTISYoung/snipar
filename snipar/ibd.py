@@ -364,10 +364,10 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         print('Map file not provided.')
         print('Using default map (decode sex averaged map on Hg19 coordinates)')
         gts.map = decode_map_from_pos(chrom, gts.pos)
-        pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
+        pc_mapped = 100*(1-np.mean(np.isnan(gts.map)))
         if pc_mapped < 50:
             print('Warning: map positions not found for the majority of SNPs. Consider providing a genetic map using --map')
-        print('Found map positions for '+str(pc_mapped)+'% of SNPs')
+        print('Found map positions for '+str(round(pc_mapped,2))+'% of SNPs')
         gts.filter(~np.isnan(gts.map))
     else:
         print('Reading map from ' + str(mapfile))
