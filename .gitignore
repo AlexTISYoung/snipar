@@ -17,3 +17,5 @@ graphs/*
 gitignore/*
 .pytest_cache/*
 .idea/*
+outputs/**
+!outputs/tmp/.gitkeep
