@@ -34,9 +34,9 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
     gt_indices = gt_indices[none_missing, :]
     par_status = par_status[none_missing, :]
     ids = ids[none_missing]
+    parcount = np.sum(par_status==0,axis=1)
     if verbose:
         print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotype observations')
-        parcount = np.sum(par_status==0,axis=1)
         print(str(np.sum(parcount==0))+' individuals with imputed but no observed parental genotypes')
         print(str(np.sum(parcount==1))+' individuals with one observed and one imputed parent')
         print(str(np.sum(parcount==2))+' individuals with both parents observed')
