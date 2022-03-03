@@ -49,14 +49,18 @@ def ldscores_from_bed(bedfile, chrom, ld_wind, ld_out = None):
     bed_in_map = np.array([x in map_snp_dict for x in bed.sid])
     gts = bed[:,bed_in_map].read().val
     sid = bed.sid[bed_in_map]
-    pos = bed.pos[bed_in_map]
+    bim = bed.pos[bed_in_map,:]
+    chrom = np.array(bim[:,0],dtype=int).reshape((sid.shape[0],1))
+    pos = np.array(bim[:,2],dtype=int).reshape((sid.shape[0],1))
     map = map[np.array([map_snp_dict[x] for x in sid])]
     print('Computing LD scores')
     ldscores = compute_ld_scores(gts,map,ld_wind)
     if ld_out is not None:
-        ld_outfile = ld_out+str(chrom)+'.l2.ldscore.gz'
+        ld_outfile = ld_out+str(chrom[0])+'.l2.ldscore.gz'
         print('Writing LD-scores to '+ld_outfile)
-        ld_outarray = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in sid]), sid, pos, ldscores)).T))
+        ld_outarray = np.hstack((chrom, sid.reshape((sid.shape[0],1)),pos,ldscores.reshape((sid.shape[0],1))))
+        ld_outarray = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),
+                        ld_outarray))
         np.savetxt(ld_outfile, ld_outarray, fmt='%s')
     return ldscores, sid
 

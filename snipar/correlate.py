@@ -101,11 +101,13 @@ class sumstats(object):
             print('Reading LD scores from '+ld_files[i])
             ld_chr = np.loadtxt(ld_files[i],dtype=str,usecols=(1,3))
             in_sid_dict = np.array([x in self.sid_dict for x in ld_chr[:,0]])
-            if in_sid_dict.shape[0] > 0:
+            if np.sum(in_sid_dict) > 0:
                 ld_chr = ld_chr[in_sid_dict,:]
                 ld_indices = np.array([self.sid_dict[x] for x in ld_chr[:,0]])
                 self.ldscores[ld_indices] = np.array(ld_chr[:,1],dtype=float)
                 self.ldscores.mask[ld_indices] = False
+            else:
+                raise(ValueError('No SNPs in common between LD scores and summary statistics'))
     def cor_direct_pop(self, n_blocks):
         print('Computing correlation between direct and population effects')
         r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = jacknife_est(self.direct,self.population,self.r_direct_pop,1/self.ldscores, n_blocks)
@@ -120,10 +122,12 @@ class sumstats(object):
             print('Computing LD scores for chromosome '+str(chroms[i]))
             ld_chr, ld_snps_chr = ldscores_from_bed(bedfiles[i], chroms[i], ld_wind, ld_out)
             in_sid_dict = np.array([x in self.sid_dict for x in ld_snps_chr])
-            if in_sid_dict.shape[0] > 0:
+            if np.sum(in_sid_dict) > 0:
                 ld_indices = np.array([self.sid_dict[x] for x in ld_snps_chr[in_sid_dict]])
                 self.ldscores[ld_indices] = np.array(ld_chr[in_sid_dict],dtype=float)
                 self.ldscores.mask[ld_indices] = False
+            else:
+                raise(ValueError('No SNPs in common between LD scores and sumstats'))
 
 def read_sumstats_file(sumstats_file, chrom):
     print('Reading sumstats from '+sumstats_file)
