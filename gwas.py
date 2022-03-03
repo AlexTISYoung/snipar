@@ -109,6 +109,7 @@ y.filter_ids(ped[:,1])
 print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
 ped_indices = np.array([ped_dict[x] for x in y.ids])
 y.fams = ped[ped_indices,0]
+
 print('Fitting variance components')
 if args.covar is not None:
     # Match covariates

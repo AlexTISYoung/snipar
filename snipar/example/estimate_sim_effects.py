@@ -9,8 +9,10 @@ args=parser.parse_args()
 f = h5py.File(args.estimated_effects,'r')
 
 ests = np.array(f['estimate'])
+not_nan = ~np.isnan(ests[:,0])
 
 b = np.loadtxt(args.true_effects)
+b = b[not_nan,:]
 
 pop = ests.dot(np.array([1,0.5,0.5]).reshape((3,1)))
 

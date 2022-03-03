@@ -88,7 +88,7 @@ class pgs(object):
 
         return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
 
-def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False):
+def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
     Args:
@@ -109,7 +109,7 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
             observed/imputed maternal PGS
 
     """
-    G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=True)
+    G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=verbose)
     if sib:
         cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
     else:

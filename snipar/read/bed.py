@@ -155,7 +155,7 @@ def read_sibs_from_bed(bedfile,sibpairs):
     sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
     gts = np.zeros((sibindices.shape[0],bed.sid.shape[0]),dtype=np.float32)
     gts[:] = bed[sibindices,:].read().val
-    return gtarray(garray = gts, ids = ids[sibindices, 1], sid = bed.sid, pos = np.array(bed.pos[:,2],dtype=int))
+    return gtarray(garray = gts, ids = ids[sibindices, 1], sid = bed.sid, pos = np.array(bed.pos[:,2],dtype=int))    
 
 def read_PO_pairs_from_bed(ped,bedfile):
     # Read bed
