@@ -508,7 +508,7 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
 
     cdef double result
     cdef double additive
-    cdef int gs1, gs2, gp1, i
+    cdef int gs1, gs2, gp1, i, dummy_gp
     cdef double sibsum = 0
     cdef int sib1, sib2, pair_index, counter, sib_index1, sib_index2, hap_index
     cdef int sibs_h00, sibs_h01, sibs_h10, sibs_h11, sibship_shared_allele_sib1, sibship_shared_allele_sib2
