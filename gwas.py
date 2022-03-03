@@ -110,6 +110,7 @@ print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
 ped_indices = np.array([ped_dict[x] for x in y.ids])
 y.fams = ped[ped_indices,0]
 
+# Fit variance components
 print('Fitting variance components')
 if args.covar is not None:
     # Match covariates
@@ -126,6 +127,11 @@ else:
     y.gts[:,0] = y.gts[:,0]-np.mean(y.gts[:,0])
 print('Family variance estimate: '+str(round(sigma2/tau,4)))
 print('Residual variance estimate: ' + str(round(sigma2,4)))
+
+# Diagonalize y
+print('Transforming phenotype')
+L = null_model.sigma_inv_root(tau, sigma2)
+y.diagonalise(L)
 
 for i in range(chroms.shape[0]):
     if args.bed is not None:

@@ -181,13 +181,12 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
         print(str(G.shape[2])+' SNPs that pass filters')
     #### Match phenotype ####
     y.filter_ids(G.ids)
-    ##### Transform genotypes and phenotypes ######
+    ##### Transform genotypes ######
     if verbose:
-        print('Transforming genotypes and phenotypes')
+        print('Transforming genotypes')
     null_model = lmm.model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams)
     L = null_model.sigma_inv_root(tau, sigma2)
     G.diagonalise(L)
-    y.diagonalise(L)
     ### Fit models for SNPs ###
     if verbose:
         print('Estimating SNP effects')
