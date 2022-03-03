@@ -74,33 +74,36 @@ cdef double get_probability_of_both_parents_conditioned_on_offsprings(int snp,
 
 
 cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(int snp,
-                                                                        int gp1,
-                                                                        int gp2,
+                                                                        int known_gp,
+                                                                        int unknown_gp,
                                                                         int[:] sib_indexes,
                                                                         int sib_count,
                                                                         signed char [:,:] unphased_gts,
                                                                         double[:] parent_genotype_prob) nogil:
-    cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
+    """"
+    Computes P(unkown_gp|known_gp,gss)
+    """
+    cdef double numerator = parent_genotype_prob[known_gp]*parent_genotype_prob[unknown_gp]
     cdef double denumerator = 0
-    cdef int flag, gs, _gp2, index
+    cdef int flag, gs, _unknown_gp, index
     cdef double tmp
     flag = 0
     for index in range(sib_count):
         gs = unphased_gts[sib_indexes[index], snp]
         if not (gs == nan_integer):
-            numerator = numerator*prob_offspring_on_parent[gp1, gp2, gs]
+            numerator = numerator*prob_offspring_on_parent[known_gp, unknown_gp, gs]
             flag = 1
     if flag==0:
         return nan_float
     if numerator==0:
         return 0.
-    for _gp2 in range(3):
+    for _unknown_gp in range(3):
         tmp = 1
         for index in range(sib_count):
             gs = unphased_gts[sib_indexes[index], snp]
             if not (gs == nan_integer):
-                tmp = tmp*prob_offspring_on_parent[gp1, _gp2, gs]
-        denumerator = denumerator+tmp*parent_genotype_prob[gp1]*parent_genotype_prob[_gp2]
+                tmp = tmp*prob_offspring_on_parent[known_gp, _unknown_gp, gs]
+        denumerator = denumerator+tmp*parent_genotype_prob[known_gp]*parent_genotype_prob[_unknown_gp]
     if denumerator==0:
         return nan_float
     return numerator/denumerator
@@ -720,8 +723,9 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
 
     if is_backup:        
         result = 0
-        for gp1 in range(3):
-            result += (gp1)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp1, gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
+        for dummy_gp in range(3):
+            #TODO this line has changed check if it fixes
+            result += (dummy_gp)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp, dummy_gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
     return_val.first = result
     return_val.second.second = is_backup
     return return_val
@@ -1056,7 +1060,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             snp = snp+1
     destroy()
     number_of_po_pairs = sum(sibships[sibships["single_parent"]]["sib_count"])
-    mendelian_error_ratio = np.array([c/number_of_po_pairs for c in single_parent_mendelian_error_count])
+    mendelian_error_ratio = np.array([c/number_of_po_pairs if c!=0 else 0 for c in single_parent_mendelian_error_count])
     estimated_genotyping_error = np.array(single_parent_mendelian_error_count) / np.array(single_parent_fvars)
     multi_sib_fams = sum(sibships["sib_count"]>1)
     single_parent_fams = np.sum(single_parent)
