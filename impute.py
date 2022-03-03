@@ -172,9 +172,6 @@ def run_imputation(data):
     control = data["control"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
-    snipar_ibd = data["snipar_ibd"]
-    king_ibd = data["king_ibd"]
-    king_seg = data["king_seg"]
     pcs = data["pcs"]
     pc_ids = data["pc_ids"]
     find_optimal_pc = data["find_optimal_pc"]
@@ -188,6 +185,29 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
+    ibd_address = data.get("ibd_address")
+    ibd_is_king = data.get("ibd_is_king")
+
+    logging.info("Loading ibd ...")
+    snipar_ibd = None
+    king_ibd = None
+    king_seg = None
+    if ibd_address is None:
+        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
+        snipar_ibd = pd.DataFrame(columns=cols)
+    else:
+        ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
+        if ibd_is_king:
+            king_ibd = ibd
+            king_seg = pd.read_csv(f"{ibd_address}allsegs.txt", delim_whitespace=True).astype(str)                        
+            if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(king_ibd.columns.values.tolist())):
+                raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
+        else:
+            snipar_ibd = ibd
+            if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
+                raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
+    logging.info("ibd loaded.")
+
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
@@ -369,29 +389,6 @@ if __name__ == "__main__":
         pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
     pedigree = pedigree[['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']]
     logging.info("pedigree loaded.")
-
-    logging.info("Loading ibd ...")
-    snipar_ibd = None
-    king_ibd = None
-    king_seg = None
-    if args.ibd is None:        
-        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
-        snipar_ibd = pd.DataFrame(columns=cols)
-        if args.ibd_is_king:
-            raise Exception("can not use 'ibd_is_king' without any ibd file")
-    else:
-        ibd = pd.read_csv(f"{args.ibd}.segments.gz", delim_whitespace=True).astype(str)
-        if args.ibd_is_king:
-            king_ibd = ibd
-            king_seg = pd.read_csv(f"{args.ibd}allsegs.txt", delim_whitespace=True).astype(str)                        
-            if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(king_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
-        else:
-            snipar_ibd = ibd
-            print("snipar_ibd.columns.values.tolist())", snipar_ibd.columns.values.tolist())
-            if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
-    logging.info("ibd loaded.")
     
     pcs = None
     pc_ids = None
@@ -413,13 +410,17 @@ if __name__ == "__main__":
     else:
         chromosomes = [None]
 
-    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.out and "~" in args.out):
+    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.out and "~" in args.out) or (args.ibd and "~" in args.ibd):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
     if args.bgen:
         if args.to_chr is None or args.from_chr is None:
             raise Exception("Chromosome range should be specified with phased genotype")
+    
+    if args.ibd is None:
+        if args.ibd_is_king:
+            raise Exception("can not use 'ibd_is_king' without any ibd file")
 
     def none_tansform(a, b, c):
         if a is not None:
@@ -429,9 +430,8 @@ if __name__ == "__main__":
             "control":args.c,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
-            "snipar_ibd": snipar_ibd,
-            "king_ibd": king_ibd,
-            "king_seg": king_seg,
+            "ibd_address": none_tansform(args.ibd, "~", str(chromosome)),            
+            "ibd_is_king": args.ibd_is_king,
             "pcs": pcs,
             "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
