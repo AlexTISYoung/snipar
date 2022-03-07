@@ -71,7 +71,7 @@ class TestSibImpute(unittest.TestCase):
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                     expected = sibsum/2
                     error_message = f"problem with type0, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
-                    self.assertAlmostEqual(result, expected, 4, msg = "problem with type0")
+                    self.assertAlmostEqual(result, expected, 4, msg = error_message)
                     self.assertTrue(not is_backup, error_message)
 
         for i in range(3):
@@ -86,12 +86,12 @@ class TestSibImpute(unittest.TestCase):
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
                     expected = expected_results[int(sibsum)]/2
                     error_message = f"problem with type1, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
+                    self.assertTrue(not is_backup, error_message)
                     if abs(i-j) == 2:
-                        self.assertTrue(is_backup, error_message)
-                        self.assertTrue(not np.isnan(result), error_message)
+                        self.assertTrue(np.isnan(result), error_message)
                     else:
                         self.assertAlmostEqual(result, expected, 4, msg = error_message)
-                        self.assertTrue(not is_backup, error_message)
+
 
         for i in range(3):
             for j in range(3):
@@ -104,11 +104,11 @@ class TestSibImpute(unittest.TestCase):
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
                     expected = sibsum/4+f
                     error_message = f"problem with type2, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
+                    self.assertTrue(not is_backup, error_message)
+                    #TODO add tests for backup imputation
                     if i!=j:
-                        self.assertTrue(is_backup, error_message)
-                        self.assertTrue(not np.isnan(result), error_message)
+                        self.assertTrue(np.isnan(result), error_message)
                     else:
-                        self.assertTrue(not is_backup, error_message)
                         self.assertAlmostEqual(result, expected, 4, msg = error_message)
 
     def test_impute_snp_from_parent_offsprings_unphased(self):
@@ -179,18 +179,19 @@ class TestSibImpute(unittest.TestCase):
                         sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                         expected = sibsum - par
                         error_message = f"problem with type0, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        self.assertTrue(not is_backup, error_message)
                         if abs(par - i)>1 or abs(par - j)>1:                            
                             self.assertTrue(np.isnan(result), error_message)
                             self.assertTrue(mendelian_error_count>0, error_message)
-                            self.assertTrue(not is_backup, error_message)
                         elif expected > 2 or expected <0:
-                            self.assertTrue(is_backup, error_message)
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertTrue(not np.isnan(result), error_message)
-                        else:
-                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(np.isnan(result), error_message)
+                        else:                            
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
+                            if np.isnan(expected):
+                                self.assertTrue(np.isnan(result), msg = error_message)
+                            else:
+                                self.assertAlmostEqual(result, expected, 4, msg = error_message)
 
         for i in range(3):
             for j in range(3):
@@ -206,19 +207,19 @@ class TestSibImpute(unittest.TestCase):
                         is_backup = data.second
                         expected = expected_result_IBD1[par].get((i, j), np.nan)
                         error_message = f"problem with type1, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        self.assertTrue(not is_backup, error_message)
                         if abs(par - i)>1 or abs(par - j)>1:                            
                             self.assertTrue(np.isnan(result), error_message)
-                            self.assertTrue(mendelian_error_count>0, error_message)
-                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(mendelian_error_count>0, error_message)                            
                         elif (j==0 and i==2) or (j==2 and i==0):
-                            self.assertTrue(is_backup, error_message)
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertTrue(not np.isnan(result), error_message)
+                            self.assertTrue(np.isnan(result), error_message)
                         else:
-                            self.assertTrue(not is_backup, error_message)
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
-                            
+                            if np.isnan(expected):
+                                self.assertTrue(np.isnan(result), msg = error_message)
+                            else:
+                                self.assertAlmostEqual(result, expected, 4, msg = error_message)                            
 
         for i in range(3):
             for j in range(3):
@@ -234,18 +235,19 @@ class TestSibImpute(unittest.TestCase):
                         is_backup = data.second
                         expected = expected_result_IBD2[par].get((i, j), np.nan)
                         error_message = f"problem with type2, with parent = {par}, and sibs = {[i,j]}: result, expected = {(result, expected)}, mendelian_erros={mendelian_error_count}, is_backup={is_backup}"
+                        self.assertTrue(not is_backup, error_message)
                         if abs(par - i)>1 or abs(par - j)>1:                            
                             self.assertTrue(np.isnan(result), error_message)
                             self.assertTrue(mendelian_error_count>0, error_message)
-                            self.assertTrue(not is_backup, error_message)
                         elif (j!=i):
-                            self.assertTrue(is_backup, error_message)
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertTrue(not np.isnan(result), error_message)
-                        else:
-                            self.assertTrue(not is_backup, error_message)
+                            self.assertTrue(np.isnan(result), error_message)
+                        else:                            
                             self.assertTrue(mendelian_error_count==0, error_message)
-                            self.assertAlmostEqual(result, expected, 4, msg = error_message)
+                            if np.isnan(expected):
+                                self.assertTrue(np.isnan(result), msg = error_message)
+                            else:
+                                self.assertAlmostEqual(result, expected, 4, msg = error_message)
     def test_get_IBD(self):
         length = 1000
         half_window = 100

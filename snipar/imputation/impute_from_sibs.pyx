@@ -327,8 +327,10 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
     cdef float additive
     cdef int sibsum = 0
     cdef int counter, sib1, sib2, pair_index, sib_index1, sib_index2, hap_index, h00, h01, h10, h11, gs10, gs11, gs20, gs21, gp1, gp2, gs1, gs2
-    cdef bint is_backup = False
     cdef cpair[double, bint] return_val
+    #unless otherwise stated, it'll be false
+    return_val.first = nan_float
+    return_val.second = False
 
 
     if phased_gts != None:
@@ -367,18 +369,26 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
             if counter>0:
                 result = result/counter
                 return_val.first = result
-                return_val.second = is_backup
                 return return_val
+
+    if len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0:
+        printf("is backup\n")
+        result = 0
+        for gp1 in range(3):
+            for gp2 in range(3):
+                result += (gp1+gp2)*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
+        return_val.first = result/2        
+        return_val.second = True
     
-    if len_snp_ibd0 > 0:
+    elif len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
         result = 0
         for pair_index in range(len_snp_ibd0):
             sib1 = sib_indexes[snp_ibd0[pair_index, 0]]
             sib2 = sib_indexes[snp_ibd0[pair_index, 1]]
-            result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])
-        result = result/len_snp_ibd0
+            result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])/2.
+        return_val.first = result/len_snp_ibd0
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
@@ -388,7 +398,6 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
             gs1 = unphased_gts[sib1, snp]
             gs2 = unphased_gts[sib2, snp]
             if (gs1 == 0 and gs2 == 2) or (gs1 == 2 and gs2 == 0):
-                is_backup = True
                 break
             sibsum = gs1 + gs2
             additive = 0
@@ -402,8 +411,9 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                 additive = 2+f
             elif sibsum==4:
                 additive = 3+f
-            result += additive
-        result = result/len_snp_ibd1
+            result += additive/2.
+        else:
+            return_val.first = result/len_snp_ibd1
 
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we divide snp sum of the pair by two
@@ -414,19 +424,11 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
             gs1 = unphased_gts[sib1, snp]
             gs2 = unphased_gts[sib2, snp]
             if gs1 != gs2:
-                is_backup = True
                 break
-            result += (gs1+gs2)/2. + 2*f
-        result = result/len_snp_ibd2
-
-    if is_backup:
-        result = 0
-        for gp1 in range(3):
-            for gp2 in range(3):
-                result += (gp1+gp2)*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
-    result = result/2
-    return_val.first = result
-    return_val.second = is_backup
+            result += (gs1+gs2)/4. + f
+        else:
+            return_val.first = result/len_snp_ibd2
+    
     return return_val
 
 @cython.wraparound(False)
@@ -519,6 +521,10 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
     cdef int mendelian_error_count = 0
     cdef cpair[double, cpair[int, bint]] return_val
     #TODO Figure out mendelian inconsistancyies
+    #this is default
+    return_val.first = nan_float
+    return_val.second.first = 0
+    return_val.second.second = False
     for i in range(sib_count):
         gs1 = unphased_gts[sib_indexes[i], snp]
         if not is_possible_child(<int> gs1, <int> gp):
@@ -526,8 +532,6 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
     return_val.second.first = mendelian_error_count
 
     if mendelian_error_count>0:
-        return_val.first = nan_float
-        return_val.second.second = False
         return return_val    
 
     if phased_gts != None:
@@ -584,12 +588,10 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                     # printf("here is the bug")
 
             if counter > 0:
-                result = result/counter
-                return_val.first = result
-                return_val.second.second = False
+                return_val.first = result/counter
                 return return_val
 
-        if len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2>0:
+        elif len_snp_ibd0==0 and len_snp_ibd1==0 and len_snp_ibd2>0:
             result = 0
             counter = 0
             for pair_index in range(len_snp_ibd2):
@@ -609,14 +611,20 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                 result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+f
                 counter += 1
             if counter > 0:
-                result = result/counter
-                return_val.first = result
-                return_val.second.second = is_backup
+                return_val.first = result/counter
                 return return_val
 
     result = nan_float
     counter = 0
-    if len_snp_ibd0 > 0:
+    if len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0:
+        result = 0
+        for dummy_gp in range(3):
+            #TODO this line has changed check if it fixes
+            result += (dummy_gp)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp, dummy_gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
+        return_val.first = result
+        return_val.second.second = True
+
+    elif len_snp_ibd0 > 0:
         #if there is any ibd state0 we have observed all of the parents' genotypes,
         #therefore we can discard other ibd statuses
         result = 0
@@ -627,11 +635,10 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
             gs2 = unphased_gts[sib_indexes[sib2], snp]
             additive = (gs1 + gs2 - gp)
             if additive>2 or additive<0:
-                is_backup = True
-                result = nan_float
                 break
             result += additive
-        result = result/len_snp_ibd0
+        else:
+            return_val.first = result/len_snp_ibd0
 
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
@@ -675,12 +682,10 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
             elif gp == 2 and (gs1 == 2 and gs2 == 2):
                 additive = 0.5*f*(1-f)/(0.5*f*(1-f) + f**2) + 2*f**2/(0.5*f*(1-f) + f**2)
             else:
-                result = nan_float
-                is_backup = True
                 break
             result += additive
-
-        result = result/len_snp_ibd1        
+        else:
+            return_val.first = result/len_snp_ibd1        
 
     elif len_snp_ibd2 > 0:
         #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
@@ -692,7 +697,6 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
             gs2 = unphased_gts[sib_indexes[sib2], snp]
             additive = 0
             if gs1 != gs2:
-                is_backup = True
                 break
             if gp == 0 and gs1 == 0:
                 additive = f*(1-f)/((1-f)**2 + f*(1-f))
@@ -716,18 +720,11 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                 additive = (f*(1-f) + 2*f**2)/(f*(1-f) + f**2)
             
             else:
-                is_backup = True
                 break
-            result += additive            
-        result = result/len_snp_ibd2
+            result += additive
+        else:
+            return_val.first = result/len_snp_ibd2
 
-    if is_backup:        
-        result = 0
-        for dummy_gp in range(3):
-            #TODO this line has changed check if it fixes
-            result += (dummy_gp)*get_probability_of_one_parent_conditioned_on_offsprings_and_parent(snp, gp, dummy_gp, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
-    return_val.first = result
-    return_val.second.second = is_backup
     return return_val
 
 cdef int get_IBD_type(cstring id1,
