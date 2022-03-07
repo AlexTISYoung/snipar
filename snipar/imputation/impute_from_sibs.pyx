@@ -372,7 +372,6 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                 return return_val
 
     if len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0:
-        printf("is backup\n")
         result = 0
         for gp1 in range(3):
             for gp2 in range(3):
