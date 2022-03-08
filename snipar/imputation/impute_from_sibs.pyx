@@ -22,6 +22,7 @@ import h5py
 from cython.parallel import prange
 cimport openmp
 from snipar.config import nan_integer as python_integer_nan
+from libc.stdio cimport printf
 cdef float nan_float = np.nan
 cdef int nan_integer = python_integer_nan
 #[gp1,gp2,gs]
@@ -375,8 +376,11 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
         result = 0
         for gp1 in range(3):
             for gp2 in range(3):
-                result += (gp1+gp2)*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
-        return_val.first = result/2        
+                result += (gp1+gp2)/2*get_probability_of_both_parents_conditioned_on_offsprings(snp, gp1, gp2, sib_indexes, sib_count, unphased_gts, parent_genotype_prob)
+        if 0. <= result <= 2.:
+            return_val.first = result
+        else:            
+            return_val.first = nan_float
         return_val.second = True
     
     elif len_snp_ibd0 > 0:
@@ -610,7 +614,11 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                 result += phased_gts[sib_index1, snp, 1-parent_offspring1_shared_allele_offspring]+f
                 counter += 1
             if counter > 0:
-                return_val.first = result/counter
+                result = result/counter
+                if 0. <= result <= 2.:
+                    return_val.first = result
+                else:            
+                    return_val.first = nan_float
                 return return_val
 
     result = nan_float
@@ -867,7 +875,6 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
     cdef int number_of_fams = sibships.shape[0]
     cdef cnp.ndarray[cnp.double_t, ndim=2] c_freqs = freqs
-    cdef double[:] parent_genotype_prob = np.array([0., 0., 0.])
     cdef double f, fvars
     cdef int p, q
     sibships["parent"] = sibships["FATHER_ID"]
@@ -900,6 +907,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int i, j, loc, ibd_type, sib1_index, sib2_index, progress, where
     cdef cstring sib1_id, sib2_id
     cdef int[:, :] sibs_index = np.zeros((number_of_threads, max_sibs)).astype("i")
+    cdef double[:, :] parent_genotype_prob = np.zeros((number_of_threads, 3))
     cdef double[:,:] imputed_par_gts = np.zeros((number_of_fams, number_of_snps))
     imputed_par_gts[:] = nan_float
     cdef int snp, this_thread, sib1_gene_isnan, sib2_gene_isnan, index
@@ -1002,9 +1010,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                 fvars = fvars + c_freqs[q, snp]*(1-c_freqs[q, snp])
                 f = f + c_freqs[q, snp]
             f = f/sib_count[index]
-            parent_genotype_prob[0] = 1-f**2
-            parent_genotype_prob[1] = 2*f*(1-f)
-            parent_genotype_prob[2] = f**2
+            parent_genotype_prob[this_thread, 0] = (1-f)**2
+            parent_genotype_prob[this_thread, 1] = 2*f*(1-f)
+            parent_genotype_prob[this_thread, 2] = f**2
             if single_parent[index] and c_unphased_gts[c_iid_to_bed_index[parents[index]], snp] != nan_integer:
                 #2 time MAF of offspring is MAF of sum of the parents. That minus the existing parent results in MAF of the missing parent.
                 f = 2*f-c_freqs[c_iid_to_bed_index[parents[index]], snp]
@@ -1020,7 +1028,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 snp_ibd1[this_thread,:,:],
                                                                                 snp_ibd2[this_thread,:,:],
                                                                                 f,
-                                                                                parent_genotype_prob,
+                                                                                parent_genotype_prob[this_thread, :],
                                                                                 c_phased_gts,
                                                                                 c_unphased_gts,
                                                                                 sib_hap_IBDs[this_thread,:,:,:],
@@ -1043,7 +1051,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          snp_ibd1[this_thread,:,:],
                                                                          snp_ibd2[this_thread,:,:],
                                                                          f,
-                                                                         parent_genotype_prob,
+                                                                         parent_genotype_prob[this_thread, :],
                                                                          c_phased_gts,
                                                                          c_unphased_gts,
                                                                          sib_hap_IBDs[this_thread,:,:,:],
@@ -1074,6 +1082,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     logging.info(f"with chromosome {chromosome} :multi sibs available for {multi_sib_fams} which is {multi_sib_fams_ratio} of total fams")
     logging.info(f"with chromosome {chromosome} :total ibd0 ratio is {total_ratio_ibd0}")
     logging.info(f"with chromosome {chromosome} :expected total ibd0 ratio is {expected_total_ratio_ibd0}")
+    logging.info(f"with chromosome {chromosome} :ratio of backup imputation among sibs is {np.mean(sib_ratio_backup)}")
+    logging.info(f"with chromosome {chromosome} :ratio of backup imputation among parent-offsprings is {np.mean(parent_ratio_backup)}")
     if total_ratio_ibd0>0.5:
         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     output_nan_count = np.sum(np.isnan(imputed_par_gts))
