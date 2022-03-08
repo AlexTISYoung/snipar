@@ -131,14 +131,11 @@ def run_imputation(data):
                 find_optimal_pc : bool, optional
                     It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
-                king_ibd: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, StartSNP, StopSNP
+                ibd_address : str
+                    address of the ibd file. The king segments file should be accompanied with an allsegs file.
 
-                king_seg: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: Segment, Chr, StartSNP, StopSNP
-
-                snipar_ibd: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate
+                ibd_is_king : boolean
+                    Whether the ibd segments are in king format or snipar format.
 
                 output_address: str
                     The address to write the result of imputation on. The default value for output_address is 'parent_imputed_chr'.
@@ -175,6 +172,8 @@ def run_imputation(data):
     pcs = data["pcs"]
     pc_ids = data["pc_ids"]
     find_optimal_pc = data["find_optimal_pc"]
+    ibd_address = data.get("ibd_address")
+    ibd_is_king = data.get("ibd_is_king")
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -185,31 +184,8 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
-    ibd_address = data.get("ibd_address")
-    ibd_is_king = data.get("ibd_is_king")
-
-    logging.info("Loading ibd ...")
-    snipar_ibd = None
-    king_ibd = None
-    king_seg = None
-    if ibd_address is None:
-        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
-        snipar_ibd = pd.DataFrame(columns=cols)
-    else:
-        ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
-        if ibd_is_king:
-            king_ibd = ibd
-            king_seg = pd.read_csv(f"{ibd_address}allsegs.txt", delim_whitespace=True).astype(str)                        
-            if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(king_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
-        else:
-            snipar_ibd = ibd
-            if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
-    logging.info("ibd loaded.")
-
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time()
     #Doing imputation chunk by chunk
