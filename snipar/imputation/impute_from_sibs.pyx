@@ -788,7 +788,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999):
+def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999, silent_progress=False):
     """Does the parent sum imputation for families in sibships and all the SNPs in unphased_gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -931,10 +931,12 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef long[:] single_parent_mendelian_error_count = np.zeros(number_of_snps).astype(long)
     cdef double[:] single_parent_fvars = np.zeros(number_of_snps)
     cdef int mendelian_error_count
+    cdef bint c_silent_progress = silent_progress
     reset()
-    logging.info("with chromosome " + str(chromosome)+": " + "using "+str(threads)+" threads")
+    logging.info("with chromosome " + str(chromosome)+": " + "using "+str(number_of_threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
-        report(mod, chromosome_c, number_of_fams)
+        if c_silent_progress == 0:
+            report(mod, chromosome_c, number_of_fams)
         this_thread = openmp.omp_get_thread_num()
         for i in range(sib_count[index]):
             sibs_index[this_thread, i] = c_iid_to_bed_index[fams[index][i]]

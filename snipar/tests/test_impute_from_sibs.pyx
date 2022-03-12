@@ -3,8 +3,9 @@ from snipar.imputation.impute_from_sibs cimport *
 import numpy as np
 import unittest
 from snipar.config import nan_integer
+from snipar.tests.utils import *
 
-class TestSibImpute(unittest.TestCase):
+class TestSibImpute(SniparTest):
     def test_get_IBD_type(self):
         #check whats the condition of start and end
         ibd1 = (10, 20)
