@@ -275,7 +275,9 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       int[:, :, :] sib_hap_IBDs,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2) nogil:
+                      int len_snp_ibd2,
+                      bint use_backup,
+                      ) nogil:
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
     If phased_gts is not NULL, it tries to do the imputation with that first and if it's not usable, it falls back to unphased data.
 
@@ -317,6 +319,9 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
 
         len_snp_ibd2 : int
             The number of sibling pairs in snp_ibd2.
+        
+        use_backup : bint
+            Whether it should use backup imputation where there is no ibd infomation available.
 
     Returns:
         cpair[double, bint]
@@ -372,7 +377,7 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                 return_val.first = result
                 return return_val
 
-    if len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0:
+    if use_backup and (len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0):
         result = 0
         for gp1 in range(3):
             for gp2 in range(3):
@@ -453,6 +458,7 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
+                      bint use_backup,
                       ) nogil:
     """Imputes the missing parent for a single SNP from the other parent and offsprings and returns the imputed value, number of mendelian errors and whether backup linear imputation was used.
     
@@ -504,6 +510,9 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
 
         len_snp_ibd2 : int
             The number of sibling pairs in snp_ibd2.
+        
+        use_backup : bint
+            Whether it should use backup imputation where there is no ibd infomation available.
 
     Returns:
         cpair[double, cpair[int, bint]]
@@ -623,7 +632,7 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
 
     result = nan_float
     counter = 0
-    if len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0:
+    if use_backup and (len_snp_ibd0 == len_snp_ibd1 == len_snp_ibd2 == 0):
         result = 0
         for dummy_gp in range(3):
             #TODO this line has changed check if it fixes
@@ -788,7 +797,7 @@ cdef int get_IBD_type(cstring id1,
 
 @cython.wraparound(False)
 @cython.boundscheck(False)
-def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999, silent_progress=False):
+def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999, silent_progress=False, use_backup=False):
     """Does the parent sum imputation for families in sibships and all the SNPs in unphased_gts and returns the results.
 
     Inputs and outputs of this function are ascii bytes instead of strings
@@ -854,6 +863,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
 
         ibd_threshold : float, optional
             Minimum ratio of agreement between haplotypes for declaring IBD.
+        
+        use_backup : bint, optional
+            Whether it should use backup imputation where there is no ibd infomation available. It's false by default.
 
     Returns:
         tuple(list, numpy.array)
@@ -932,6 +944,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef double[:] single_parent_fvars = np.zeros(number_of_snps)
     cdef int mendelian_error_count
     cdef bint c_silent_progress = silent_progress
+    cdef bint c_use_backup = use_backup
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(number_of_threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -1037,7 +1050,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                                 parent_offspring_hap_IBDs[this_thread,:,:,:],
                                                                                 len_snp_ibd0,
                                                                                 len_snp_ibd1,
-                                                                                len_snp_ibd2
+                                                                                len_snp_ibd2,
+                                                                                c_use_backup,
                                                                                 )
                 imputed_par_gts[index, snp] = po_result.first
                 mendelian_error_count = po_result.second.first
@@ -1059,7 +1073,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                                                                          sib_hap_IBDs[this_thread,:,:,:],
                                                                          len_snp_ibd0,
                                                                          len_snp_ibd1,
-                                                                         len_snp_ibd2)
+                                                                         len_snp_ibd2,
+                                                                         c_use_backup,
+                                                                         )
                 imputed_par_gts[index, snp] = o_result.first
                 is_backup = o_result.second
                 sib_backup_count[snp] += is_backup

@@ -15,6 +15,12 @@ Args:
         Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
         These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
+    -silent_progress : bool, optional
+        Hides the percentage of progress from logging
+
+    -use_backup : bool, optional
+        Whether it should use backup imputation where there is no ibd infomation available.
+
     IBD : str
         Address of a file containing IBD statuses for all SNPs without segments.gz suffix. with --snipar_ibd flag this is assumed to be in snipar format and without it, it's assumed to be in king format.
 
@@ -116,6 +122,9 @@ def run_imputation(data):
                     Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
                     These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
+                use_backup : bool, optional
+                    Whether it should use backup imputation where there is no ibd infomation available.
+
                 unphased_address: str, optional
                     Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
                 
@@ -167,6 +176,7 @@ def run_imputation(data):
     chunks = data["chunks"]
     pedigree = data["pedigree"]
     control = data["control"]
+    use_backup = data["use_backup"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     pcs = data["pcs"]
@@ -203,7 +213,7 @@ def run_imputation(data):
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
             phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end, pcs, pc_ids, find_optimal_pc)
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress)
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
             logging.info(f"imputing chunk {i}/{chunks} done")
         
         #Merging chunks one by one and then removing the outputs
@@ -246,7 +256,7 @@ def run_imputation(data):
         logging.info(f"merging chunks done")
     elif chunks == 1:
         phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
     end_time = time()
@@ -316,6 +326,7 @@ def main(args):
         return None
     inputs = [{"pedigree": pedigree,
             "control":args.c,
+            "use_backup":args.use_backup,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "ibd_address": none_tansform(args.ibd, "~", str(chromosome)),            
@@ -352,9 +363,14 @@ def main(args):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c',
-                    action='store_true')
+                    action='store_true',
+                    help = "Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs. These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.")
 parser.add_argument('-silent_progress',
-                    action='store_true')
+                    action='store_true',
+                    help = "Hides the percentage of progress from logging")
+parser.add_argument('-use_backup',
+                    action='store_true',
+                    help = "Whether it should use backup imputation where there is no ibd infomation available")                    
 parser.add_argument('--ibd',
                     type=str,
                     help='IBD file withoout suffix')

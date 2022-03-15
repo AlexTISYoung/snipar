@@ -67,7 +67,7 @@ class TestSibImpute(SniparTest):
                     bed[0, snp] = i
                     bed[1, snp] = j
                     snp_ibd0[count] = [0, 1]
-                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0)
+                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0, False)
                     result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                     expected = sibsum/2
@@ -81,7 +81,7 @@ class TestSibImpute(SniparTest):
                     bed[0, snp] = i
                     bed[1, snp] = j
                     snp_ibd1[count] = [0, 1]
-                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1)
+                    t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1, False)
                     result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
@@ -100,7 +100,7 @@ class TestSibImpute(SniparTest):
                     bed[0, snp] = i
                     bed[1, snp] = j
                     snp_ibd2[count] = [0, 1]
-                    t = impute_snp_from_offsprings(snp, sib_indexes,  2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1)
+                    t = impute_snp_from_offsprings(snp, sib_indexes,  2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1, False)
                     result, is_backup = t.first, t.second
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
                     expected = sibsum/4+f
@@ -173,7 +173,7 @@ class TestSibImpute(SniparTest):
                         bed[1, snp] = j
                         bed[2, snp] = par
                         snp_ibd0[count] = [0, 1]
-                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, count+1, 1, 1)
+                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, count+1, 1, 1, False)
                         result, data = t.first, t.second
                         mendelian_error_count = data.first
                         is_backup = data.second
@@ -202,7 +202,7 @@ class TestSibImpute(SniparTest):
                         bed[1, snp] = j
                         bed[2, snp] = par
                         snp_ibd1[count] = [0, 1]
-                        t = impute_snp_from_parent_offsprings(snp,  2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, count+1, 1)
+                        t = impute_snp_from_parent_offsprings(snp,  2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, count+1, 1, False)
                         result, data = t.first, t.second
                         mendelian_error_count = data.first
                         is_backup = data.second
@@ -230,7 +230,7 @@ class TestSibImpute(SniparTest):
                         bed[1, snp] = j
                         bed[2, snp] = par
                         snp_ibd2[count] = [0, 1]
-                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, 0, count+1)
+                        t = impute_snp_from_parent_offsprings(snp, 2, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, None, 0, 0, count+1, False)
                         result, data = t.first, t.second
                         mendelian_error_count = data.first
                         is_backup = data.second
