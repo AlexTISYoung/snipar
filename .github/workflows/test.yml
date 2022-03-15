@@ -28,4 +28,5 @@ jobs:
       run: python3 setup.py install
 
     - name: run tests
+      working-directory: ./snipar
       run: python3 -m unittest snipar.tests
