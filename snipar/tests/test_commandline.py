@@ -1,4 +1,4 @@
-import impute
+import snipar.impute
 from snipar.tests.test_imputation import imputation_test
 import os
 from snipar.tests.utils import *
