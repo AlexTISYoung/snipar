@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
     - name: Install snipar
-      run: python setup.py install
+      run: python3 setup.py install
 
     - name: run tests
-      run: python -m unittest snipar.tests
+      run: python3 -m unittest snipar.tests
