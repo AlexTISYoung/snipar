@@ -14,6 +14,8 @@ jobs:
     env:
       CC: /usr/local/opt/llvm/bin/clang
       CXX: /usr/local/opt/llvm/bin/clang++
+      CIBW_BUILD: cp38*
+      CIBW_SKIP: cp31*
     environment: TEST_PYPI_API_TOKEN
     strategy:
       matrix:
@@ -30,20 +32,20 @@ jobs:
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel
 
+    - name: Build wheels (ubuntu-latest)        
+      if: matrix.os == 'ubuntu-latest'
+      run: python -m cibuildwheel --output-dir dist
 
-    - name: Build wheels
+    - name: Build wheels (macos-latest)
       env:
         DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
-        tmp: "/usr/local/opt/llvm/lib"
-        CIBW_BUILD: cp38*
-        CIBW_SKIP: cp31*
-      run: |
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            export LIBRARY_PATH="/usr/local/opt/llvm/lib"
-            echo ============================
-          fi
-          python -m cibuildwheel --output-dir dist
+      if: matrix.os == 'macos-latest'
+      run: python -m cibuildwheel --output-dir dist
 
+    - name: Build wheels (windows-latest)      
+      if: matrix.os == 'windows-latest'
+      run: python -m cibuildwheel --output-dir dist
+      
     - name: Install twine
       run: python -m pip install twine
 
