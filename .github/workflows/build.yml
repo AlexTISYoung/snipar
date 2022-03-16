@@ -37,10 +37,10 @@ jobs:
       run: python -m cibuildwheel --output-dir dist
 
     - name: Build wheels (macos-latest)
-      env:
-        DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
       if: matrix.os == 'macos-latest'
-      run: python -m cibuildwheel --output-dir dist
+      run: |
+        export LIBRARY_PATH="/usr/local/opt/llvm/lib"
+        python -m cibuildwheel --output-dir dist
 
     - name: Build wheels (windows-latest)      
       if: matrix.os == 'windows-latest'
