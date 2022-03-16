@@ -41,9 +41,10 @@ jobs:
 
     - name: Build wheels
       env:
+        DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
+        tmp: "/usr/local/opt/llvm/lib"
         CIBW_BUILD: cp38*
         CIBW_SKIP: cp31*
-        DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
       run: |
           echo 11111111111
           echo $CIBW_BUILD
@@ -52,6 +53,10 @@ jobs:
           echo 3333333333333333
           ls $DYLD_LIBRARY_PATH
           echo 444444444444444
+          echo $tmp
+          echo 5555555555
+          ls $tmp
+          echo 66666666
           python -m cibuildwheel --output-dir dist
 
     - name: Publish distribution 📦 to Test PyPI
