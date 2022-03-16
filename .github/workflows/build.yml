@@ -25,14 +25,6 @@ jobs:
       with:
           python-version: ${{ matrix.python-version }}
 
-    - name: Prepare os
-      if: matrix.os == 'macOS-latest'
-      run: |      
-          ls /usr/local/opt/llvm/lib
-    #     echo fffffffffffffffffffffff
-    #     echo $DYLD_LIBRARY_PATH
-    #     brew install llvm libomp
-    #     echo libomp.dylib
       
     
     - name: Install cibuildwheel
@@ -46,13 +38,7 @@ jobs:
         CIBW_BUILD: cp38*
         CIBW_SKIP: cp31*
       run: |
-          export DYLD_LIBRARY_PATH="/usr/local/opt/llvm/lib"
           export LIBRARY_PATH="/usr/local/opt/llvm/lib"
-          echo 2222222222222
-          echo $DYLD_LIBRARY_PATH
-          echo 33333333333
-          ls $DYLD_LIBRARY_PATH
-          echo 444444444444444
           python -m cibuildwheel --output-dir dist
 
     - name: Publish distribution 📦 to Test PyPI
