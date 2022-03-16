@@ -29,9 +29,10 @@ jobs:
       if: matrix.os == 'macOS-latest'
       run: |      
         echo fffffffffffffffffffffff
+        echo $DYLD_LIBRARY_PATH
         brew install llvm libomp
-        ls /usr/local/lib/libomp.dylib
-        ls /usr/local/Cellar/libomp/13.0.1/
+        ln -s /usr/local/lib/libomp.dylib ${DYLD_LIBRARY_PATH}/libomp.dylib
+      
     
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel
