@@ -43,8 +43,11 @@ jobs:
       env:
         CIBW_BUILD: cp38*
         CIBW_SKIP: cp31*
-        DYLD_LIBRARY_PATH: "/usr/local/Cellar/libomp/13.0.1/lib"
-      run: python -m cibuildwheel --output-dir dist
+        DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
+      run: |
+          echo $DYLD_LIBRARY_PATH
+          ls $DYLD_LIBRARY_PATH
+          python -m cibuildwheel --output-dir dist
 
     - name: Publish distribution 📦 to Test PyPI
       uses: pypa/gh-action-pypi-publish@master
