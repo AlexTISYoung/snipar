@@ -45,10 +45,13 @@ jobs:
         CIBW_SKIP: cp31*
         DYLD_LIBRARY_PATH: "/usr/local/opt/llvm/lib"
       run: |
-          echo aaaaaaaaa
+          echo 11111111111
           echo $CIBW_BUILD
+          echo 222222222
           echo $DYLD_LIBRARY_PATH
+          echo 3333333333333333
           ls $DYLD_LIBRARY_PATH
+          echo 444444444444444
           python -m cibuildwheel --output-dir dist
 
     - name: Publish distribution 📦 to Test PyPI
