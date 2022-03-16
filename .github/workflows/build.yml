@@ -41,6 +41,9 @@ jobs:
           export LIBRARY_PATH="/usr/local/opt/llvm/lib"
           python -m cibuildwheel --output-dir dist
 
+    - name: Install twine
+      run: python -m pip install twine
+
     - name: Upload to TestPyPI
       env:
         TWINE_USERNAME: __token__
