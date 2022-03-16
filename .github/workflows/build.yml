@@ -46,6 +46,7 @@ jobs:
         CIBW_BUILD: cp38*
         CIBW_SKIP: cp31*
       run: |
+          DYLD_LIBRARY_PATH="/usr/local/opt/llvm/lib"
           echo 11111111111
           echo $CIBW_BUILD
           echo 222222222
