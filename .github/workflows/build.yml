@@ -28,10 +28,11 @@ jobs:
     - name: Prepare os
       if: matrix.os == 'macOS-latest'
       run: |      
-        echo fffffffffffffffffffffff
-        echo $DYLD_LIBRARY_PATH
-        brew install llvm libomp
-        echo libomp.dylib
+          ls /usr/local/opt/llvm/lib
+    #     echo fffffffffffffffffffffff
+    #     echo $DYLD_LIBRARY_PATH
+    #     brew install llvm libomp
+    #     echo libomp.dylib
       
     
     - name: Install cibuildwheel
@@ -43,7 +44,7 @@ jobs:
         CIBW_BUILD: cp38*
         CIBW_SKIP: cp31*
         DYLD_LIBRARY_PATH: "/usr/local/Cellar/libomp/13.0.1/lib"
-      run: echo $DYLD_LIBRARY_PATH; python -m cibuildwheel --output-dir dist
+      run: python -m cibuildwheel --output-dir dist
 
     - name: Publish distribution 📦 to Test PyPI
       uses: pypa/gh-action-pypi-publish@master
