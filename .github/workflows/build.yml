@@ -26,11 +26,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
     - name: Prepare os
-      run: |
       if: matrix.os == 'macOS-latest'
+      run: |      
         echo fffffffffffffffffffffff
-        brew install llvm libomp        
-      fi
+        brew install llvm libomp
     
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel==2.3.1
