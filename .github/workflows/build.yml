@@ -51,7 +51,7 @@ jobs:
         TWINE_REPOSITORY: testpypi
         skip_existing: true
       run: |
-        python3 -m twine upload dist/*
+        python -m twine upload dist/*
     
     - uses: actions/upload-artifact@v2
       with:
