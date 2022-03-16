@@ -30,7 +30,7 @@ jobs:
       run: |      
         echo fffffffffffffffffffffff
         brew install llvm libomp
-        ln -s /usr/local/Cellar/libomp/13.0.1/lib/libomp.dylib /usr/local/lib/libomp.dylib
+        ls /usr/local/lib/libomp.dylib
         ls /usr/local/Cellar/libomp/13.0.1/
     
     - name: Install cibuildwheel
