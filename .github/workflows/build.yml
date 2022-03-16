@@ -58,7 +58,7 @@ jobs:
       run: |
         echo TWINE_PASSWORD ........... $TWINE_PASSWORD 
         echo TWINE_REPOSITORY ........... $TWINE_REPOSITORY 
-        python -m twine upload dist/*
+        python -m twine upload --skip-existing dist/*
     
     - uses: actions/upload-artifact@v2
       with:
