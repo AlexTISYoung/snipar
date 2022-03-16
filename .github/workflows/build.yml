@@ -41,13 +41,15 @@ jobs:
           export LIBRARY_PATH="/usr/local/opt/llvm/lib"
           python -m cibuildwheel --output-dir dist
 
-    - name: Publish distribution 📦 to Test PyPI
-      uses: pypa/gh-action-pypi-publish@master
-      with:
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository_url: https://test.pypi.org/legacy/
-        skip_existing: true
-
+    - name: Upload to TestPyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
+          TWINE_REPOSITORY: testpypi
+          skip_existing: true
+        run: |
+          python3 -m twine upload dist/*
+    
     - uses: actions/upload-artifact@v2
       with:
         path: ./dist/*.whl
