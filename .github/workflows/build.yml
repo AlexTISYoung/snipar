@@ -47,10 +47,12 @@ jobs:
     - name: Upload to TestPyPI
       env:
         TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.TWINE_TEST_TOKEN }}
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         TWINE_REPOSITORY: testpypi
         skip_existing: true
       run: |
+        echo TWINE_PASSWORD ........... $TWINE_PASSWORD 
+        echo TWINE_REPOSITORY ........... $TWINE_REPOSITORY 
         python -m twine upload dist/*
     
     - uses: actions/upload-artifact@v2
