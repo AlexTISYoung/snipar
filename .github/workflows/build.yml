@@ -39,6 +39,7 @@ jobs:
     - name: Build wheels (macos-latest)
       if: matrix.os == 'macos-latest'
       run: |
+        python --version
         brew install llvm
         export LIBRARY_PATH="/usr/local/opt/llvm/lib"
         python -m cibuildwheel --output-dir dist
