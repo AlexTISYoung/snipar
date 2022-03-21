@@ -301,7 +301,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, king_segs = None, snipar_ibd = None, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -316,23 +316,12 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
         unphased_address : str
             Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
         
-        king_ibd : pd.DataFrame, optional
-            A pandas dataframe containing IBD statuses for all SNPs.
-            This It has these columns: "chr", "ID1", "ID2", "IBDType", "StartSNP", "StopSNP".
-            Each line states an IBD segment between a pair on individuals. This can be generated using King software.
-            Either king inputs or snipar should be provided.
+        ibd_address : str
+            address of the ibd file. The king segments file should be accompanied with an allsegs file.
 
-        king_segs : pd.DataFrame, optional
-            A pandas dataframe containing IBD segments that have been processed.
-            This It has these columns: Segment, Chr, StartSNP, StopSNP
-            Each line states a segment that's been processed. This can be generated using King software.
-            Either king inputs or snipar should be provided.
+        ibd_is_king : boolean
+            Whether the ibd segments are in king format or snipar format.
 
-        snipar_ibd : pd.DataFrame, optional
-            A pandas dataframe containing IBD statuses for all SNPs.
-            This It has these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate
-            Each line states an IBD segment between a pair on individuals. This can be generated using snipar.
-            Either king inputs or snipar should be provided.
 
         bim_address : str, optional
             Address of the bim file if it's different from the address of the bed file. Does not include '.bim'.
@@ -422,27 +411,42 @@ def prepare_data(pedigree, phased_address, unphased_address, king_ibd = None, ki
     fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
     logging.info(f"with chromosomes {chromosomes} loading bim file ...")      
     logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
-    if snipar_ibd is None:
-        ibd = preprocess_king(king_ibd, king_segs, bim, chromosomes, sibships)
+    if ibd_address is None:
+        logging.info(f"with chromosomes {chromosomes} making an empty ibd dataframe")
+        if (sibships["sib_count"]>1).any():
+            raise Exception("Should provide ibd file in the presense of families with multiple sibs")
+        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
+        ibd = pd.DataFrame(columns=cols)
     else:
-        ibd = snipar_ibd.astype(str)
-        ibd[["IBDType", "start_coordinate", "stop_coordinate"]] = ibd[["IBDType", "start_coordinate", "stop_coordinate"]].astype(int)
-        #Adding location of start and end of each
-        chromosomes = chromosomes.astype(str)
-        if len(chromosomes)>1:
-            ibd = ibd[ibd["Chr"].isin(chromosomes)]
+        ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
+        if ibd_is_king:            
+            king_segs = pd.read_csv(f"{ibd_address}allsegs.txt", delim_whitespace=True).astype(str)                        
+            if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(ibd.columns.values.tolist())):
+                raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
+            ibd = preprocess_king(ibd, king_segs, bim, chromosomes, sibships)
         else:
-            ibd = ibd[ibd["Chr"]==chromosomes[0]]
-        #TODO cancel or generalize this    
-        ibd['segment'] = ibd[['start_coordinate', 'stop_coordinate', "IBDType"]].values.tolist()
-        def create_seg_list(x):
-            elements = list(x)
-            result = []
-            for el in elements:
-                result = result+el
-            return result
-        ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
-
+            if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(ibd.columns.values.tolist())):
+                raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
+            ibd = ibd.astype(str)
+            ibd[["IBDType", "start_coordinate", "stop_coordinate"]] = ibd[["IBDType", "start_coordinate", "stop_coordinate"]].astype(int)
+            #Adding location of start and end of each
+            chromosomes = chromosomes.astype(str)
+            if len(chromosomes)>1:
+                ibd = ibd[ibd["Chr"].isin(chromosomes)]
+            else:
+                ibd = ibd[ibd["Chr"]==chromosomes[0]]
+            #TODO cancel or generalize this    
+            ibd['segment'] = ibd[['start_coordinate', 'stop_coordinate', "IBDType"]].values.tolist()
+            def create_seg_list(x):
+                elements = list(x)
+                result = []
+                for el in elements:
+                    result = result+el
+                return result
+            ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
+    if not ibd:
+        logging.warning(f"with chromosomes {chromosomes} no matching ibd segments")        
+    logging.info("ibd loaded.")        
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
     pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype(str)
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values)).astype('S')

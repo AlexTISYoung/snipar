@@ -15,6 +15,12 @@ Args:
         Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
         These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
+    -silent_progress : bool, optional
+        Hides the percentage of progress from logging
+
+    -use_backup : bool, optional
+        Whether it should use backup imputation where there is no ibd infomation available.
+
     IBD : str
         Address of a file containing IBD statuses for all SNPs without segments.gz suffix. with --snipar_ibd flag this is assumed to be in snipar format and without it, it's assumed to be in king format.
 
@@ -116,6 +122,9 @@ def run_imputation(data):
                     Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
                     These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
+                use_backup : bool, optional
+                    Whether it should use backup imputation where there is no ibd infomation available.
+
                 unphased_address: str, optional
                     Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
                 
@@ -131,14 +140,11 @@ def run_imputation(data):
                 find_optimal_pc : bool, optional
                     It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
-                king_ibd: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, StartSNP, StopSNP
+                ibd_address : str
+                    address of the ibd file. The king segments file should be accompanied with an allsegs file.
 
-                king_seg: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: Segment, Chr, StartSNP, StopSNP
-
-                snipar_ibd: pd.Dataframe
-                    IBD segments. Only needs to contain information about this chromosome. Should contain these columns: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate
+                ibd_is_king : boolean
+                    Whether the ibd segments are in king format or snipar format.
 
                 output_address: str
                     The address to write the result of imputation on. The default value for output_address is 'parent_imputed_chr'.
@@ -170,11 +176,14 @@ def run_imputation(data):
     chunks = data["chunks"]
     pedigree = data["pedigree"]
     control = data["control"]
+    use_backup = data["use_backup"]
     phased_address = data.get("phased_address")
     unphased_address = data.get("unphased_address")
     pcs = data["pcs"]
     pc_ids = data["pc_ids"]
     find_optimal_pc = data["find_optimal_pc"]
+    ibd_address = data.get("ibd_address")
+    ibd_is_king = data.get("ibd_is_king")
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -185,31 +194,9 @@ def run_imputation(data):
     output_compression_opts = data.get("output_compression_opts")
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
-    ibd_address = data.get("ibd_address")
-    ibd_is_king = data.get("ibd_is_king")
-
-    logging.info("Loading ibd ...")
-    snipar_ibd = None
-    king_ibd = None
-    king_seg = None
-    if ibd_address is None:
-        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
-        snipar_ibd = pd.DataFrame(columns=cols)
-    else:
-        ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
-        if ibd_is_king:
-            king_ibd = ibd
-            king_seg = pd.read_csv(f"{ibd_address}allsegs.txt", delim_whitespace=True).astype(str)                        
-            if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(king_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
-        else:
-            snipar_ibd = ibd
-            if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(snipar_ibd.columns.values.tolist())):
-                raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
-    logging.info("ibd loaded.")
-
+    silent_progress = data.get("silent_progress")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, king_ibd, king_seg, snipar_ibd, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
     number_of_snps = len(bim)
     start_time = time()
     #Doing imputation chunk by chunk
@@ -226,7 +213,7 @@ def run_imputation(data):
             chunk_start = start+i*interval
             chunk_end = min(start+(i+1)*interval, end)
             phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end, pcs, pc_ids, find_optimal_pc)
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
             logging.info(f"imputing chunk {i}/{chunks} done")
         
         #Merging chunks one by one and then removing the outputs
@@ -269,103 +256,14 @@ def run_imputation(data):
         logging.info(f"merging chunks done")
     elif chunks == 1:
         phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts)
+        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
     else:
         raise Exception("invalid chunks, chunks should be a positive integer")  
     end_time = time()
     return (end_time-start_time)
 
 #does the imputation and writes the results
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c',
-                        action='store_true')
-    parser.add_argument('--ibd',
-                        type=str,
-                        help='IBD file withoout suffix')
-    parser.add_argument('--ibd_is_king',
-                        action='store_true',
-                        help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
-    parser.add_argument('--bgen',
-                        type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
-    parser.add_argument('--bed',
-                        type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
-    parser.add_argument('--from_chr',
-                        type=int,                        
-                        help='Which chromosome (<=). Should be used with to_chr parameter.')
-    parser.add_argument('--to_chr',
-                        type=int,
-                        help='Which chromosome (<). Should be used with from_chr parameter.')
-    parser.add_argument('--bim',
-                        type=str,
-                        default = None,
-                        help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
-    parser.add_argument('--fam',
-                        type=str,
-                        default = None,
-                        help='Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes')
-    parser.add_argument('--out',
-                        type=str,
-                        default = "parent_imputed",
-                        help="Writes the result of imputation for chromosome i to outprefix{i}")
-    parser.add_argument('--start',
-                        type=int,
-                        help='Start index of SNPs to perform imputation for in genotype file (starting at zero). Should be used with end parameter.',
-                        default=None)
-    parser.add_argument('--end',
-                        type=int,
-                        help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1). Should be used with start parameter.',
-                        default=None)
-    parser.add_argument('--pedigree',
-                        type=str,
-                        default = None,
-                        help='Pedigree file with siblings sharing family ID')
-    parser.add_argument('--king',
-                        type=str,
-                        default = None,
-                        help='Address of the king file')
-    parser.add_argument('--agesex',
-                        type=str,
-                        default = None,
-                        help='Address of the agesex file with header "FID IID age sex"')
-    parser.add_argument('--pcs',
-                        type=str,
-                        default = None,
-                        help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
-    parser.add_argument('--pc_num',
-                        type=int,
-                        default = None,
-                        help='Number of PCs to consider')
-    parser.add_argument('-find_optimal_pc',
-                        action='store_true',
-                        help='It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.')
-    parser.add_argument('--threads',
-                        type=int,
-                        default=1, 
-                        help='Number of the cores to be used')
-    parser.add_argument('--processes',
-                        type=int,
-                        default=1,
-                        help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
-    parser.add_argument('--chunks',
-                        type=int,
-                        default=1,
-                        help='Number of chunks in each process')
-    parser.add_argument('--output_compression',
-                        type=str,
-                        default=None,
-                        help='Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf')
-    parser.add_argument('--output_compression_opts',
-                        type=int,
-                        default=None,
-                        help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
-    parser.add_argument('--pedigree_nan',
-                        type=str,
-                        default='0',
-                        help='The value representing NaN in the pedigreee.')
-
-    args=parser.parse_args()
+def main(args):
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
     
@@ -428,6 +326,7 @@ if __name__ == "__main__":
         return None
     inputs = [{"pedigree": pedigree,
             "control":args.c,
+            "use_backup":args.use_backup,
             "phased_address": none_tansform(args.bgen, "~", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "~", str(chromosome)),
             "ibd_address": none_tansform(args.ibd, "~", str(chromosome)),            
@@ -446,6 +345,7 @@ if __name__ == "__main__":
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
             "pedigree_nan":args.pedigree_nan,
+            'silent_progress':args.silent_progress
             }
             for chromosome in chromosomes]
     #TODO output more information about the imputation inside the hdf5 filehf
@@ -460,3 +360,101 @@ if __name__ == "__main__":
             run_imputation(args)
         end_time = time()
         logging.info(f"imputation time: {end_time-start_time}")
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-c',
+                    action='store_true',
+                    help = "Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs. These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.")
+parser.add_argument('-silent_progress',
+                    action='store_true',
+                    help = "Hides the percentage of progress from logging")
+parser.add_argument('-use_backup',
+                    action='store_true',
+                    help = "Whether it should use backup imputation where there is no ibd infomation available")                    
+parser.add_argument('--ibd',
+                    type=str,
+                    help='IBD file withoout suffix')
+parser.add_argument('--ibd_is_king',
+                    action='store_true',
+                    help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
+parser.add_argument('--bgen',
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+parser.add_argument('--bed',
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
+parser.add_argument('--from_chr',
+                    type=int,                        
+                    help='Which chromosome (<=). Should be used with to_chr parameter.')
+parser.add_argument('--to_chr',
+                    type=int,
+                    help='Which chromosome (<). Should be used with from_chr parameter.')
+parser.add_argument('--bim',
+                    type=str,
+                    default = None,
+                    help='Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes')
+parser.add_argument('--fam',
+                    type=str,
+                    default = None,
+                    help='Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes')
+parser.add_argument('--out',
+                    type=str,
+                    default = "parent_imputed",
+                    help="Writes the result of imputation for chromosome i to outprefix{i}")
+parser.add_argument('--start',
+                    type=int,
+                    help='Start index of SNPs to perform imputation for in genotype file (starting at zero). Should be used with end parameter.',
+                    default=None)
+parser.add_argument('--end',
+                    type=int,
+                    help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1). Should be used with start parameter.',
+                    default=None)
+parser.add_argument('--pedigree',
+                    type=str,
+                    default = None,
+                    help='Pedigree file with siblings sharing family ID')
+parser.add_argument('--king',
+                    type=str,
+                    default = None,
+                    help='Address of the king file')
+parser.add_argument('--agesex',
+                    type=str,
+                    default = None,
+                    help='Address of the agesex file with header "FID IID age sex"')
+parser.add_argument('--pcs',
+                    type=str,
+                    default = None,
+                    help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
+parser.add_argument('--pc_num',
+                    type=int,
+                    default = None,
+                    help='Number of PCs to consider')
+parser.add_argument('-find_optimal_pc',
+                    action='store_true',
+                    help='It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.')
+parser.add_argument('--threads',
+                    type=int,
+                    default=1, 
+                    help='Number of the cores to be used')
+parser.add_argument('--processes',
+                    type=int,
+                    default=1,
+                    help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
+parser.add_argument('--chunks',
+                    type=int,
+                    default=1,
+                    help='Number of chunks in each process')
+parser.add_argument('--output_compression',
+                    type=str,
+                    default=None,
+                    help='Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf')
+parser.add_argument('--output_compression_opts',
+                    type=int,
+                    default=None,
+                    help='Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.')
+parser.add_argument('--pedigree_nan',
+                    type=str,
+                    default='0',
+                    help='The value representing NaN in the pedigreee.')
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
+    args=parser.parse_args()
+    main(args)

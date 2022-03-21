@@ -5,7 +5,7 @@ from snipar.imputation.preprocess_data import create_pedigree, add_control
 import networkx as nx
 import os
 import numpy as np
-tests_root = os.path.dirname(__file__)
+from snipar.tests.utils import *
 
 def node_match(node1, node2):
     return node1["observed"] == node2["observed"]
@@ -33,7 +33,7 @@ def create_graph_from_pedigree(pedigree):
     return fam_tree
 
 
-class TestPedigree(unittest.TestCase):
+class TestPedigree(SniparTest):
     def test_create_pedigree(self):
         result = create_pedigree(f"{tests_root}/test_data/pedigree_creation_sample.king",
                                    f"{tests_root}/test_data/pedigree_creation_sample.agesex",

@@ -1,0 +1,466 @@
+DIR=/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1
+#plink2 --bfile $DIR/genotype/non_europe_filter_maf05/MCS --pca 20  approx --out $DIR/genotype/non_europe_filter_maf05/pca
+#----------------------------------------
+#---------------europians----------------
+#----------------------------------------
+
+plink --bfile $DIR/genotype/MCS --keep $DIR/genotype/eur_samples.txt --maf 0.05 --make-bed --out $DIR/genotype/europe_filter_maf05/MCS
+
+for chr in {1..23}; do \
+plink --bfile $DIR/genotype/europe_filter_maf05/MCS --chr $chr --make-bed --out $DIR/genotype/europe_filter_maf05/by_chrom/chr${chr}; \
+done
+
+king -b $DIR/genotype/europe_filter_maf05/MCS.bed\
+ --related \
+ --degree 1\
+ --prefix $DIR/genotype/europe_filter_maf05/MCS
+
+king -b $DIR/genotype/europe_filter_maf05/MCS.bed\
+ --ibdseg \
+ --prefix $DIR/genotype/europe_filter_maf05/king \
+ --degree 
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/europe_filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/europe_filter_maf05/imputed_parents/pcs_nof~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t([21], '${DIR}/genotype/europe_filter_maf05/imputed_parents/pcs_nof', '${DIR}/genotype/europe_filter_maf05/by_chrom/chr', outname_prefix='europe_filter_maf05_pcs_nof'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/europe_filter_maf05/imputed_parents/pcs_nof_europe_filter_maf05_pcs_nof_pm_qq.png
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/europe_filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --pcs "${DIR}/genotype/whole_genome_pc.csv" \
+            --pc_num 7 \
+            --output_address "${DIR}/genotype/europe_filter_maf05/imputed_parents/pcs_f7~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t([21], '${DIR}/genotype/europe_filter_maf05/imputed_parents/pcs_f7', '${DIR}/genotype/europe_filter_maf05/by_chrom/chr', outname_prefix='europe_filter_maf05_pcs_f7'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/europe_filter_maf05/imputed_parents/pcs_f7_europe_filter_maf05_pcs_f7_pm_qq.png
+
+
+
+#----------------------------------------
+#-------------non-europians--------------
+#----------------------------------------
+plink --bfile $DIR/genotype/MCS --remove $DIR/genotype/eur_samples.txt --maf 0.05 --make-bed --out $DIR/genotype/non_europe_filter_maf05/MCS
+
+for chr in {1..23}; do \
+plink --bfile $DIR/genotype/non_europe_filter_maf05/MCS --chr $chr --make-bed --out $DIR/genotype/non_europe_filter_maf05/by_chrom/chr${chr}; \
+done
+
+king -b $DIR/genotype/non_europe_filter_maf05/MCS.bed\
+ --related \
+ --degree 1\
+ --prefix $DIR/genotype/non_europe_filter_maf05/MCS
+
+king -b $DIR/genotype/non_europe_filter_maf05/MCS.bed\
+ --ibdseg \
+ --prefix $DIR/genotype/non_europe_filter_maf05/king \
+ --degree 
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/non_europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/non_europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/non_europe_filter_maf05/agesex.txt" \
+            --from_chr 1 \
+            --to_chr 23\
+            --output_address "${DIR}/genotype/non_europe_filter_maf05/imputed_parents/pcs_nof~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t(list(range(1,23)), '${DIR}/genotype/non_europe_filter_maf05/imputed_parents/pcs_nof', '${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr', outname_prefix='non_europe_filter_maf05_pcs_nof'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/non_europe_filter_maf05/imputed_parents/pcs_nof_non_europe_filter_maf05_pcs_nof_pm_qq.png
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/non_europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/non_europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/non_europe_filter_maf05/agesex.txt" \
+            --from_chr 1 \
+            --to_chr 23 \
+            --pcs "${DIR}/genotype/whole_genome_pc.csv" \
+            --pc_num 7 \
+            --processes 5 \
+            --output_address "${DIR}/genotype/non_europe_filter_maf05/imputed_parents/pcs_f7~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t(list(range(1,23)), '${DIR}/genotype/non_europe_filter_maf05/imputed_parents/pcs_f7', '${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr', outname_prefix='non_europe_filter_maf05_pcs_f7'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/non_europe_filter_maf05/imputed_parents/pcs_f7_non_europe_filter_maf05_pcs_f7_pm_qq.png
+
+
+#----------------------------------------
+#-------------whole sample--------------
+#----------------------------------------
+mkdir $DIR/genotype/filter_maf05
+mkdir $DIR/genotype/filter_maf05/imputed_parents/
+mkdir $DIR/genotype/filter_maf05/by_chrom/
+
+plink --bfile $DIR/genotype/MCS --maf 0.05 --make-bed --out $DIR/genotype/filter_maf05/MCS
+
+for chr in {1..23}; do \
+plink --bfile $DIR/genotype/filter_maf05/MCS --chr $chr --make-bed --out $DIR/genotype/filter_maf05/by_chrom/chr${chr}; \
+done
+
+king -b $DIR/genotype/filter_maf05/MCS.bed\
+ --related \
+ --degree 1\
+ --prefix $DIR/genotype/filter_maf05/MCS
+
+king -b $DIR/genotype/filter_maf05/MCS.bed\
+ --ibdseg \
+ --prefix $DIR/genotype/filter_maf05/king \
+ --degree 
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/filter_maf05/king" \
+            --bed "${DIR}/genotype/filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/filter_maf05/imputed_parents/pcs_nof~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t([21], '${DIR}/genotype/filter_maf05/imputed_parents/pcs_nof', '${DIR}/genotype/filter_maf05/by_chrom/chr', outname_prefix='filter_maf05_pcs_nof'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/filter_maf05/imputed_parents/pcs_nof_filter_maf05_pcs_nof_pm_qq.png
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/filter_maf05/king" \
+            --bed "${DIR}/genotype/filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --pcs "${DIR}/genotype/whole_genome_pc.csv" \
+            --pc_num 7 \
+            --processes 5 \
+            --output_address "${DIR}/genotype/filter_maf05/imputed_parents/pcs_f7~" 
+
+
+python -c "from tests.test_manhattan import imputation_test as t
+print(t([21], '${DIR}/genotype/filter_maf05/imputed_parents/pcs_f7', '${DIR}/genotype/filter_maf05/by_chrom/chr', outname_prefix='filter_maf05_pcs_f7'))
+"
+/var/genetics/data/mcs/private/latest/raw/gen/NCDS_SFTP_1TB_1/genotype/non_europe_filter_maf05/imputed_parents/pcs_f7_non_europe_filter_maf05_pcs_f7_pm_qq.png
+
+
+---------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/non_europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/non_europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/non_europe_filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/non_europe_filter_maf05/imputed_parents/realr~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/non_europe_filter_maf05/imputed_parents/realr', '${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr'))
+"
+(nan, 0.9195259414826445)
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/non_europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/non_europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/non_europe_filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/non_europe_filter_maf05/imputed_parents/zero~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/non_europe_filter_maf05/imputed_parents/zero', '${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr'))
+"
+(nan, 1.075112860796488)
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/non_europe_filter_maf05/king" \
+            --bed "${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr~" \
+            --king "${DIR}/genotype/non_europe_filter_maf05/MCS.kin0" \
+            --agesex "${DIR}/genotype/non_europe_filter_maf05/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/non_europe_filter_maf05/imputed_parents/glm~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/non_europe_filter_maf05/imputed_parents/glm', '${DIR}/genotype/non_europe_filter_maf05/by_chrom/chr'))
+"
+(nan, 0.9140182444601808)
+
+
+with 3 (nan, 1.0004615484196286)
+
+with 10 (nan, 0.9789158603906452)
+
+10 penalized (nan, 1.027771378212021)
+
+
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/zero_f_~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/zero_f_', '${DIR}/genotype/by_chrom/chr'))
+"
+(1.124178312788569, 0.8714725217448079)
+
+
+
+
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/reallr_f~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/reallr_f', '${DIR}/genotype/by_chrom/chr'))
+"
+0.9829686023900867, 0.9046741723457948
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+================================================
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/flex_f_~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/flex_f', '${DIR}/genotype/by_chrom/chr'))
+"
+(1.0651992035957976, 1.1004300588574079)
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/normal_f_~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/normal_f', '${DIR}/genotype/by_chrom/chr'))
+"
+(1.0006223710342583, 1.0042501527976377)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/zero_f_~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/zero_f_', '${DIR}/genotype/by_chrom/chr'))
+"
+(1.124178312788569, 0.8714725217448079)
+
+
+
+
+
+
+
+
+python impute_runner.py \
+            -c \
+            "${DIR}/genotype/king" \
+            --bed "${DIR}/genotype/by_chrom/chr~" \
+            --king "${DIR}/genotype/MCS.kin0" \
+            --agesex "${DIR}/genotype/agesex.txt" \
+            --from_chr 21 \
+            --to_chr 22 \
+            --output_address "${DIR}/genotype/imputed_parents/reallr_f~" 
+
+
+python -c "from tests.test_commandline import imputation_test as t
+print(t([21], '${DIR}/genotype/imputed_parents/reallr_f', '${DIR}/genotype/by_chrom/chr'))
+"
+0.9829686023900867, 0.9046741723457948

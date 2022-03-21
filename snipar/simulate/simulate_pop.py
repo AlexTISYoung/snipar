@@ -90,8 +90,6 @@ direct_indirect_cov_matrix = [[direct_var, direct_indirect_cov],[direct_indirect
 direct_indirect = multivariate_normal.rvs(cov = direct_indirect_cov_matrix, size=nsnp)
 direct_effects = direct_indirect[:,0].reshape((-1, 1))
 indirect_effects = direct_indirect[:,1].reshape((-1, 1))
-print("direct_effects", direct_effects)
-print("indirect_effects", indirect_effects)
 print("direct_indirect_cov_matrix", direct_indirect_cov_matrix)
 
 v_direct = []

@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from numpy import testing
 from snipar import lmm
+from snipar.tests.utils import *
 
 def random_design(labels):
     unique_labels = np.unique(labels)
@@ -36,7 +37,7 @@ def safe_alpha_mle(y,X,Sigma):
     X_T_y = np.dot(X_T_Sigma_inv,y)
     return np.linalg.solve(X_T_X,X_T_y)
 
-class test_regrnd_functions(unittest.TestCase):
+class test_regrnd_functions(SniparTest):
 
     def test_alpha_mle(self):
         sigma2 = float(1)

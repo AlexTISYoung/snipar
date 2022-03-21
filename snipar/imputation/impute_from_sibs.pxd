@@ -23,7 +23,9 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       int[:, :, :] sib_hap_IBDs,                      
                       int len_snp_ibd0,
                       int len_snp_ibd1,
-                      int len_snp_ibd2) nogil
+                      int len_snp_ibd2,
+                      bint use_backup
+                      ) nogil
 
 
 cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
@@ -42,6 +44,7 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
+                      bint use_backup
                       ) nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
