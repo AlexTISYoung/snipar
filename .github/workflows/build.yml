@@ -40,6 +40,7 @@ jobs:
       if: matrix.os == 'macos-latest'
       run: |
         python --version
+        ${{ matrix.python-version }} --version
         brew install llvm
         export LIBRARY_PATH="/usr/local/opt/llvm/lib"
         python -m cibuildwheel --output-dir dist
