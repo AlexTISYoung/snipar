@@ -14,7 +14,7 @@ jobs:
     env:
       CC: /usr/local/opt/llvm/bin/clang
       CXX: /usr/local/opt/llvm/bin/clang++
-      CIBW_BUILD: cp3*
+      CIBW_BUILD: cp3[678]*
       CIBW_SKIP: cp31*
     environment: TEST_PYPI_API_TOKEN
     strategy:
