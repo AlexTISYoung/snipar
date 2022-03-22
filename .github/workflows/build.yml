@@ -87,7 +87,8 @@ jobs:
     - name: installing
       run: |
             ls dist
-            pip install --no-index --find-links=dist snipar
+            ls dist/artifact
+            pip install --no-index --find-links=dist/artifact snipar
     
     - name: testing
       run: python -m unittest snipar.tesets
