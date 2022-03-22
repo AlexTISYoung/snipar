@@ -68,7 +68,7 @@ Imputing missing parental genotypes
 
 To impute the missing parental genotypes without using phase information, type:
 
-    ``impute.py chr_1.ibd --bed chr_1 --king king.kin0 --agesex agesex.txt --output_address chr_1 --threads 4 --snipar_ibd``
+    ``impute.py --ibd chr_1.ibd --bed chr_1 --king king.kin0 --agesex agesex.txt --out chr_1 --threads 4``
 
 The script constructs a pedigree from the output of KING's relatedness inference (sample.king),
 and age and sex information (sample.agesex). The pedigree along with the IBD segments shared between siblings recorded in chr_1.ibd.segments.gz are used to impute missing parental genotypes
@@ -77,14 +77,14 @@ from the observed sibling and parental genotypes in sample.bed. The imputed pare
 If phased haplotypes are available in .bgen format, the imputation can use these as input, which improves the information gained by imputation
 in certain situations. To perform imputation from the phased .bgen file in example_data/, use the following command:
 
-    ``impute.py chr_1.ibd --bgen chr_1 --king king.kin0 --agesex agesex.txt --output_address chr_1 --threads 4 --from_chr 1 --to_chr 2 --snipar_ibd``
+    ``impute.py --ibd chr_1.ibd --bgen chr_1 --king king.kin0 --agesex agesex.txt --out chr_1 --threads 4 --from_chr 1 --to_chr 2``
 
 It is necessary to provide the *--from_chr* and *--to_chr* arguments when imputing from .bgen files since they often do not contain information on which chromosome
 the SNPs are located on, and it's necessary to match the IBD segments to the SNPs on the same chromosome.
 
 To use IBD segments output by KING with the --ibdseg argument (sample.king.segments.gz), use the following command:
 
-    ``impute.py king --bgen chr_1 --king king.kin0 --agesex agesex.txt --output_address chr_1 --threads 4 --from_chr 1 --to_chr 2``
+    ``impute.py --ibd king --bgen chr_1 --king king.kin0 --agesex agesex.txt --out chr_1 --threads 4 --from_chr 1 --to_chr 2 --ibd_is_king``
 
 As with the ibd.py script, the impute_runner.py script can use a user input pedigree (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
@@ -104,7 +104,7 @@ where sibling relations in the pedigree are stored in the output of the imputati
 
 To use the .bgen file instead, type:
 
-    ``gwas.py phenotype.txt  --bgen chr_~ --imp chr_~ --threads 4``
+    ``gwas.py phenotype.txt ./ --bgen chr_~ --imp chr_~ --threads 4``
 
 The script outputs summary statistics in a gzipped text file: h2_quad_0.8.sumstats.gz. This file gives the chromosome,
 SNP id, position, alleles (A1, the allele that effects are given with respect to; and A2, the alternative allele),
@@ -133,7 +133,7 @@ The output contains different datasets:
 
 Now we have estimated SNP specific summary statistics. To compare to the true effects, run
 
-    ``python snipar/example/estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
+    ``python ../snipar/example/estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
@@ -157,7 +157,7 @@ Correlations between effects
 To compute these correlations from the effects estimated in this tutorial (output by gwas.py to h2_quad_0.8.sumstats.gz) 
 using the LD scores computed by ibd.py (and output to 1.l2.ldscore.gz), use the following command: 
 
-    ``correlate.py chr_~ effect --ldscores ~``
+    ``correlate.py chr_~ effect --ldscores ./~``
 
 This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
 and their standard errors, estimated by block-jacknife, are output to effect_corrs.txt. 

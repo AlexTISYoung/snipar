@@ -10,6 +10,7 @@ f = h5py.File(args.estimated_effects,'r')
 
 ests = np.array(f['estimate'])
 not_nan = ~np.isnan(ests[:,0])
+ests = ests[not_nan, :]
 
 b = np.loadtxt(args.true_effects)
 b = b[not_nan,:]
