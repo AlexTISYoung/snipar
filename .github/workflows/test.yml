@@ -28,7 +28,7 @@ jobs:
       run: python3 setup.py install
 
     - name: tmp
-      run: python -c "import bgen_reader;print(bgen_reader.__version__)"
+      run: pip freeze | grep bgen-reader
     
     - name: run tests
       working-directory: ./snipar/tests
