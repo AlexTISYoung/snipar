@@ -13,7 +13,7 @@ jobs:
       CC: /usr/local/opt/llvm/bin/clang
       CXX: /usr/local/opt/llvm/bin/clang++
       # CIBW_BUILD: cp3[678]*
-      CIBW_BUILD: cp3[8]*
+      CIBW_BUILD: cp38*
       CIBW_SKIP: cp31*
     environment: TEST_PYPI_API_TOKEN
     strategy:
@@ -85,7 +85,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
     - name: installing
-      run: pip install --no-index --find-links=dist snipar
+      run: |
+            ls dist
+            pip install --no-index --find-links=dist snipar
     
     - name: testing
       run: python -m unittest snipar.tesets
