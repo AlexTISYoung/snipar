@@ -27,6 +27,9 @@ jobs:
     - name: Install snipar
       run: python3 setup.py install
 
+    - name: tmp
+      run: python -c "import bgen_reader;print(bgen_reader.__version__)"
+    
     - name: run tests
-      working-directory: ./snipar
+      working-directory: ./snipar/tests
       run: python3 -m unittest snipar.tests
