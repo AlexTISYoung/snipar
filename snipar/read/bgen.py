@@ -30,15 +30,25 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
         print(str(snp_ids.shape[0]-len(snp_set))+' SNPs with duplicate IDs removed')
     ## Read and match SNP ids
     imp_bim = convert_str_array(np.array(par_gts_f['bim_values']))
-    # Find relevant column for SNP ids in imputed data
     imp_bim_cols = convert_str_array(np.array(par_gts_f['bim_columns']))
+    # Find relevant column for SNP ids in imputed data
+    found_snp_ids = False
     if 'rsid' in imp_bim_cols:
-        id_col = np.where('rsid' == imp_bim_cols)[0][0]
-    elif 'id' in imp_bim_cols:
-        id_col = np.where('id' == imp_bim_cols)[0][0]
-    else:
-        raise(ValueError('Could not find SNP ids in imputed parental genotypes'))
-    imp_sid = imp_bim[:, id_col]
+        imp_sid = imp_bim[:,np.where(imp_bim_cols=='rsid')[0][0]]
+        if np.unique(imp_sid).shape[0] == 0:
+            found_snp_ids = False
+        else:
+            found_snp_ids = True
+    if not found_snp_ids:
+        if 'id' in imp_bim_cols:
+            imp_sid = imp_bim[:,np.where(imp_bim_cols=='id')[0][0]]
+        else:
+            raise(ValueError('Cannot find imputed SNP ids'))
+    # Get imputed allele ids
+    if 'allele_ids' in imp_bim_cols:
+        imp_alleles = np.array([x.split(',') for x in imp_bim[:,np.where(imp_bim_cols=='allele_ids')[0][0]]])
+    elif 'allele1' in imp_bim_cols and 'allele2' in imp_bim_cols:
+        imp_alleles = imp_bim[:,[np.where(imp_bim_cols=='allele1')[0][0],np.where(imp_bim_cols=='allele2')[0][0]]]
     obs_sid = gts_f.ids
     if np.unique(obs_sid).shape[0] == 1:
         obs_sid = gts_f.rsids
@@ -54,13 +64,31 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
     obs_sid_index = obs_sid_index[in_obs_sid]
     sid = imp_sid[in_obs_sid]
     alleles = alleles[obs_sid_index, :]
+    imp_alleles = imp_alleles[in_obs_sid,:]
     if 'Chr' in imp_bim_cols:
         chr_col = np.where('Chr' == imp_bim_cols)[0][0]
     else:
         chr_col = 0
     chromosome = imp_bim[in_obs_sid,chr_col]
     pos = pos[obs_sid_index]
-    return chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index
+    allele_match = np.logical_and(alleles[:,0]==imp_alleles[:,0],alleles[:,1]==imp_alleles[:,1])
+    if np.sum(allele_match) < alleles.shape[0]:
+        allele_flip = np.logical_and(alleles[:,0]==imp_alleles[:,1],alleles[:,1]==imp_alleles[:,0])
+        allele_mismatch = np.logical_not(np.logical_or(allele_match,allele_flip))
+        n_mismatch = np.sum(allele_mismatch)
+        if n_mismatch == alleles.shape[0]:
+            raise(ValueError('Np alleles match between observed and imputed genotypes'))
+        elif n_mismatch > 0:
+            print('Removing '+str(n_mismatch)+' SNPs with mismatched alleles between imputed and observed')
+            chromosome = chromosome[~allele_mismatch]
+            sid = sid[~allele_mismatch]
+            pos = pos[~allele_mismatch]
+            alleles = alleles[~allele_mismatch]
+            imp_alleles = imp_alleles[~allele_mismatch]
+            in_obs_sid[allele_mismatch] = False
+            obs_sid_index =  obs_sid_index[~allele_mismatch]
+    allele_flip = np.logical_and(alleles[:,0]==imp_alleles[:,1],alleles[:,1]==imp_alleles[:,0])
+    return chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index
 
 def get_snps(gts_f, snp_ids=None):
     """
@@ -123,7 +151,7 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
     if par_gts_f is not None:
         if verbose:
             print('Matching observed and imputed SNPs')
-        chromosome, sid, pos, alleles, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
+        chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
         # Read imputed parental genotypes
         if verbose:
             print('Reading imputed parental genotypes')
@@ -134,6 +162,11 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
             imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
             imp_gts = imp_gts[imp_indices,:]
         imp_fams = imp_fams[imp_indices]
+        # Check for allele flip
+        nflip = np.sum(allele_flip)
+        if nflip>0:
+            print('Flipping alleles of '+str(nflip)+' SNPs to match observed genotypes')
+            imp_gts[:,allele_flip] = 2-imp_gts[:,allele_flip]
     else:
         chromosome, sid, pos, alleles, obs_sid_index = get_snps(gts_f, snp_ids=snp_ids)
         imp_gts = None
