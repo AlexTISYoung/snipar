@@ -24,7 +24,7 @@ setup(name='snipar',
       author_email='alextisyoung@gmail.com',
       license='MIT',
       include_package_data=True,
-      scripts=['gwas.py', 'pgs.py', 'snipar/scripts/impute.py', 'ibd.py','correlate.py'],
+      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
@@ -60,7 +60,7 @@ setup(name='snipar',
             'numba==0.50.0',
             'gitpython==3.1.24',
             'scikit-learn==1.0.2',
-            'statsmodels==0.13.2',
+            'statsmodels==0.10.0',
             ],
       test_suite="snipar/tests",
       zip_safe=False,

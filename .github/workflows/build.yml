@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build wheels on ${{ matrix.os }} ${{ matrix.python-version }}
+    name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     env:
       CC: /usr/local/opt/llvm/bin/clang
@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.8']
     steps:
     - uses: actions/checkout@v2
 
@@ -39,6 +40,8 @@ jobs:
     - name: Build wheels (macos-latest)
       if: matrix.os == 'macos-latest'
       run: |
+        python --version
+        brew install llvm
         export LIBRARY_PATH="/usr/local/opt/llvm/lib"
         python -m cibuildwheel --output-dir dist
 
