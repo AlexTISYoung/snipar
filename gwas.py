@@ -17,7 +17,7 @@ parser.add_argument('--bed',type=str,help='Address of observed genotype files in
 parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
 parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
-parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of parental genotypes (useful when parental genotypes imputed from sibs only)',default = False)
+parser.add_argument('--parsep',action='store_true',help='Regress onto proband and (imputed/observed) paternal and (imputed/observed) maternal genotypes. Default regresses onto the sum of (imputed/observed) parental genotypes.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -133,6 +133,12 @@ print('Transforming phenotype')
 L = null_model.sigma_inv_root(tau, sigma2)
 y.diagonalise(L)
 
+# Figure out parsum
+if args.parsep:
+    parsum = False
+else:
+    parsum = True
+
 for i in range(chroms.shape[0]):
     if args.bed is not None:
         print('Observed genotypes file: '+bedfiles[i])
@@ -145,6 +151,6 @@ for i in range(chroms.shape[0]):
     else:
         print('Estimaing SNP effects')
     process_chromosome(chroms[i], y, ped, tau, sigma2, args.out, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
-                        par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
+                        par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=parsum, 
                         max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                         no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)
