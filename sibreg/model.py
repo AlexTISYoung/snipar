@@ -1,10 +1,10 @@
-from os import system, ttyname
+import code
 from numpy.linalg import solve
 from .sibreg import convert_str_array, get_indices_given_ped, gtarray, make_id_dict, find_par_gts
 import numpy as np
 import numpy.ma as ma
 from numpy.linalg import slogdet
-from scipy.sparse import csc_matrix, csr_matrix, tril, triu
+from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import splu, SuperLU, spsolve, cg, spsolve_triangular
 from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import minimize, OptimizeResult
@@ -28,12 +28,12 @@ from multiprocessing import Pool, RawArray
 import ctypes
 
 
-FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
+# FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(
-    format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
+# logging.basicConfig(
+#     format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +61,7 @@ def timethis(f: Callable):
     return wrap
 
 
-def match_phenotype_(ids: List[str], y: np.ndarray, pheno_ids: List[str]):
+def match_phenotype_(ids: np.ndarray, y: np.ndarray, pheno_ids: List[str]):
     """Match a phenotype to a genotype array by individual IDs.
     """
     id_dict = make_id_dict(ids)
@@ -93,7 +93,7 @@ def get_ids_with_par(par_gts_f: str,
                      ids: np.ndarray = None,
                      sib: bool = False,
                      impute_unrel: bool = True,
-                     return_gt_indices: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+                     return_info: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """Find ids with observed/imputed parents and family labels
     """
     # Imputed parental file
@@ -109,13 +109,14 @@ def get_ids_with_par(par_gts_f: str,
     # Get families with imputed parental genotypes
     fams = convert_str_array(np.array(par_gts_f_['families']))
 
-    logger.debug(f'#ids present in both phen and ped: {len(np.intersect1d(ids, ped[:, 1]))}')
+    # logger.debug(f'#ids present in both phen and ped: {len(np.intersect1d(ids, ped[:, 1]))}')
 
     if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
         gts_f_: Bed = Bed(gts_f, count_A1=True)
         gts_ids = gts_f_.iid[:, 1]
         logger.debug(f'Length of geno: {len(gts_ids)}')
-        logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
+        # logger.debug('#iid' + len(gts_ids))
+        # logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
         logger.debug(f'#ids present in both ped and geno: {len(np.intersect1d(ped[:, 1], gts_ids))}')
         ids, observed_indices, imp_indices = get_indices_given_ped(ped,
                                                                    fams,
@@ -129,7 +130,7 @@ def get_ids_with_par(par_gts_f: str,
         gts_f_ = open_bgen(gts_f)
         gts_ids = gts_f_.samples
         logger.debug(f'Length of geno: {len(gts_ids)}')
-        logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
+        # logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
         logger.debug(f'#ids present in both ped and geno: {len(np.intersect1d(ped[:, 1], gts_ids))}')
         ids, observed_indices, imp_indices = get_indices_given_ped(ped,
                                                                    fams,
@@ -158,9 +159,12 @@ def get_ids_with_par(par_gts_f: str,
     # f = fam_labels[ind]
     # print([ped[i, :] for i in range(len(ped)) if ped[i, 1] in f])
     logger.debug(f'Length of par status: {len(par_status)}')
-    logger.info(f'#missing [F, M]: {(par_status == -1).sum(axis=0)}')
+    logger.debug(f'#missing [F, M]: {(par_status == -1).sum(axis=0)}')
     logger.debug(f'#missing F and M (from par_status): {sum([i == j == -1 for i, j in par_status])}')
     logger.debug(f'#missing F and M (fro gt_indices): {sum([i == j == -1 for _,i, j in gt_indices])}')
+    logger.debug(f'#both par geno: {sum([i == j == 0 for _,i, j in gt_indices])}')
+    logger.debug(f'#both par geno: {sum([i == j == 0 for i, j in par_status])}')
+    logger.debug(f'#one par geno: {sum([i + j == 1 for i, j in par_status])}')
     n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
     logger.debug(f'#unique fam_labels: {np.unique(fam_labels).__len__()}')
     logger.debug(f'#empty fam_labels: {n_empty_fams}')
@@ -175,8 +179,8 @@ def get_ids_with_par(par_gts_f: str,
     logger.debug(f'#iids to use {len(ids)}')
     xx = len([1 for i in fam_labels if '_not_' in i])
     logger.debug(f'{xx}')
-    if return_gt_indices:
-        return ids, fam_labels, gt_indices
+    if return_info:
+        return ids, fam_labels, par_status, gt_indices
     return ids, fam_labels
 
 
@@ -189,8 +193,8 @@ def match_grm_ids(ids: np.ndarray,
     """
     orig_ids = pd.DataFrame({'ids': ids, 'fam_labels': fam_labels})
     if grm_source == 'gcta':
-        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\t', names=[
-                              '_', 'ids_'])[['ids_']]
+        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\s+', names=[
+                              '_', 'ids_'], dtype={'_': str, 'ids_': str})[['ids_']]
     elif grm_source == 'ibdrel':
         grm_ids = pd.read_csv(grm_path + '.seg',
                               sep='\t')[['ID1', 'ID2']]
@@ -376,6 +380,27 @@ def build_grm_arr(grm_path: str, id_dict: Dict[Hashable, int],
     return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
 
 
+def build_grm_arr_from_npz(id_filepath: str, npz_path: str, ids: np.ndarray, id_dict: Dict[Hashable, int]):
+    logger.info('Building grm from npz...')
+    _ids = pd.read_csv(id_filepath, sep="\s+", header=None)[1].astype(str).to_numpy()
+    f = np.load(npz_path)
+    orig = pd.DataFrame({'data': np.float64(f['data']), 'row_ids': _ids[f['row_ind']], 'col_ids': _ids[f['col_ind']]})
+    _ids = pd.read_csv(id_filepath, sep="\s+", header=None)[1].astype(str)
+    _ids = _ids[~_ids.isin(ids)]
+    orig = orig[orig['row_ids'].isin(ids)]
+    orig = orig[orig['col_ids'].isin(ids)]
+    orig['row_ind'] = orig['row_ids'].apply(lambda x: id_dict[x])
+    orig['col_ind'] = orig['col_ids'].apply(lambda x: id_dict[x])
+    # https://stackoverflow.com/questions/45504391/swapping-column-values-based-on-column-conditions-pandas-dataframe
+    cond = orig['row_ind'] < orig['col_ind']
+    orig.loc[cond, ['row_ind', 'col_ind']] = orig.loc[cond, ['col_ind', 'row_ind']].values
+    data = orig['data'].to_numpy()
+    row_ind = orig['row_ind'].to_numpy(dtype='uint32')
+    col_ind = orig['col_ind'].to_numpy(dtype='uint32')
+    logger.info('Done building grm from npz.')
+    return data, row_ind, col_ind
+
+
 def build_ibdrel_arr(ibdrel_path: str, id_dict: Dict[Hashable, int],
                      keep: List[Union[str, int]], 
                      thres: float = 0.05) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -411,7 +436,7 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: Dict[Hashable, int],
         id2 = row.ID2
         ind1, ind2 = id_dict[id1], id_dict[id2]
         ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
-        data[row.Index] = row.PropIBD if row.PropIBD > thres else 0.
+        data[row.Index] = row.PropIBD  # if row.PropIBD > thres else 0.
         row_ind[row.Index] = ind1
         col_ind[row.Index] = ind2
     for i in range(len(keep)):
@@ -423,7 +448,7 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: Dict[Hashable, int],
 
 
 def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
-                        ids: List[str], thres: float = 0.0205) -> None:
+                        ids: np.ndarray, thres: float = 0.0205) -> None:
     """Write ibd relatedness from KING to GCTA GRM format.
     """
     logger.info(f'Reading {ibdrel_path}...')
@@ -440,7 +465,7 @@ def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
         'col_ind': x[1] + 1,
         'non_missing': np.ones(len(x[0]), dtype=np.int)
     })
-
+    # print(full_king)
     def make_ind(df):
         rows, cols = [], []
         for row in df.itertuples():
@@ -450,10 +475,15 @@ def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
             row_ind, col_ind = max(ind1, ind2), min(ind1, ind2)
             rows.append(row_ind + 1)  # GCTA indices start from 1
             cols.append(col_ind + 1)
-        return pd.Series({'row_ind': rows, 'col_ind': cols})
+        return rows, cols  # pd.Series({'row_ind': rows, 'col_ind': cols})
 
     logger.info('Making ibd row and col indices...')
-    king[['row_ind', 'col_ind']] = make_ind(king)
+    # king[['row_ind', 'col_ind']] = make_ind(king)
+    rows, cols = make_ind(king)
+    logger.info('Finished making ibd row and col indices...')
+    # king['row_ind'] = np.array(rows, dtype=np.int)
+    # king['col_ind'] = np.array(cols, dtype=np.int)
+    king = king.assign(row_ind=np.array(rows, dtype=np.int), col_ind=np.array(cols, dtype=np.int))
     king_ = king.merge(full_king, on=['row_ind', 'col_ind'], how='right')[[
         'row_ind', 'col_ind', 'non_missing', 'PropIBD'
     ]]
@@ -461,7 +491,7 @@ def write_ibdrel_to_grm(ibdrel_path: str, output_path: str,
     king_ = king_.fillna(0.)
     king_.loc[king_.row_ind == king_.col_ind, 'PropIBD'] = 1.
     # sparsification
-    king_.loc[king_['PropIBD'] < thres, 'PropIBD'] = 0.
+    # king_.loc[king_['PropIBD'] < thres, 'PropIBD'] = 0.
     logger.info(f'Writting ibd matrix to {output_path}.grm.gz...')
     king_.to_csv(output_path + '.grm.gz',
                  index=False,
@@ -582,23 +612,24 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False) ->
             'No need to impute parental genotypes of unrelated individuals if sib effect is modelled.'
         )
         return G
-    if G.freqs is None:
-        G.compute_freqs()
+    # if G.freqs is None:
+    #     G.compute_freqs()
     # missing_ind = np.min(gt_indices, axis=1)
     # missing_ind = none_missing_ind == -1
     missing_ind = G.gts[:, 1, 0] == -1
-    np.testing.assert_array_equal(missing_ind, G.gts[:, 1, 1] == -1, err_msg='what the')
-    np.testing.assert_array_equal(missing_ind, G.gts[:, 1, 2] == -1, err_msg='what the')
-    logger.info(f'Number of unrelated individuals that need linear imputations: {missing_ind.sum()}.')
+    # G.compute_freqs(G.gts[:, 1, 0] > -1)
+    np.testing.assert_array_equal(missing_ind, G.gts[:, 1, 1] == -1, err_msg='Missing indices don\'t match across snps.')
+    np.testing.assert_array_equal(missing_ind, G.gts[:, 1, 2] == -1, err_msg='Missing indices don\'t match across snps.')
+    logger.debug(f'Number of unrelated individuals that need linear imputations: {missing_ind.sum()}.')
     imp = 0.5 * G.gts[missing_ind, 0, :] + G.freqs
     G.gts[missing_ind, 1, :] = imp
     if parsum:
         G.gts[missing_ind, 1, :] += imp
     else:
         if __debug__:
-            np.testing.assert_array_equal(missing_ind, G.gts[:, 2, 0] == -1, err_msg='hererer')
+            np.testing.assert_array_equal(missing_ind, G.gts[:, 2, 0] == -1)
         G.gts[missing_ind, 2, :] = imp
-    logger.info(f'Number of missingness left after linear imputation: {(G.gts[:, 1, 0] == -1).sum()}.')
+    logger.debug(f'Number of missingness left after linear imputation: {(G.gts[:, 1, 0] == -1).sum()}.')
     return G
 
 
@@ -616,6 +647,32 @@ def he_reg(grm_arr: np.ndarray, sib_arr: np.ndarray, pheno_prod_arr: np.ndarray)
     beta1 = 0 if beta1 < 0 else beta1
     beta2 = 0 if beta2 < 0 else beta2
     return beta1, beta2, err
+
+
+def compute_neff_ratio(sib_corr: float, f: float, n0: int, n1: int, phased: bool = False) -> float:
+    """Compute theoretical effective sample size ratio of combined sample analysis versus related sample analysis.
+
+    Args:
+        sib_corr (float): sibling correlation.
+        f (float): allele frequency.
+        n0 (int): number of sib pairs in related sample.
+        n1 (int): unrelated sample size.
+
+    Returns:
+        float: effective sample size ratio.
+    """
+    if phased:
+        nu = 3 / 4
+    else:
+        nu = 3 / 4 - f * (1 - f) / 8.
+    var_direct = np.linalg.inv(
+        n0 / (1 - sib_corr ** 2) * np.array(
+            [[2 - sib_corr, 2 * (1 - sib_corr)],
+            [2 * (1 - sib_corr), 4 * nu * (1 - sib_corr)]]
+        ) + n1
+    )[0, 0]
+    var_direct0 = 4 * nu * (1 - sib_corr ** 2) / (4 * n0 * (nu * (2 - sib_corr) + sib_corr - 1))
+    return var_direct0 / var_direct
 
 
 class GradHessComponents(NamedTuple):
@@ -711,6 +768,7 @@ def worker_func_(ind_lst):
 class LinearMixedModel:
     """Wrapper of data and functions that compute estimates of variance components or SNP effects.
     """
+    logger = logger.getChild(__qualname__)
 
     # jitter = 1e-6  # 1e-3
     _vec_linear2coord: Callable[..., Tuple[np.ndarray, np.ndarray]] = np.vectorize(
@@ -720,7 +778,8 @@ class LinearMixedModel:
     def __init__(self, y: np.ndarray, 
                  varcomp_arr_lst: Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], ...],
                  varcomps: Tuple[float, ...] = None,
-                 covar_X: np.ndarray = None) -> None:
+                 covar_X: np.ndarray = None,
+                 add_intercept: bool = False) -> None:
         """Initilize a LinearMixedModel instance.
 
         Args:
@@ -736,21 +795,27 @@ class LinearMixedModel:
         if y.ndim != 1:
             raise ValueError('y should be a 1-d array.')
         self.y: np.ndarray = y
+        self.n: int = len(y)
         self.has_covar: bool = False
         if covar_X is not None:
-            if covar_X.ndim != 2:
-                raise ValueError('covar_X should be a 2-d array.')
+            if covar_X.ndim == 1:
+                covar_X = covar_X.reshape((self.n,1))
+            if covar_X.ndim > 2:
+                raise ValueError('covar_X should be a 1-d or 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
                 raise ValueError(
                     f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
             self.Z: np.ndarray = ma.getdata(covar_X)
             self.has_covar = True
-            # logger.info('Adjusting phenotype for fixed covariates...')
+            # self.logger.info('Adjusting phenotype for fixed covariates...')
             # self.y = self.fit_covar(y, covar_X)
-            # logger.info('Finished adjusting.')
-        self.n: int = len(y)
-        logger.info(f'#individuals: {self.n}.')
+            # self.logger.info('Finished adjusting.')
+        # self.n: int = len(y)
+        self.logger.info(f'#individuals: {self.n}.')
 
+        if add_intercept:
+            self.Z = np.hstack((np.ones((self.n, 1),dtype=self.Z.dtype), self.Z))
+            
         def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
             nz = arr.nonzero()[0]
             return arr[nz], nz
@@ -770,6 +835,7 @@ class LinearMixedModel:
         self.optimized: bool
         self.jitter: float
         y_var: float = self.y.var()
+        self.logger.info(f'Phenotypic variance: {y_var}.')
         self.jitter = y_var / 1000.
         if varcomps is not None:
             if len(varcomps) != self.n_varcomps:
@@ -778,11 +844,13 @@ class LinearMixedModel:
             self.optimized = True
         else:
             self._varcomps = tuple(
-                self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
+                # self.y.var() if i == self.n_varcomps - 1 else 0. for i in range(self.n_varcomps))
+                self.y.var() / self.n_varcomps for i in range(self.n_varcomps))
+            self.logger.info(f'init varcomps: {self._varcomps}.')
             # self._varcomps = tuple(
             #     y_var / self.n_varcomps for i in range(self.n_varcomps))
             self.optimized = False
-        logger.info(f'Number of variance components: {self.n_varcomps}.')
+        self.logger.info(f'Number of variance components: {self.n_varcomps}.')
 
     # deprecated
     @staticmethod
@@ -793,7 +861,7 @@ class LinearMixedModel:
             raise TypeError(
                 f'Input dimensions do not match. y: {y.shape}. covar_X: {covar_X.shape}.'
             )
-        y_adjusted: np.ndarray = y - covar_X.dot(np.linalg.solve(
+        y_adjusted: np.ndarray = y - covar_X.dot(solve(
             covar_X.T.dot(covar_X), covar_X.T.dot(y)))
         return y_adjusted
 
@@ -1028,7 +1096,7 @@ class LinearMixedModel:
         assert n == self.n
         if self.has_covar:
             gts_ = gts.reshape((gts.shape[0], int(k * l)))
-            logger.info('Calculating projecting matrix...')
+            self.logger.info('Calculating projecting matrix...')
             M_X: np.ndarray = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
             logger.info('Projecting genotype...')
             X_: np.ndarray = M_X.reshape((self.n, k, l)).transpose(2, 0, 1)
@@ -1037,11 +1105,11 @@ class LinearMixedModel:
                 M.flat[::self.n + 1] += 1
                 X__ = M.dot(gts_).reshape((self.n, k, l)).transpose(2, 0, 1)
                 np.testing.assert_array_almost_equal(X__, X_)
-            logger.info('Done projecting genotype.')
-            logger.info('Projecting phenotype...')
+            self.logger.info('Done projecting genotype.')
+            self.logger.info('Projecting phenotype...')
             # y: np.ndarray = M @ self.y
             y: np.ndarray = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
-            logger.info('Start estimating snp effects...')
+            self.logger.info('Start estimating snp effects...')
             Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, X_)
             Vinv_y: np.ndarray = self.V_lu.solve(y)
             XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
@@ -1051,7 +1119,7 @@ class LinearMixedModel:
             Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, gts)
             XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
             XT_Vinv_y: np.ndarray = np.einsum('...ij,i', gts, self.Vinv_y)
-        alpha: np.ndarray = np.linalg.solve(XT_Vinv_X, XT_Vinv_y)
+        alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
         alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
         alpha_ses: np.ndarray = np.sqrt(
             np.diagonal(alpha_cov, axis1=1, axis2=2))
@@ -1103,6 +1171,10 @@ class LinearMixedModel:
         """
         if not self.optimized:
             raise ValueError('Variance components are not optimized.')
+        # return tuple(
+        #     self._varcomps[i] if i < self.n_varcomps - 1 else self._varcomps[i] + self.jitter 
+        #     for i in range(self.n_varcomps)
+        # )
         return self._varcomps
 
     @cached_property_depends_on('_varcomps')
@@ -1112,7 +1184,7 @@ class LinearMixedModel:
         Returns:
             csc_matrix: V in sparse csc format
         """
-        logger.debug('Calculating V...')
+        # self.logger.debug('Calculating V...')
         varcomps = np.array(self._varcomps)
         varcomps[-1] += self.jitter
         V: csc_matrix = sum(
@@ -1127,7 +1199,7 @@ class LinearMixedModel:
         Returns:
             SuperLU: wrapper object holding LU factorization of V
         """
-        logger.debug('Calculating V_lu')
+        # self.logger.debug('Calculating V_lu')
         lu: SuperLU = splu(self.V)
         return lu
 
@@ -1150,7 +1222,7 @@ class LinearMixedModel:
         Returns:
             np.ndarray: Vinv_e
         """
-        logger.debug('Calculating Vinv_y')
+        # self.logger.debug('Calculating Vinv_y')
         return self.V_lu.solve(self.y)
 
     def Vinv_mat(self, dense_mat: np.ndarray) -> np.ndarray:
@@ -1214,7 +1286,7 @@ class LinearMixedModel:
         Returns:
             Tuple[csc_matrix, ...]: a tuple holding all Vinv_varcomp_mat
         """
-        logger.debug('Calculating V_inv_varcomp_mats...')
+        self.logger.debug('Calculating V_inv_varcomp_mats...')
         return tuple(self.Vinv_mat(self._varcomp_mats[i]) for i in range(self.n_varcomps))
 
     # TODO: test
@@ -1225,7 +1297,7 @@ class LinearMixedModel:
         Returns:
             GradHessComponents: a NameTuple holding the computation results
         """
-        logger.debug('Calculating P_mats...')
+        self.logger.debug('Calculating P_mats...')
         P_comp: np.ndarray
         if self.has_covar:
             P_comp = self.Vinv_Z @ solve(self.Z.T @ self.Vinv_Z, self.Vinv_Z.T)
@@ -1244,7 +1316,7 @@ class LinearMixedModel:
         Returns:
             np.ndarray: 1-d array of gradient
         """
-        logger.debug('Calculating grad...')
+        self.logger.debug('Calculating grad...')
         P_y: np.ndarray = self.P_attrs.P_y
         grad: np.ndarray = -0.5 * np.array(
             [
@@ -1260,7 +1332,7 @@ class LinearMixedModel:
         Returns:
             np.ndarray: 2-d n_varcomps-by-n_varcomps array
         """
-        logger.debug('Calculating hessian...')
+        self.logger.debug('Calculating hessian...')
         hessian: np.ndarray = np.empty((self.n_varcomps, self.n_varcomps))
         P_y: np.ndarray = self.P_attrs.P_y
         for i in range(self.n_varcomps):
@@ -1332,7 +1404,7 @@ class LinearMixedModel:
             if info1 == 0:
                 pass
             elif info1 > 0:
-                logger.warning('Conjugate gradient did not converge.')
+                self.logger.warning('Conjugate gradient did not converge.')
             elif info1 < 1:
                 raise RuntimeError(
                     'Illegal input or breakdown for conjugate gradient.')
@@ -1340,7 +1412,7 @@ class LinearMixedModel:
             if info2 == 0:
                 pass
             elif info2 > 0:
-                logger.warning('Conjugate gradient did not converge.')
+                self.logger.warning('Conjugate gradient did not converge.')
             elif info2 < 1:
                 raise RuntimeError(
                     'Illegal input or breakdown for conjugate gradient.')
@@ -1354,7 +1426,7 @@ class LinearMixedModel:
         """Perform grid search on variance component parameters.
         """
         if self.optimized:
-            logger.warning('Variance components are already optimized.')
+            self.logger.warning('Variance components are already optimized.')
         # reserve jitter for sibma_sib
         upper: float = np.var(self.y) - self.jitter
         step: float = upper / 100.
@@ -1385,16 +1457,16 @@ class LinearMixedModel:
         max_ll: float = float('-inf')
         iter: int = 1
         max_sigma: Tuple[float, ...]
-        logger.info('Starting AI-REML...')
+        self.logger.info('Starting AI-REML...')
         while True:
-            logger.info(f'Iter: {iter}\tloglik: {self.reml_loglik}')
+            self.logger.info(f'Iter: {iter}\tloglik: {self.reml_loglik}')
             if abs(self.reml_loglik - ll_) < 1e-4:
                 break
             if iter > 50:
                 self._varcomps = max_sigma
             ll_ = self.reml_loglik
             sigma: np.ndarray = np.array(
-                self._varcomps) + np.linalg.solve(self.hessian, self.grad)
+                self._varcomps) + solve(self.hessian, self.grad)
             sigma[sigma <= 0.] = self.y.var() * 1e-5
             self._varcomps = tuple(sigma)
             iter += 1
@@ -1408,18 +1480,18 @@ class LinearMixedModel:
         """Perform LBFGS-B to optimize variance components.
         """
         if self.optimized:
-            logger.warning('Variance components are already optimized.')
-        logger.info('Starting LBFGS-B...')
+            self.logger.warning('Variance components are already optimized.')
+        self.logger.info('Starting LBFGS-B...')
 
         def nll(x):
             self._varcomps = tuple(x)
             return -1 * self.reml_loglik
-        res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps),
-                                       method='L-BFGS-B', bounds=[(0, self.y.var()) for i in range(self.n_varcomps)])
+        res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), options={'gtol': 1e-8, 'eps': 1e-10},
+                                       method='L-BFGS-B', bounds=[(0.0001 * self.y.var(), self.y.var()) for i in range(self.n_varcomps)])
         if res.success:
             self.optimized = True
             self._varcomps = tuple(res.x)
-            logger.info('Finished LBFGS-B.')
+            self.logger.info(f'Finished LBFGS-B. # of Likelihood evaluations: {res.nfev}')
         else:
             raise ValueError(f'Scipy minimize failed: {res.message}')
 

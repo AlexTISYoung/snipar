@@ -9,14 +9,15 @@ from pysnptools.snpreader import Bed
 from functools import partial
 import ctypes
 
-
-FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
+# TODO: set logging level for imported packages
+# see https://stackoverflow.com/questions/47265898/how-to-set-the-log-level-for-an-imported-module
+# FORMAT = '%(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(
-    format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
-logger = logging.getLogger(__name__)
+# logging.basicConfig(
+#     format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
+# logger = logging.getLogger(__name__)
 
 
 def transform_phenotype(inv_root, y, fam_indices, null_mean=None):
@@ -246,7 +247,7 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 
 def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False,
-                  impute_unrel=True, no_mean_normalise=False):
+                  impute_unrel=True, no_mean_normalise=False, common_freqs=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
     # no need to provide residual var arr
@@ -269,7 +270,7 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
-    G.compute_freqs()
+    G.compute_freqs(ind=G.gts[:, 1, 0] > -1 if common_freqs else None)
     # impute parental genotypes of unrelated individuals
     if impute_unrel:
         logger.info('imputing unrelated ind parental geno.')
@@ -281,10 +282,10 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
         logger.info('Filtering based on MAF')
     G.filter_maf(min_maf)
     gt_filetype = gts_f.split('.')[1]
-    if gt_filetype == 'bed':
-        if verbose:
-            logger.info('Filtering based on missingness')
-        G.filter_missingness(max_missing)
+    # if gt_filetype == 'bed':
+    if verbose:
+        logger.info('Filtering based on missingness')
+    G.filter_missingness(max_missing)
     if gt_filetype == 'bgen':
         if verbose:
             logger.info('Filtering based on imputation INFO')
@@ -295,7 +296,7 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     if verbose:
         logger.info('Imputing missing values with population frequencies')
     if not no_mean_normalise:
-        NAs = G.fill_NAs()
+        NAs = G.fill_NAs(ind=None)
     else:
         def _fill_NAs(G):
             # NAs = np.sum(G.gts.mask, axis=0)
@@ -324,6 +325,10 @@ if __name__ == '__main__':
                         help='Fit indirect effect from sibling ', default=False)
     parser.add_argument(
         '--covar', type=str, help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
+    parser.add_argument(
+        '--fit_res', action='store_true', default=False,
+        help='Use residualized phenotypes.'
+    )
     parser.add_argument('--phen_index', type=int, help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument(
@@ -357,9 +362,14 @@ if __name__ == '__main__':
                         help='Path to gcta grm output (without prefix).', default=None)
     parser.add_argument('--plink_path', type=str,
                         help='Path to plink2 executable.', default=None)
+    parser.add_argument('--grm_npz_path', type=str,
+                        help='Path to subsetted grm npz file.', default=None)
 
     parser.add_argument('--ibdrel_path', type=str,
                         help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+    
+    parser.add_argument('--grm_only', action='store_true', default=False,
+                        help='whether to only include grm variance component.')
 
     parser.add_argument('--sparse_thres', type=float,
                         help='Threshold of GRM/IBD sparsity', default=0.05)
@@ -381,6 +391,14 @@ if __name__ == '__main__':
                         action='store_true', default=False,
                         help='Match individual IDs from all genotype files or not.')
     
+    parser.add_argument('--vc_out',
+                        type=str,
+                        help='Prefix of output filename for variance component array (without .npy).')
+    
+    parser.add_argument('--vc_in',
+                        type=str,
+                        help='Prefix of input filename for variance component array (without .npy).')
+    
     parser.add_argument('--impute_unrel',
                         action='store_true', default=False,
                         help='Whether to impute parental genotype of unrelated individuals or not.')
@@ -388,8 +406,29 @@ if __name__ == '__main__':
     parser.add_argument('--no_mean_normalise',
                         action='store_true', default=False,
                         help='Whether to mean-normalise genotype or not (for testin purposes).')
+                    
+    parser.add_argument('--common_freqs',
+                        action='store_true', default=False,
+                        help='Whether to use common allele frequencies.')
+
+    parser.add_argument('--debug',
+                     action='store_true', default=False,
+                     help='Debug code in single process mode.')
+    
+    parser.add_argument('--loglevel',
+                        type=str, default='INFO',
+                        help='Case insensitive Logging level: INFO, DEBUG, ...')
 
     args = parser.parse_args()
+
+    loglevel = args.loglevel
+    FORMAT = '%(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError('Invalid log level: %s' % loglevel)
+    logging.basicConfig(
+        format=FORMAT, level=numeric_level)
+    logger = logging.getLogger(__name__)
 
     if (args.ibdrel_path is not None) + (args.grm_path is not None) + (args.gcta_path is not None) > 1:
         raise parser.error(
@@ -397,6 +436,10 @@ if __name__ == '__main__':
     if args.ibdrel_path is None and args.grm_path is None and args.gcta_path is None:
         # raise parser.error(
         #     'One of ibdrel_path and grm_path/gcta_path should be supplied.')
+        if args.grm_only:
+            logger.error(
+                'If --grm_only is supplied, must also provide either --ibdrel_path, --grm_path or gcta_path.'
+            )
         logger.info('Only sibship variance component is modelled.')
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error(
@@ -432,7 +475,7 @@ if __name__ == '__main__':
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
     if args.bed is not None and args.bgen is not None:
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
-    ######## Find commond ind ids #####
+    ######## Find common ind ids #####
     if args.bed is not None:
         gts_list, pargts_list = parse_filelist(
             args.bed, args.pargts, 'bed', args.from_chr, args.to_chr, args.match_all)
@@ -468,28 +511,57 @@ if __name__ == '__main__':
         ids, fam_labels = match_grm_ids(
             ids, fam_labels, grm_path=grm_path, grm_source='gcta')
         id_dict = make_id_dict(ids)
-        grm_data, grm_row_ind, grm_col_ind = build_grm_arr(
-            grm_path, id_dict=id_dict, thres=args.sparse_thres)
-    sib_data, sib_row_ind, sib_col_ind = build_sib_arr(fam_labels)
+        if args.grm_npz_path is not None:
+            grm_data, grm_row_ind, grm_col_ind = build_grm_arr_from_npz(
+                id_filepath=grm_path + '.grm.id', npz_path=args.grm_npz_path,
+                ids=ids, id_dict=id_dict)
+        else:
+            grm_data, grm_row_ind, grm_col_ind = build_grm_arr(
+                grm_path, id_dict=id_dict, thres=args.sparse_thres)
+    if not args.grm_only:
+        sib_data, sib_row_ind, sib_col_ind = build_sib_arr(fam_labels)
     ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
-    if 'grm_data' in locals():
+    if 'grm_data' in locals() and not args.grm_only:
         varcomp_lst = (
             (grm_data, grm_row_ind, grm_col_ind),
             (sib_data, sib_row_ind, sib_col_ind),
         )
+    elif args.grm_only:
+        varcomp_lst = (
+            (grm_data, grm_row_ind, grm_col_ind),
+        )
     else:
         varcomp_lst = (
             (sib_data, sib_row_ind, sib_col_ind),
         )
+    if args.vc_in:
+        varcomps = tuple(np.load(f'{args.vc_in}.npz')['varcomps'])
+        if len(varcomps) != len(varcomp_lst) + 1:
+            raise ValueError('Supplied varcomps length does not match the length of ')
+    else:
+        varcomps = None
     if args.covar is None:
-        lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_lst, covar_X=None)
+        lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None)
     else:
         covariates.filter_ids(ids)
-        lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts)
-    logger.info('Optimizing variance components...')
-    lmm.scipy_optimize()
-    logger.info(f'{lmm.varcomps}')
+        if args.fit_res:
+            alpha = np.linalg.solve(covariates.gts.T.dot(covariates.gts), covariates.gts.T.dot(y))
+            aa = covariates.gts.dot(alpha)
+            y -= aa
+            logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
+            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None)
+        else:
+            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts)
+    if not varcomps:
+        logger.info('Optimizing variance components...')
+        lmm.scipy_optimize()
+    else:
+        logger.info('varcomps supplied.')
+    if args.vc_out:
+        np.savez(f'{args.vc_out}', varcomps=np.array(lmm.varcomps))
+        logger.info(f'varcomps saved to {args.vc_out}.npz.')
+    logger.info(f'Variance components: {lmm.varcomps}')
     sigmas = lmm.varcomps
     ####### Iterate through all chromosomes #######
     chr_ = int(args.from_chr)
@@ -556,14 +628,16 @@ if __name__ == '__main__':
         else:
             logger.info('Using '+str(len(batches))+' batches')
         ##############  Process batches of SNPs ##############
+        # make shared memory for multiprocessing
         y_ = RawArray('d', y.shape[0])
+        # write to shared memory
         y_buffer = np.frombuffer(y_, dtype='float')
         np.copyto(y_buffer, y)
         # varcomp_mat_ = RawArray('f', int(2 * grm.shape[0]))
         # varcomp_mat_buffer = np.frombuffer(
         #     varcomp_mat_, dtype='float').reshape((2, grm.shape[0]))
         # np.copyto(varcomp_mat_buffer, np.array([grm, sib], dtype='float'))
-        if args.covar:
+        if args.covar and not args.fit_res:
             covar_ = RawArray(
                 'd', int(covariates.gts.shape[0] * covariates.gts.shape[1]))
             covar_buffer = np.frombuffer(covar_, dtype='float').reshape(
@@ -573,6 +647,7 @@ if __name__ == '__main__':
         else: covar_ = None; covar_shape = None
         varcomps_ = lmm.varcomps
         varcomp_dict = {}
+        # put variance component data to shared memory
         for i in range(len(varcomps_) - 1):
             l = len(varcomp_lst[i][0])
             # data
@@ -597,8 +672,13 @@ if __name__ == '__main__':
                                  parsum=args.parsum, fit_sib=args.fit_sib,
                                  max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,
                                  impute_unrel=args.impute_unrel,
-                                 no_mean_normalise=args.no_mean_normalise)
+                                 no_mean_normalise=args.no_mean_normalise,
+                                 common_freqs=args.common_freqs)
         _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
+        if args.debug:
+            _init_worker_(y_, varcomps_, covar_, covar_shape)
+            process_batch_(snp_ids[batches[0]])
+            exit('Debug finishsed.')
         with Pool(
             processes=args.num_cpus,
             initializer=_init_worker_,

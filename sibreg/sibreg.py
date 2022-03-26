@@ -7,12 +7,12 @@ from bgen_reader import open_bgen
 import logging
 
 
-FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
+# FORMAT = '%(asctime)-15s :: %(levelname)s :: %(filename)s :: %(funcName)s :: %(message)s'
 # numeric_level = getattr(logging, loglevel.upper(), None)
 # if not isinstance(numeric_level, int):
 #     raise ValueError('Invalid log level: %s' % loglevel)
-logging.basicConfig(
-    format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
+# logging.basicConfig(
+#     format=FORMAT, level=logging.DEBUG if __debug__ else logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -369,14 +369,20 @@ class gtarray(object):
 
         self.info = None
 
-    def compute_freqs(self):
+    def compute_freqs(self, ind=None):
         """
         Computes the frequencies of the SNPs. Stored in self.freqs.
         """
         if self.ndim == 2:
-            self.freqs = ma.mean(self.gts,axis=0)/2.0
+            if ind is None:
+                self.freqs = ma.mean(self.gts,axis=0)/2.0
+            else:
+                self.freqs = ma.mean(self.gts[ind, :],axis=0)/2.0
         elif self.ndim == 3:
-            self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
+            if ind is None:
+                self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
+            else:
+                self.freqs = ma.mean(self.gts[ind,0,:], axis=0) / 2.0
 
     def filter(self,filter_pass):
         if self.freqs is not None:
@@ -456,16 +462,22 @@ class gtarray(object):
             if self.fams is not None:
                 self.fams = self.fams[indices]
 
-    def mean_normalise(self):
+    def mean_normalise(self, ind=None):
         """
         This normalises the SNPs/PGS columns to have mean-zero.
         """
         if not self.mean_normalised:
             if self.gts.ndim == 2:
-                self.gts = self.gts - ma.mean(self.gts,axis=0)
+                if ind is None:
+                    self.gts = self.gts - ma.mean(self.gts,axis=0)
+                else:
+                    self.gts = self.gts - ma.mean(self.gts[ind, :],axis=0)
             elif self.gts.ndim==3:
                 for i in range(0, self.gts.shape[1]):
-                    self.gts[:, i, :] = self.gts[:, i, :] - ma.mean(self.gts[:, i, :], axis=0)
+                    if ind is None:
+                        self.gts[:, i, :] = self.gts[:, i, :] - ma.mean(self.gts[:, i, :], axis=0)
+                    else:
+                        self.gts[:, i, :] = self.gts[:, i, :] - ma.mean(self.gts[ind, i, :], axis=0)
             self.mean_normalised = True
 
     def scale(self):
@@ -478,12 +490,12 @@ class gtarray(object):
             for i in range(0, self.gts.shape[1]):
                 self.gts[:, i, :] = self.gts[:, i, :]/ma.std(self.gts[:, i, :], axis=0)
 
-    def fill_NAs(self):
+    def fill_NAs(self, ind=None):
         """
         This normalises the SNP columns to have mean-zero, then fills in NA values with zero.
         """
         if not self.mean_normalised:
-            self.mean_normalise()
+            self.mean_normalise(ind=ind)
         NAs = np.sum(self.gts.mask, axis=0)
         self.gts[self.gts.mask] = 0
         self.gts.mask = False
