@@ -85,7 +85,7 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end
             pos = pos[~allele_mismatch]
             alleles = alleles[~allele_mismatch]
             imp_alleles = imp_alleles[~allele_mismatch]
-            in_obs_sid[allele_mismatch] = False
+            in_obs_sid[np.where(in_obs_sid)[0][allele_mismatch]] = False
             obs_sid_index =  obs_sid_index[~allele_mismatch]
     allele_flip = np.logical_and(alleles[:,0]==imp_alleles[:,1],alleles[:,1]==imp_alleles[:,0])
     return chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index
