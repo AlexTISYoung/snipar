@@ -19,7 +19,7 @@ class MyExt(Extension):
         self.__include_dirs = dirs
 
 setup(name='snipar',
-      version='0.0.0',
+      version='0.0.1',
       description='Functions for performing robust GWAS using sibpairs in a random effects model',
       long_description = long_description,
       long_description_content_type="text/markdown",
