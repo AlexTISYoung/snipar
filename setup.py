@@ -16,11 +16,11 @@ class MyExt(Extension):
         self.__include_dirs = dirs
 
 setup(name='snipar',
-      version='0.0.1',
+      version='0.0.0',
       description='Functions for performing robust GWAS using sibpairs in a random effects model',
       url='http://github.com/alexTISYoung/sibreg',
       download_url='https://github.com/AlexTISYoung/hlmm/archive/1.2.0a1.tar.gz',
-      author='Alexander I. Young',
+      author='Alexander I. Young, Moeen Nehzati',
       author_email='alextisyoung@gmail.com',
       license='MIT',
       include_package_data=True,
