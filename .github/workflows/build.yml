@@ -53,7 +53,7 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         skip_existing: true
-      run: python -m twine upload --skip-existing dist/*
+      run: python -m twine upload --skip-existing --verbose dist/*
     
     - uses: actions/upload-artifact@v2
       with:
