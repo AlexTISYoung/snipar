@@ -1,5 +1,9 @@
 from setuptools import setup, find_packages, Extension
 from setuptools import dist
+from pathlib import Path
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "readme.md").read_text()
 
 class MyExt(Extension):
     def __init__(self, *args, **kwargs):
@@ -18,6 +22,8 @@ class MyExt(Extension):
 setup(name='snipar',
       version='0.0.0',
       description='Functions for performing robust GWAS using sibpairs in a random effects model',
+      long_description = long_description,
+      long_description_content_type="text/markdown",
       url='http://github.com/alexTISYoung/sibreg',
       download_url='https://github.com/AlexTISYoung/hlmm/archive/1.2.0a1.tar.gz',
       author='Alexander I. Young, Moeen Nehzati',
