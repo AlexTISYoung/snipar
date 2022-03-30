@@ -83,7 +83,6 @@ jobs:
             python setup.py install
             python setup.py build_ext --inplace
             pip install --upgrade pip
-            pip uninstall snipar
 
     - name: make the docs
       run: |
