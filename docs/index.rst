@@ -3,7 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to SNIPar's documentation!
+Welcome to SNIPar's documentation!   assssssssss
 ==================================
 
 .. toctree::
@@ -12,8 +12,6 @@ Welcome to SNIPar's documentation!
    
    tutorial
    guide
-   sibreg.sibreg
-   sibreg.bin
 
 Indices and tables
 ==================
