@@ -59,10 +59,7 @@ jobs:
       run: python -m twine upload --skip-existing dist/*
     
     - name: installing
-      run: |
-          pip install --upgrade pip
-          pip install wheel
-          pip install --no-index --find-links=dist/artifact snipar
+      run: python setup.py install
 
     - name: make the docs
       run: |
