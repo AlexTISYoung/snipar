@@ -20,16 +20,16 @@ class MyExt(Extension):
 
 setup(name='snipar',
       version='0.0.2',
-      description='Functions for performing robust GWAS using sibpairs in a random effects model',
+      description='Library and command line scripts for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing family based genome-wide association and polygenic score analyses.',
       long_description = long_description,
       long_description_content_type="text/markdown",
-      url='http://github.com/alexTISYoung/sibreg',
-      download_url='https://github.com/AlexTISYoung/hlmm/archive/1.2.0a1.tar.gz',
+      url='http://github.com/alexTISYoung/snipar',
+      download_url='https://pypi.org/project/snipar/files',
       author='Alexander I. Young, Moeen Nehzati',
       author_email='alextisyoung@gmail.com',
       license='MIT',
       include_package_data=True,
-      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py'],
+      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py','snipar/example/snipar_example_data.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
