@@ -58,9 +58,25 @@ jobs:
         skip_existing: true
       run: python -m twine upload --skip-existing dist/*
     
+    - name: installing
+      run: |
+          pip install --upgrade pip
+          pip install wheel
+          pip install --no-index --find-links=dist/artifact snipar
+
+    - name: make the docs
+      run: |
+            pip install sphinx
+            pip install sphinx_rtd_theme
+            cd docs
+            sphinx-apidoc -o . ../snipar/
+            make html
+      
     - uses: actions/upload-artifact@v2
       with:
-        path: ./dist/*.whl
+        path: |
+          ./dist/
+          ./docs/_build/
 #######
   # test:    
   #   name: testing on ${{ matrix.os }} and ${{ matrix.python-version }}
