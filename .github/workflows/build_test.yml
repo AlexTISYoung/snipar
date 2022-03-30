@@ -1,4 +1,4 @@
-name: make binaries
+name: test making binaries
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
 
     - uses: actions/setup-python@v2
       with:
-          python-version: '3.8'      
+          python-version: '3.8'
     
     - name: Install cibuildwheel
       run: python -m pip install cibuildwheel
@@ -56,10 +56,33 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         TWINE_REPOSITORY: testpypi
         skip_existing: true
-      run: python -m twine upload --skip-existing dist/*
+      run: python -m twine upload --skip-existing dist/*        
+      
+    - uses: actions/upload-artifact@v2
+      with:
+        path: |
+          ./docs/_build/
+  
+  update_docs:
+    name: Updating docs
+      runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.8']    
+    steps:
+
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-python@v2
+      with:
+          python-version: ${{ matrix.python-version }}
     
     - name: installing
-      run: python setup.py install
+      run: |
+        python setup.py install
+        python setup.py build_ext --inplace
+        pip uninstall snipar
 
     - name: make the docs
       run: |
@@ -68,12 +91,10 @@ jobs:
             cd docs
             sphinx-apidoc -o . ../snipar/
             make html
-      
+    
     - uses: actions/upload-artifact@v2
       with:
-        path: |
-          ./dist/
-          ./docs/_build/
+        path: ./docs/_build/
 #######
   # test:    
   #   name: testing on ${{ matrix.os }} and ${{ matrix.python-version }}
