@@ -1,4 +1,4 @@
-from snipar.sibreg import *
+from snipar.lmm import *
 from pysnptools.snpreader import Bed
 
 bedfile = 'whole_genome'
