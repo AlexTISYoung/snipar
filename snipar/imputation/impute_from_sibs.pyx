@@ -132,7 +132,7 @@ cdef extern from * nogil:
             now = time(NULL);
             text = ctime(&now);
             text[strlen(text)-1] = 0;
-            printf("%s INFO impute with chromosome %s: progress is %d \n", text, chromosomes, (100*cnt)/total);
+            printf("%s INFO impute with chromosome %s: progress is %d\% \n", text, chromosomes, (100*cnt)/total);
         }
         omp_unset_lock(&cnt_lock);
     }
