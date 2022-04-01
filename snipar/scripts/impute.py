@@ -303,23 +303,33 @@ def main(args):
                 pcs = pcs[:,:args.pc_num]
     logging.info("pcs loaded")
 
-    if (args.from_chr is not None) and (args.to_chr is not None):
-        chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
-    else:
-        chromosomes = [None]
+    if args.bed and args.bgen:
+        if ("~" in args.bed) ^ ("~" in args.bgen):
+            raise Exception("Can not have ~ for just one of the bed and bgen")
 
-    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen) or (args.out and "~" in args.out) or (args.ibd and "~" in args.ibd):
+    if args.bgen and (not "~" in args.bgen):
+        if args.to_chr is None or args.from_chr is None:
+            raise Exception("Chromosome range should be specified with phased genotype address with no ~")    
+
+    if (args.bed and "~" in args.bed) or (args.bgen and "~" in args.bgen):
+        if args.from_chr is None:
+            args.from_chr = 1
+        if args.to_chr is None:
+            args.to_chr = 23
+
+    if (args.out and "~" in args.out) or (args.ibd and "~" in args.ibd):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("no chromosome range specified for the wildcard ~ in the address")
 
-    if args.bgen:
-        if args.to_chr is None or args.from_chr is None:
-            raise Exception("Chromosome range should be specified with phased genotype")
-    
     if args.ibd is None:
         if args.ibd_is_king:
             raise Exception("can not use 'ibd_is_king' without any ibd file")
 
+    if (args.from_chr is not None) and (args.to_chr is not None):
+        chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
+    else:
+        chromosomes = [None]
+    
     def none_tansform(a, b, c):
         if a is not None:
             return a.replace(b, c)
