@@ -290,8 +290,8 @@ def main(args):
     
     pcs = None
     pc_ids = None
-    logging.info("loading pcs ...")
     if args.pcs:
+        logging.info("loading pcs ...")
         #ordering should be the same
         pcs = pd.read_csv(f"{args.pcs}", delim_whitespace=True)
         pc_ids = pcs.iloc[:, 1].values.astype("S").tolist()
@@ -301,7 +301,7 @@ def main(args):
                 raise Exception(f"pc_num={args.pc_num} more than {pcs.shape} PCs available in pcs")
             else:
                 pcs = pcs[:,:args.pc_num]
-    logging.info("pcs loaded")
+        logging.info("pcs loaded")
 
     if args.bed and args.bgen:
         if ("~" in args.bed) ^ ("~" in args.bgen):
