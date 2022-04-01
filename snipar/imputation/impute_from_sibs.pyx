@@ -1090,7 +1090,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     multi_sib_fams_ratio = multi_sib_fams/number_of_fams
     sib_ratio_backup = np.array([b/no_parent_fams  if no_parent_fams>0 else 0. for b in sib_backup_count])
     parent_ratio_backup = np.array([b/single_parent_fams  if single_parent_fams>0 else 0. for b in single_parent_backup_count])
-    ratio_ibd0 = np.array([<float>counter_ibd0[i]/multi_sib_fams for i in range(number_of_snps)])
+    ratio_ibd0 = np.array([<float>counter_ibd0[i]/number_of_fams for i in range(number_of_snps)])
     total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(number_of_fams*number_of_snps)
     expected_total_ibd0 = 0
     for c in sib_count:
