@@ -7,10 +7,14 @@ from snipar.tests.utils import *
 class TestCommanline(SniparTest):
     p_value_threshold = 0.01
     subsample_snp = 50
+    log = False
     @classmethod
-    def setUpClass(cls):        
-        logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-        warnings.filterwarnings("ignore")
+    def setUpClass(cls):
+        if cls.log:
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
+        else:
+            logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
+            warnings.filterwarnings("ignore")
 
     @classmethod
     def tearDownClass(cls):
@@ -25,7 +29,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree_control(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--ibd", f"{tests_root}/test_data/sample.our",                   
                    "--bed", f"{tests_root}/test_data/sample_reduced~",
@@ -35,6 +38,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
@@ -46,7 +51,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree_control_backup(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -58,6 +62,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_backup~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
@@ -72,7 +78,6 @@ class TestCommanline(SniparTest):
     
     def test_impute_with_unphased_pedigree_wild_ibd_control(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -84,6 +89,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
@@ -97,7 +104,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree(self):
         command = [
-                   "-silent_progress",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
@@ -108,12 +114,13 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
 
     def test_impute_with_unphased_pedigree_chunks_control(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -126,6 +133,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
@@ -140,7 +149,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree_control_legacy_ibd(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -153,6 +161,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
@@ -167,7 +177,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_phased_pedigree_control(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -179,6 +188,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_phased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -192,7 +203,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_phased_pedigree_chunks_control(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -205,6 +215,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_phased_pedigree_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -217,9 +229,7 @@ class TestCommanline(SniparTest):
         self.assertGreaterEqual(p_value[1], self.p_value_threshold)
 
     def test_impute_with_unphased_king(self):
-        command = [
-                   "-silent_progress",
-                   "--start", "0",
+        command = ["--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
                    "--bed", f"{tests_root}/test_data/sample_reduced~",
@@ -230,13 +240,13 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_king~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
 
     def test_impute_with_unphased_king_control(self):
-        command = [
-                   "-silent_progress",
-                   "-c",
+        command = ["-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
@@ -248,6 +258,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -261,7 +273,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_king_control_pca(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -277,6 +288,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -292,7 +305,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_king_control_legacy_ibd(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -306,6 +318,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -319,7 +333,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree_control_multiprocess(self):
         command = [
-                   "-silent_progress",   
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -332,6 +345,8 @@ class TestCommanline(SniparTest):
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multiprocess~",
                    "--processes", "2",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -345,7 +360,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_king_control_legacy_tilda_ibd(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -359,6 +373,8 @@ class TestCommanline(SniparTest):
                    "--threads", "2",
                    "--out", f"{output_root}/test_impute_with_unphased_king_control~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -373,7 +389,6 @@ class TestCommanline(SniparTest):
 #TODO test without providing ibd, that should result in all backup
     def test_impute_with_unphased_pedigree_control_nothread(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -384,6 +399,8 @@ class TestCommanline(SniparTest):
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multithread~",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1, 2],
@@ -397,7 +414,6 @@ class TestCommanline(SniparTest):
 
     def test_impute_with_unphased_pedigree_control_notilda(self):
         command = [
-                   "-silent_progress",
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
@@ -407,6 +423,8 @@ class TestCommanline(SniparTest):
                    "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_notilda1",
                    "--threads", "2",
                    ]
+        if not self.log:
+            command = ["-silent_progress"] + command
         args=impute.parser.parse_args(command)
         impute.main(args)
         coef, z, p_value = imputation_test([1],
