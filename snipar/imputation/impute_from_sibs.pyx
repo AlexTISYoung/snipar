@@ -1096,11 +1096,12 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         expected_total_ibd0 += (1-0.5**(c-1))**2
     expected_total_ratio_ibd0 = expected_total_ibd0/number_of_fams
     logging.info(f"with chromosome {chromosome} :total number of fams is {number_of_fams}")
-    logging.info(f"with chromosome {chromosome} :multi sibs available for {multi_sib_fams} which is {multi_sib_fams_ratio} of total fams")
-    logging.info(f"with chromosome {chromosome} :total ibd0 ratio is {total_ratio_ibd0}")
-    logging.info(f"with chromosome {chromosome} :expected total ibd0 ratio is {expected_total_ratio_ibd0}")
-    logging.info(f"with chromosome {chromosome} :ratio of backup imputation among sibs is {np.mean(sib_ratio_backup)}")
-    logging.info(f"with chromosome {chromosome} :ratio of backup imputation among parent-offsprings is {np.mean(parent_ratio_backup)}")
+    logging.info(f"with chromosome {chromosome} :more than one offspring is genotyped for {multi_sib_fams} which is {multi_sib_fams_ratio} of total fams")
+    logging.info(f"with chromosome {chromosome} :IBD0 state observed for {total_ratio_ibd0*100}%")
+    logging.info(f"with chromosome {chromosome} :Expected to observe IBD0 state for {expected_total_ratio_ibd0*100}%")
+    if use_backup:
+        logging.info(f"with chromosome {chromosome} :ratio of backup imputation among sibs is {np.mean(sib_ratio_backup)}")
+        logging.info(f"with chromosome {chromosome} :ratio of backup imputation among parent-offsprings is {np.mean(parent_ratio_backup)}")
     if total_ratio_ibd0>0.5:
         logging.warning("with chromosome " + str(chromosome)+": ibd0 ratio is too high")
     output_nan_count = np.sum(np.isnan(imputed_par_gts))
