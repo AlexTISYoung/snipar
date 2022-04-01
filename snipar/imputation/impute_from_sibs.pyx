@@ -890,14 +890,13 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef double f, fvars
     cdef int p, q
     sibships["parent"] = sibships["FATHER_ID"]
-    sibships["parent"][sibships["has_father"]] = sibships["FATHER_ID"][sibships["has_father"]]
-    sibships["parent"][sibships["has_mother"]] = sibships["MOTHER_ID"][sibships["has_mother"]]
+    sibships.loc[sibships["has_father"], "parent"] = sibships["FATHER_ID"][sibships["has_father"]]
+    sibships.loc[sibships["has_mother"], "parent"] = sibships["MOTHER_ID"][sibships["has_mother"]]
     cdef vector[cstring] parents
     cdef vector[vector[cstring]] fams
     for fam in range(number_of_fams):
         fams.push_back(sibships["IID"].iloc[fam])
         parents.push_back(sibships["parent"].iloc[fam])
-
     cdef int[:] sib_count = sibships["sib_count"].values.astype("i")
     cdef cnp.ndarray[cnp.uint8_t, ndim=1] single_parent = sibships["single_parent"].astype('uint8').values    
     #iid_to_bed_index

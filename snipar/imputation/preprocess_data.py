@@ -389,7 +389,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #Keep individuals in fam
-    pedigree = pedigree[pedigree["IID"].isin(fam["IID"].astype(str))]
+    pedigree = pedigree[pedigree["IID"].isin(fam["IID"].astype(str))].copy()
     pedigree["has_father"] = pedigree["FATHER_ID"].isin(fam["IID"].astype(str))
     pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(fam["IID"].astype(str))
     if control:
