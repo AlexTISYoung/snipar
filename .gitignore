@@ -6,7 +6,7 @@
 *.log
 .vscode/*
 screenlog*
-.eggs/*
+**/.eggs/*
 **/*.egg-info/**
 **/.nfs*
 env/*
@@ -18,3 +18,6 @@ gitignore/*
 **/build/**
 outputs/**
 !outputs/tmp/.gitkeep
+**/_**
+**.mmm
+**.metafile
