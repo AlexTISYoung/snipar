@@ -11,9 +11,9 @@ from snipar.utilities import *
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
-    parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.', default = None)
     parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
     parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
