@@ -28,30 +28,30 @@ Documentation for the modules and scripts is at: https://snipar.readthedocs.io/e
 We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
 You may encounter problems with the installation due to package conflicts with your existing Python installation. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done by using the following commands in your directory of choice:
     
-    'python -m venv path-to-where-you-want-the-virtual-environment-to-be'
+    python -m venv path-to-where-you-want-the-virtual-environment-to-be
 
 You can activate and use the environment using
 
-    'source path-to-where-you-want-the-virtual-environment-to-be'
+    source path-to-where-you-want-the-virtual-environment-to-be
     
 
 # Installing Using Pip
 Just run:
 
-    'pip install snipar'
+    pip install snipar
 
 Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
 
-    'pip install --upgrade pip'
+    pip install --upgrade pip
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory
-containing the SNIPar source code, at the shell type
+containing the SNIPar source code, at the shell type:
 
-    'python setup.py install'
+    python setup.py install
    
 
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you should run tests. To run the tests, after the installation run this command:
 
-    'python -m unittest snipar.tests'
+    python -m unittest snipar.tests
