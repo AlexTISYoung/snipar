@@ -37,8 +37,11 @@ You can activate and use the environment using
 
 # Installing Using Pip
 Just run:
+
     'pip install snipar'
+
 Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
+
     'pip install --upgrade pip'
 
 # Installing From Source
