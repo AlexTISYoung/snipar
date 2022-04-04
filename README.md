@@ -24,45 +24,31 @@ and read the guide: https://snipar.readthedocs.io/en/latest/guide.html
 
 Documentation for the modules and scripts is at: https://snipar.readthedocs.io/en/latest/
 
-
-# Package Install Instructions
-
-*snipar* has the following dependencies:
-
-python 3.7
-
-Packages:
-
-- h5py
-- bgen-reader
-- numpy
-- scipy
-- pysnptools
-- pandas
-- networkx
-- Cython
-- pooch
-- numba
-- statsmodels
-- scikit-learn
-
+# Virtual Environment
 We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
+You may encounter problems with the installation due to package conflicts with your existing Python installation. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done by using the following commands in your directory of choice:
+    
+    ``python -m venv path-to-where-you-want-the-virtual-environment-to-be``
 
+You can activate and use the environment using
+
+    ``source path-to-where-you-want-the-virtual-environment-to-be``
+    
+
+# Installing Using Pip
+Just run:
+    'pip install snipar'
+Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
+    ``pip install --upgrade pip``
+
+# Installing From Source
 To install from source, clone the git repository, and in the directory
 containing the SNIPar source code, at the shell type
 
-    'python setup.py install'
+    ``python setup.py install``
    
-If you have problems with the installation, it may be due to package conflicts with your existing Python installation. To overcome this, you can 
-try installing in a virtual environment. In a bash shell, this could be done by using the following commands in the SNIPar directory:
-    
-    'python -m venv env'
-    'source env/bin/activate'
-    'python setup.py install' 
 
 # Running tests
+To check that the code is working properly and that the C modules have been compiled, you should run tests. To run the tests, after the installation run this command:
 
-To check that the code is working properly and that the C modules have compiled, you should
-run tests. To run the tests, in the main SNIPar directory enter the command:
-
-    ``python setup.py pytest``
+    ``python -m unittest snipar.tests``
