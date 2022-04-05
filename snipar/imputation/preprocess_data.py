@@ -329,7 +329,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def brepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
+def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
