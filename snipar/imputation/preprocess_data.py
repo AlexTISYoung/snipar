@@ -1,4 +1,4 @@
-"""Contains functions for preprocessing data
+"""Contains functions for preprocessing the data for the imputation
 
 Classes
 -------
@@ -9,7 +9,11 @@ Functions
     recurcive_append
     create_pedigree
     add_control
+    preprocess_king
     prepare_data
+    compute_aics
+    estimate_f
+    prepare_gts
 """
 import logging
 import pandas as pd
@@ -219,6 +223,30 @@ def add_control(pedigree):
 
 #TODO raise error if file is multi chrom
 def preprocess_king(ibd, segs, bim, chromosomes, sibships):
+    """Converts the ibds in king format to ibds in snipar format
+        King format only saves ibd1 and ibd2s in the ibd file. The rest is ibd0 only if present in the segs file. This function finds the ibd0 sections and appends to the ibd data structure.
+    
+    Args:
+        ibd: pd.DataFrame
+            A pandas DataFrame with columns including ["ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP"] where IDs are individual IIDs.
+        
+        segs: pd.DataFrame
+            A pandas DataFrame with columns including ["Segment", "Chr", "StartSNP", "StopSNP"]
+
+        bim: pd.DataFrame
+            A dataframe with these columns(dtype str) including: Chr id coordinate
+        
+        chromosomes: list
+            list of chromosome numbers
+
+        sibships: pandas.DataFrame
+            A pandas DataFrame with columns ['FID', 'FATHER_ID', 'MOTHER_ID', 'IID', 'has_father', 'has_mother', 'single_parent'] where IID columns is a list of the IIDs of individuals in that family.
+            It only contains families that have more than one child or only one parent.
+
+    Returns:
+        (str, str) -> list
+            A dictionary where the keys are pairs of individual ids and the values are IBD segments. The list is flattened as has information about successive ibd segments meaning it's like [start0, end0, ibd_status0, start1, end1, ibd_status1, ...]
+    """
     ibd["Chr"] = ibd["Chr"].astype(int)
     segs["Chr"] = segs["Chr"].astype(int)
     chromosomes = [int(x) for x in chromosomes]
@@ -301,7 +329,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
+def brepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -326,11 +354,17 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
         bim_address : str, optional
             Address of the bim file if it's different from the address of the bed file. Does not include '.bim'.
         
+        fam_address : str, optional
+            Address of the fam file if it's different from the address of the bed file. Does not include '.fam'.
+        
+        control : boolean, optional
+            If True, adds control families to the pedigree table for testing using snipar.imputation.preprocess_data.add_control.
+        
         chromosome: str, optional
             Number of the chromosome that's going to be loaded.
 
         pedigree_nan: str, optional
-            Value that's considered nan in the pedigree
+            Value that's considered nan in the pedigree. The default is '0'
 
     Returns:
         tuple(pandas.Dataframe, dict, numpy.ndarray, pandas.Dataframe, numpy.ndarray, numpy.ndarray)
@@ -468,7 +502,8 @@ def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
             number of snps to use for computing aics. aics from these snps are averaged. default is 1000.
     
     Returns:
-        optimal number of PCs to use
+        int:
+            optimal number of PCs to use
     """
     if linear:
         pop_size = unphased_gts.shape[0]
@@ -511,8 +546,8 @@ def estimate_f(unphased_gts, pc_scores, linear=True):
             Whether the model is linear regression or not. Default is true.
         
     Returns:
-        np.array[float]
-            A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
+        np.array[float], dict
+            A two-dimensional array containing estimated fs for all individuals and SNPs respectively and a dictionary containing information about the model. These include ['x', 'coefs', 'TSS', 'RSS1', 'RSS2', 'R2_1', 'R2_2', 'larger1', 'less0'].
     """
 
     pop_size = unphased_gts.shape[0]
@@ -616,7 +651,12 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
                 A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
 
             hdf5_output_dict: dict
-                A  dictionary whose values will be written in the imputation output under its keys.
+                A  dictionary whose values will be written in the imputation output under its keys. It contains:
+                    'bim_columns' : Columns of the resulting bim file
+                    'bim_values' : Contents of the resulting bim file
+                    'pedigree' : pedigree table Its columns are has_father, has_mother, single_parent respectively.
+                    'non_duplicates' : Indexes of the unique snps. Imputation is restricted to them.
+                    'standard_f' : Whether the allele frequencies are just population average instead of MAFs estimated using PCs
     """
     logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
     phased_gts = None
