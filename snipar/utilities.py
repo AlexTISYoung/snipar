@@ -86,3 +86,16 @@ def parse_filelist(obsfiles, impfiles, obsformat):
                 if not path.exists(impfile):
                     raise(ValueError(impfile+' not found'))
     return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
+
+def outfile_name(outprefix,outsuffix,chrom=None):
+    if '~' in outprefix:
+        if chrom is None:
+            raise(ValueError('Must provide chromosome number with wildcard character'))
+        outprefix = outprefix.split('~')
+        outprefix = outprefix[0]+str(chrom)+outprefix[1]
+        return outprefix+outsuffix
+    elif chrom is not None:
+        return outprefix+'chr_'+str(chrom)+outsuffix
+    else:
+        return outprefix+outsuffix
+    

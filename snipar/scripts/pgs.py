@@ -144,7 +144,7 @@ if __name__ == '__main__':
         if args.scale_pgs:
             pg.scale()
         # Estimate effects
-        print('Estimating direct and indirect/parental effects')
+        print('Estimating direct effects and NTCs')
         alpha_imp = lmm.fit_model(y.gts[:,0], pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
         # Estimate population effect
         print('Estimating population effect')
@@ -155,10 +155,10 @@ if __name__ == '__main__':
         alpha_out[0:pg.sid.shape[0], 1] = np.sqrt(np.diag(alpha_imp[1])[1:(1+pg.sid.shape[0])])
         alpha_out[pg.sid.shape[0],0] = alpha_proband[0][1]
         alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
-        print('Saving estimates to '+args.out+ '.pgs_effects.txt')
+        print('Saving estimates to '+args.out+ '.effects.txt')
         outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
         np.savetxt(args.out + '.pgs_effects.txt',
                    np.hstack((outcols, np.array(alpha_out, dtype='S'))),
                    delimiter='\t', fmt='%s')
-        print('Saving sampling covariance matrix of estimates to ' + args.out + '.pgs_vcov.txt')
+        print('Saving sampling covariance matrix of estimates to ' + args.out + '.vcov.txt')
         np.savetxt(args.out + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])

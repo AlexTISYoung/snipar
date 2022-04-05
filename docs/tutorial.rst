@@ -8,7 +8,7 @@ Test data
 
 To load the example data into ./example_data, use the command:
 
-    ``python snipar/example/load_data.py``
+    ``snipar_example_data.py``
 
 In the example_data/ directory, there is some example data. The file phenotype.txt is a simulated phenotype with direct, paternal, and maternal effects, where 80% of the phenotypic
 variance is explained by the combined direct, paternal and maternal effects of the SNPs; and the
@@ -133,7 +133,7 @@ The output contains different datasets:
 
 Now we have estimated SNP specific summary statistics. To compare to the true effects, run
 
-    ``python ../snipar/example/estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
+    ``python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
@@ -191,8 +191,8 @@ To estimate direct, paternal, and maternal effects of the PGS, use the following
 
 This uses a linear mixed model that has a random effect for mean differences between families (defined as sibships here) and fixed effects for the direct,
 paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
-The estimated effects and their standard errors are output to direct.pgs_effects.txt, with the effect names (direct, paternal, maternal, population) in the first column,
-their estimates in the second column, and their standard errors in the final column. The sampling variance-covariance matrix of direct, paternal, and maternal effects is output in direct.pgs_vcov.txt.
+The estimated effects and their standard errors are output to direct.effects.txt, with the effect names (direct, paternal, maternal, population) in the first column,
+their estimates in the second column, and their standard errors in the final column. The sampling variance-covariance matrix of direct, paternal, and maternal effects is output in direct.vcov.txt.
 
 Estimates of the direct effect of the PGS should be equal to 1 in expectation since
 we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
@@ -209,7 +209,7 @@ one command with the addition of the --fit_sib option:
 
 This outputs the PGS values for each individual along with the PGS value of their sibling, and imputed/observed paternal and maternal PGS to direct_sib.pgs.txt.
 (If an individual has multiple genotyped siblings, the average of the siblings' PGS is used for the PGS of the sibling.)
-It outputs estimates of direct, indirect sibling, paternal, and maternal effects of the PGS to direct_sib.pgs_effects.txt and their sampling variance-covariance matrix to direct_sib.pgs_vcov.txt.
+It outputs estimates of direct, indirect sibling, paternal, and maternal effects of the PGS to direct_sib.effects.txt and their sampling variance-covariance matrix to direct_sib.vcov.txt.
 Since indirect effects from siblings were zero in this simulation, the estimated sibling effect should be close to zero.
 
 Note that the standard error for the direct effect estimate increases: this is due both to a drop in sample size since only those probands with genotyped siblings are included, and due to the fact that adding the sibling effect to the regression

@@ -6,6 +6,7 @@ import numpy as np
 from snipar.read.bed import read_sibs_from_bed
 from snipar.read.bgen import read_sibs_from_bgen
 from snipar.utilities import make_id_dict
+from snipar.utilities import outfile_name
 from bgen_reader import open_bgen
 
 ####### Transition Matrix ######
@@ -383,18 +384,19 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments
-    segs_outfile = outprefix + 'chr_'+str(chrom)+'.ibd.segments.gz'
+    segs_outfile = outfile_name(outprefix,'.ibd.segments.gz',chrom)
     print('Writing segments to ' + segs_outfile)
     write_segs(sibpairs, allsegs, chrom, segs_outfile)
     # Write matrix
     if ibdmatrix:
-        outfile = outprefix + 'chr_'+str(chrom)+'.ibd.gz'
+        outfile = outfile_name(outprefix,'.ibdmatrix.gz',chrom)
         print('Writing matrix output to ' + str(outfile))
         ibd = np.row_stack(
             (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')
     if ld_out:
-        print('Writing LD-scores to '+outprefix+str(chrom)+'.l2.ldscore.gz')
+        ld_outfile = outfile_name(outprefix,'.l2.ldscore.gz',chrom)
+        print('Writing LD-scores to '+ld_outfile)
         ld_out = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in gts.sid]), gts.sid, gts.pos, ld)).T))
-        np.savetxt(outprefix+str(chrom)+'.l2.ldscore.gz', ld_out, fmt='%s')
+        np.savetxt(ld_outfile, ld_out, fmt='%s')
