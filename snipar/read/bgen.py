@@ -132,6 +132,8 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
     gts_f = open_bgen(bgenfile, verbose=verbose)
     # get ids of genotypes and make dict
     gts_ids = gts_f.samples
+    if ids is None:
+        ids = gts_ids
     # Get families with imputed parental genotypes
     if par_gts_f is not None:
         imp_fams = convert_str_array(np.array(par_gts_f['families']))

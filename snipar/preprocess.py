@@ -24,8 +24,7 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
         print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     # Find which individuals can be used
-    none_missing = np.min(gt_indices, axis=1)
-    none_missing = none_missing >= 0
+    none_missing = np.min(gt_indices, axis=1) >= 0
     N = np.sum(none_missing)
     if N == 0:
         raise ValueError(
@@ -142,7 +141,7 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
     The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
     If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
     """
-    ids, ids_fams, gts_fams = find_individuals_with_sibs(ids,ped,gts_ids)
+    ids, ids_fams, gts_fams = find_individuals_with_sibs(ids, ped, gts_ids)
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
     # Compute sums of genotypes in each family

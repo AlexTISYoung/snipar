@@ -116,6 +116,8 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
     gts_f = Bed(bedfile,count_A1=True)
     # get ids of genotypes and make dict
     gts_ids = gts_f.iid[:, 1]
+    if ids is None:
+        ids = gts_ids
     # Get families with imputed parental genotypes
     if par_gts_f is not None:
         imp_fams = convert_str_array(par_gts_f['families'])
