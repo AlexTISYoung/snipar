@@ -21,11 +21,11 @@ Args:
     -use_backup : bool, optional
         Whether it should use backup imputation where there is no ibd infomation available.
 
-    IBD : str
-        Address of a file containing IBD statuses for all SNPs without segments.gz suffix. with --snipar_ibd flag this is assumed to be in snipar format and without it, it's assumed to be in king format.
+    --ibd : str
+        Address of the IBD file without suffix. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
-    --snipar_ibd
-        If not provided the ibd input is assumed to be in king format with an allsegs file
+    --ibd_is_king
+        If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file
 
     --bgen : str
         Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
@@ -33,27 +33,20 @@ Args:
     --bed : str
         Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
-    --bim : str
-        Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
-
-    --pcs : str, optional
-        Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs
-
-    --pc_num : int, optional
-        Number of PCs to consider.
-
-    -find_optimal_pc: optional
-        It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
-
     --from_chr : int, optional
-        Which chromosome (<=). Should be used with to_chr parameter.
-        
+        Which chromosome (<=). Should be used with to_chr parameter.   
 
     --to_chr : int, optional
         Which chromosome (<). Should be used with from_chr parameter.
+    
+    --bim : str
+        Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
+
+    --fam : str
+        Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes
 
     --out: str, optional
-        The script writes the result of imputation to this path. If it contains '*', result of imputation for chromosome i will be written to a similar path where * has been replaced with i. The default value for output_address is 'parent_imputed_chr'.
+        The script writes the result of imputation to this path. If it contains '*', result of imputation for chromosome i will be written to a similar path where * has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
 
     --start: int, optional
         The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
@@ -76,6 +69,15 @@ Args:
         Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
         ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
 
+    --pcs : str, optional
+        Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs
+
+    --pc_num : int, optional
+        Number of PCs to consider.
+
+    -find_optimal_pc: optional
+        It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
+    
     --threads : int, optional
         Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
 
@@ -91,10 +93,13 @@ Args:
     --output_compression_opts': int, optional
         Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.
 
+    --pedigree_nan: str, optional
+        The value representing NaN in the pedigreee. Default is '0'
+
 Results:
     HDF5 files
         For each chromosome i, an HDF5 file is created at outprefix{i}. This file contains imputed genotypes, the position of SNPs, columns of resulting bim file, contents of resulting bim file, pedigree table and, family ids
-        of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'bim_columns', 'bim_values', 'pedigree' and, 'families', 'parental_status' respectively.
+        of the imputed parents, under the keys 'imputed_par_gts', 'pos', 'bim_columns', 'bim_values', 'pedigree' and, 'families', 'parental_status' respectively. There are also other details of the imputation in the resulting file. For more explanation see the documentation of snipar.imputation.impute_from_sibs.impute
         
 """
 import logging
@@ -125,12 +130,18 @@ def run_imputation(data):
                 use_backup : bool, optional
                     Whether it should use backup imputation where there is no ibd infomation available.
 
-                unphased_address: str, optional
-                    Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
-                
                 phased_address: str, optional
                     Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+                
+                unphased_address: str, optional
+                    Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.                
 
+                ibd_address : str
+                    address of the ibd file. The king segments file should be accompanied with an allsegs file.
+
+                ibd_is_king : boolean
+                    Whether the ibd segments are in king format or snipar format.
+                
                 pcs : np.array[float], optional
                     A two-dimensional array containing pc scores for all individuals and SNPs respectively.
 
@@ -140,17 +151,8 @@ def run_imputation(data):
                 find_optimal_pc : bool, optional
                     It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
 
-                ibd_address : str
-                    address of the ibd file. The king segments file should be accompanied with an allsegs file.
-
-                ibd_is_king : boolean
-                    Whether the ibd segments are in king format or snipar format.
-
                 output_address: str
                     The address to write the result of imputation on. The default value for output_address is 'parent_imputed_chr'.
-
-                chunks: int
-                    Number of chunks load data in(each process).
 
                 start: int, optional
                     This function can do the imputation on a slice of each chromosome. If specified, his is the start of that slice(it is inclusive).
@@ -161,17 +163,32 @@ def run_imputation(data):
                 bim: str, optional
                     Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes.
 
+                fam: str, optional
+                    Address of a fam file containing positions of SNPs if the address is different from Fam file of genotypes.
+
                 threads: int, optional
                     Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+
+                chunks: int
+                    Number of chunks load data in(each process).
 
                 output_compression: str, optional
                     Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
 
-                output_compression_opts': int, optional
+                output_compression_opts: int, optional
                     Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information. None means no compression setting.
+
+                chromosome: str
+                    name of the chromosome
+                
+                pedigree_nan: str
+                    The value representing NaN in the pedigreee.
+
+                silent_progress: bool
+                    Hides the percentage of progress from logging
     Returns:
         float
-            time consumed byt the imputation.
+            time consumed by the imputation.
     """
     chunks = data["chunks"]
     pedigree = data["pedigree"]
@@ -264,6 +281,11 @@ def run_imputation(data):
 
 #does the imputation and writes the results
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
     
@@ -383,7 +405,7 @@ parser.add_argument('-use_backup',
                     help = "Whether it should use backup imputation where there is no ibd infomation available")                    
 parser.add_argument('--ibd',
                     type=str,
-                    help='IBD file withoout suffix')
+                    help='Address of the IBD file without suffix. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
 parser.add_argument('--ibd_is_king',
                     action='store_true',
                     help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
