@@ -49,7 +49,7 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
 
-cdef char is_possible_child(int child, int parent) nogil
+cdef bint is_possible_child(int child, int parent) nogil
 
 cdef void get_IBD(signed char[:] hap1,
                   signed char[:] hap2,

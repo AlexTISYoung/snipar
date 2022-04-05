@@ -1,7 +1,11 @@
-"""Contains functions in cython for doing the parent sum imputation from the sibs.
+"""Contains functions in cython for doing the parent sum imputation from offsprings and parents(if they are observed).
 
 Functions
 ----------
+    get_probability_of_both_parents_conditioned_on_offsprings
+    get_probability_of_one_parent_conditioned_on_offsprings_and_parent
+    get_IBD
+    get_hap_index
     is_possible_child
     dict_to_cmap
     impute_snp_from_offsprings
@@ -25,7 +29,7 @@ from snipar.config import nan_integer as python_integer_nan
 from libc.stdio cimport printf
 cdef float nan_float = np.nan
 cdef int nan_integer = python_integer_nan
-#[gp1,gp2,gs]
+#prob_offspring_on_parent[i, j, k] shows the probability the offspring having the genotype k when the parents are i and j
 cdef double[:,:,:] prob_offspring_on_parent = np.array(
 [[[1.0, 0.0, 0.0],
  [0.5, 0.5, 0.0],
@@ -48,6 +52,36 @@ cdef double get_probability_of_both_parents_conditioned_on_offsprings(int snp,
                                                              int sib_count,
                                                              signed char [:,:] unphased_gts,
                                                              double[:] parent_genotype_prob) nogil:
+    """Returns the probability of both parents being gp1 and gp2 given the offsprings specified in sib_indexes at SNP snp
+
+        The function takes advantage of conditional independence of offsprings on parents. P(gp1, gp2| gs1, g2, ...) = P(gs1, gs2, ...|gp1, gp2)*P(gp1, gp2)/P(gs1, gs2, ...)=
+        = P(gp1)P(gp2)/P(gs1, gs2, ...)*Prod[P(gsi|gp1, gp2)]
+    Args:
+        snp : int
+            Index of the snp where the probability is computed.
+
+        gp1 : int
+            Genotype of parent 1
+
+        gp2 : int
+            Genotype of parent 2
+
+        sib_indexes : int[:]
+            Determines the gts index for each sibling from index of each sibling between offsprings
+
+        sib_count : int
+            Number of the offspring the parents have. The gts indexes of offsprings should be the first sib_count elements of sib_indexes.
+
+        unphased_gts : signed char [:,:]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+        parent_genotype_prob : double[:]
+            An array with three elements, probability of parental genotype being 0, 1, 2 respectively.
+
+    Returns:
+        double
+            Probability of parents being gp1 and gp2 given offsprings at SNP snp
+    """
     cdef double numerator = parent_genotype_prob[gp1]*parent_genotype_prob[gp2]
     cdef double denumerator = 0.
     cdef int flag, gs, _gp1, _gp2, index
@@ -81,8 +115,38 @@ cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(i
                                                                         int sib_count,
                                                                         signed char [:,:] unphased_gts,
                                                                         double[:] parent_genotype_prob) nogil:
-    """"
-    Computes P(unkown_gp|known_gp,gss)
+    """Returns the probability of a parents being unknown_gp given the other parent being known_gp the offsprings specified in sib_indexes at SNP snp
+
+        The function takes advantage of conditional independence of offsprings on parents. P(unknown_gp| known_gp, gs1, gs2, ...) = P(unknown_gp, known_gp, gs1, gs2, ...)/P(known_gp, gs1, gs2, ...) = 
+        = P(gs1, gs2, ...|known_gp, unknown_gp)*P(known_gp, unknown_gp)/P(known_gp, gs1, g2, ...) = 
+        = Prod[gsi|known_gp, unknown_gp]*P(known_gp)P(unknown_gp)/Sum_unknown[P(unknown, known_gp, gs1, g2, ...)] = 
+        = Prod[gsi|known_gp, unknown_gp]*P(known_gp)P(unknown_gp)/Sum_unknown[Prod[gsi|known_gp, unknown_gp]*P(known_gp)P(unknown_gp)] 
+
+    Args:
+        snp : int
+            Index of the snp where the probability is computed.
+
+        known_gp : int
+            Genotype of the known parent(used in the condition)
+
+        unknown_gp : int
+            Genotype of the unknown parent(the one you are after its probability)
+
+        sib_indexes : int[:]
+            Determines the gts index for each sibling from index of each sibling between offsprings
+
+        sib_count : int
+            Number of the offspring the parents have. The gts indexes of offsprings should be the first sib_count elements of sib_indexes.
+
+        unphased_gts : signed char [:,:]
+            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+
+        parent_genotype_prob : double[:]
+            An array with three elements, probability of parental genotype being 0, 1, 2 respectively.
+
+    Returns:
+        double
+            Probability of a parent being unknown_gp given offsprings and known_gp at SNP snp
     """
     cdef double numerator = parent_genotype_prob[known_gp]*parent_genotype_prob[unknown_gp]
     cdef double denumerator = 0
@@ -115,15 +179,18 @@ cdef extern from * nogil:
     #include <stdio.h>  
     #include <string.h>
     static omp_lock_t cnt_lock;
+    //the counter for progress
     static int cnt = 0;
+    //Want to log the progress across different threads so made a lock for the variable cnt
     void reset(){
         omp_init_lock(&cnt_lock);
         cnt = 0;
     }
     void destroy(){
         omp_destroy_lock(&cnt_lock);
-    }   
+    }
     void report(int mod, char* chromosomes, int total){
+        //writes the progress once every mod
         time_t now;
         char* text;
         omp_set_lock(&cnt_lock);
@@ -216,13 +283,13 @@ cdef int get_hap_index(int i, int j) nogil:
         return i*(i-1)/2+j
     return j*(j-1)/2+i
 
-cdef char is_possible_child(int child, int parent) nogil:
-    """Checks whether a person with child genotype can be an offspring of someone with the parent genotype. Returns False if any of them is nan
+cdef bint is_possible_child(int child, int parent) nogil:
+    """Checks whether the child genotype is a possible offspring of the parent genotype. Returns False if any of them are nan
         Args:
             child : int
             parent : int
 
-        Returns: char
+        Returns: bint
     """
     if parent == nan_integer or child == nan_integer:
         return False
@@ -239,7 +306,7 @@ cdef char is_possible_child(int child, int parent) nogil:
     return False
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict):
-    """ Converts a (str,str)->list[int] to cmap[cpair[cstring, cstring], vector[int]]
+    """ Converts a (str,str)->list[int] dictionary to cmap[cpair[cstring, cstring], vector[int]]
 
     Args:
         the_dict : (str,str)->list[int]
@@ -279,11 +346,14 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
                       bint use_backup,
                       ) nogil:
     """Imputes the parent sum divided by two for a single SNP from offsprings and returns the imputed value
-    If phased_gts is not NULL, it tries to do the imputation with that first and if it's not usable, it falls back to unphased data.
+        If phased_gts is not NULL, it tries to do the imputation with that first and if there is a problem, it falls back to unphased data.
 
     Args:
         snp : int
             index of each sibling between offsprings
+
+        sib_count : int
+            Number of the offspring the parents have. The gts indexes of offsprings should be the first sib_count elements of sib_indexes.
         
         sib_indexes: int[:]
             Determines the gts index for each sibling from index of each sibling between offsprings
@@ -299,7 +369,10 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
 
         f : float
             Minimum allele frequency for the SNP.
-
+        
+        parent_genotype_prob : double[:]
+            An array with three elements, probability of parental genotype being 0, 1, 2 respectively.
+        
         phased_gts : signed char[:,:,:]
             A three-dimensional array containing genotypes for all individuals, SNPs and, haplotypes respectively.
 
@@ -321,11 +394,11 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
             The number of sibling pairs in snp_ibd2.
         
         use_backup : bint
-            Whether it should use backup imputation where there is no ibd infomation available.
+            Whether it should use backup bayesian imputation where there is no ibd infomation available.
 
     Returns:
         cpair[double, bint]
-            First value is imputed parent sum divided by two. NAN if all the children are NAN in this SNP. Second value is whether the regression has been done using backup imputation.
+            First value is imputed parent sum divided by two. NAN if all the children are NAN in this SNP. Second value is whether the imputation has been done using backup imputation.
 
     """
 
@@ -397,6 +470,7 @@ cdef cpair[double, bint] impute_snp_from_offsprings(int snp,
             sib2 = sib_indexes[snp_ibd0[pair_index, 1]]
             result += (unphased_gts[sib1, snp]+unphased_gts[sib2, snp])/2.
         return_val.first = result/len_snp_ibd0
+    
     elif len_snp_ibd1 > 0:
         #Because ibd2 is similar to having just one individual, we can discard ibd2s
         result = 0
@@ -474,6 +548,9 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
         sib_indexes: int[:]
             Determines the gts index for each sibling from index of each sibling between offsprings
 
+        sib_count : int
+            Number of the offspring the parents have. The gts indexes of offsprings should be the first sib_count elements of sib_indexes.
+        
         snp_ibd0 : cnp.ndarray[cnp.int_t, ndim=2]
             List of sib pairs that are ibd0 in this SNP. It is assumed that there are len_snp_ibd0 sib pairs is this list.
 
@@ -512,11 +589,11 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
             The number of sibling pairs in snp_ibd2.
         
         use_backup : bint
-            Whether it should use backup imputation where there is no ibd infomation available.
+            Whether it should use backup bayesian imputation where there is no ibd infomation available.
 
     Returns:
         cpair[double, cpair[int, bint]]
-            First value is imputed missing parent. NAN if all the children are NAN in this SNP. Second value is number of mendelian errors and whether regression has been done using backup imputation accordingly.
+            First value is imputed missing parent. NAN if all the children are NAN in this SNP or there is a mendelian error. Second value is number of mendelian errors and whether the imputation has been done using backup imputation accordingly.
 
     """    
 
@@ -532,7 +609,6 @@ cdef cpair[double, cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
     cdef bint is_backup = False
     cdef int mendelian_error_count = 0
     cdef cpair[double, cpair[int, bint]] return_val
-    #TODO Figure out mendelian inconsistancyies
     #this is default
     return_val.first = nan_float
     return_val.second.first = 0
@@ -800,7 +876,7 @@ cdef int get_IBD_type(cstring id1,
 def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, chromosome, freqs, output_address = None, threads = None, output_compression = None, output_compression_opts = None, half_window=50, ibd_threshold = 0.999, silent_progress=False, use_backup=False):
     """Does the parent sum imputation for families in sibships and all the SNPs in unphased_gts and returns the results.
 
-    Inputs and outputs of this function are ascii bytes instead of strings
+        Inputs and outputs of this function are ascii bytes instead of strings. It writes result of the imputation to the output_address.
 
     Args:
         sibships : pandas.Dataframe
@@ -827,27 +903,31 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             A numpy array with the position of each SNP in the order of appearance in phased and unphased gts.
         
         hdf5_output_dict : dict
-            Other key values to be added to the HDF5 output
+            Other key values to be added to the HDF5 output. Usually contains:                
+                'bim_columns' : Columns of the resulting bim file
+                'bim_values' : Contents of the resulting bim file
+                'pedigree' : pedigree table Its columns are has_father, has_mother, single_parent respectively.
+                'non_duplicates' : Indexes of the unique snps. Imputation is restricted to them.
+                'standard_f' : Whether the allele frequencies are just population average instead of MAFs estimated using PCs
 
         chromosome: str
             Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
 
         freqs: list[float]
             A two-dimensional array containing estimated fs for all individuals and SNPs respectively.
-
+        
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
-            The following table explains the keys and their corresponding values within this file.
+            Aside from all the key, value pairs inside hdf5_output_dict, the following are also written to the file.
                 'imputed_par_gts' : imputed genotypes
-                'pos' : the position of SNPs(in the order of appearance in genotypes)
-                "bim_columns" : Columns of the resulting bim file
-                "bim_values" : Contents of the resulting bim file
-                'pedigree' : pedigree table
+                'pos' : the position of SNPs(in the order of appearance in genotypes)                
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
                 'sib_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among offspring imputations in each snp.
                 'parent_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among parent-offspring imputations in each snp.
-                    Its columns are has_father, has_mother, single_parent respectively.
+                'mendelian_error_ratio' : Ratio of mendelian errors among parent-offspring pairs for each snp
+                'estimated_genotyping_error' : estimated for each snp using mendelian_error_ratio and maf
+                'ratio_ibd0' : ratio of families with offsprings in ibd0 to all the fams.
         
         threads : int, optional
             Specifies the Number of threads to be used. If None there will be only one thread.
@@ -864,13 +944,15 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         ibd_threshold : float, optional
             Minimum ratio of agreement between haplotypes for declaring IBD.
         
-        use_backup : bint, optional
+        silent_progress : boolean, optional
+            Whether it should log the percentage of imputation's progress
+        
+        use_backup : boolean, optional
             Whether it should use backup imputation where there is no ibd infomation available. It's false by default.
 
     Returns:
         tuple(list, numpy.array)
-            The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).
-            
+            The second element is imputed parental genotypes and the first element is family ids of the imputed parents(in the order of appearance in the first element).                        
     """
     logging.warning("with chromosome " + str(chromosome)+": " + "imputing ...")
     if sibships.empty:
