@@ -1,4 +1,4 @@
-import h5py, code
+import h5py
 import numpy as np
 from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
@@ -52,6 +52,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
+    hdf5_outfile = outfile_name(outprefix,'.sumstats.hdf5')
     print('Writing output to ' + outprefix + '.sumstats.hdf5')
     outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
@@ -283,10 +284,12 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         freqs[batch_indices] = batch_freqs
         print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
-    if not chrom_out==0:
-        outprefix = outprefix+'chr_'+str(chrom_out)
     if not no_hdf5_out:
-        write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, fit_sib, alpha, alpha_ses, alpha_cov,
+        if chrom_out==0:
+            hdf5_outfile = outfile_name(outprefix,'.hdf5')
+        else:
+            hdf5_outfile = outfile_name(outprefix)
+        write_output(chrom, snp_ids, pos, alleles, hdf5_outfile, parsum, fit_sib, alpha, alpha_ses, alpha_cov,
                      sigma2, tau, freqs)
     if not no_txt_out:
         write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, fit_sib, alpha, alpha_cov,

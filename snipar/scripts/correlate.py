@@ -7,11 +7,11 @@ from numba import config as numba_config
 from snipar.utilities import parse_obsfiles
 
 parser = argparse.ArgumentParser()
-parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22')
+parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22')
 parser.add_argument('out',type=str,help='Prefix for output file(s)')
 parser.add_argument('--ldscores',type=str,help='Address of ldscores as output by LDSC',default=None)
 parser.add_argument('--bed', type=str,
-                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
+                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
 parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.05)', default=0.05)

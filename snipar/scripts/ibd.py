@@ -137,7 +137,7 @@ for i in range(chroms.shape[0]):
     else:
         error_probs_i = error_probs[i]
     snipar.ibd.infer_ibd_chr(sibpairs, error_prob, error_probs_i, outprefix,
-                             bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
-                             min_length=min_length, mapfile=args.map,
-                             ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
-                             min_maf=min_maf, max_missing=max_missing, max_error=max_error)
+                            bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
+                            min_length=min_length, mapfile=args.map,
+                            ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
+                            min_maf=min_maf, max_missing=max_missing, max_error=max_error)
