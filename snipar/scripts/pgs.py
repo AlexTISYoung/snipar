@@ -76,6 +76,8 @@ if __name__ == '__main__':
             raise(ValueError('No input genotype files found'))
         # Get pedigree if no imputed parental genotypes provided
         if args.imp is None:
+            if args.pedigree is None:
+                raise(ValueError('Must provide pedigree if not providing imputed parental genotypes'))
             print('Reading pedigree from '+str(args.pedigree))
             ped = np.loadtxt(args.pedigree,dtype=str)
             if ped.shape[1] < 4:
@@ -157,8 +159,8 @@ if __name__ == '__main__':
         alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
         print('Saving estimates to '+args.out+ '.effects.txt')
         outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
-        np.savetxt(args.out + '.pgs_effects.txt',
+        np.savetxt(args.out + '.effects.txt',
                    np.hstack((outcols, np.array(alpha_out, dtype='S'))),
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.out + '.vcov.txt')
-        np.savetxt(args.out + '.pgs_vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+        np.savetxt(args.out + '.vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])

@@ -48,13 +48,12 @@ def compute_ses(alpha_cov):
         alpha_ses[i,:] = np.sqrt(np.diag(alpha_cov[i,:,:]))
     return alpha_ses
 
-def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
+def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
-    hdf5_outfile = outfile_name(outprefix,'.sumstats.hdf5')
-    print('Writing output to ' + outprefix + '.sumstats.hdf5')
-    outfile = h5py.File(outprefix+'.sumstats.hdf5', 'w')
+    print('Writing output to ' + outfile)
+    outfile = h5py.File(outfile, 'w')
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
     outfile['bim'] = encode_str_array(outbim)
     X_length = 1
@@ -92,7 +91,7 @@ def outarray_effect(est, ses, freqs, vy):
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, alpha_cov, sigma2, tau, freqs):
+def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_cov, sigma2, tau, freqs):
     outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
     header = ['chromosome','SNP','pos','A1','A2','freq']
     # Which effects to estimate
@@ -150,8 +149,8 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     header += corrs
     # Output array
     outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
-    print('Writing text output to '+outprefix+'.sumstats.gz')
-    np.savetxt(outprefix+'.sumstats.gz',outarray,fmt='%s')
+    print('Writing text output to '+outfile)
+    np.savetxt(outfile, outarray, fmt='%s')
 
 def compute_batch_boundaries(snp_ids,batch_size):
     nsnp = snp_ids.shape[0]
@@ -179,9 +178,11 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
         print('Filtering based on missingness')
     G.filter_missingness(max_missing)
     if verbose:
-        print(str(G.shape[2])+' SNPs that pass filters')
+        print(str(G.shape[2])+'s SNPs that pass filters')
     #### Match phenotype ####
     y.filter_ids(G.ids)
+    if G.ids.shape[0] > y.ids.shape[0]:
+        G.filter_ids(y.ids)
     ##### Transform genotypes ######
     if verbose:
         print('Transforming genotypes')
@@ -274,7 +275,7 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
             verbose = False
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(y, pedigree, 
                     tau, sigma2, snp_ids=snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], bedfile=bedfile, bgenfile=bgenfile, 
-                    par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib,max_missing=max_missing, min_maf=min_maf,
+                    par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib, max_missing=max_missing, min_maf=min_maf,
                     print_sample_info=print_sample_info, verbose=verbose)
         # Fill in fitted SNPs
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
@@ -286,11 +287,15 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
     ######## Save output #########
     if not no_hdf5_out:
         if chrom_out==0:
-            hdf5_outfile = outfile_name(outprefix,'.hdf5')
+            hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5')
         else:
-            hdf5_outfile = outfile_name(outprefix)
+            hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5', chrom=chrom_out)
         write_output(chrom, snp_ids, pos, alleles, hdf5_outfile, parsum, fit_sib, alpha, alpha_ses, alpha_cov,
                      sigma2, tau, freqs)
     if not no_txt_out:
-        write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, fit_sib, alpha, alpha_cov,
+        if chrom_out==0:
+            txt_outfile = outfile_name(outprefix, '.sumstats.gz')
+        else:
+            txt_outfile = outfile_name(outprefix, '.sumstats.gz', chrom=chrom_out)
+        write_txt_output(chrom, snp_ids, pos, alleles, txt_outfile, parsum, fit_sib, alpha, alpha_cov,
                      sigma2, tau, freqs)

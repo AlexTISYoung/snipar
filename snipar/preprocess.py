@@ -16,6 +16,8 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
         ids = gts_ids
     # Find individuals with genotyped siblings
     if sib:
+        # Look in full genotype sample in case some genotyped sibs are not in ids
+        ids = gts_ids
         ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
         if verbose:
             print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')

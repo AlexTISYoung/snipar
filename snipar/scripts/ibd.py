@@ -10,10 +10,10 @@ from snipar.pedigree import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bed', type=str,
-                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.',
+                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.',
                     default=None)
 parser.add_argument('--bgen',type=str,
-                    help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a ~ in the address, ~ is replaced by the chromosome numbers in the range of 1-22.', 
+                    help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a * in the address, * is replaced by the chromosome numbers in the range of 1-22.', 
                     default = None)
 parser.add_argument('--king',
                     type=str,
@@ -31,7 +31,7 @@ parser.add_argument('--map',type=str,default=None)
 parser.add_argument('--out',
                     type=str,
                     default = 'ibd',
-                    help="The IBD segments will output to this path, one file for each chromosome. If the path contains '~', the '~' will be replaced with the chromosome number. Otherwise, the segments will be output to the given path with file names chr_1.ibd.segments.gz, chr_2.segments.gz, etc.")
+                    help="The IBD segments will output to this path, one file for each chromosome. If the path contains '*', the '*' will be replaced with the chromosome number. Otherwise, the segments will be output to the given path with file names chr_1.ibd.segments.gz, chr_2.segments.gz, etc.")
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error. By default, this is estimated from genotyped parent-offspring pairs.',default=None)
 parser.add_argument('--min_length',type=float,help='Smooth segments with length less than min_length (cM)',
                     default=0.01)
