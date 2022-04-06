@@ -22,16 +22,16 @@ Args:
         Whether it should use backup imputation where there is no ibd infomation available.
 
     --ibd : str
-        Address of the IBD file without suffix. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
+        Address of the IBD file without suffix. If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     --ibd_is_king
         If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file
 
     --bgen : str
-        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
+        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     --bed : str
-        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
+        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).
 
     --from_chr : int, optional
         Which chromosome (<=). Should be used with to_chr parameter.   
@@ -46,7 +46,7 @@ Args:
         Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes
 
     --out: str, optional
-        The script writes the result of imputation to this path. If it contains '*', result of imputation for chromosome i will be written to a similar path where * has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
+        The script writes the result of imputation to this path. If it contains '#', result of imputation for chromosome i will be written to a similar path where # has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
 
     --start: int, optional
         The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
@@ -326,22 +326,22 @@ def main(args):
         logging.info("pcs loaded")
 
     if args.bed and args.bgen:
-        if ("*" in args.bed) ^ ("*" in args.bgen):
-            raise Exception("Can not have * for just one of the bed and bgen")
+        if ("#" in args.bed) ^ ("#" in args.bgen):
+            raise Exception("Can not have # for just one of the bed and bgen")
 
-    if args.bgen and (not "*" in args.bgen):
+    if args.bgen and (not "#" in args.bgen):
         if args.to_chr is None or args.from_chr is None:
-            raise Exception("Chromosome range should be specified with phased genotype address with no *")    
+            raise Exception("Chromosome range should be specified with phased genotype address with no #")    
 
-    if (args.bed and "*" in args.bed) or (args.bgen and "*" in args.bgen):
+    if (args.bed and "#" in args.bed) or (args.bgen and "#" in args.bgen):
         if args.from_chr is None:
             args.from_chr = 1
         if args.to_chr is None:
             args.to_chr = 23
 
-    if (args.out and "*" in args.out) or (args.ibd and "*" in args.ibd):
+    if (args.out and "#" in args.out) or (args.ibd and "#" in args.ibd):
         if args.to_chr is None or args.from_chr is None:
-            raise Exception("no chromosome range specified for the wildcard * in the address")
+            raise Exception("no chromosome range specified for the wildcard # in the address")
 
     if args.ibd is None:
         if args.ibd_is_king:
@@ -359,18 +359,18 @@ def main(args):
     inputs = [{"pedigree": pedigree,
             "control":args.c,
             "use_backup":args.use_backup,
-            "phased_address": none_tansform(args.bgen, "*", str(chromosome)),
-            "unphased_address": none_tansform(args.bed, "*", str(chromosome)),
-            "ibd_address": none_tansform(args.ibd, "*", str(chromosome)),            
+            "phased_address": none_tansform(args.bgen, "#", str(chromosome)),
+            "unphased_address": none_tansform(args.bed, "#", str(chromosome)),
+            "ibd_address": none_tansform(args.ibd, "#", str(chromosome)),            
             "ibd_is_king": args.ibd_is_king,
             "pcs": pcs,
             "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
-            "output_address":none_tansform(args.out, "*", str(chromosome)),
+            "output_address":none_tansform(args.out, "#", str(chromosome)),
             "start": args.start,
             "end": args.end,
-            "bim": none_tansform(args.bim, "*", str(chromosome)),
-            "fam": none_tansform(args.fam, "*", str(chromosome)),
+            "bim": none_tansform(args.bim, "#", str(chromosome)),
+            "fam": none_tansform(args.fam, "#", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
@@ -405,14 +405,14 @@ parser.add_argument('-use_backup',
                     help = "Whether it should use backup imputation where there is no ibd infomation available")                    
 parser.add_argument('--ibd',
                     type=str,
-                    help='Address of the IBD file without suffix. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+                    help='Address of the IBD file without suffix. If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
 parser.add_argument('--ibd_is_king',
                     action='store_true',
                     help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
 parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script).')
 parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format. If there is a * in the address, * is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a # in the address, # is replaced by the chromosome numbers in the range of [from_chr, to_chr) for each chromosome(from_chr and to_chr are two optional parameters for this script). Should be supplemented with from_chr and to_chr.')
 parser.add_argument('--from_chr',
                     type=int,                        
                     help='Which chromosome (<=). Should be used with to_chr parameter.')

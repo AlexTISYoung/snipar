@@ -35,8 +35,8 @@ def encode_str_array(x):
 def parse_obsfiles(obsfiles, obsformat='bed'):
     obs_files = []
     chroms = []
-    if '*' in obsfiles:
-        bed_ixes = obsfiles.split('*')
+    if '#' in obsfiles:
+        bed_ixes = obsfiles.split('#')
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):
@@ -59,9 +59,9 @@ def parse_filelist(obsfiles, impfiles, obsformat):
     obs_files = []
     imp_files = []
     chroms = []
-    if '*' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('*')
-        imp_ixes = impfiles.split('*')
+    if '#' in obsfiles and impfiles:
+        bed_ixes = obsfiles.split('#')
+        imp_ixes = impfiles.split('#')
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
@@ -88,10 +88,10 @@ def parse_filelist(obsfiles, impfiles, obsformat):
     return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
 
 def outfile_name(outprefix,outsuffix,chrom=None):
-    if '*' in outprefix:
+    if '#' in outprefix:
         if chrom is None:
             raise(ValueError('Must provide chromosome number with wildcard character'))
-        outprefix = outprefix.split('*')
+        outprefix = outprefix.split('#')
         outprefix = outprefix[0]+str(chrom)+outprefix[1]
         return outprefix+outsuffix
     elif chrom is not None:

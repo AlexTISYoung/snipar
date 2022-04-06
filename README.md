@@ -1,4 +1,4 @@
-# SNIPar
+# snipar
 
 *snipar* (single nucleotide imputation of parents) is a python library for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes from observed genotypes and IBD segments in a nuclear family, and for performing
 family based genome-wide association and polygenic score analyses using observed and/or imputed parental genotypes. 
