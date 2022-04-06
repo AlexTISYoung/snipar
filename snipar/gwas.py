@@ -178,7 +178,7 @@ def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile
         print('Filtering based on missingness')
     G.filter_missingness(max_missing)
     if verbose:
-        print(str(G.shape[2])+'s SNPs that pass filters')
+        print(str(G.shape[2])+' SNPs that pass filters')
     #### Match phenotype ####
     y.filter_ids(G.ids)
     if G.ids.shape[0] > y.ids.shape[0]:
