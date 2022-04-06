@@ -44,7 +44,7 @@ if __name__ == '__main__':
         if args.sep is None:
             weights = np.loadtxt(args.weights,dtype=str)
         else:
-            weights = np.loadtxt(args.weight,dtype=args.sep)
+            weights = np.loadtxt(args.weights,dtype=args.sep)
         colnames = weights[0,:]
         weights = weights[1:weights.shape[0],:]
         print('Read weights for '+str(weights.shape[0])+' variants')
