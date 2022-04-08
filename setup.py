@@ -19,7 +19,7 @@ class MyExt(Extension):
         self.__include_dirs = dirs
 
 setup(name='snipar',
-      version='0.0.2',
+      version='0.0.3',
       description='Library and command line scripts for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing family based genome-wide association and polygenic score analyses.',
       long_description = long_description,
       long_description_content_type="text/markdown",
