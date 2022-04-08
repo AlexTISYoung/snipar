@@ -19,7 +19,7 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 # -- Project information -----------------------------------------------------
 
-project = u'SNIPar'
+project = u'snipar'
 copyright = u'2021, Alexander Young'
 author = u'Alexander Young'
 
@@ -30,6 +30,8 @@ release = u''
 
 
 # -- General configuration ---------------------------------------------------
+
+master_doc = 'index'
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #

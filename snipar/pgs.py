@@ -115,7 +115,13 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
     else:
         cols = np.array(['proband', 'paternal', 'maternal'])
     if compute_controls:
-        return [pgs.compute(x,cols) for x in G]
+        pgs_out = [pgs.compute(x,cols) for x in G[0:3]]
+        if sib:
+            o_cols = np.array(['proband', 'sibling', 'parental'])
+        else:
+            o_cols = np.array(['proband','parental'])
+        pgs_out.append(pgs.compute(G[3], o_cols))
+        return pgs_out
     else:
         return pgs.compute(G,cols)
 
