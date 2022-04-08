@@ -18,11 +18,7 @@ Compute polygenic scores for probands, siblings, and parents from SNP weights us
 
 # Documentation
 
-It is recommended to work through the tutorial: https://github.com/AlexTISYoung/SNIPar/blob/master/docs/tutorial.rst
-
-and read the guide: https://snipar.readthedocs.io/en/latest/guide.html
-
-Documentation for the modules and scripts is at: https://snipar.readthedocs.io/en/latest/
+It is recommended to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
 
 # Virtual Environment
 We highly recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/).
@@ -32,8 +28,7 @@ You may encounter problems with the installation due to package conflicts with y
 
 You can activate and use the environment using
 
-    source path-to-where-you-want-the-virtual-environment-to-be
-    
+    source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
 
 # Installing Using Pip
 Just run:
@@ -46,11 +41,10 @@ Sometimes this may not work because the pip in the system is outdated. You can u
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory
-containing the SNIPar source code, at the shell type:
+containing the *snipar* source code, at the shell type:
 
     python setup.py install
    
-
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you should run tests. To run the tests, after the installation run this command:
 
