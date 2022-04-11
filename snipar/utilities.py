@@ -1,6 +1,7 @@
 import numpy as np
 from os import path
-
+import argparse
+import re
 def make_id_dict(x,col=0):
     """
     Make a dictionary that maps from the values in the given column (col) to their row-index in the input array
@@ -101,3 +102,31 @@ def outfile_name(outprefix,outsuffix,chrom=None):
         return outprefix+'chr_'+str(chrom)+outsuffix
     else:
         return outprefix+outsuffix
+
+def parseNumRange(string):
+    """reads either a int or a range"""
+    match_range = re.match(r' *(\d+) *- *(\d+) *', string)
+    match_list = re.match(r' *(\d+) *', string)
+    if match_range:
+        start = int(match_range.group(1))
+        end = int(match_range.group(2))
+        result = [str(n) for n in range(start, end+1)]
+    elif match_list:
+        result = match_list.group(0)
+    else:
+        raise Exception(f"{string} is neither a range of the form x-y nor a list of integers of the form x y z")
+    return result
+
+class NumRangeAction(argparse.Action):
+    """flattens and sorts the resulting num range. also removes duplicates"""
+    def __call__(self, parser, args, values, option_string=None):
+        result = []
+        for v in values:
+            if isinstance(v,list):
+                result += v
+            if isinstance(v,str):
+                result.append(v)
+        result = np.unique(result).astype(int)
+        result.sort()
+        result = result.astype(str).tolist()
+        setattr(args, self.dest, result)
