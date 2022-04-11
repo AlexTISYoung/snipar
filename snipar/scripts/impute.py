@@ -105,6 +105,7 @@ Results:
 import logging
 from snipar.imputation.preprocess_data import *
 from snipar.imputation.impute_from_sibs import *
+from snipar.utilities import parse_obsfiles
 import argparse
 import h5py
 import random
@@ -332,26 +333,36 @@ def main(args):
     if args.bgen and (not "#" in args.bgen):
         if args.to_chr is None or args.from_chr is None:
             raise Exception("Chromosome range should be specified with phased genotype address with no #")    
-
-    if (args.bed and "#" in args.bed) or (args.bgen and "#" in args.bgen):
-        if args.from_chr is None:
+    
+    chromosomes = [None]
+    if (args.from_chr is not None) or (args.to_chr is not None):
+        if (args.from_chr is None):
             args.from_chr = 1
-        if args.to_chr is None:
-            args.to_chr = 23
+        if (args.to_chr is None):
+            args.from_chr = 23
+        chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
+        if args.bed:
+            if not ("#" in args.bed):
+                raise Error("with from_chr and to_chr bed address requires a # wildcard")
+        elif args.bgen:
+            if not ("#" in args.bgen):
+                raise Error("with from_chr and to_chr bgen address requires a # wildcard")
+    else:        
+        if (args.bed and "#" in args.bed):
+            files, chromosomes = parse_obsfiles(args.bed, "bed", False)
+            chromosome = chromosomes.astype('str')
+        elif(args.bgen and "#" in args.bgen):
+            files, chromosomes = parse_obsfiles(args.bgen, "bgen", False)
+            chromosome = chromosomes.astype('str')        
 
     if (args.out and "#" in args.out) or (args.ibd and "#" in args.ibd):
-        if args.to_chr is None or args.from_chr is None:
-            raise Exception("no chromosome range specified for the wildcard # in the address")
+        if chromosomes == [None]:
+            raise Exception("no chromosome can be find for the wildcard # in the address")
 
     if args.ibd is None:
         if args.ibd_is_king:
             raise Exception("can not use 'ibd_is_king' without any ibd file")
 
-    if (args.from_chr is not None) and (args.to_chr is not None):
-        chromosomes = [str(chromosome) for chromosome in range(args.from_chr, args.to_chr)]
-    else:
-        chromosomes = [None]
-    
     def none_tansform(a, b, c):
         if a is not None:
             return a.replace(b, c)

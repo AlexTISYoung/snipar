@@ -32,7 +32,7 @@ def encode_str_array(x):
     x_out = np.array([y.encode('ascii') for y in x])
     return x_out.reshape(x_shape)
 
-def parse_obsfiles(obsfiles, obsformat='bed'):
+def parse_obsfiles(obsfiles, obsformat='bed', append = True):
     obs_files = []
     chroms = []
     if '#' in obsfiles:
@@ -40,7 +40,10 @@ def parse_obsfiles(obsfiles, obsformat='bed'):
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):
-                obs_files.append(obsfile)
+                if append:
+                    obs_files.append(obsfile)
+                else:
+                    obs_files.append(obsfile[:-(len(obsformat)+1)])
                 chroms.append(i)
         if len(obs_files)==0:
             raise(ValueError('Observed genotype files not found'))
@@ -98,4 +101,3 @@ def outfile_name(outprefix,outsuffix,chrom=None):
         return outprefix+'chr_'+str(chrom)+outsuffix
     else:
         return outprefix+outsuffix
-    
