@@ -31,11 +31,11 @@ class TestCommanline(SniparTest):
         command = [
                    "-c",
                    "--ibd", f"{tests_root}/test_data/sample.our",                   
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -54,11 +54,11 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.empty",                   
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_backup#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_backup@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -79,12 +79,12 @@ class TestCommanline(SniparTest):
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
-                   "--ibd", f"{tests_root}/test_data/sample#.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--ibd", f"{tests_root}/test_data/sample@.our",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -104,11 +104,11 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -121,12 +121,12 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--chunks", "3",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -149,11 +149,11 @@ class TestCommanline(SniparTest):
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.king",
                    "--ibd_is_king",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -175,11 +175,11 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bgen", f"{tests_root}/test_data/sample_reduced#",
+                   "--bgen", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -200,12 +200,12 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bgen", f"{tests_root}/test_data/sample_reduced#",
+                   "--bgen", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--chunks", "3",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control#",
+                   "--out", f"{output_root}/test_impute_with_phased_pedigree_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -224,12 +224,12 @@ class TestCommanline(SniparTest):
         command = ["--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_king#",
+                   "--out", f"{output_root}/test_impute_with_unphased_king@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -241,12 +241,12 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_king_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -267,7 +267,7 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample#",
+                   "--bed", f"{tests_root}/test_data/sample@",
                    "--chr_range", "1-2",
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
@@ -275,7 +275,7 @@ class TestCommanline(SniparTest):
                    "--pc_num", "8",
                    "-find_optimal_pc",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_king_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -299,12 +299,12 @@ class TestCommanline(SniparTest):
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.king",
                    "--ibd_is_king",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_king_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -325,11 +325,11 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
                 #    "--threads", "5", TODO figure out why interaction goes wrong
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multiprocess#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multiprocess@",
                    "--processes", "2",
                    ]
         if not self.log:
@@ -350,14 +350,14 @@ class TestCommanline(SniparTest):
                    "-c",
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
-                   "--ibd", f"{tests_root}/test_data/sample#.king",
+                   "--ibd", f"{tests_root}/test_data/sample@.king",
                    "--ibd_is_king",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--king", f"{tests_root}/test_data/sample.king",
                    "--agesex", f"{tests_root}/test_data/sample.agesex",
                    "--threads", "2",
-                   "--out", f"{output_root}/test_impute_with_unphased_king_control#",
+                   "--out", f"{output_root}/test_impute_with_unphased_king_control@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command
@@ -379,10 +379,10 @@ class TestCommanline(SniparTest):
                    "--start", "0",
                    "--end", f"{self.subsample_snp}",
                    "--ibd", f"{tests_root}/test_data/sample.our",
-                   "--bed", f"{tests_root}/test_data/sample_reduced#",
+                   "--bed", f"{tests_root}/test_data/sample_reduced@",
                    "--chr_range", "1-2",
                    "--pedigree", f"{tests_root}/test_data/sample.ped",
-                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multithread#",
+                   "--out", f"{output_root}/test_impute_with_unphased_pedigree_control_multithread@",
                    ]
         if not self.log:
             command = ["-silent_progress"] + command

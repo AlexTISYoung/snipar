@@ -33,11 +33,11 @@ def encode_str_array(x):
     x_out = np.array([y.encode('ascii') for y in x])
     return x_out.reshape(x_shape)
 
-def parse_obsfiles(obsfiles, obsformat='bed', append = True):
+def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@'):
     obs_files = []
     chroms = []
-    if '#' in obsfiles:
-        bed_ixes = obsfiles.split('#')
+    if wildcard in obsfiles:
+        bed_ixes = obsfiles.split(wildcard)
         for i in range(1,23):
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):

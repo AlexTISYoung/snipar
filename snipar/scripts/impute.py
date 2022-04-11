@@ -22,16 +22,16 @@ Args:
         Whether it should use backup imputation where there is no ibd infomation available.
 
     --ibd : str
-        Address of the IBD file without suffix. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
+        Address of the IBD file without suffix. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
 
     --ibd_is_king
         If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file
 
     --bgen : str
-        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
+        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
 
     --bed : str
-        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
+        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
 
     --chr_range : int, optional
         number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.'
@@ -43,7 +43,7 @@ Args:
         Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes
 
     --out: str, optional
-        The script writes the result of imputation to this path. If it contains '#', result of imputation for chromosome i will be written to a similar path where # has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
+        The script writes the result of imputation to this path. If it contains '@', result of imputation for chromosome i will be written to a similar path where @ has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
 
     --start: int, optional
         The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
@@ -328,22 +328,22 @@ def main(args):
     if args.chr_range:
         chromosomes = args.chr_range
         if args.bed:
-            if not ("#" in args.bed):
-                raise Exception("with chr_range bed address requires a # wildcard")
+            if not ("@" in args.bed):
+                raise Exception("with chr_range bed address requires a @ wildcard")
         elif args.bgen:
-            if not ("#" in args.bgen):
-                raise Exception("with chr_range bgen address requires a # wildcard")
+            if not ("@" in args.bgen):
+                raise Exception("with chr_range bgen address requires a @ wildcard")
     else:
-        if (args.bed and "#" in args.bed):
+        if (args.bed and "@" in args.bed):
             files, chromosomes = parse_obsfiles(args.bed, "bed", False)
             chromosomes = chromosomes.astype('str').tolist()
-        elif(args.bgen and "#" in args.bgen):
+        elif(args.bgen and "@" in args.bgen):
             files, chromosomes = parse_obsfiles(args.bgen, "bgen", False)
             chromosomes = chromosomes.astype('str').tolist()
 
     if args.bed and args.bgen:
-        if ("#" in args.bed) ^ ("#" in args.bgen):
-            raise Exception("Can not have # for just one of the bed and bgen")
+        if ("@" in args.bed) ^ ("@" in args.bgen):
+            raise Exception("Can not have @ for just one of the bed and bgen")
 
     if args.bgen and chromosomes==[None]:
         raise Exception("bgen files should be used with chr_range argument")
@@ -359,18 +359,18 @@ def main(args):
     inputs = [{"pedigree": pedigree,
             "control":args.c,
             "use_backup":args.use_backup,
-            "phased_address": none_tansform(args.bgen, "#", str(chromosome)),
-            "unphased_address": none_tansform(args.bed, "#", str(chromosome)),
-            "ibd_address": none_tansform(args.ibd, "#", str(chromosome)),            
+            "phased_address": none_tansform(args.bgen, "@", str(chromosome)),
+            "unphased_address": none_tansform(args.bed, "@", str(chromosome)),
+            "ibd_address": none_tansform(args.ibd, "@", str(chromosome)),            
             "ibd_is_king": args.ibd_is_king,
             "pcs": pcs,
             "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
-            "output_address":none_tansform(args.out, "#", str(chromosome)),
+            "output_address":none_tansform(args.out, "@", str(chromosome)),
             "start": args.start,
             "end": args.end,
-            "bim": none_tansform(args.bim, "#", str(chromosome)),
-            "fam": none_tansform(args.fam, "#", str(chromosome)),
+            "bim": none_tansform(args.bim, "@", str(chromosome)),
+            "fam": none_tansform(args.fam, "@", str(chromosome)),
             "threads": args.threads,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
@@ -405,14 +405,14 @@ parser.add_argument('-use_backup',
                     help = "Whether it should use backup imputation where there is no ibd infomation available")                    
 parser.add_argument('--ibd',
                     type=str,
-                    help='Address of the IBD file without suffix. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
+                    help='Address of the IBD file without suffix. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--ibd_is_king',
                     action='store_true',
                     help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
 parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--chr_range',
                     type=parseNumRange,
                     nargs='*',
