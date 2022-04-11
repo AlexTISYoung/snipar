@@ -408,7 +408,7 @@ parser.add_argument('--ibd_is_king',
 parser.add_argument('--bgen',
                     type=str,help='Address of the phased genotypes in .bgen format. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script').
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a # in the address, # is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--chr_range',
                     type=parseNumRange,
                     nargs='*',
