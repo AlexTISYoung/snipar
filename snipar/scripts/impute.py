@@ -323,7 +323,8 @@ def main(args):
             else:
                 pcs = pcs[:,:args.pc_num]
         logging.info("pcs loaded")
-        
+    
+    chromosomes = [None]
     if args.chr_range:
         chromosomes = args.chr_range
         if args.bed:
@@ -335,15 +336,18 @@ def main(args):
     else:
         if (args.bed and "#" in args.bed):
             files, chromosomes = parse_obsfiles(args.bed, "bed", False)
-            chromosome = chromosomes.astype('str')
+            chromosomes = chromosomes.astype('str').tolist()
         elif(args.bgen and "#" in args.bgen):
             files, chromosomes = parse_obsfiles(args.bgen, "bgen", False)
-            chromosome = chromosomes.astype('str')        
+            chromosomes = chromosomes.astype('str').tolist()
 
     if args.bed and args.bgen:
         if ("#" in args.bed) ^ ("#" in args.bgen):
             raise Exception("Can not have # for just one of the bed and bgen")
-    
+
+    if args.bgen and chromosomes==[None]:
+        raise Exception("bgen files should be used with chr_range argument")
+
     if args.ibd is None:
         if args.ibd_is_king:
             raise Exception("can not use 'ibd_is_king' without any ibd file")
