@@ -11,9 +11,16 @@ from snipar.utilities import *
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
-    parser.add_argument('--bed',type=str,help='Address of observed genotype files in .bed format (without .bed suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--bgen',type=str,help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.', default = None)
-    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.', default = None)
+    parser.add_argument('--bgen',
+                        type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+    parser.add_argument('--bed',
+                        type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
+    parser.add_argument('--chr_range',
+                        type=parseNumRange,
+                        nargs='*',
+                        action=NumRangeAction,
+                        help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
     parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
     parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
@@ -59,18 +66,18 @@ if __name__ == '__main__':
         if args.imp is None:
             print('Warning: no imputed parental genotypes provided. Will compute PGS only for individuals with both parents genotyped.')
             if args.bed is not None:
-                bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
+                bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
                 bgenfiles = [None for x in range(chroms.shape[0])]
             elif args.bgen is not None:
-                bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen')
+                bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromsomes=args.chr_range)
                 bedfiles = [None for x in range(chroms.shape[0])]
             pargts_list = [None for x in range(chroms.shape[0])]
         else:
             if args.bed is not None:
-                bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed')
+                bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromsomes=args.chr_range)
                 bgenfiles = [None for x in range(chroms.shape[0])]
             elif args.bgen is not None:
-                bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen')
+                bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen', chromsomes=args.chr_range)
                 bedfiles = [None for x in range(chroms.shape[0])]
         if chroms.shape[0]==0:
             raise(ValueError('No input genotype files found'))

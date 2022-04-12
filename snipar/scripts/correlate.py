@@ -7,7 +7,12 @@ from numba import config as numba_config
 from snipar.utilities import parse_obsfiles
 
 parser = argparse.ArgumentParser()
-parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22')
+parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in chr_range (optional argument)')
+parser.add_argument('--chr_range',
+                        type=parseNumRange,
+                        nargs='*',
+                        action=NumRangeAction,
+                        help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('out',type=str,help='Prefix for output file(s)')
 parser.add_argument('--ldscores',type=str,help='Address of ldscores as output by LDSC',default=None)
 parser.add_argument('--bed', type=str,
@@ -34,7 +39,7 @@ if args.ldscores is not None and args.bed is not None:
     raise(ValueError('Both LD scores and genotypes provided. Provided LD scores will be used'))
 
 # Find sumstats files
-sumstats_files, chroms = parse_obsfiles(args.sumstats, obsformat='sumstats.gz')
+sumstats_files, chroms = parse_obsfiles(args.sumstats, obsformat='sumstats.gz', chromosomes=args.chr_range)
 # Read sumstats
 s = read_sumstats_files(sumstats_files, chroms)
 
@@ -48,11 +53,11 @@ s.filter_corrs(args.corr_filter)
 
 # Get LD scores
 if args.ldscores is not None:
-    ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz')
+    ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz', chromosomes=chroms)
     s.scores_from_ldsc(ld_files)
     s.filter_NAs()
 elif args.bed is not None:
-    bedfiles, chroms = parse_obsfiles(args.bed, obsformat='bed')
+    bedfiles, chroms = parse_obsfiles(args.bed, obsformat='bed', chromosomes=chroms)
     s.compute_ld_scores(bedfiles, chroms, args.ld_wind, args.ld_out)
     s.filter_NAs()
 

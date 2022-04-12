@@ -5,16 +5,19 @@ from numba import config as numba_config
 import snipar.ibd
 import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
-from snipar.utilities import parse_obsfiles
+from snipar.utilities import *
 from snipar.pedigree import *
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--bed', type=str,
-                    help='Address of observed genotype files in .bed format (without .bed suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.',
-                    default=None)
-parser.add_argument('--bgen',type=str,
-                    help='Address of observed genotype files in .bgen format (without .bgen suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.', 
-                    default = None)
+parser.add_argument('--bgen',
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--bed',
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--chr_range',
+                    type=parseNumRange,
+                    nargs='*',
+                    action=NumRangeAction,
+                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('--king',
                     type=str,
                     default = None,
@@ -59,10 +62,10 @@ if args.bed is not None and args.bgen is not None:
 
 # Find bed files
 if args.bed is not None:
-    bedfiles, chroms = parse_obsfiles(args.bed, 'bed')
+    bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromsomes=args.chr_range)
     bgenfiles = [None for x in range(chroms.shape[0])]
 elif args.bgen is not None:
-    bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen')
+    bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromsomes=args.chr_range)
     bedfiles = [None for x in range(chroms.shape[0])]
 if args.chrom is not None and chroms.shape[0]==1:
     chroms = np.array([args.chrom],dtype=int)

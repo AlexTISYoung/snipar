@@ -384,19 +384,19 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments
-    segs_outfile = outfile_name(outprefix,'.ibd.segments.gz',chrom)
+    segs_outfile = outfile_name(outprefix,'.ibd.segments.gz', chrom)
     print('Writing segments to ' + segs_outfile)
     write_segs(sibpairs, allsegs, chrom, segs_outfile)
     # Write matrix
     if ibdmatrix:
-        outfile = outfile_name(outprefix,'.ibdmatrix.gz',chrom)
+        outfile = outfile_name(outprefix,'.ibdmatrix.gz', chrom)
         print('Writing matrix output to ' + str(outfile))
         ibd = np.row_stack(
             (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')
     if ld_out:
-        ld_outfile = outfile_name(outprefix,'.l2.ldscore.gz',chrom)
+        ld_outfile = outfile_name(outprefix,'.l2.ldscore.gz', chrom)
         print('Writing LD-scores to '+ld_outfile)
         ld_out = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in gts.sid]), gts.sid, gts.pos, ld)).T))
         np.savetxt(ld_outfile, ld_out, fmt='%s')

@@ -33,12 +33,14 @@ def encode_str_array(x):
     x_out = np.array([y.encode('ascii') for y in x])
     return x_out.reshape(x_shape)
 
-def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@'):
+def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@', chromosomes=None):
     obs_files = []
     chroms = []
     if wildcard in obsfiles:
         bed_ixes = obsfiles.split(wildcard)
-        for i in range(1,23):
+        if chromosomes is None:
+            chromosomes = np.arange(1,23)
+        for i in chromosomes:
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             if path.exists(obsfile):
                 if append:
@@ -59,14 +61,16 @@ def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@'):
                 raise(ValueError(obsfile+' not found'))
     return np.array(obs_files), np.array(chroms,dtype=int)
 
-def parse_filelist(obsfiles, impfiles, obsformat):
+def parse_filelist(obsfiles, impfiles, obsformat, chromosomes=None):
     obs_files = []
     imp_files = []
     chroms = []
-    if '#' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('#')
-        imp_ixes = impfiles.split('#')
-        for i in range(1,23):
+    if '@' in obsfiles and impfiles:
+        bed_ixes = obsfiles.split('@')
+        imp_ixes = impfiles.split('@')
+        if chromosomes is None:
+            chromosomes = np.arange(1,23)
+        for i in chromosomes:
             obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
             impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
             if path.exists(impfile) and path.exists(obsfile):
@@ -92,10 +96,10 @@ def parse_filelist(obsfiles, impfiles, obsformat):
     return np.array(obs_files), np.array(imp_files), np.array(chroms,dtype=int)
 
 def outfile_name(outprefix,outsuffix,chrom=None):
-    if '#' in outprefix:
+    if '@' in outprefix:
         if chrom is None:
             raise(ValueError('Must provide chromosome number with wildcard character'))
-        outprefix = outprefix.split('#')
+        outprefix = outprefix.split('@')
         outprefix = outprefix[0]+str(chrom)+outprefix[1]
         return outprefix+outsuffix
     elif chrom is not None:

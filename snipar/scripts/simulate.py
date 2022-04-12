@@ -8,9 +8,13 @@ from snipar.utilities import *
 from snipar.simulate import *
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('bgen', type=str,
-                        help='Address of genotype files in .bgen format (without .bgen suffix). If there is a # in the address, # is replaced by the chromosome numbers in the range of 1-22.',
-                        default=None)
+    parser.add_argument('--bgen',
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+    parser.add_argument('--chr_range',
+                    type=parseNumRange,
+                    nargs='*',
+                    action=NumRangeAction,
+                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
     parser.add_argument('n_causal',type=int,help='Number of causal loci')
     parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
     parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
@@ -75,7 +79,7 @@ if __name__ == '__main__':
     beta_vert = args.beta_vert
     ncausal = args.n_causal
 
-    bgenfiles, chroms = parse_obsfiles(args.bgen, obsformat='bgen')
+    bgenfiles, chroms = parse_obsfiles(args.bgen, obsformat='bgen', chromosomes=args.chr_range)
 
     # Read genotypes
     haps = []
