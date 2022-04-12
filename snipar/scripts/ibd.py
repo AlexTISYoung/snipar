@@ -62,10 +62,10 @@ if args.bed is not None and args.bgen is not None:
 
 # Find bed files
 if args.bed is not None:
-    bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromsomes=args.chr_range)
+    bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
     bgenfiles = [None for x in range(chroms.shape[0])]
 elif args.bgen is not None:
-    bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromsomes=args.chr_range)
+    bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromosomes=args.chr_range)
     bedfiles = [None for x in range(chroms.shape[0])]
 if args.chrom is not None and chroms.shape[0]==1:
     chroms = np.array([args.chrom],dtype=int)

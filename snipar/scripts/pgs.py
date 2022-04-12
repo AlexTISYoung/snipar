@@ -69,15 +69,15 @@ if __name__ == '__main__':
                 bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
                 bgenfiles = [None for x in range(chroms.shape[0])]
             elif args.bgen is not None:
-                bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromsomes=args.chr_range)
+                bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromosomes=args.chr_range)
                 bedfiles = [None for x in range(chroms.shape[0])]
             pargts_list = [None for x in range(chroms.shape[0])]
         else:
             if args.bed is not None:
-                bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromsomes=args.chr_range)
+                bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromosomes=args.chr_range)
                 bgenfiles = [None for x in range(chroms.shape[0])]
             elif args.bgen is not None:
-                bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen', chromsomes=args.chr_range)
+                bgenfiles, pargts_list, chroms = parse_filelist(args.bgen, args.imp, 'bgen', chromosomes=args.chr_range)
                 bedfiles = [None for x in range(chroms.shape[0])]
         if chroms.shape[0]==0:
             raise(ValueError('No input genotype files found'))

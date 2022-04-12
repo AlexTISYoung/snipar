@@ -4,7 +4,7 @@ import argparse
 from snipar.correlate import *
 from numba import set_num_threads
 from numba import config as numba_config
-from snipar.utilities import parse_obsfiles
+from snipar.utilities import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in chr_range (optional argument)')
