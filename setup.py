@@ -50,7 +50,7 @@ setup(name='snipar',
       ],
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
-      setup_requires=['numpy==1.19.1']#, 'Cython==0.29.20'],
+      setup_requires=['numpy==1.19.1'],# 'Cython==0.29.20'],
       install_requires=[
             'numpy==1.19.1',
             # 'Cython==0.29.20',
