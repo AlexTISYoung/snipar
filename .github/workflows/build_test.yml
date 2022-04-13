@@ -86,6 +86,7 @@ jobs:
     - name: installing
       run: |
             pip install --upgrade pip
+            pip install --upgrade build
             python -m build -C--global-option=build_ext -C--global-option=--inplace
             pip install sphinx
             pip install sphinx_rtd_theme
