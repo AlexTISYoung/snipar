@@ -85,14 +85,13 @@ jobs:
     
     - name: installing
       run: |
-            python setup.py install
-            python setup.py build_ext --inplace
             pip install --upgrade pip
+            python setup.py build_ext --inplace
+            pip install sphinx
+            pip install sphinx_rtd_theme
 
     - name: make the docs
       run: |
-            pip install sphinx
-            pip install sphinx_rtd_theme
             cd docs
             sphinx-apidoc -o . ../snipar/
             make html
