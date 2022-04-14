@@ -6,7 +6,7 @@ this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
 class MyExt(Extension):
     def __init__(self, *args, **kwargs):
-        self.__include_dirs = []
+        self.__include_dirs = ["."]
         super().__init__(*args, **kwargs)
 
     @property
@@ -29,6 +29,7 @@ setup(name='snipar',
       author_email='alextisyoung@gmail.com',
       license='MIT',
       include_package_data=True,
+      package_data={'': ['*.pxd', '*.pyx']},
       scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py','snipar/example/snipar_example_data.py'],
       classifiers=[
             # How mature is this project? Common values are
@@ -50,34 +51,33 @@ setup(name='snipar',
       ],
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
-      setup_requires=['numpy==1.19.3', 'Cython==0.29.24'],
       install_requires=[
-            'pkgconfig==1.5.5',
-            'numpy==1.19.3',
-            'Cython==0.29.24',
+            'numpy==1.22.1',
+            'Cython==0.29.20',
             'scipy==1.7.1',
             'bgen_reader==4.0.7',
-            'pandas==1.1.1',
+            'pandas==1.4.2',
             'pysnptools==0.5.3',
-            'networkx==2.2',
-            'h5py==2.10.0',
+            'networkx==2.8',
+            'h5py==3.6.0',
             'pooch==1.5.1',
-            'numba==0.50.0',
+            'numba==0.53.1',
             'gitpython==3.1.24',
             'scikit-learn==1.0.2',
             'statsmodels==0.13.2',
             ],
       test_suite="snipar/tests",
       zip_safe=False,
-      ext_modules=[MyExt("snipar.imputation.impute_from_sibs",
-			     ["snipar/imputation/impute_from_sibs.pyx"],
-			     language='c++',
-			     extra_compile_args=['-fopenmp'],
-			     extra_link_args=['-fopenmp'],
+      ext_modules=[
+                MyExt("snipar.imputation.impute_from_sibs",
+                    ["snipar/imputation/impute_from_sibs.pyx"],
+                    language='c++',
+                    extra_compile_args=['-fopenmp'],
+                    extra_link_args=['-fopenmp'],
 			     ),
-                  MyExt("snipar.tests.test_impute_from_sibs",
-			     ["snipar/tests/test_impute_from_sibs.pyx"],
-			     language='c++',
-			     ),
+                MyExt("snipar.tests.test_impute_from_sibs",
+                    ["snipar/tests/test_impute_from_sibs.pyx"],
+                    language='c++',
+			    ),
                   ],
 )
