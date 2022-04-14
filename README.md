@@ -54,7 +54,7 @@ where x=7 or 8 for Python 3.7 and 3.8. This environment can be activatated by th
 To install from source, clone the git repository, and in the directory
 containing the *snipar* source code, at the shell type:
 
-    python setup.py install
+    pip install .
    
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you should run tests. To run the tests, after the installation run this command:
