@@ -865,7 +865,7 @@ cdef int get_IBD_type(cstring id1,
         segments = ibd_dict[key2]
 
     for index in range(segments.size()//3):
-        if segments[3*index] <= loc < segments[3*index+1]:
+        if segments[3*index] <= loc <= segments[3*index+1]:
             result = segments[3*index+2]
             break
 
