@@ -2,16 +2,15 @@ from snipar.gtarray import gtarray
 import numpy as np
 from snipar.read import get_gts_matrix
 from snipar.utilities import *
-import h5py
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
     Args:
         snp_ids : :class:`~numpy:numpy.array`
-            vector of SNP ids
-        snp_ids : :class:`~numpy:numpy.array`
-            vector of weights of equal length to snp_ids
+            [L] vector of SNP ids
+        weights : :class:`~numpy:numpy.array`
+            [L] vector of weights of equal length to snp_ids
         alleles : :class:`~numpy:numpy.array`
             [L x 2] matrix of ref and alt alleles for the SNPs. L must match size of snp_ids
 
