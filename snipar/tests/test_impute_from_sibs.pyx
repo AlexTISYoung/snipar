@@ -26,11 +26,11 @@ class TestSibImpute(SniparTest):
             inferred_ibd1 = get_IBD_type(b"jack", b"jim", i, ibd_dict)
             inferred_ibd2 = get_IBD_type(b"jim", b"jack", i, ibd_dict)
             self.assertEqual(inferred_ibd1, inferred_ibd2, msg="different id order changes the result")
-            if ibd0[0] <= i < ibd0[1]:
+            if ibd0[0] <= i <= ibd0[1]:
                 self.assertEqual(inferred_ibd1, 0, msg="inferred IBD is not 0")
-            elif ibd1[0] <= i < ibd1[1]:
+            elif ibd1[0] <= i <= ibd1[1]:
                 self.assertEqual(inferred_ibd1, 1, msg="inferred IBD is not 1")
-            elif ibd2[0] <= i < ibd2[1]:
+            elif ibd2[0] <= i <= ibd2[1]:
                 self.assertEqual(inferred_ibd1, 2, msg="inferred IBD is not 2")
             else:
                 self.assertEqual(inferred_ibd1, nan_integer, msg="inferred IBD is not 0")
