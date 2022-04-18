@@ -18,11 +18,11 @@ Compute polygenic scores for probands, siblings, and parents from SNP weights us
 
 # Documentation
 
-It is recommended to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html. 
+It is recommended to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
 
 # Installing Using Pip
 
-*snipar* currently supports Python 3.7 and 3.8 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.8 and 3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 The easiest way to install is using pip:
 
@@ -41,14 +41,6 @@ You may encounter problems with the installation due to Python version incompata
 You can activate and use the environment using
 
     source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
-
-If your Python version is not supported (for example, you have Anaconda Python 3.9) you can create a Python 3.7 or 3.8 environment in conda:
-
-    conda create --name py3x python=3.x
-
-where x=7 or 8 for Python 3.7 and 3.8. This environment can be activatated by the command:
-
-    conda activate py3x
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory

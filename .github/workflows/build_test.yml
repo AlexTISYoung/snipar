@@ -12,7 +12,7 @@ jobs:
     env:
       CC: /usr/local/opt/llvm/bin/clang
       CXX: /usr/local/opt/llvm/bin/clang++
-      CIBW_BUILD: cp3[89]*
+      CIBW_BUILD: cp3[789]*
     environment: TEST_PYPI_API_TOKEN
     strategy:
       fail-fast: false
@@ -61,7 +61,7 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
         TWINE_REPOSITORY: testpypi
         skip_existing: true
-      run: python -m twine upload --skip-existing dist/*        
+      run: python -m twine upload --skip-existing --verbose dist/*        
       
     - uses: actions/upload-artifact@v2
       with:
