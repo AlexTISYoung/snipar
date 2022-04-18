@@ -5,7 +5,6 @@ class TestExample(SniparTest):
     
     def test_example(self):
         commands1 = [
-            f"cd {output_root}",
             f"rm -rf {output_root}/example_data",
             f"snipar_example_data.py --dest {output_root}/example_data",
         ]
@@ -20,6 +19,7 @@ class TestExample(SniparTest):
         stdout = subprocess.DEVNULL
         if self.log:
             stdout = None
+        os.chdir(f"{output_root}")
         for c in commands1:
             subprocess.run(c.split(), stdout=stdout)
         os.chdir(f"{output_root}/example_data")
