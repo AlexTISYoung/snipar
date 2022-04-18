@@ -10,7 +10,6 @@ class TestExample(SniparTest):
             f"snipar_example_data.py --dest {output_root}/example_data",
         ]
         commands2 = [            
-            "cd example_data",
             "ibd.py --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 --ld_out",#TODO add option of supressing logging in snipar
             "impute.py --ibd chr_@.ibd --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 -silent_progress",
             "gwas.py phenotype.txt --bed chr_@ --imp chr_@ --threads 4",
