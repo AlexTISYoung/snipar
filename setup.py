@@ -19,7 +19,7 @@ class MyExt(Extension):
         self.__include_dirs = dirs
 
 setup(name='snipar',
-      version='0.0.7',
+      version='0.0.8',
       description='Library and command line scripts for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing family based genome-wide association and polygenic score analyses.',
       long_description = long_description,
       long_description_content_type="text/markdown",
@@ -47,21 +47,20 @@ setup(name='snipar',
 
             # Specify the Python versions you support here. In particular, ensure
             # that you indicate whether you support Python 2, Python 3 or both.
-            'Programming Language :: Python :: 3.8',
+            'Programming Language :: Python :: 3.7+',
       ],
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
       install_requires=[
-            'numpy==1.22.1',
-            'Cython==0.29.20',
+            'numpy==1.21.1',
             'scipy==1.7.1',
             'bgen_reader==4.0.7',
-            'pandas==1.4.2',
+            'pandas==1.1.4',
             'pysnptools==0.5.3',
-            'networkx==2.8',
+            'networkx==2.5',
             'h5py==3.6.0',
             'pooch==1.5.1',
-            'numba==0.53.1',
+            'numba==0.55.0',
             'gitpython==3.1.24',
             'scikit-learn==1.0.2',
             'statsmodels==0.13.2',
