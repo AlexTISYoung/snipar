@@ -12,6 +12,7 @@ if not os.path.exists(output_root):
 class SniparTest(unittest.TestCase):
     p_value_threshold = 0.01
     subsample_snp = 50
+    log = False
     @classmethod
     def setUpClass(cls):        
         logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')

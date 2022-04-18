@@ -1,31 +1,9 @@
 from snipar.scripts import impute
 from snipar.tests.test_imputation import imputation_test
-import os
 from snipar.tests.utils import *
 #TODO add tests with nan
 
-class TestCommanline(SniparTest):
-    p_value_threshold = 0.01
-    subsample_snp = 50
-    log = False
-    @classmethod
-    def setUpClass(cls):
-        if cls.log:
-            logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-        else:
-            logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-            warnings.filterwarnings("ignore")
-
-    @classmethod
-    def tearDownClass(cls):
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
-
-    def setUp(self):
-        self.startTime = time.time()
-
-    def tearDown(self):
-        t = time.time() - self.startTime
-        print('%s: %.3f' % (self.id(), t))
+class TestImpute(SniparTest):
 
     def test_impute_with_unphased_pedigree_control(self):
         command = [

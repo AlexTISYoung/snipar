@@ -1,13 +1,14 @@
 import numpy as np
 import h5py, argparse, gzip
-from snipar.sibreg import *
+from snipar.utilities import *
+from snipar.ibd import write_segs_from_matrix
 
 def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
 
 def simulate_sibs(father,mother, blocksize=200):
     # Compute blocks without recombination
-    n_blocks = np.int(np.ceil(father.shape[0]/float(blocksize)))
+    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
     blocksizes = np.zeros((n_blocks),dtype=int)
     for i in range(n_blocks-1):
         blocksizes[i] = blocksize
@@ -210,6 +211,14 @@ haps_snps = np.column_stack(([f"{chrom}"]*nsnp,[f'{chrom}_rs'+str(x) for x in ra
 haps_out = np.column_stack((haps_snps,haps_matrix))
 np.savetxt(args.outprefix+'.haps',haps_out,fmt='%s')
 
+# Save segs in snipar format
+sibpairs = np.column_stack(([str(x)+'_0' for x in range(nfam)],
+                            [str(x)+'_1' for x in range(nfam)]))
+segs = write_segs_from_matrix(ibd, sibpairs, [f'{chrom}_rs'+str(x) for x in range(nsnp)], 
+                                [f"{chrom*nsnp+x}" for x in range(nsnp)], 
+                                np.arange(0,1,1/float(nsnp)), chrom,
+                                args.outprefix+'.chr_'+str(chrom)+'.ibd.segments.gz')
+
 # Write sample file
 sample_out = open(outprefix+'.sample','w')
 sample_out.write('ID_1 ID_2 missing\n')
@@ -241,7 +250,8 @@ for i in range(0,n_sib_only):
                 remove.write(ped[fp * i + j, 1] + ' ' + ped[fp * i + j, 1]+'\n')
 
 for i in range(n_sib_only, n_sib_only + n_one_parent):
-    remove_father = np.random.binomial(1, 0.5, 1)
+    #remove_father = np.random.binomial(1, 0.5, 1)
+    remove_father = 1
     if remove_father==1:
         remove.write(ped[fp * i + fsize, 1] + ' ' + ped[fp * i + fsize, 1]+'\n')
     else:

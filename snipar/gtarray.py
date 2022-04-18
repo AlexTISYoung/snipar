@@ -11,14 +11,16 @@ class gtarray(object):
             For a 3 dimensional array, the second dimension indexes the individual and his/her relatives' genotypes (for example: proband, paternal, and maternal); and
             the third dimension is the SNPs.
         ids : :class:`~numpy:numpy.array`
-            vector of individual IDs
+            vector of individual IDs of same length as first dimension of garray
         sid : :class:`~numpy:numpy.array`
-            vector of SNP ids, equal in length size of last dimension of array
+            vector of SNP ids, equal in length, L, to last dimension of array
         alleles : :class:`~numpy:numpy.array`
             [L x 2] matrix of ref and alt alleles for the SNPs. L must match size of sid
         pos : :class:`~numpy:numpy.array`
             vector of SNP positions; must match size of sid
         chrom : :class:`~numpy:numpy.array`
+            vector of SNP chromosomes; must match size of sid
+        map : :class:`~numpy:numpy.array`
             vector of SNP chromosomes; must match size of sid
         fams : :class:`~numpy:numpy.array`
             vector of family IDs; must match size of ids

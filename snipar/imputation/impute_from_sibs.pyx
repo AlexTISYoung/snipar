@@ -865,7 +865,7 @@ cdef int get_IBD_type(cstring id1,
         segments = ibd_dict[key2]
 
     for index in range(segments.size()//3):
-        if segments[3*index] <= loc < segments[3*index+1]:
+        if segments[3*index] <= loc <= segments[3*index+1]:
             result = segments[3*index+2]
             break
 
@@ -1026,6 +1026,9 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int mendelian_error_count
     cdef bint c_silent_progress = silent_progress
     cdef bint c_use_backup = use_backup
+    cdef int[:, :] sib_is_nan = np.zeros((number_of_threads, max_sibs)).astype("i")
+    cdef bint has_non_nan_offspring = False
+    cdef int[:] number_of_non_nan_offspring_per_snp = np.zeros(number_of_snps).astype("i")
     reset()
     logging.info("with chromosome " + str(chromosome)+": " + "using "+str(number_of_threads)+" threads")
     for index in prange(number_of_fams, nogil = True, num_threads = number_of_threads):
@@ -1056,110 +1059,117 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             len_snp_ibd1 = 0
             len_snp_ibd2 = 0
             loc = c_pos[snp]
-            if sib_count[index] > 1:
-                for i in range(1, sib_count[index]):
-                    for j in range(i):
-                        sib1_index = sibs_index[this_thread, i]
-                        sib2_index = sibs_index[this_thread, j]
-                        sib1_id = fams[index][i]
-                        sib2_id = fams[index][j]
-                        sib1_gene_isnan = (c_unphased_gts[sib1_index, snp] == nan_integer)
-                        sib2_gene_isnan = (c_unphased_gts[sib2_index, snp] == nan_integer)
-                        ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
-                        if sib1_gene_isnan  and sib2_gene_isnan:
-                            continue
-                        elif not sib1_gene_isnan  and sib2_gene_isnan:
-                            snp_ibd2[this_thread, len_snp_ibd2,0] = i
-                            snp_ibd2[this_thread, len_snp_ibd2,1] = i
-                            len_snp_ibd2 = len_snp_ibd2+1
-
-                        elif sib1_gene_isnan  and not sib2_gene_isnan:
-                            snp_ibd2[this_thread, len_snp_ibd2,0] = j
-                            snp_ibd2[this_thread, len_snp_ibd2,1] = j
-                            len_snp_ibd2 = len_snp_ibd2 + 1
-
-                        elif not sib1_gene_isnan and not sib2_gene_isnan:
-                            if ibd_type == 2:
+            has_non_nan_offspring = True
+            for i in range(sib_count[index]):
+                sib1_index = sibs_index[this_thread, i]
+                sib_is_nan[this_thread, i] = (c_unphased_gts[sib1_index, snp] == nan_integer)
+                if sib_is_nan[this_thread, i] > 0:
+                    has_non_nan_offspring = True
+            if has_non_nan_offspring:
+                number_of_non_nan_offspring_per_snp[snp] += 1
+                if sib_count[index] > 1:
+                    for i in range(1, sib_count[index]):
+                        for j in range(i):
+                            sib1_id = fams[index][i]
+                            sib2_id = fams[index][j]
+                            sib1_gene_isnan = sib_is_nan[this_thread, i]
+                            sib2_gene_isnan = sib_is_nan[this_thread, j]
+                            ibd_type = get_IBD_type(sib1_id, sib2_id, loc, c_ibd)
+                            if sib1_gene_isnan  and sib2_gene_isnan:
+                                continue
+                            
+                            elif not sib1_gene_isnan  and sib2_gene_isnan:
                                 snp_ibd2[this_thread, len_snp_ibd2,0] = i
+                                snp_ibd2[this_thread, len_snp_ibd2,1] = i
+                                len_snp_ibd2 = len_snp_ibd2+1
+
+                            elif sib1_gene_isnan  and not sib2_gene_isnan:
+                                snp_ibd2[this_thread, len_snp_ibd2,0] = j
                                 snp_ibd2[this_thread, len_snp_ibd2,1] = j
                                 len_snp_ibd2 = len_snp_ibd2 + 1
-                            if ibd_type == 1:
-                                snp_ibd1[this_thread, len_snp_ibd1,0] = i
-                                snp_ibd1[this_thread, len_snp_ibd1,1] = j
-                                len_snp_ibd1 = len_snp_ibd1 + 1
-                            if ibd_type == 0:
-                                snp_ibd0[this_thread, len_snp_ibd0,0] = i
-                                snp_ibd0[this_thread, len_snp_ibd0,1] = j
-                                len_snp_ibd0 = len_snp_ibd0 + 1
-                if len_snp_ibd0>0:
-                    counter_ibd0[snp] = counter_ibd0[snp]+1
-            else :
-                sib1_index = sibs_index[this_thread, 0]
-                if not (c_unphased_gts[sib1_index, snp] == nan_integer):
-                    snp_ibd2[this_thread, len_snp_ibd2,0] = 0
-                    snp_ibd2[this_thread, len_snp_ibd2,1] = 0
-                    len_snp_ibd2 = len_snp_ibd2 + 1
-            f = 0.
-            fvars = 0.
-            for p in range(sib_count[index]):
-                q = sibs_index[this_thread, p]
-                fvars = fvars + c_freqs[q, snp]*(1-c_freqs[q, snp])
-                f = f + c_freqs[q, snp]
-            f = f/sib_count[index]
-            parent_genotype_prob[this_thread, 0] = (1-f)**2
-            parent_genotype_prob[this_thread, 1] = 2*f*(1-f)
-            parent_genotype_prob[this_thread, 2] = f**2
-            if single_parent[index] and c_unphased_gts[c_iid_to_bed_index[parents[index]], snp] != nan_integer:
-                #2 time MAF of offspring is MAF of sum of the parents. That minus the existing parent results in MAF of the missing parent.
-                f = 2*f-c_freqs[c_iid_to_bed_index[parents[index]], snp]
-                if f>1.:
-                    f=1.
-                elif f<0.:
-                    f=0.
-                po_result = impute_snp_from_parent_offsprings(snp,
-                                                                                c_iid_to_bed_index[parents[index]],
-                                                                                sibs_index[this_thread, :],
-                                                                                sib_count[index],
-                                                                                snp_ibd0[this_thread,:,:],
-                                                                                snp_ibd1[this_thread,:,:],
-                                                                                snp_ibd2[this_thread,:,:],
-                                                                                f,
-                                                                                parent_genotype_prob[this_thread, :],
-                                                                                c_phased_gts,
-                                                                                c_unphased_gts,
-                                                                                sib_hap_IBDs[this_thread,:,:,:],
-                                                                                parent_offspring_hap_IBDs[this_thread,:,:,:],
-                                                                                len_snp_ibd0,
-                                                                                len_snp_ibd1,
-                                                                                len_snp_ibd2,
-                                                                                c_use_backup,
-                                                                                )
-                imputed_par_gts[index, snp] = po_result.first
-                mendelian_error_count = po_result.second.first
-                single_parent_mendelian_error_count[snp] += mendelian_error_count
-                single_parent_fvars[snp] += fvars
-                is_backup = po_result.second.second
-                single_parent_backup_count[snp] += is_backup
-            else:
-                o_result = impute_snp_from_offsprings(snp,
-                                                                         sibs_index[this_thread, :],
-                                                                         sib_count[index],
-                                                                         snp_ibd0[this_thread,:,:],
-                                                                         snp_ibd1[this_thread,:,:],
-                                                                         snp_ibd2[this_thread,:,:],
-                                                                         f,
-                                                                         parent_genotype_prob[this_thread, :],
-                                                                         c_phased_gts,
-                                                                         c_unphased_gts,
-                                                                         sib_hap_IBDs[this_thread,:,:,:],
-                                                                         len_snp_ibd0,
-                                                                         len_snp_ibd1,
-                                                                         len_snp_ibd2,
-                                                                         c_use_backup,
-                                                                         )
-                imputed_par_gts[index, snp] = o_result.first
-                is_backup = o_result.second
-                sib_backup_count[snp] += is_backup
+
+                            elif not sib1_gene_isnan and not sib2_gene_isnan:
+                                if ibd_type == 2:
+                                    snp_ibd2[this_thread, len_snp_ibd2,0] = i
+                                    snp_ibd2[this_thread, len_snp_ibd2,1] = j
+                                    len_snp_ibd2 = len_snp_ibd2 + 1
+                                if ibd_type == 1:
+                                    snp_ibd1[this_thread, len_snp_ibd1,0] = i
+                                    snp_ibd1[this_thread, len_snp_ibd1,1] = j
+                                    len_snp_ibd1 = len_snp_ibd1 + 1
+                                if ibd_type == 0:
+                                    snp_ibd0[this_thread, len_snp_ibd0,0] = i
+                                    snp_ibd0[this_thread, len_snp_ibd0,1] = j
+                                    len_snp_ibd0 = len_snp_ibd0 + 1
+                    if len_snp_ibd0>0:
+                        counter_ibd0[snp] = counter_ibd0[snp]+1
+                else :
+                    sib1_index = sibs_index[this_thread, 0]
+                    if not (c_unphased_gts[sib1_index, snp] == nan_integer):
+                        snp_ibd2[this_thread, len_snp_ibd2,0] = 0
+                        snp_ibd2[this_thread, len_snp_ibd2,1] = 0
+                        len_snp_ibd2 = len_snp_ibd2 + 1
+                f = 0.
+                fvars = 0.
+                for p in range(sib_count[index]):
+                    q = sibs_index[this_thread, p]
+                    fvars = fvars + c_freqs[q, snp]*(1-c_freqs[q, snp])
+                    f = f + c_freqs[q, snp]
+                f = f/sib_count[index]
+                parent_genotype_prob[this_thread, 0] = (1-f)**2
+                parent_genotype_prob[this_thread, 1] = 2*f*(1-f)
+                parent_genotype_prob[this_thread, 2] = f**2
+                if single_parent[index] and c_unphased_gts[c_iid_to_bed_index[parents[index]], snp] != nan_integer:
+                    #2 time MAF of offspring is MAF of sum of the parents. That minus the existing parent results in MAF of the missing parent.
+                    f = 2*f-c_freqs[c_iid_to_bed_index[parents[index]], snp]
+                    if f>1.:
+                        f=1.
+                    elif f<0.:
+                        f=0.
+                    po_result = impute_snp_from_parent_offsprings(snp,
+                                                                                    c_iid_to_bed_index[parents[index]],
+                                                                                    sibs_index[this_thread, :],
+                                                                                    sib_count[index],
+                                                                                    snp_ibd0[this_thread,:,:],
+                                                                                    snp_ibd1[this_thread,:,:],
+                                                                                    snp_ibd2[this_thread,:,:],
+                                                                                    f,
+                                                                                    parent_genotype_prob[this_thread, :],
+                                                                                    c_phased_gts,
+                                                                                    c_unphased_gts,
+                                                                                    sib_hap_IBDs[this_thread,:,:,:],
+                                                                                    parent_offspring_hap_IBDs[this_thread,:,:,:],
+                                                                                    len_snp_ibd0,
+                                                                                    len_snp_ibd1,
+                                                                                    len_snp_ibd2,
+                                                                                    c_use_backup,
+                                                                                    )
+                    imputed_par_gts[index, snp] = po_result.first
+                    mendelian_error_count = po_result.second.first
+                    single_parent_mendelian_error_count[snp] += mendelian_error_count
+                    single_parent_fvars[snp] += fvars
+                    is_backup = po_result.second.second
+                    single_parent_backup_count[snp] += is_backup
+                else:
+                    o_result = impute_snp_from_offsprings(snp,
+                                                                            sibs_index[this_thread, :],
+                                                                            sib_count[index],
+                                                                            snp_ibd0[this_thread,:,:],
+                                                                            snp_ibd1[this_thread,:,:],
+                                                                            snp_ibd2[this_thread,:,:],
+                                                                            f,
+                                                                            parent_genotype_prob[this_thread, :],
+                                                                            c_phased_gts,
+                                                                            c_unphased_gts,
+                                                                            sib_hap_IBDs[this_thread,:,:,:],
+                                                                            len_snp_ibd0,
+                                                                            len_snp_ibd1,
+                                                                            len_snp_ibd2,
+                                                                            c_use_backup,
+                                                                            )
+                    imputed_par_gts[index, snp] = o_result.first
+                    is_backup = o_result.second
+                    sib_backup_count[snp] += is_backup
             snp = snp+1
     destroy()
     number_of_po_pairs = sum(sibships[sibships["single_parent"]]["sib_count"])
@@ -1171,8 +1181,8 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     multi_sib_fams_ratio = multi_sib_fams/number_of_fams
     sib_ratio_backup = np.array([b/no_parent_fams  if no_parent_fams>0 else 0. for b in sib_backup_count])
     parent_ratio_backup = np.array([b/single_parent_fams  if single_parent_fams>0 else 0. for b in single_parent_backup_count])
-    ratio_ibd0 = np.array([<float>counter_ibd0[i]/number_of_fams for i in range(number_of_snps)])
-    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/(number_of_fams*number_of_snps)
+    ratio_ibd0 = np.array([<float>counter_ibd0[i]/number_of_non_nan_offspring_per_snp[i] if number_of_non_nan_offspring_per_snp[i]>0 else 0 for i in range(number_of_snps)])
+    total_ratio_ibd0 = (<float>np.sum(counter_ibd0))/np.sum(number_of_non_nan_offspring_per_snp) if np.sum(number_of_non_nan_offspring_per_snp)>0 else 0
     expected_total_ibd0 = 0
     for c in sib_count:
         expected_total_ibd0 += (1-0.5**(c-1))**2

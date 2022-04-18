@@ -449,8 +449,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
         logging.info(f"with chromosomes {chromosomes} making an empty ibd dataframe")
         if (sibships["sib_count"]>1).any():
             raise Exception("Should provide ibd file in the presense of families with multiple sibs")
-        cols = ["ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate"]
-        ibd = pd.DataFrame(columns=cols)
+        ibd = {}
     else:
         ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
         if ibd_is_king:            

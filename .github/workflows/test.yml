@@ -25,7 +25,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
     - name: Install snipar
-      run: python3 setup.py install
+      run: pip install .
     
     - name: run tests
       working-directory: ./snipar/tests
