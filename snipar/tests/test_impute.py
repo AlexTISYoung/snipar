@@ -1,10 +1,9 @@
 from snipar.scripts import impute
 from snipar.tests.test_imputation import imputation_test
-import os
 from snipar.tests.utils import *
 #TODO add tests with nan
 
-class TestCommanline(SniparTest):
+class TestImpute(SniparTest):
 
     def test_impute_with_unphased_pedigree_control(self):
         command = [
