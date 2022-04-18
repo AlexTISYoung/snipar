@@ -8,12 +8,16 @@
 # /disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar
 
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
-for i in {1..21}
+for i in {1..22}
 do
 /disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/vcftools-vcftools-581c231/bin/bin/vcftools --gzvcf /disk/genetics/sibling_consortium/GS20k/aokbay/imputed/HRC/vcf/chr$i.dose.vcf.gz --snps /disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/haplotypes/chr_$i'_MAF_0.01_call_0.99_Rsq_0.99.txt' --remove-indels --maf 0.01 --hwe 0.000001 --phased --recode --stdout | gzip -c > haplotypes/chr_$i.vcf.gz
 done
 ### Convert VCF to phased BGEN file ###
-/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 
+hapdir = '/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar'
+for i in {1..21}
+do
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g $hapdir/chr_$i.vcf.gz -og $hapdir/chr_$i.bgen -os $hapdir/chr_$i.sample
+done
 
 # /disk/genetics/sibling_consortium/GS20k/alextisyoung/HM3/tidy
 source env/bin/activate
