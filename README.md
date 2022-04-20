@@ -22,7 +22,7 @@ It is recommended to work through the tutorial: https://snipar.readthedocs.io/en
 
 # Installing Using Pip
 
-*snipar* currently supports Python 3.8 and 3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 The easiest way to install is using pip:
 
