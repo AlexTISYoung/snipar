@@ -81,9 +81,9 @@ class sumstats(object):
         self.direct = self.direct[filter_pass]
         self.direct_SE = self.direct_SE[filter_pass]
         self.avg_NTC = self.avg_NTC[filter_pass]
-        self.avg_NTC_SE = self.avg_NTC_SE[filter_pass]
+        self.avg_NTC_SE = self.avg_NTC_nSE[filter_pass]
         self.population = self.population[filter_pass]
-        self.population_SE = self.population[filter_pass]
+        self.population_SE = self.population_SE[filter_pass]
         self.r_direct_avg_NTC = self.r_direct_avg_NTC[filter_pass]
         self.r_direct_pop = self.r_direct_pop[filter_pass]
         if self.ldscores is not None:
@@ -151,13 +151,19 @@ def read_sumstats_file(sumstats_file, chrom):
     sumstats_header[len(sumstats_header)-1] = sumstats_header[len(sumstats_header)-1].split('\n')[0]
     sumstats_header = np.array(sumstats_header)
     sumstats_file_o.close()
-    # Find columns
+    ## Find columns
+    # Keep backwards compatibility with old sumstats files
+    if 'avg_parental_Beta' in sumstats_header:
+        parname = 'avg_parental'
+    else:
+        parname = 'avg_NTC'
+    # Find column indices
     colnames = ['SNP','pos','A1','A2','freq','direct_Beta',
-                'direct_SE','avg_NTC_Beta','avg_NTC_SE',
-                'population_Beta','population_SE','r_direct_avg_NTC','r_direct_population']
-    col_indices = tuple(np.where(sumstats_header==colnames)[0])
+                'direct_SE',parname+'_Beta',parname+'_SE',
+                'population_Beta','population_SE','r_direct_'+parname,'r_direct_population']
+    col_indices = tuple([np.where(sumstats_header==x)[0][0] for x in colnames])
     # Read summary statistics
-    s = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
+    s = np.loadtxt(sumstats_file,dtype=str,nskiprows=1,usecols=col_indices)
     # Return sumstats class
     return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
                     s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12])
