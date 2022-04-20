@@ -1,5 +1,5 @@
 import sphinx_rtd_theme
-
+from sphinx.ext import apidoc
 # -*- coding: utf-8 -*-
 #
 # Configuration file for the Sphinx documentation builder.
@@ -185,3 +185,13 @@ epub_exclude_files = ['search.html']
 
 
 # -- Extension configuration -------------------------------------------------
+
+def run_apidoc(_):
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    cur_dir = os.path.abspath(os.path.dirname(__file__))
+    module = '../snipar/'
+    output_path = os.path.join(cur_dir, 'source')
+    apidoc.main(['-e', '-o', output_path, module, '--force'])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
