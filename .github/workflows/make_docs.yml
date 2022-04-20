@@ -5,7 +5,8 @@ on:
     branches:
       - master
 
-make_docs:
+jobs:
+  make_docs:
     name: Updating docs
     runs-on: ${{ matrix.os }}
     strategy:
