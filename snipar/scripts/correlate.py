@@ -53,7 +53,7 @@ s.filter_corrs(args.corr_filter)
 
 # Get LD scores
 if args.ldscores is not None:
-    ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz', chromosomes=chroms)
+    ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz', chromosomes=[x for x in range(1,23)])
     s.scores_from_ldsc(ld_files)
     s.filter_NAs()
 elif args.bed is not None:
