@@ -3,7 +3,7 @@ name: make docs and push to the pages branch
 on:
   push:
     branches:
-      - master
+      - test_docs
 
 jobs:
   make_docs:
