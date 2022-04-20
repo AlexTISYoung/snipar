@@ -33,12 +33,11 @@ done
 $plink --merge-list $hapdir/bedfiles/merge_list.txt --make-bed --out $hapdir/bedfiles/autosome
 
 ### Infer relations with KING
-$king -b $hapdir/bedfile/autosome --related --degree 1 --cpus 20 --prefix $gpardir/
+$king -b $hapdir/bedfiles/autosome.bed --related --degree 1 --cpus 20 --prefix $gpardir/king
 
 ### Load snipar python virtualenv ###
-source $hapdir/env/bin/activate
-ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin --agesex $gpardir/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@
-
+source $gpardir/env/bin/activate
+ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@
 
 impute.py --ibd ibd/chr_@.ibd --bgen ../genotypes/haplotypes/chr_@_haps --pedigree ../../pedigree.txt --threads 20 --out imputed/chr_@
 for i in {14..16}

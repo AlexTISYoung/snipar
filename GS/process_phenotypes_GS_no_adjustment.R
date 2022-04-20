@@ -140,13 +140,17 @@ processed_traits$EA_years_mid = sapply(raw_traits$years,years_convert_mid)
 processed_traits$EA_quals = sapply(raw_traits$qualification,quals_convert)
 processed_traits$EA_quals[is.na(processed_traits$EA_quals)] = processed_traits$EA_years[is.na(processed_traits$EA_quals)]
 
-# FIDs
-ped = read.table('pedigree.txt',header=T,stringsAsFactors = F)
-processed_traits$FID = ped[match(processed_traits$IID,ped$IID),'FID']
-processed_traits$FID[is.na(processed_traits$FID)] = paste('F',processed_traits$IID[is.na(processed_traits$FID)],sep='')
-processed_traits = processed_traits[order(processed_traits$FID),]
+# Match with geno ids
+fam = read.table('grandpar/haplotypes/bedfiles/autosome.fam')
+fam$IID = sapply(fam[,2],function(x) strsplit(x,'_')[[1]][2])
+processed_traits$IID = fam[match(processed_traits$IID,fam$IID),2]
+processed_traits$FID = processed_traits$IID
 processed_traits = processed_traits[,c(dim(processed_traits)[2],1:(dim(processed_traits)[2]-1))]
-
 # Write
-write.table(processed_traits,'processed_traits_noadj.txt',quote=F,row.names=F)
+write.table(processed_traits,'grandpar/processed_traits_noadj.txt',quote=F,row.names=F)
 
+# Agesex
+agesex = data.frame(FID=processed_traits$FID,IID=processed_traits$IID,
+                    age=raw_traits$age,
+                    sex=sapply(raw_traits$sex,function(x) if (x==0){return('F')} else if (x==1){return('M')} else {return(NA)}))
+write.table(agesex,'grandpar/agesex.txt',quote=F,row.names=F)
