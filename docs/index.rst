@@ -12,7 +12,6 @@ Welcome to snipar's documentation!
    
    tutorial
    guide
-   modules
 
 Indices and tables
 ==================
