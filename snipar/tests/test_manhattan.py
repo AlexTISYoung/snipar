@@ -4,7 +4,6 @@ import pandas as pd
 from pysnptools.snpreader import Bed
 from scipy.stats import norm
 from pandas import DataFrame
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 import statsmodels.api as sm
 from scipy.stats import linregress
@@ -18,6 +17,7 @@ def imputation_test(chromosomes,
                    outname_prefix = "",
                    ):
     #Data files for chromosome i should be named in this fashion: "prefix{i}"
+    import matplotlib.pyplot as plt
     chromosomes_expected_genes_o = []
     chromosomes_expected_genes_pm = []
     chromosomes_imputed_genes_o = []

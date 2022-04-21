@@ -1,3 +1,4 @@
 numpydoc
 sphinx_rtd_theme
 numba
+cython==0.29.28
