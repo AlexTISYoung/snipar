@@ -6,29 +6,28 @@ from snipar.ibd import write_segs_from_matrix
 from snipar.map import decode_map_from_pos
 from snipar.utilities import *
 from snipar.simulate import *
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
-    parser.add_argument('--chr_range',
-                    type=parseNumRange,
-                    nargs='*',
-                    action=NumRangeAction,
-                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
-    parser.add_argument('n_causal',type=int,help='Number of causal loci')
-    parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
-    parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
-    parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating',default=0)
-    parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating)',default=None)
-    parser.add_argument('--h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
-    parser.add_argument('--h2_total',type=float,help='Total variance explained by direct effects and indirect genetic effects from parents',default=None)
-    parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
-    parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
-    parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
-    parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
-    parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
-    args=parser.parse_args()
+parser = argparse.ArgumentParser()
+parser.add_argument('--bgen',
+                type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--chr_range',
+                type=parseNumRange,
+                nargs='*',
+                action=NumRangeAction,
+                help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
+parser.add_argument('n_causal',type=int,help='Number of causal loci')
+parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
+parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
+parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating',default=0)
+parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating)',default=None)
+parser.add_argument('--h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
+parser.add_argument('--h2_total',type=float,help='Total variance explained by direct effects and indirect genetic effects from parents',default=None)
+parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
+parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
+parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
+parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
+parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
 
+def main(args):
     if args.beta_vert > 0 and args.h2_total is not None:
         raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
     if args.beta_vert > 0 and args.h2_direct is None:
@@ -291,3 +290,7 @@ if __name__ == '__main__':
         # count
 
     np.savetxt(args.outprefix+'causal_effects.txt',causal_out,fmt='%s')
+
+if __name__ == "__main__":
+    args=parser.parse_args()
+    main(args)

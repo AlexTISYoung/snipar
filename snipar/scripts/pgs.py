@@ -8,39 +8,38 @@ import snipar.lmm as lmm
 from snipar.utilities import *
 
 ######### Command line arguments #########
-if __name__ == '__main__':
-    parser=argparse.ArgumentParser()
-    parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
-    parser.add_argument('--bgen',
-                        type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
-    parser.add_argument('--bed',
-                        type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
-    parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
-    parser.add_argument('--chr_range',
-                        type=parseNumRange,
-                        nargs='*',
-                        action=NumRangeAction,
-                        help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
-    parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
-    parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
-    parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
-    parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
-    parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='nt1')
-    parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='nt2')
-    parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
-    parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
-    parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
-    parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
-    parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
-    parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
-                        default=1)
-    parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
-    parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to have variance 1 among the phenotyped individuals',default=False)
-    parser.add_argument('--compute_controls', action='store_true', default=False,
-                        help='Compute PGS for control families (default False)')
-    parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
-    args=parser.parse_args()
+parser=argparse.ArgumentParser()
+parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
+parser.add_argument('--bgen',
+                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--bed',
+                    type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
+parser.add_argument('--chr_range',
+                    type=parseNumRange,
+                    nargs='*',
+                    action=NumRangeAction,
+                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
+parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
+parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
+parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
+parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
+parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='nt1')
+parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='nt2')
+parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
+parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
+parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
+parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
+parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
+parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
+                    default=1)
+parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
+parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to have variance 1 among the phenotyped individuals',default=False)
+parser.add_argument('--compute_controls', action='store_true', default=False,
+                    help='Compute PGS for control families (default False)')
+parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
 
+def main(args):
     if args.weights is not None:
         if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')
@@ -171,3 +170,6 @@ if __name__ == '__main__':
                    delimiter='\t', fmt='%s')
         print('Saving sampling covariance matrix of estimates to ' + args.out + '.vcov.txt')
         np.savetxt(args.out + '.vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+if __name__ == "__main__":
+    args=parser.parse_args()
+    main(args)
