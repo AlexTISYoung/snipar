@@ -10,8 +10,10 @@ Welcome to snipar's documentation!
    :maxdepth: 2
    :caption: Contents:
    
-   tutorial
    guide
+   tutorial
+   input files
+   output files
 
 Indices and tables
 ==================
