@@ -1,6 +1,6 @@
 # snipar
 
-*snipar* (single nucleotide imputation of parents) is a python library for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes from observed genotypes and IBD segments in a nuclear family, and for performing
+*snipar* (single nucleotide imputation of parents) is a Python package for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing
 family based genome-wide association and polygenic score analyses using observed and/or imputed parental genotypes. 
 
 # Main features:
@@ -18,9 +18,13 @@ Compute polygenic scores for probands, siblings, and parents from SNP weights us
 
 # Documentation
 
-It is recommended to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
+Documentation: https://snipar.rtfd.io/
 
-# Installing Using Pip
+It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
+
+And to work through the tutorial: https://snipar.rtfd.io/en/latest/tutorial.html
+
+# Installing Using pip
 
 *snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
@@ -49,6 +53,6 @@ containing the *snipar* source code, at the shell type:
     pip install .
    
 # Running tests
-To check that the code is working properly and that the C modules have been compiled, you should run tests. To run the tests, after the installation run this command:
+To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 
     python -m unittest snipar.tests
