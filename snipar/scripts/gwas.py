@@ -51,10 +51,13 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    # Set number of threads
     if args.threads is not None:
-        if args.threads < numba_config.NUMBA_NUM_THREADS:
-            set_num_threads(args.threads)
-            print('Number of threads: '+str(args.threads))
+        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+    else:
+        num_threads = numba_config.NUMBA_NUM_THREADS
+    set_num_threads(num_threads)
+    print('Number of threads: '+str(num_threads))
 
     # Check arguments
     if args.bed is None and args.bgen is None:

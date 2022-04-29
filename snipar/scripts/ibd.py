@@ -60,9 +60,11 @@ def main(args):
     """
     # Set number of threads
     if args.threads is not None:
-        if args.threads < numba_config.NUMBA_NUM_THREADS:
-            set_num_threads(args.threads)
-            print('Number of threads: '+str(args.threads))
+        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+    else:
+        num_threads = numba_config.NUMBA_NUM_THREADS
+    set_num_threads(num_threads)
+    print('Number of threads: '+str(num_threads))
 
     # Check arguments
     if args.bed is None and args.bgen is None:
