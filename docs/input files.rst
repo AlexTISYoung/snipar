@@ -18,3 +18,7 @@ agesex file
 phenotype file
 --------------
 .. _phenotype:
+
+weights file
+------------
+.. _weights: 
