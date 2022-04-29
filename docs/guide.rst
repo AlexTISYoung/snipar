@@ -15,7 +15,6 @@ Installation
 
 *snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
-
 Installing Using pip
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -72,6 +71,9 @@ A *snipar* workflow requires input files in certain formats. See :ref:`input fil
 
 The :ref:`tutorial <tutorial>` allows you to work through an example workflow before trying real data. 
 
+Inputting multiple chromosomes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Inferring identity-by-descent segments 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -97,9 +99,9 @@ inference plateaus as the density of variants increases, so inputting millions o
 imputed from a reference panel to ibd.py will result in a long computation time for little gain
 in accuracy over using variants from a genotyping array. 
 
-The information on the relations present in genotyped sample can be provided through a pedigree file[ref] or through
+The information on the relations present in the genotyped sample can be provided through a :ref:`pedigree file <pedigree>` or through
 the output of KING relationship inference (as output using the --related --degree 1 options: see https://www.kingrelatedness.com/manual.shtml#RELATED)
-along with a file giving the age and sex information[ref] on the genotyped sample.
+along with a :ref:`file giving the age and sex information <agesex>` on the genotyped sample.
 (The age and sex information along with the parent-offspring and sibling relations inferred by KING are used to construct a pedigree
 if a pedigree is not provided.)
 
@@ -107,13 +109,13 @@ The algorithm requires a genetic map to compute the probabilities of transitioni
 If the genetic map positions (in cM) are provided in the .bim file (if using .bed formatted genotypes), the script will use these. 
 Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
 (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats).
-If no genetic map is provided, then the deCODE sex-averaged map on Hg19 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
+If no genetic map is provided, then the deCODE sex-averaged map on GRCh38 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
 which is distributed as part of *snipar*, will be used. 
 
 The HMM employs a genotyping error model that requires a genotyping error probability parameter. 
 By default, the algorithm will estimate the per-SNP genotyping error probability from Mendelian errors
 observed in parent-offspring pairs. However, if your data does not contain any genotyped parent-offspring pairs, 
-then you will need to supply a genotyping error probability to ibd.py.
+then you will need to supply a genotyping error probability.
 If you have no external information on the genotyping error rate in your data, using a value of 1e-4 has 
 worked well when applied to typical genotyping array data. 
 
@@ -127,7 +129,13 @@ Imputing missing parental genotypes
 Family-based genome-wide association analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-*snipar* includes a command-line script 
+Family-based gwas is performed by the gwas.py script. 
+This script will estimate direct effects, non-transmitted coefficients, and population effects of input genetic variants
+on the input phenotype. The script will use both observed and imputed parental genotypes to estimate these effects. 
+Note that if no imputed parental genotypes are input, gwas.py will estimate effects for samples with both parents genotyped,
+provided that a :ref:`pedigree file <pedigree>` is also input. 
+
+The script first estimates variance components from
 
 Family-based polygenic score analyses
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

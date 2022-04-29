@@ -14,7 +14,7 @@ Welcome to snipar's documentation!
    tutorial
    input files
    output files
-   Scripts <source/snipar.scripts>
+   scripts
 
 Indices and tables
 ==================
