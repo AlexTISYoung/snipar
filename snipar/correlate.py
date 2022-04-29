@@ -81,7 +81,7 @@ class sumstats(object):
         self.direct = self.direct[filter_pass]
         self.direct_SE = self.direct_SE[filter_pass]
         self.avg_NTC = self.avg_NTC[filter_pass]
-        self.avg_NTC_SE = self.avg_NTC_nSE[filter_pass]
+        self.avg_NTC_SE = self.avg_NTC_SE[filter_pass]
         self.population = self.population[filter_pass]
         self.population_SE = self.population_SE[filter_pass]
         self.r_direct_avg_NTC = self.r_direct_avg_NTC[filter_pass]
