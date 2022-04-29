@@ -1,11 +1,15 @@
 #!/usr/bin/env python
+"""
+Args:
+@parser@
+"""
 import numpy as np
 import argparse
 from snipar.correlate import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.utilities import *
-
+from snipar.utilities import get_parser_doc
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in chr_range (optional argument)')
 parser.add_argument('--chr_range',
@@ -25,8 +29,13 @@ parser.add_argument('--n_blocks',type=int,help='Number of blocks to use for bloc
 parser.add_argument('--save_delete',action='store_true',help='Save jacknife delete values',default=False)
 parser.add_argument('--ld_wind',type=float,help='The window, in cM, within which LD scores are computed (default 1cM)',default=1.0)
 parser.add_argument('--ld_out',type=str,help='Output LD scores in LDSC format to this address',default=None)
-
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     # Set number of threads
     if args.threads is not None:
         if args.threads < numba_config.NUMBA_NUM_THREADS:

@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""
+Args:
+@parser@
+"""
 import argparse, code
 from numba import set_num_threads
 from numba import config as numba_config
@@ -7,6 +11,7 @@ import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
+from snipar.utilities import get_parser_doc
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',
@@ -46,8 +51,13 @@ parser.add_argument('--max_error', type=float, help='Maximum per-SNP genotyping 
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
-
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     # Set number of threads
     if args.threads is not None:
         if args.threads < numba_config.NUMBA_NUM_THREADS:

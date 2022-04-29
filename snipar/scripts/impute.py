@@ -11,87 +11,7 @@ Use the --king option to provide the KING relatedness inference output (usually 
 constructs a pedigree from this information and outputs it in the HDF5 output.
 
 Args:
-    -c : optional
-        Duplicates offsprings of families with more than one offspring and both parents and add '_' to the start of their FIDs.
-        These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
-
-    -silent_progress : bool, optional
-        Hides the percentage of progress from logging
-
-    -use_backup : bool, optional
-        Whether it should use backup imputation where there is no ibd infomation available.
-
-    --ibd : str
-        Address of the IBD file without suffix. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
-
-    --ibd_is_king
-        If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file
-
-    --bgen : str
-        Address of the phased genotypes in .bgen format(should not include '.bgen'). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
-
-    --bed : str
-        Address of the unphased genotypes in .bed format(should not include '.bed'). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).
-
-    --chr_range : int, optional
-        number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.'
-    
-    --bim : str
-        Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes
-
-    --fam : str
-        Address of a fam file containing positions of SNPs if the address is different from fam file of genotypes
-
-    --out: str, optional
-        The script writes the result of imputation to this path. If it contains '@', result of imputation for chromosome i will be written to a similar path where @ has been replaced with i. The default value for output_address is 'parent_imputed_chr'.    
-
-    --start: int, optional
-        The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive).
-
-    --end: int, optional
-        The script can do the imputation on a slice of each chromosome. This is the end of that slice(it is inclusive).
-
-    --pedigree : string, optional
-        Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'.
-
-    --king : string, optional
-        Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
-        Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
-        The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
-        This file is used in creating a pedigree file and can be generated using KING.
-
-    --agesex : string, optional
-        Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
-        Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
-        Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
-        ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
-
-    --pcs : str, optional
-        Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs
-
-    --pc_num : int, optional
-        Number of PCs to consider.
-
-    -find_optimal_pc: optional
-        It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.
-    
-    --threads : int, optional
-        Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
-
-    --processes: int, optional
-        Number of processes for imputation chromosomes. Each chromosome is done on one process.
-
-    --chunks: int, optional
-        Number of chunks load data in(each process).
-
-    --output_compression: str, optional
-        Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf.
-
-    --output_compression_opts': int, optional
-        Additional settings for the optional compression algorithm. Take a look at the create_dataset function of h5py library for more information.
-
-    --pedigree_nan: str, optional
-        The value representing NaN in the pedigreee. Default is '0'
+@parser@
 
 Results:
     HDF5 files
@@ -110,7 +30,7 @@ import pandas as pd
 import os
 from multiprocessing import Pool
 from time import time
-from snipar.utilities import NumRangeAction, parseNumRange
+from snipar.utilities import NumRangeAction, parseNumRange, get_parser_doc
 random.seed(1567924)
 
 def run_imputation(data):
@@ -432,28 +352,34 @@ parser.add_argument('--out',
                     help="Writes the result of imputation for chromosome i to outprefix{i}")
 parser.add_argument('--start',
                     type=int,
-                    help='Start index of SNPs to perform imputation for in genotype file (starting at zero). Should be used with end parameter.',
+                    help='The script can do the imputation on a slice of each chromosome. This is the start of that slice(it is inclusive)',
                     default=None)
 parser.add_argument('--end',
                     type=int,
-                    help='End index of SNPs to perform imputation for in genotype file (goes from 0 to (end-1). Should be used with start parameter.',
+                    help='The script can do the imputation on a slice of each chromosome. This is the end of that slice(it is inclusive).',
                     default=None)
 parser.add_argument('--pedigree',
                     type=str,
                     default = None,
-                    help='Pedigree file with siblings sharing family ID')
+                    help="Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'.")
 parser.add_argument('--king',
                     type=str,
                     default = None,
-                    help='Address of the king file')
+                    help="""Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+        Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
+        The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
+        This file is used in creating a pedigree file and can be generated using KING.""")
 parser.add_argument('--agesex',
                     type=str,
                     default = None,
-                    help='Address of the agesex file with header "FID IID age sex"')
+                    help="""Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
+        Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
+        Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
+        ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.""")
 parser.add_argument('--pcs',
                     type=str,
                     default = None,
-                    help='Address of the PCs file with header "FID IID PC1 PC2 ...". The IID ordering should be the same as fam file. If provided MAFs will be estimated from PCs')
+                    help='Address of the PCs file with header "FID IID PC1 PC2 ...". If provided MAFs will be estimated from PCs')
 parser.add_argument('--pc_num',
                     type=int,
                     default = None,
@@ -464,7 +390,7 @@ parser.add_argument('-find_optimal_pc',
 parser.add_argument('--threads',
                     type=int,
                     default=1, 
-                    help='Number of the cores to be used')
+                    help='Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.')
 parser.add_argument('--processes',
                     type=int,
                     default=1,
@@ -472,7 +398,7 @@ parser.add_argument('--processes',
 parser.add_argument('--chunks',
                     type=int,
                     default=1,
-                    help='Number of chunks in each process')
+                    help='Number of chunks load data in(each process).')
 parser.add_argument('--output_compression',
                     type=str,
                     default=None,
@@ -485,6 +411,7 @@ parser.add_argument('--pedigree_nan',
                     type=str,
                     default='0',
                     help='The value representing NaN in the pedigreee.')
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')
     args=parser.parse_args()

@@ -28,6 +28,11 @@ parser.add_argument('--impute',action='store_true',help='Impute parental genotyp
 parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
 
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     if args.beta_vert > 0 and args.h2_total is not None:
         raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
     if args.beta_vert > 0 and args.h2_direct is None:

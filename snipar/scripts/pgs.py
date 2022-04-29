@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""
+Args:
+@parser@
+"""
 import argparse
 import numpy as np
 import snipar.pgs as pgs
@@ -6,6 +10,7 @@ from snipar.gtarray import gtarray
 import snipar.read as read
 import snipar.lmm as lmm
 from snipar.utilities import *
+from snipar.utilities import get_parser_doc
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -38,8 +43,14 @@ parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to hav
 parser.add_argument('--compute_controls', action='store_true', default=False,
                     help='Compute PGS for control families (default False)')
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     if args.weights is not None:
         if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')

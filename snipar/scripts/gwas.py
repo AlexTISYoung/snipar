@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""
+Args:
+@parser@
+"""
 import argparse, h5py
 import snipar.read as read
 import numpy as np
@@ -8,6 +12,7 @@ from snipar.gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
+from snipar.utilities import get_parser_doc
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -38,9 +43,14 @@ parser.add_argument('--no_txt_out',action='store_true',help='Suppress text outpu
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
 parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                     default=1)
-
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 # Set number of threads
 def main(args):
+    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    Args:
+        args: list
+            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """
     if args.threads is not None:
         if args.threads < numba_config.NUMBA_NUM_THREADS:
             set_num_threads(args.threads)
