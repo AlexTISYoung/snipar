@@ -81,7 +81,7 @@ class sumstats(object):
         self.direct = self.direct[filter_pass]
         self.direct_SE = self.direct_SE[filter_pass]
         self.avg_NTC = self.avg_NTC[filter_pass]
-        self.avg_NTC_SE = self.avg_NTC_nSE[filter_pass]
+        self.avg_NTC_SE = self.avg_NTC_SE[filter_pass]
         self.population = self.population[filter_pass]
         self.population_SE = self.population_SE[filter_pass]
         self.r_direct_avg_NTC = self.r_direct_avg_NTC[filter_pass]
@@ -163,7 +163,7 @@ def read_sumstats_file(sumstats_file, chrom):
                 'population_Beta','population_SE','r_direct_'+parname,'r_direct_population']
     col_indices = tuple([np.where(sumstats_header==x)[0][0] for x in colnames])
     # Read summary statistics
-    s = np.loadtxt(sumstats_file,dtype=str,nskiprows=1,usecols=col_indices)
+    s = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
     # Return sumstats class
     return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
                     s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12])
