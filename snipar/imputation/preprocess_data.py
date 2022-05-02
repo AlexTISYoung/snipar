@@ -656,6 +656,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
                     'pedigree' : pedigree table Its columns are has_father, has_mother, single_parent respectively.
                     'non_duplicates' : Indexes of the unique snps. Imputation is restricted to them.
                     'standard_f' : Whether the allele frequencies are just population average instead of MAFs estimated using PCs
+                    'MAF_*' : info about the MAF estimator if MAF estimator is used.
     """
     logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
     phased_gts = None

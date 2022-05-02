@@ -909,6 +909,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                 'pedigree' : pedigree table Its columns are has_father, has_mother, single_parent respectively.
                 'non_duplicates' : Indexes of the unique snps. Imputation is restricted to them.
                 'standard_f' : Whether the allele frequencies are just population average instead of MAFs estimated using PCs
+                'MAF_*' : info about the MAF estimator if MAF estimator is used.
 
         chromosome: str
             Name of the chromosome(s) that's going to be imputed. Only used for logging purposes.
@@ -919,7 +920,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
         output_address : str, optional
             If presented, the results would be written to this address in HDF5 format.
             Aside from all the key, value pairs inside hdf5_output_dict, the following are also written to the file.
-                'imputed_par_gts' : imputed genotypes
+                'imputed_par_gts' : imputed parental genotypes. It's the imputed missing parent if only one parent is missing and the imputed average of the both parents if both are missing.
                 'pos' : the position of SNPs(in the order of appearance in genotypes)                
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
                 'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
