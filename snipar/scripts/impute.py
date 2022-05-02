@@ -361,7 +361,7 @@ parser.add_argument('--end',
 parser.add_argument('--pedigree',
                     type=str,
                     default = None,
-                    help="Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'.")
+                    help="Address of the pedigree file. Pedigree file is a ' ' seperated csv with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Default NaN value of Pedigree file is '0'. If your NaN value is something else be sure to specify it with --pedigree_nan option.")
 parser.add_argument('--king',
                     type=str,
                     default = None,
