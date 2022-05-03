@@ -138,6 +138,28 @@ LD scores are calculated for each SNP. These can also be output in LDSC format u
 Imputing missing parental genotypes 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+:ref:`impute.py <impute.py>` is responsible for imputing the missing parental genotypes.
+This is done for families with at least one offspring and one parent missing.
+You should provide the script with information identity-by-descent (IBD) segments shared between
+the siblings if there are sibling pairs present within the data. This data can be either in snipar or king format.
+Use –ibd_is_king to specify which format is used.
+
+The script needs information about family structure of the sample. You can either supply it with a :ref:`pedigree file <pedigree>` or
+let it build the pedigree from :ref:`kinship <kinship>` and :ref:`agesex <agesex>` files.
+
+If you want to do the imputation only on a subset of SNPS you can achieve  it by using -start and -end options.
+This can help you with possible memory issues. -chunks option implements a similar functionaity.
+When the script is run with -chunks x, the SNPs are broken into x different batches and those batches are run consecutively.
+
+If your system has more than one processor you can take advantage of -threads and -processes for higher performance.
+snipar processes chromosomes one by one each as one process. In presense of -processes x, x of the chromosomes will be
+processesed at the same time. -threads specifies how many threads will be used for each of the chromosomes.
+With -processes x -threads y at each point there will be x*y threads open.
+This number shouldn't be much higher than available physical threads on the system.
+
+Imputed parental genotypes and other informations about the imputation will be written to a file in HDF5 format for each chromosome.
+You can see information about the outputs :ref:`here <imputed_file>`.
+
 Family-based genome-wide association analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -175,7 +197,7 @@ The script outputs summary statistics in both gzipped :ref:`text format <_sumsta
 Estimating correlations between effects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To :ref:`correlate.py <correlate.py>` script estimates the genome-wide correlation between direct and population effects,
+:ref:`correlate.py <correlate.py>` script estimates the genome-wide correlation between direct and population effects,
 and between direct effects and average non-transmitted coefficients (NTCs). 
 It takes as input the :ref:`summary statistics <_sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
 and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
@@ -192,7 +214,7 @@ and whether direct effects are meaningfully different from population effects fo
 Family-based polygenic score analyses
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Polygenic scores base on observed/imputed genotypes can be calculated and analysed using the :ref:`pgs.py <pgs.py>` script.
+Polygenic scores based on observed/imputed genotypes can be calculated and analysed using the :ref:`pgs.py <pgs.py>` script.
 
 The :ref:`pgs.py <pgs.py>` takes similar inputs to the :ref:`gwas.py <gwas.py>` script. 
 The main addition is that in order to compute a PGS, a :ref:`weights file <weights>` must be provided. 
