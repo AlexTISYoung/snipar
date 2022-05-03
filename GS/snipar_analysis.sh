@@ -37,9 +37,9 @@ $king -b $hapdir/bedfiles/autosome.bed --related --degree 1 --cpus 20 --prefix $
 
 ### Load snipar python virtualenv ###
 source $gpardir/env/bin/activate
+mkdir $gpardir/ibd $gpardir/imputed $gpardir/traits
 ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@
-
-impute.py --ibd ibd/chr_@.ibd --bgen ../genotypes/haplotypes/chr_@_haps --pedigree ../../pedigree.txt --threads 20 --out imputed/chr_@
+impute.py --ibd $gpardir/ibd/chr_@.ibd --bgen $hapdir/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/agesex.txt --threads 40 --out $gpardir/imputed/chr_@
 for i in {14..16}
 do
 mkdir traits/$i
