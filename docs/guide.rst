@@ -54,6 +54,7 @@ To check that the code is working properly and that the C modules have been comp
 
 Workflow
 --------
+.. _workflow:
 
 A typical *snipar* workflow for performing family-based GWAS (see flowchart below) is:
 
@@ -133,7 +134,6 @@ worked well when applied to typical genotyping array data.
 
 The HMM will output the IBD segments to a gzipped text file with suffix ibd.segments.gz. As part of the algorithm,
 LD scores are calculated for each SNP. These can also be output in LDSC format using the --ld_out option. 
-
 
 Imputing missing parental genotypes 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
