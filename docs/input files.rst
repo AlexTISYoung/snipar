@@ -77,3 +77,5 @@ weights file
 ------------
 .. _weights: 
 
+This file is used to input the SNP weights to the :ref:`pgs.py <pgs.py>` script for computation of the PGS. 
+The weights file is a plain-text file with columns giving (minimally) 
