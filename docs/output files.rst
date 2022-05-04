@@ -51,13 +51,13 @@ The resulting HDF5 file will contain the following datasets:
         [n] vector of family (sibship) ids of the imputed parents (in the order of appearance in genotypes); these are used internally by *snipar* and are distinct from FIDs in input files
 
     'parental_status'
-        [n] vector where each row shows the family status [ref] of the family of the corresponding row in families.
+        [n*3] Array where each row shows the family status [ref] of the family of the corresponding row in families. Columns are has_father, has_mother and, single_parent.
 
     'sib_ratio_backup'
         [L] vector giving the ratio of backup imputation (not using IBD information) among families with 2 or more genotyped siblings for each variant.
 
     'parent_ratio_backup'
-        [l] vector giving the ratio of backup imputation among parent-offspring imputations for each variant.
+        [L] vector giving the ratio of backup imputation among parent-offspring imputations for each variant.
 
     'mendelian_error_ratio'
         [L] vector giving ratio of mendelian errors among parent-offspring pairs for each variant
@@ -81,7 +81,7 @@ The resulting HDF5 file will contain the following datasets:
         or genotyped mother (respectively) was used in the imputation
 
     'non_duplicates'
-        vector of indexes of the unique snps; imputation is restricted to these SNPs
+        [L] vector of indexes of the unique snps; imputation is restricted to these SNPs
 
     'standard_f'
         Whether the allele frequencies are just population average instead of MAFs estimated using PCs

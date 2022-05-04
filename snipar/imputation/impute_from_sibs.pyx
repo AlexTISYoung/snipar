@@ -923,7 +923,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
                 'imputed_par_gts' : imputed parental genotypes. It's the imputed missing parent if only one parent is missing and the imputed average of the both parents if both are missing.
                 'pos' : the position of SNPs(in the order of appearance in genotypes)                
                 'families' : family ids of the imputed parents(in the order of appearance in genotypes)
-                'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families.
+                'parental_status' : a numpy array where each row shows the family status of the family of the corresponding row in families. Columns are has_father, has_mother and, single_parent.
                 'sib_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among offspring imputations in each snp.
                 'parent_ratio_backup' : An array with the size of number of snps. Show the ratio of backup imputation among parent-offspring imputations in each snp.
                 'mendelian_error_ratio' : Ratio of mendelian errors among parent-offspring pairs for each snp
