@@ -1,7 +1,9 @@
-.. _output_files
+.. _output_files:
 ============
 Output files
 ============
+
+We describe the output files here. Examples are produced by working through the :ref:`tutorial <tutorial>`. 
 
 IBD segments file 
 -----------------
@@ -177,14 +179,72 @@ HDF5 summary statistics
 -----------------------
 .. _sumstats_hdf5:
 
-pgs file
+The :ref:`gwas.py <gwas.py>` script outputs one HDF5 file per chromosome containing the summary statistics for variants in the input. 
+This is to allow for easier access, compared to the text file, of the parameter vector estimate along with its sampling variance-covariance matrix for each SNP. 
+Variants that have been filtered out (by having an MAF below the threshold, too much missingness, or missing IBD/genetic map information)
+will appear but the summary statistics will be 'nan'. For a chromosome with L variants, the HDF5 file contains the following datasets: 
+
+    'bim'
+        [L x 5] matrix of variant level information with columns: chromosome, SNP ID, base-pair (bp) position, Allele 1, Allele 2
+    'estimate'
+        [L x k] matrix of effect estimates for each SNP. The effects estimated depend on the model.
+    'estimate_cols'
+        [k] vector giving the names of the effects estimated for each SNP (corresponding to columns of 'estimate' dataset)
+    'estimate_covariance'
+        [L x k x k] array giving the [k x k] sampling variance-covariance matrix for the effect estimates for each SNP
+    'estimate_ses'
+        [L x k] matrix giving the standard errors for each effect estimate for each SNP
+    'freqs'
+        [L] vector giving the estimated allele frequencies (of allele 1) for each SNP
+    'sigma2'
+        scalar giving the MLE of the residual variance from the linear-mixed model
+    'tau'
+        scalar giving the ratio between the residual variance and variance explained by differences in means between sibships
+
+The variance components in the HDF5 file can be used to reconstruct the phenotypic variance by sigma2*(1+1/tau),
+and the phenotypic correlation between siblings by 1/(1+tau). 
+
+PGS file
 --------
 .. _pgs_file: 
 
-pgs effects
+The :ref:`pgs.py <pgs.py>` script can be used to compute polygenic scores for genotyped individuals
+along with the parental polygenic scores based on observed and/or imputed parental genotypes. 
+The :ref:`pgs.py <pgs.py>` script will output a PGS file, which is a white-space delimited text
+file with columns: FID (family ID), IID (individual ID), proband PGS, paternal PGS, maternal PGS. 
+Here, the family ID is the same as used internally by *snipar*, so that individuals who share a family
+ID are full-siblings. The proband PGS column gives the PGS value for the individual given by the IID in that 
+row. The paternal and maternal PGS columns give the PGS values of the individual's father and mother respectively,
+and these values can be computed from either imputed or observed parental genotypes. 
+
+Note that if the PGS was computed with the '--fit_sib' option, the columns will be 
+FID (family ID), IID (individual ID), proband PGS, sibling PGS, paternal PGS, maternal PGS. The
+sibling PGS column is the PGS computed from the average of the individual's siblings' genotypes. 
+
+PGS effects
 -----------
 .. _pgs_effects:
 
-pgs effects sampling covariance
+The :ref:`pgs.py <pgs.py>` script can be used to compute the direct and population effects of the PGS
+along with the non-transmitted coefficients (NTCs). When this is done, the script will write a file
+with suffix effects.txt. This file has three columns: the first gives the name of the column of the input
+PGS file (i.e. proband, paternal, maternal, population), the second gives the corresponding regression coefficient,
+and the third gives the standard error. For example, if your PGS file has columns proband, paternal, maternal,
+then the first row in the effects file contains the estimate of the direct effect 
+(regression coefficient on proband PGS when controlling for paternal and maternal PGS), the second
+row contains the estimate of the paternal NTC, the third row contains the estimate of the maternal NTC,
+and the final row contains an estimate of the population effect. 
+
+PGS effects sampling covariance
 -------------------------------
 .. _pgs_vcov:
+
+The :ref:`pgs.py <pgs.py>` script can be used to compute the direct and population effects of the PGS
+along with the non-transmitted coefficients (NTCs). When this is done, the script will write a file
+with suffix vcov.txt in addition to the file with suffix effects.txt (described above). This file contains
+the sampling variance-covariance matrix of the estimated effects from fitting the 'full model', i.e. 
+from fitting proband and parental PGS jointly (along wih the sibling PGS if included); in other words,
+the sampling variance-covariance matrix of all the estimated effects except the population effect, which 
+is estimated in a separate regression. If (k+1) effects (including the population effect) are estimated
+and output in the :ref:`effects file <pgs_effects>`, then this file will be a k x k matrix giving the sampling
+variance-covariance matrix of the first k effects in  the :ref:`effects file <pgs_effects>` (excluding the population effect). 

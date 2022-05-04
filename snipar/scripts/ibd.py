@@ -1,7 +1,17 @@
 #!/usr/bin/env python
-"""
+"""Infers identity-by-descent (IBD) segments shared between full-siblings.
+
+Minimally: the script requires observed sibling genotypes in either .bed or .bgen format, along with information
+on the relations present in the dataset, which can be provided using a pedigree file or the results
+of KING kinship inference along with age and sex information (from which a pedigree can be constructed).
+
 Args:
 @parser@
+
+Results:
+    IBD segments
+        For each chromosome, a gzipped text file containing the IBD segments for the siblings is output. 
+        
 """
 import argparse, code
 from numba import set_num_threads

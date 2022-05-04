@@ -3,6 +3,8 @@
 Input files
 ===========
 
+We describe the input files here. Examples are available in the :ref:`tutorial <tutorial>` data. 
+
 IDs
 ---
 
@@ -18,7 +20,7 @@ Observed genotypes
 Observed genotypes can be provided either in PLINK .bed format or in phased .bgen format. 
 (Unphased .bgen format is not currently supported).
 Phased .bgen files are the recommended input since the imputation is more accurate 
-when phase information can be used (see Young et al. [ref]).
+when phase information can be used (see Young et al. 2022 [ref]).
 If one has phased genotypes in another format (for example VCF), then these can be converted
 to phased .bgen format using QCTOOL (https://www.well.ox.ac.uk/~gav/qctool_v2/documentation/examples/converting.html).
 
@@ -61,15 +63,15 @@ agesex file
 This is a white-space delimited text file with header "FID", "IID", "sex", "age".
 Each row contains the family-ID, individual-ID, age, and sex of one individual. 
 Male and Female sex should be represented with 'M' and 'F' respectively.
-The age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the :ref:`kinship file <kinship>`.
+The age column is used for distinguishing between parent and child in a parent-offspring relationship inferred from the :ref:`kinship file <kinship>`.
 ID1 is a parent of ID2 if there is a parent-offspring (PO) relationship between them and 'ID1' is at least 12 years older than ID2.
 
 phenotype file
 --------------
 .. _phenotype:
 
-The phenotype file is a white-space delimited text file with header "FID", "IID", "phenotype_1", "phenotype_2", ...,
-corresponding to columns for family-ID, individual-ID, and phenotype values for the different phenotypes. 
+The phenotype file is a white-space delimited text file with a header. It has columns (in order) for
+family-ID, individual-ID, and phenotype values for the different phenotypes. 
 To specify the k'th phenotype for analysis (relevant for :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>`),
 add '--phen_index k' to your command; by default, the first phenotype will be used.  
 
@@ -77,3 +79,16 @@ weights file
 ------------
 .. _weights: 
 
+This file is used to input the SNP weights to the :ref:`pgs.py <pgs.py>` script for computation of the PGS. 
+The weights file is a plain-text file with columns giving (minimally) the SNP ID, the SNP weight, the 
+effect allele, and the alternative allele. The script is setup to process weights files as output by LD-pred
+by default. If your weights file has different column names, these can be specified through the command 
+line arguments of the :ref:`pgs.py <pgs.py>` script:
+    '--SNP'
+        the column name for the column containing the SNP IDs
+    '--beta_col'
+        the column name for the column with the SNP weights
+    '--A1' 
+        the column name for the column with the effect allele
+    '--A2'
+        the column name for the column with the alternative allele

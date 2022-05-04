@@ -1,3 +1,4 @@
+.. _scripts:
 ====================
 Command Line Scripts
 ====================
