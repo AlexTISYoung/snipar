@@ -1,7 +1,17 @@
 #!/usr/bin/env python
-"""
+"""Infers direct effects, non-transmitted coefficients (NTCs), and population effects of a PGS on a phenotype.
+
+Minimally: the script requires observed genotypes on  individuals and their parents, and/or 
+parental genotypes imputed by snipar's impute.py script, along with a SNP weights file.
+
 Args:
 @parser@
+
+Results:
+    PGS effect estimates
+        A file with suffix effects.txt containing estimates of the PGS effects and their standard errors,
+        and a file with suffix vcov.txt containing the sampling variance-covariance matrix of the effect estimates
+        
 """
 import argparse
 import numpy as np

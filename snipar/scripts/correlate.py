@@ -1,7 +1,17 @@
 #!/usr/bin/env python
-"""
+"""Infers correlations between direct effects and population effects, and between direct effects and average non-transmitted coefficients (NTCs).
+
+Minimally: the script requires summary statistics as output by snipar's gwas.py script, and
+either LD-scores (as output by snipar's ibd.py script or LDSC) or .bed files from
+which LD-scores can be computed
+
 Args:
 @parser@
+
+Results:
+    correlations
+        A text file containing the estimated correlations and their standard errors. 
+        
 """
 import numpy as np
 import argparse

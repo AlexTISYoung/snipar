@@ -1,7 +1,9 @@
-.. _output_files
+.. _output_files:
 ============
 Output files
 ============
+
+We describe the output files here. Examples are produced by working through the :ref:`tutorial <tutorial>`. 
 
 IBD segments file 
 -----------------
@@ -57,7 +59,7 @@ The resulting HDF5 file will contain the following datasets:
         [L] vector giving the ratio of backup imputation (not using IBD information) among families with 2 or more genotyped siblings for each variant.
 
     'parent_ratio_backup'
-        [l] vector giving the ratio of backup imputation among parent-offspring imputations for each variant.
+        [L] vector giving the ratio of backup imputation among parent-offspring imputations for each variant.
 
     'mendelian_error_ratio'
         [L] vector giving ratio of mendelian errors among parent-offspring pairs for each variant
@@ -241,7 +243,7 @@ The :ref:`pgs.py <pgs.py>` script can be used to compute the direct and populati
 along with the non-transmitted coefficients (NTCs). When this is done, the script will write a file
 with suffix vcov.txt in addition to the file with suffix effects.txt (described above). This file contains
 the sampling variance-covariance matrix of the estimated effects from fitting the 'full model', i.e. 
-from fitting proband and parenal PGS jointly (along wih the sibling PGS if included); in other words,
+from fitting proband and parental PGS jointly (along wih the sibling PGS if included); in other words,
 the sampling variance-covariance matrix of all the estimated effects except the population effect, which 
 is estimated in a separate regression. If (k+1) effects (including the population effect) are estimated
 and output in the :ref:`effects file <pgs_effects>`, then this file will be a k x k matrix giving the sampling

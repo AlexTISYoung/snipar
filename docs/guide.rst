@@ -63,12 +63,13 @@ A typical *snipar* workflow for performing family-based GWAS (see flowchart belo
 3. Estimating direct effects and non-transmitted coefficients (NTCs) of genome-wide SNPs (:ref:`gwas.py <gwas.py>`)
 
 .. figure:: snipar_flowchart.png
-   :scale: 35 %
+   :scale: 30 %
    :alt: typical snipar workflow
 
    Illustration of a typical workflow for performing family-based GWAS
 
 A *snipar* workflow requires input files in certain formats. See :ref:`input files <input files>`.
+Output files are documented :ref:`here <output_files>`. 
 
 The :ref:`tutorial <tutorial>` allows you to work through an example workflow before trying real data. 
 
@@ -98,7 +99,7 @@ parent-offspring pairs (i.e. one parent's genotype is missing), imputation
 can proceed without inferring IBD. 
 
 *snipar* contains a Hidden Markov Model (HMM) algorithm for inferring IBD shared between siblings, 
-which can be accessed through the command line script ibd.py. 
+which can be accessed through the command line script :ref:`ibd.py <ibd.py>`. 
 
 The ibd.py script requires the :ref:`observed genotypes <observed genotypes>` of the siblings and information
 on the sibling and parent-offspring relations in the genotyped sample. 
@@ -107,13 +108,13 @@ To infer IBD, one can use a smaller set of genetic variants than one intends to
 use in downstream analyses (imputation, gwas, etc.). 
 For example, one could use the variants on a genotyping array to
 infer IBD segments, and these IBD segments could be used to impute missing parental genotypes
-for all variants imputed from a reference panel. This can be useful since the accuracy of IBD
+for a larger set of variants imputed from a reference panel. This can be useful since the accuracy of IBD
 inference plateaus as the density of variants increases, so inputting millions of variants
-imputed from a reference panel to ibd.py will result in a long computation time for little gain
+imputed from a reference panel to :ref:`ibd.py <ibd.py>` will result in a long computation time for little gain
 in accuracy over using variants from a genotyping array. 
 
 The information on the relations present in the genotyped sample can be provided through a :ref:`pedigree file <pedigree>` or through
-the output of KING relationship inference (as output using the --related --degree 1 options: see https://www.kingrelatedness.com/manual.shtml#RELATED)
+the :ref:`output of KING relationship inference <kinship>` (as output using the --related --degree 1 options: see https://www.kingrelatedness.com/manual.shtml#RELATED)
 along with a :ref:`file giving the age and sex information <agesex>` on the genotyped sample.
 (The age and sex information along with the parent-offspring and sibling relations inferred by KING are used to construct a pedigree
 if a pedigree is not provided.)
@@ -132,7 +133,7 @@ then you will need to supply a genotyping error probability.
 If you have no external information on the genotyping error rate in your data, using a value of 1e-4 has 
 worked well when applied to typical genotyping array data. 
 
-The HMM will output the IBD segments to a gzipped text file with suffix ibd.segments.gz. As part of the algorithm,
+The HMM will output the IBD segments to a :ref:`gzipped text file with suffix ibd.segments.gz <ibd_segments_file>`. As part of the algorithm,
 LD scores are calculated for each SNP. These can also be output in LDSC format using the --ld_out option. 
 
 Imputing missing parental genotypes 
@@ -151,14 +152,14 @@ The script needs information about family structure of the sample. You can eithe
 let it build the pedigree from :ref:`kinship <kinship>` and :ref:`agesex <agesex>` files.
 
 If you are imputing for a chromosome with a large number of SNPs, you may encounter memory issues. 
-If this is the case, you can use the --chunks argument to do the imputation in chunks. 
+If this is the case, you can use the --chunks argument to perform the imputation in chunks. 
 When the script is run with '-chunks x', it will split the imputation into 'x' batches. 
 Alternatively, you can do the imputation for only on a subset of SNPS by using -start and -end options.
 
 For each chromosome, imputed parental genotypes and other information about the imputation will be written to a file in HDF5 format.
 The contents of the HDF5 output, which a typical user does not need to interact with directly, are documented here: :ref:`here <imputed_file>`.
 
-The expected proportion of imputed variants that have been imputed from a sibling pair in IBD0 (i.e. the parental alleles are fully observed)
+The expected proportion of variants that have been imputed from a sibling pair in IBD0 (i.e. the parental alleles are fully observed)
 can be computed from the pedigree. At the end of the imputation, the script will output the expected IBD0 proportion 
 and the observed IBD0 proportion. If there have been issues with the imputation (such as failure to match IBD segments to observed genotypes),
 this will often should up as a large discrepancy between expected and observed IBD0 proportions. 
@@ -166,13 +167,13 @@ this will often should up as a large discrepancy between expected and observed I
 Family-based genome-wide association analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Family-based GWAS is performed by the gwas.py script. 
-This script will estimate direct effects, non-transmitted coefficients, and population effects of input genetic variants
+Family-based GWAS is performed by the :ref:`gwas.py <gwas.py>` script. 
+This script estimates direct effects, non-transmitted coefficients, and population effects of input genetic variants
 on the phenotype specified in the :ref:`phenotype file <phenotype>`. (If multiple phenotypes are present in the :ref:`phenotype file <phenotype>`,
 the phenotype to analyse can be specified using the '--phen_index' argument, where '--phen_index 1' corresponds to the first phenotype.)
 
 The script will use both :ref:`observed <observed genotypes>` and :ref:`imputed parental genotypes <imputed_file>` to estimate these effects. 
-Note that if no imputed parental genotypes are input, gwas.py will estimate effects using individuals with both parents genotyped only,
+Note that if no imputed parental genotypes are input, effects will be estimated using individuals with both parents genotyped only,
 provided that a :ref:`pedigree file <pedigree>` is also input. 
 (A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
 
@@ -193,7 +194,7 @@ The gwas.py script first estimates a variance component model that models the ph
 then does a transformation that allows the SNP effects to be estimated by simple linear regression while
 accounting for correlations between siblings. 
 
-The script outputs summary statistics in both gzipped :ref:`text format <_sumstats_text>` and
+The script outputs summary statistics in both gzipped :ref:`text format <sumstats_text>` and
 :ref:`HDF5 format <sumstats_hdf5>`.
 
 Estimating correlations between effects
@@ -201,41 +202,45 @@ Estimating correlations between effects
 
 As part of Young et al. 2022 [ref], we estimated the genome-wide correlations between direct and population effects
 and between direct effects and average non-transmitted coefficients (NTCs). The correlation between direct effects and population effects
-tells you how different direct effects are across the genome from effects estimated by standard GWAS (population effects). 
+is a measure of how different direct effects and effects estimated by standard GWAS (population effects) are. 
 
 We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
-It takes as input the :ref:`summary statistics <_sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
+It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
 and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
 It applies a method-of-moments based estimator that 
 accouts for the known sampling variance-covariance of the effect estimates, and for the correlations
 between effect estimates of nearby SNPs due to LD. (See Young et al. 2022 [ref] for more details.)
 
 Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
-heritability and to separate out the contribution of population stratification. This estimator only uses
+heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
 LD-scores to account for correlations between nearby SNPs, not to separate out population stratification. 
 This is because we are (potentially) interested in the contribution of population stratification to population effects,
-and whether population stratification makes population effects different from direct effects.  
+and whether population stratification makes population effects different from direct effects. The approach used by LDSC 
+would remove some of the contribution of population stratification to differences between direct and population effects.   
 
 Family-based polygenic score analyses
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As in previous work (e.g. Kong et al. 2018), parental polygenic scores can be used as 'controls'
+As in previous work (e.g. Kong et al. 2018: https://www.science.org/doi/abs/10.1126/science.aan6877), parental polygenic scores can be used as 'controls'
 to separate out the component of the association between phenotype and polygenic score (PGS) that is due to
-direct genetic effects. In Young et al. 2022 [ref], we showed how this can be done using parental PGS
+direct genetic effects. In Young et al. 2022 [ref], we showed how this can be done using parental PGSs
 computed from imputed parental genotypes. *snipar* provides a script, :ref:`pgs.py <pgs.py>`,
-that can be used for computing and analysing PGS using observed/imputed parental genotypes. 
+that can be used for computing and analysing PGSs using observed/imputed parental genotypes. 
 
-The :ref:`pgs.py <pgs.py>` takes similar inputs to the :ref:`gwas.py <gwas.py>` script. 
+The :ref:`pgs.py <pgs.py>` script takes similar inputs to the :ref:`gwas.py <gwas.py>` script. 
 The main addition is that in order to compute a PGS, a :ref:`weights file <weights>` must be provided. 
 
-By default, if no :ref:`phenotype file <phenotype>` is provided, the :ref:`pgs.py <pgs.py>` will compute
-the PGS values of the all the genotyped individuals for whom :ref:`observed <observed genotypes>` or :ref:`imputed parental genotypes <imputed_file>`
-parental genotypes are available. The script will output a :ref:`PGS file <pgs_file>`, 
-including the imputed/observed PGS values for each individual's parents, facilitating family-based polygenic score analyses. 
+By default, if no :ref:`phenotype file <phenotype>` is provided, the :ref:`pgs.py <pgs.py>` script will compute
+the PGS values of all the genotyped individuals 
+for whom :ref:`observed <observed genotypes>` or :ref:`imputed parental genotypes <imputed_file>` are available. 
+The script will output a :ref:`PGS file <pgs_file>`, 
+including the imputed/observed PGS values for each individual's parents, 
+facilitating family-based polygenic score analyses. 
 
-If the '--fit_sib' argument is provided, the :ref:`PGS file <pgs_file>` will include a column corresponding to the average PGS value of the individual's sibling(s). 
+If the '--fit_sib' argument is provided, the :ref:`PGS file <pgs_file>` 
+will include a column corresponding to the average PGS value of the individual's sibling(s). 
 
-To estimate the direct and population effects as well as the non-transmitted coefficients (NTCs) of the polygenic score, 
+To estimate the direct and population effects as well as the non-transmitted coefficients (NTCs) of the PGS on a phenotype, 
 input a :ref:`phenotype file <phenotype>` to :ref:`pgs.py <pgs.py>`. 
 One can first compute the PGS and write it to :ref:`file <pgs_file>`, 
 and then use this as input to :ref:`pgs.py <pgs.py>` along with a :ref:`phenotype file <phenotype>`.
@@ -243,5 +248,5 @@ and then use this as input to :ref:`pgs.py <pgs.py>` along with a :ref:`phenotyp
 The direct effect and NTCs of the PGS are estimated as fixed effects in a linear mixed model that includes
 a random effect that models (residual) phenotypic correlations between siblings. The population effect is estimated
 from a separate linear mixed regression model that includes only the proband PGS as a fixed effect. 
-The estimates and their standard errors are output to :ref:`file <pgs effects>` along with a separate
+The estimates and their standard errors are output to :ref:`file <pgs_effects>` along with a separate
 :ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the direct effect and NTCs. 

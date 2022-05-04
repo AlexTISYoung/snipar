@@ -1,7 +1,16 @@
 #!/usr/bin/env python
-"""
+"""Infers direct effects, non-transmitted coefficients (NTCs), and population effects of genome-wide SNPs on a phenotype.
+
+Minimally: the script requires observed genotypes on phenotyped individuals and their parents, and/or 
+parental genotypes imputed by snipar's impute.py script, along with a phenotype file. 
+
 Args:
 @parser@
+
+Results:
+    sumstats.gz
+        For each chromosome, a gzipped text file containing the SNP level summary statistics. 
+        
 """
 import argparse, h5py
 import snipar.read as read
