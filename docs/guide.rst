@@ -1,3 +1,4 @@
+.. _guide:
 =====
 Guide
 =====
@@ -75,6 +76,8 @@ The :ref:`tutorial <tutorial>` allows you to work through an example workflow be
 
 Inputting multiple chromosomes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.. _multichrom:
+
 
 We recommend splitting up :ref:`observed genotype files <observed genotypes>`  by chromosome since certain
 scripts in *snipar* cannot handle observed genotype files with SNPs from multiple chromosomes. 
