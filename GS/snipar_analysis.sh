@@ -43,5 +43,5 @@ impute.py --ibd $gpardir/ibd/chr_@.ibd --bgen $hapdir/chr_@_haps --king $gpardir
 for i in {14..16}
 do
 mkdir traits/$i
-gwas.py ../../processed_traits_noadj.txt --out traits/$i/chr_@ --bgen ../genotypes/haplotypes/chr_@_haps --imp imputed/chr_@ --covar ../../covariates.fam --phen_index $i --threads 20
+gwas.py $gpardir/processed_traits_noadj.txt --out $gpardir/traits/$i/chr_@ --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --covar $gpardir/covariates.fam --phen_index $i --threads 40&
 done
