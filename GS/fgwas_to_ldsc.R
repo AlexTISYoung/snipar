@@ -1,4 +1,4 @@
-# "/disk/genetics/sibling_consortium/GS20k/alextisyoung/HM3/tidy/traits/15
+# "/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/traits/15
 d=c()
 for (i in 1:22){
 d = rbind(d,read.table(paste('chr_',i,'.sumstats.gz',sep=''),header=T))
