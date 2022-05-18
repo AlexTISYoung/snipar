@@ -1,13 +1,14 @@
-from sibreg.sibreg import *
-from sibreg.model import *
+# from sibreg.sibreg import *
+# from sibreg.model import *
 import os
 from os import path
 import argparse
-import h5py
-from bgen_reader import open_bgen
-from pysnptools.snpreader import Bed
-from functools import partial
-import ctypes
+import logging
+# import h5py
+# from bgen_reader import open_bgen
+# from pysnptools.snpreader import Bed
+# from functools import partial
+# import ctypes
 
 # TODO: set logging level for imported packages
 # see https://stackoverflow.com/questions/47265898/how-to-set-the-log-level-for-an-imported-module
@@ -40,26 +41,48 @@ def transform_phenotype(inv_root, y, fam_indices, null_mean=None):
     return y
 
 
-def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None, impute_unrel=True):
+def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None, keep=None, impute_unrel=True):
     if len(obsfiles) == 1:
         if from_chr is None:
             raise TypeError('from_chr should not be None.')
         ids, fam_labels = get_ids_with_par(impfiles[from_chr], obsfiles[from_chr], pheno_ids, impute_unrel=impute_unrel)
+        if covar or keep:
+            df = pd.DataFrame({f'fam_labels': fam_labels}, index=ids)
+            if covar is not None:
+                df_covar = pd.DataFrame(index=covar.ids)
+                df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
+            if keep is not None:
+                df_keep = pd.read_csv(keep, sep='\s+', header=None)
+                df_keep = df_keep.astype(str)
+                df_keep.index = df_keep[0]
+                del df_keep[0]
+                df = df.merge(df_keep, how='inner', left_index=True, right_index=True)
+            df = df.reset_index()
+            ids = df['index'].values
+            fam_labels = df[f'fam_labels'].values
+        logger.info(f'Found {len(ids)} common ids.')
         return ids, fam_labels
     # for now impfiles and obsfiles contain all chromosome filenames
     # TODO: if from_chr is not 1, keyerror
-    ids, fam_labels = get_ids_with_par(impfiles[1], obsfiles[1], pheno_ids, impute_unrel=impute_unrel)
-    df = pd.DataFrame({'fam_labels_1': fam_labels}, index=ids)
+    # ids, fam_labels = get_ids_with_par(impfiles[1], obsfiles[1], pheno_ids, impute_unrel=impute_unrel)
+    # df = pd.DataFrame({'fam_labels_1': fam_labels}, index=ids)
     # for obs, imp in zip(obsfiles[1:], impfiles[1:]):
-    for i in range(2, 23):
+    first = True
+    j = from_chr
+    for i in range(1, 23):
         if i not in impfiles or i not in obsfiles:
             continue
         imp = impfiles[i]
         obs = obsfiles[i]
         ids_, fam_labels_ = get_ids_with_par(imp, obs, pheno_ids, impute_unrel=impute_unrel)
-        df_ = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
-        # merge on index, i.e., ids
-        df = df.merge(df_, how='inner', left_index=True, right_index=True)
+        if first:
+            df = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
+            first = False
+            j = i
+        else:
+            df_ = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
+            # merge on index, i.e., ids
+            df = df.merge(df_, how='inner', left_index=True, right_index=True)
     if len(df.index) == 0:
         raise ValueError('No commond ids among chromosome files.')
     logger.info(
@@ -71,9 +94,14 @@ def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None
     if covar is not None:
         df_covar = pd.DataFrame(index=covar.ids)
         df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
+    if keep is not None:
+        df_keep = pd.DataFrame(keep, header=None)
+        df_keep.index = df_keep[0]
+        del df_keep[0]
+        df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
     df = df.reset_index()
     ids = df['index'].values
-    fam_labels = df['fam_labels_1'].values
+    fam_labels = df[f'fam_labels_{j}'].values
     logger.info(f'Found {len(ids)} common ids.')
     return ids, fam_labels
 
@@ -119,7 +147,7 @@ def write_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha, al
         outcols.append('sib')
     if parsum:
         X_length += 1
-        outcols.append('avg_parental')
+        outcols.append('avg_NTC')
     else:
         X_length += 2
         outcols = outcols + ['paternal', 'maternal']
@@ -159,12 +187,12 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
         effects.append('sib')
     if not parsum:
         effects += ['paternal', 'maternal']
-    effects += ['avg_parental', 'population']
+    effects += ['avg_NTC', 'population']
     effects = np.array(effects)
     if not parsum:
         paternal_index = np.where(effects == 'paternal')[0][0]
         maternal_index = np.where(effects == 'maternal')[0][0]
-    avg_par_index = np.where(effects == 'avg_parental')[0][0]
+    avg_par_index = np.where(effects == 'avg_NTC')[0][0]
     population_index = avg_par_index+1
     # Get transform matrix
     A = np.zeros((len(effects), alpha.shape[1]))
@@ -178,7 +206,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outprefix, parsum, sib, alpha
     # Transform effects
     alpha = alpha.dot(A.T)
     alpha_ses_out = np.zeros((alpha.shape[0], A.shape[0]))
-    corrs = ['r_direct_avg_parental', 'r_direct_population']
+    corrs = ['r_direct_avg_NTC', 'r_direct_population']
     if sib:
         corrs.append('r_direct_sib')
     if not parsum:
@@ -225,7 +253,7 @@ def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, fit_sib=False):
         raise ValueError('Too many bytes to handle for multiprocessing.')
     n_tasks = num_cpus
     f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
-    while int(nsnp / n_tasks) * nbytes > max_nbytes / 2 or f(nsnp, niid, n_tasks) > max_nbytes:
+    while int(nsnp / n_tasks) * nbytes > max_nbytes / 4 or f(nsnp, niid, n_tasks) > max_nbytes / 4:
         n_tasks += num_cpus
     return np.array_split(np.arange(nsnp), n_tasks)
 
@@ -247,7 +275,7 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 
 def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
                   fit_sib=False, max_missing=5, min_maf=0.01, min_info=0.9, verbose=False, print_sample_info=False,
-                  impute_unrel=True, no_mean_normalise=False, common_freqs=False):
+                  impute_unrel=True, no_mean_normalise=False, common_freqs=False, ignore_na_fams=False, ignore_na_rows=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
     # no need to provide residual var arr
@@ -261,8 +289,6 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(
         _var_dict['covar_shape']) \
             if 'covar_' in _var_dict else None
-    lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
-                           varcomps=varcomps, covar_X=covar)
     ####### Construct family based genotype matrix #######
     G = get_gts_matrix(pargts_f, gts_f, snp_ids=snp_ids, ids=pheno_ids,
                        parsum=parsum, sib=fit_sib, print_sample_info=print_sample_info, impute_unrel=impute_unrel)
@@ -270,10 +296,9 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     no_fam = np.array([len(x) == 0 for x in G.fams])
     if np.sum(no_fam) > 0:
         ValueError('No family label from pedigree for some individuals')
-    G.compute_freqs(ind=G.gts[:, 1, 0] > -1 if common_freqs else None)
+    G.compute_freqs() #ind=G.gts[:, 1, 0] > -1 if common_freqs else None)
     # impute parental genotypes of unrelated individuals
     if impute_unrel:
-        logger.info('imputing unrelated ind parental geno.')
         G = impute_unrel_par_gts(G, sib=fit_sib, parsum=parsum)
     else:
         logger.info('Not imputing unrelated individuals parental geno.')
@@ -295,14 +320,27 @@ def process_batch(snp_ids, pheno_ids, pargts_f, gts_f, parsum=False,
     #### Fill NAs ####
     if verbose:
         logger.info('Imputing missing values with population frequencies')
-    if not no_mean_normalise:
-        NAs = G.fill_NAs(ind=None)
-    else:
-        def _fill_NAs(G):
-            # NAs = np.sum(G.gts.mask, axis=0)
-            G.gts[G.gts.mask] = 0
-        _fill_NAs(G)
-    alpha, alpha_cov, alpha_ses = lmm.fit_snps_eff(G.gts)
+    if not ignore_na_fams and not ignore_na_rows:
+        # NAs = G.fill_NAs()
+        G = impute_missing(G)
+    # start = time()
+    # G.fill_NAs_imp()
+    # print(time() - start)
+    np.testing.assert_array_equal(G.ids, pheno_ids)
+    G.mean_normalise()
+    # code.interact(local=locals())
+    # else:
+    #     def _fill_NAs(G):
+    #         # NAs = np.sum(G.gts.mask, axis=0)
+    #         G.gts[G.gts.mask] = 0
+    #     _fill_NAs(G)
+    logger.info(f'{len(G.sid)} snps pass filter.')
+    y = match_phenotype(G, y, pheno_ids)
+    # np.testing.assert_array_almost_equal(y, y_)
+    # print(G.sid[0])
+    lmm = LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
+                           varcomps=varcomps, covar_X=covar, add_intercept=True)
+    alpha, alpha_cov, alpha_ses = lmm.fit_snps_eff(G.gts, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
     return G.chrom, G.pos, G.alleles, G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
 
@@ -371,11 +409,14 @@ if __name__ == '__main__':
     parser.add_argument('--grm_only', action='store_true', default=False,
                         help='whether to only include grm variance component.')
 
+    parser.add_argument('--zero_sib_entries', action='store_true', default=False,
+                        help='whether to only zero out grm entries fro sibling pair.')
+
     parser.add_argument('--sparse_thres', type=float,
                         help='Threshold of GRM/IBD sparsity', default=0.05)
 
-    parser.add_argument('--num_threads', type=int,
-                        help='Number of threads numpy uses.', default=None)
+    parser.add_argument('--num_threads', type=str,
+                        help='Number of threads numpy uses.', default='1')
 
     parser.add_argument('--num_cpus', type=int,
                         help='Number of cpus to distribute batches across', default=1)
@@ -399,9 +440,32 @@ if __name__ == '__main__':
                         type=str,
                         help='Prefix of input filename for variance component array (without .npy).')
     
+    parser.add_argument('--vc_list', 
+                        type=float,
+                        nargs='+',
+                        default=None,
+                        help='Pass in variance components as a list of floats.')
+
+    parser.add_argument('--vc_only',
+                       action='store_true',
+                       help='Only perform variance component estimation.')
+
+    parser.add_argument('--ignore_na_fams',
+                        action='store_true', default=False,
+                        help='Whether to ignore families with NA rows  in genotype design matrix or not.')
+    
+    parser.add_argument('--ignore_na_rows',
+                        action='store_true', default=False,
+                        help='Whether to ignore NA rows in genotype design matrix or not.')
+    
     parser.add_argument('--impute_unrel',
                         action='store_true', default=False,
                         help='Whether to impute parental genotype of unrelated individuals or not.')
+
+    parser.add_argument('--keep',
+                        default=None,
+                        type=str,
+                        help='Filename of IDs to be kept for analysis. (No header)')
 
     parser.add_argument('--no_mean_normalise',
                         action='store_true', default=False,
@@ -422,7 +486,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     loglevel = args.loglevel
-    FORMAT = '%(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
+    FORMAT = '%(process)d :: %(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
     numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % loglevel)
@@ -430,6 +494,7 @@ if __name__ == '__main__':
         format=FORMAT, level=numeric_level)
     logger = logging.getLogger(__name__)
 
+    logger.info(f'Output will be written to {args.outprefix}.')
     if (args.ibdrel_path is not None) + (args.grm_path is not None) + (args.gcta_path is not None) > 1:
         raise parser.error(
             'Only one of ibdrel_path and grm_path/gcta_path should be supplied.')
@@ -440,25 +505,42 @@ if __name__ == '__main__':
             logger.error(
                 'If --grm_only is supplied, must also provide either --ibdrel_path, --grm_path or gcta_path.'
             )
+            exit(1)
         logger.info('Only sibship variance component is modelled.')
     if args.gcta_path is not None and (args.plink_path is None or args.hapmap_bed is None):
         raise parser.error(
             'Should provide plink_path and hapmap_bed is gcta_path is supplied.')
+    
+    if args.to_chr < args.from_chr:
+        raise parser.error(
+            '--to_chr must be larger than from_chr.'
+        )
+    if args.to_chr < 1 or args.from_chr > 23:
+        raise parser.error(
+            '--from_chr and --to_chr must be an integer from 1 to 23.'
+        )
 
-    if args.num_threads:
-        # export OMP_NUM_THREADS=...
-        os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
-        # export OPENBLAS_NUM_THREADS=...
-        os.environ["OPENBLAS_NUM_THREADS"] = str(args.num_threads)
-        # export MKL_NUM_THREADS=...
-        os.environ["MKL_NUM_THREADS"] = str(args.num_threads)
-        # export VECLIB_MAXIMUM_THREADS=...
-        os.environ["VECLIB_MAXIMUM_THREADS"] = str(args.num_threads)
-        # export NUMEXPR_NUM_THREADS=...
-        os.environ["NUMEXPR_NUM_THREADS"] = str(args.num_threads)
+    # if args.num_threads:
+    # export OMP_NUM_THREADS=...
+    os.environ["OMP_NUM_THREADS"] = str(args.num_threads)
+    # export OPENBLAS_NUM_THREADS=...
+    os.environ["OPENBLAS_NUM_THREADS"] = str(args.num_threads)
+    # export MKL_NUM_THREADS=...
+    os.environ["MKL_NUM_THREADS"] = str(args.num_threads)
+    # export VECLIB_MAXIMUM_THREADS=...
+    os.environ["VECLIB_MAXIMUM_THREADS"] = str(args.num_threads)
+    # export NUMEXPR_NUM_THREADS=...
+    os.environ["NUMEXPR_NUM_THREADS"] = str(args.num_threads)
     import numpy as np
     from scipy.stats import chi2
     from math import log10
+    from sibreg.sibreg import *
+    from sibreg.model import *
+    import h5py
+    from bgen_reader import open_bgen
+    from pysnptools.snpreader import Bed
+    from functools import partial
+    import ctypes
 
     ######### Read Phenotype ########
     y, pheno_ids = read_phenotype(
@@ -490,9 +572,9 @@ if __name__ == '__main__':
         raise ValueError(
             f'Lists of imputed and observed genotype files not of same length {len(gts_list)} and {len(pargts_list)}')
     if args.covar:
-        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=covariates, impute_unrel=args.impute_unrel)
+        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
     else:
-        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=None, impute_unrel=args.impute_unrel)
+        ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, pheno_ids, from_chr=args.from_chr, covar=None, keep=args.keep, impute_unrel=args.impute_unrel)
     ########## Construct GRM/IBD and sibship matrix ##########
     # logger.info('Building GRM...')
     if args.ibdrel_path is not None:
@@ -500,7 +582,7 @@ if __name__ == '__main__':
         #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
         id_dict = make_id_dict(ids)
         grm_data, grm_row_ind, grm_col_ind = build_ibdrel_arr(
-            args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
+            args.ibdrel_path, id_dict=id_dict, ignore_sib=args.zero_sib_entries, keep=ids, thres=args.sparse_thres)
     elif args.grm_path is not None or args.gcta_path is not None:
         if args.grm_path is None:
             run_gcta_grm(args.plink_path, args.gcta_path,
@@ -522,6 +604,9 @@ if __name__ == '__main__':
         sib_data, sib_row_ind, sib_col_ind = build_sib_arr(fam_labels)
     ################## Optimize variance components ##################
     y = match_phenotype_(ids, y, pheno_ids)
+    print('variance of y', np.var(y))
+    y = (y - np.mean(y)) #/ np.std(y)
+    print('variance of y', np.var(y))
     if 'grm_data' in locals() and not args.grm_only:
         varcomp_lst = (
             (grm_data, grm_row_ind, grm_col_ind),
@@ -535,43 +620,59 @@ if __name__ == '__main__':
         varcomp_lst = (
             (sib_data, sib_row_ind, sib_col_ind),
         )
-    if args.vc_in:
+    if args.vc_list and args.vc_in:
+        raise ValueError('Only one of --vc_list and --vc_in is needed.')
+    if args.vc_list:
+        varcomps = tuple(args.vc_list)
+        if len(varcomps) != len(varcomp_lst) + 1:
+            raise ValueError('Supplied varcomps length does not match the length of ')
+    elif args.vc_in:
         varcomps = tuple(np.load(f'{args.vc_in}.npz')['varcomps'])
         if len(varcomps) != len(varcomp_lst) + 1:
             raise ValueError('Supplied varcomps length does not match the length of ')
     else:
         varcomps = None
     if args.covar is None:
-        lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None)
+        lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
     else:
         covariates.filter_ids(ids)
+        covar_1 = np.hstack((np.ones((len(y), 1),dtype=y.dtype), covariates.gts.data))
         if args.fit_res:
-            alpha = np.linalg.solve(covariates.gts.T.dot(covariates.gts), covariates.gts.T.dot(y))
-            aa = covariates.gts.dot(alpha)
-            y -= aa
+            # import code
+            # # alpha_covar = np.linalg.solve(covariates.gts.T.dot(covariates.gts), covariates.gts.T.dot(y))
+            alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y))
+            y = y -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
+            # alpha_covar = np.linalg.solve(covariates.gts.T.dot(covariates.gts), covariates.gts.T.dot(y))
+            # y -=  covariates.gts.dot(alpha_covar)
+            # code.interact(local=locals())
             logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
-            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None)
+            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
         else:
-            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts)
+            lmm = LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covar_1, add_intercept=True)
     if not varcomps:
-        logger.info('Optimizing variance components...')
+        logger.info(f'Optimizing variance components...{y.shape}')
+        print(np.isnan(ma.getdata(covariates.gts)).sum())
         lmm.scipy_optimize()
+        # lmm.grid_search_reml()
     else:
         logger.info('varcomps supplied.')
     if args.vc_out:
         np.savez(f'{args.vc_out}', varcomps=np.array(lmm.varcomps))
         logger.info(f'varcomps saved to {args.vc_out}.npz.')
-    logger.info(f'Variance components: {lmm.varcomps}')
+    logger.info(f'Variance components: {list(i / y.var() for i in lmm.varcomps)}')
+    if args.vc_only:
+        exit()
     sigmas = lmm.varcomps
     ####### Iterate through all chromosomes #######
     chr_ = int(args.from_chr)
     while chr_ < args.to_chr:
+        start = time()
         gts_f = gts_list[chr_]
         pargts_f = pargts_list[chr_]
         if args.bed is not None:
             bed = Bed(gts_f, count_A1=True)
             snp_ids = bed.sid
-            pos = bed.pos[:, 2]
+            pos = bed.pos[:, 2].astype(int)
             chrom = bed.pos[:, 0]
             alleles = np.loadtxt(gts_f[:-4]+'.bim', dtype=str, usecols=(4, 5))
         elif args.bgen is not None:
@@ -673,11 +774,14 @@ if __name__ == '__main__':
                                  max_missing=args.max_missing, min_maf=args.min_maf, min_info=args.min_info,
                                  impute_unrel=args.impute_unrel,
                                  no_mean_normalise=args.no_mean_normalise,
-                                 common_freqs=args.common_freqs)
+                                 common_freqs=args.common_freqs,
+                                 ignore_na_fams=args.ignore_na_fams,
+                                 ignore_na_rows=args.ignore_na_rows)
         _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
         if args.debug:
             _init_worker_(y_, varcomps_, covar_, covar_shape)
-            process_batch_(snp_ids[batches[0]])
+            batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[46]])
+            # process_batch_(np.array(['rs2294488']))
             exit('Debug finishsed.')
         with Pool(
             processes=args.num_cpus,
@@ -685,7 +789,7 @@ if __name__ == '__main__':
             initargs=(y_, varcomps_, covar_, covar_shape,)
         ) as pool:
             result = pool.map(
-                process_batch_, [snp_ids[ind] for ind in batches])
+                process_batch_, [snp_ids[ind] for ind in batches], chunksize=1)
         # varcomp_mat = np.array([grm, sib], dtype='float32').T
         # varcomps = varcomps_
         # covar = covariates.gts
@@ -696,12 +800,15 @@ if __name__ == '__main__':
             batch_chrom, batch_pos, batch_alleles, batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = result[
                 i]
             # Fill in fitted SNPs
+            if len(batch_snps) == 0:
+                logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
+                continue
             batch_indices = np.array([snp_dict[x] for x in batch_snps])
             alpha[batch_indices, :] = batch_alpha
             alpha_cov[batch_indices, :, :] = batch_alpha_cov
             alpha_ses[batch_indices, :] = batch_alpha_ses
             freqs[batch_indices] = batch_freqs
-            logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)))
+            logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
         ######## Save output #########
         if not args.no_hdf5_out:
             write_output(chrom, snp_ids, pos, alleles, args.outprefix.replace('~', str(chr_)), args.parsum, args.fit_sib, alpha, alpha_ses, alpha_cov,
@@ -709,4 +816,5 @@ if __name__ == '__main__':
         if not args.no_txt_out:
             write_txt_output(chrom, snp_ids, pos, alleles, args.outprefix.replace('~', str(chr_)), args.parsum, args.fit_sib, alpha, alpha_cov,
                              sigmas, freqs)
+        logger.info(f'Time used for chr {chr_}: {time() - start}.')
         chr_ += 1
