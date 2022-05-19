@@ -22,7 +22,7 @@ done
 ### Convert VCF to phased BGEN file ###
 for i in {1..22}
 do
-idone
+done
 ### Convert to bed
 for i in {1..22}
 do
@@ -33,7 +33,7 @@ done
 $plink --merge-list $hapdir/bedfiles/merge_list.txt --make-bed --out $hapdir/bedfiles/autosome
 
 ### Infer relations with KING
-$king -b $hapdir/bedfiles/autosome.bed --related --degree 1 --cpus 20 --prefix $gpardir/king
+$king -b $hapdir/bedfiles/autosome.bed --related --cpus 20 --prefix $gpardir/king
 
 ### Load snipar python virtualenv ###
 source $gpardir/env/bin/activate
@@ -42,7 +42,7 @@ ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/
 impute.py --ibd $gpardir/ibd/chr_@.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c
 
 ### GWAS ###
-for i in {15..1}
+for i in {1..5}
 do
 mkdir $gpardir/traits/$i
 gwas.py $gpardir/processed_traits_noadj.txt --out $gpardir/traits/$i/chr_@ --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --covar $gpardir/covariates.fam --phen_index $i --threads 40
