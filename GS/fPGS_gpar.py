@@ -3,12 +3,12 @@ from snipar.utilities import *
 from snipar.gtarray import gtarray
 import snipar.read as read
 
-dir = '/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar'
-pgs_file = 'pgs/pgs_gpar.txt'
-phenofile = 'processed_traits_noadj.txt'
+dir = '/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/'
+pgs_file = dir+'pgs/pgs_gpar_full.txt'
+phenofile = dir+'processed_traits_noadj.txt'
 phen_index = 16
-hsq_file = 'grms/varcomps/16.hsq'
-mgrm = 'grms/mgrm.txt'
+hsq_file = dir+'grms/varcomps/16.hsq'
+mgrm = dir+'grms/mgrm.txt'
 
 ### Read PGS ###
 pgs_f = open(pgs_file, 'r')
@@ -35,9 +35,7 @@ print('Final sample size of individuals with complete phenotype and PGS observat
 # Scale phenotype
 y.scale()
 
-
 ####### Estimate effects ###########
-
 ### Load variance components
 hsq = open(hsq_file,'r')
 varcomps = np.zeros((3))
@@ -79,5 +77,18 @@ alpha_cov = np.linalg.inv(xtx)
 alpha_ses = np.sqrt(np.diag(alpha_cov))
 # Save output
 alpha_out = np.vstack((pg.sid,alpha.reshape((alpha.shape[0])),alpha_ses)).T
-np.savetxt('pgs/fpgs_gpar.effects.txt',alpha_out,fmt='%s')
-np.savetxt('pgs/fpgs_gpar.vcov.txt',alpha_cov,fmt='%s')
+np.savetxt(dir+'pgs/fpgs_gpar.effects.txt',alpha_out,fmt='%s')
+np.savetxt(dir+'pgs/fpgs_gpar.vcov.txt',alpha_cov,fmt='%s')
+
+## Drop grandparents and estimate effects
+pg_dim = pg.gts.shape[1]
+pg.gts = pg.gts[:,0:(pg.gts.shape[1]-4)]
+xtx = pg.gts.T.dot(pheno_grm_inv.dot(pg.gts))
+xty = pg.gts.T.dot(pheno_grm_inv.dot(y.gts))
+alpha = np.linalg.solve(xtx,xty)
+alpha_cov = np.linalg.inv(xtx)
+alpha_ses = np.sqrt(np.diag(alpha_cov))
+# Save output
+alpha_out = np.vstack((pg.sid[0:pg.gts.shape[1]],alpha.reshape((alpha.shape[0])),alpha_ses)).T
+np.savetxt(dir+'pgs/fpgs_par.effects.txt',alpha_out,fmt='%s')
+np.savetxt(dir+'pgs/fpgs_par.vcov.txt',alpha_cov,fmt='%s')
