@@ -66,5 +66,9 @@ gimpute = gimpute[in_bpg,]
 # scale
 pgs[,-c(1:2)] = pgs[,-c(1:2)]/sd(pgs[,3],na.rm=T)
 
-write.table(pgs,'pgs_gpar.txt',quote=F,row.names=F)
+# Add covariates
+covars = covars[match(pgs[,2],covars[,2]),]
+pgs_out = cbind(covars[,1:(dim(covars)[2]-1)],pgs[,-c(1:2)])
+
+write.table(pgs_out,'pgs_gpar.txt',quote=F,row.names=F)
 
