@@ -22,6 +22,7 @@ done
 ### Convert VCF to phased BGEN file ###
 for i in {1..22}
 do
+/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7 -g $hapdir/chr_$i.vcf.gz -og $hapdir/chr_$i.bgen -os $hapdir/chr_$i.sample
 done
 ### Convert to bed
 for i in {1..22}
@@ -63,4 +64,3 @@ mkdir $gpardir/grms/varcomps
 $gcta64 --mgrm $gpardir/grms/mgrm.txt --reml --reml-no-lrt --pheno $gpardir/processed_traits_noadj.txt --mpheno 16 --qcovar $gpardir/pgs/GS_EA_13_weights_LDpred_p1.pgs.with_covariates.txt --out $gpardir/grms/varcomps/16 --thread-num 20
 
 ### Estimate grandparental PGS model ###
-
