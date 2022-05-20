@@ -54,7 +54,7 @@ kinship file
 ------------
 .. _kinship: 
 
-The kinship file is as output by KING: https://www.kingrelatedness.com/manual.shtml#RELATED.
+The kinship file is as output by KING: https://www.kingrelatedness.com/manual.shtml#RELATED. WARNING: KING relationship inference behaves differently if the .fam file of the input .bed file has meaningful family IDs (FIDs) and parental IDs; i.e., if your .fam file already contains pedigree/family information, KING will produce a .kin file. We have found the output of KING in this case (the .kin file) to be unpredictable in ways that causes issues with *snipar* analyses. We therefore recommend setting the family IDs (FIDs) to the individual IDs (IIDs) in .fam file input to KING, and removing information on parents (if present), before running KING with the --related command. This will output a .kin0 file containing the sibling and parent-offspring relations needed by *snipar*. 
 
 agesex file
 -----------
@@ -74,6 +74,13 @@ The phenotype file is a white-space delimited text file with a header. It has co
 family-ID, individual-ID, and phenotype values for the different phenotypes. 
 To specify the k'th phenotype for analysis (relevant for :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>`),
 add '--phen_index k' to your command; by default, the first phenotype will be used.  
+
+covariate file
+--------------
+.. _phenotype:
+
+The covariate file has the same format as the phenotype file (above). It is a white-space delimited text file with a header. It has columns (in order) for
+family-ID, individual-ID, and covariate values for the different covariates. (Note, covariates must be numerical). 
 
 weights file
 ------------
