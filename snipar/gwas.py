@@ -1,14 +1,82 @@
 import h5py
 import numpy as np
+import pandas as pd
 from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
 from math import log10
 import snipar.read as read
 import snipar.lmm as lmm
+from snipar.gtarray import impute_missing, impute_unrel_par_gts
 from snipar.utilities import *
 from numba import njit, prange
 from snipar.preprocess import find_par_gts
+from typing import List, Union, Dict, Hashable
+from multiprocessing import Pool, RawArray
+from functools import partial
+import ctypes
+import logging
+
+
+logger = logging.getLogger(__name__)
+
+
+def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None, keep=None, include_unrel=False):
+    if len(obsfiles) == 1:
+        if from_chr is None:
+            raise TypeError('from_chr should not be None.')
+        ids, fam_labels = read.get_ids_with_par(impfiles[from_chr], obsfiles[from_chr], pheno_ids, include_unrel=include_unrel)
+        if covar or keep:
+            df = pd.DataFrame({f'fam_labels': fam_labels}, index=ids)
+            if covar is not None:
+                df_covar = pd.DataFrame(index=covar.ids)
+                df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
+            if keep is not None:
+                df_keep = pd.read_csv(keep, sep='\s+', header=None)
+                df_keep = df_keep.astype(str)
+                df_keep.index = df_keep[0]
+                del df_keep[0]
+                df = df.merge(df_keep, how='inner', left_index=True, right_index=True)
+            df = df.reset_index()
+            ids = df['index'].values
+            fam_labels = df[f'fam_labels'].values
+        # logger.info(f'Found {len(ids)} common ids.')
+        return ids, fam_labels
+    first = True
+    j = from_chr
+    for i in range(1, 23):
+        if i not in impfiles or i not in obsfiles:
+            continue
+        imp = impfiles[i]
+        obs = obsfiles[i]
+        ids_, fam_labels_ = read.get_ids_with_par(imp, obs, pheno_ids, impute_unrel=include_unrel)
+        if first:
+            df = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
+            first = False
+            j = i
+        else:
+            df_ = pd.DataFrame({f'fam_labels_{i}': fam_labels_}, index=ids_)
+            # merge on index, i.e., ids
+            df = df.merge(df_, how='inner', left_index=True, right_index=True)
+    if len(df.index) == 0:
+        raise ValueError('No commond ids among chromosome files.')
+    # for j in range(1, 22):
+    #     if not df[f'fam_labels_{j}'].equals(df[f'fam_labels_{j + 1}']):
+    #         raise ValueError(
+    #             'fam_labels are not consistent across chromosome files.')
+    if covar is not None:
+        df_covar = pd.DataFrame(index=covar.ids)
+        df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
+    if keep is not None:
+        df_keep = pd.DataFrame(keep, header=None)
+        df_keep.index = df_keep[0]
+        del df_keep[0]
+        df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
+    df = df.reset_index()
+    ids = df['index'].values
+    fam_labels = df[f'fam_labels_{j}'].values
+    return ids, fam_labels
+
 
 def transform_phenotype(inv_root, y, fam_indices, null_mean = None):
     """
@@ -48,7 +116,7 @@ def compute_ses(alpha_cov):
         alpha_ses[i,:] = np.sqrt(np.diag(alpha_cov[i,:,:]))
     return alpha_ses
 
-def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_ses, alpha_cov, sigma2, tau, freqs):
+def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_ses, alpha_cov, sigmas, freqs):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -77,8 +145,8 @@ def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alph
     outfile['estimate_cols'] = encode_str_array(np.array(outcols))
     outfile['estimate_ses'][:] = alpha_ses
     outfile['estimate_covariance'][:] = alpha_cov
-    outfile['sigma2'] = sigma2
-    outfile['tau'] = tau
+    for i in range(len(sigmas)):
+        outfile[f'sigma_{i}'] = sigmas[i]
     outfile['freqs'] = freqs
     outfile.close()
 
@@ -91,7 +159,7 @@ def outarray_effect(est, ses, freqs, vy):
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_cov, sigma2, tau, freqs):
+def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_cov, sigmas, freqs):
     outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
     header = ['chromosome','SNP','pos','A1','A2','freq']
     # Which effects to estimate
@@ -140,7 +208,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, 
         if not parsum:
             alpha_corr_out[i,ncor-1] = alpha_cov_i[paternal_index,maternal_index]/(alpha_ses_out[i,maternal_index]*alpha_ses_out[i,paternal_index])
     # Create output array
-    vy = (1+1/tau)*sigma2
+    vy = sum(sigmas)
     outstack = [outbim]
     for i in range(len(effects)):
         outstack.append(outarray_effect(alpha[:,i],alpha_ses_out[:,i],freqs,vy))
@@ -164,41 +232,128 @@ def compute_batch_boundaries(snp_ids,batch_size):
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
     return block_bounds
 
-def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False):
+
+def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, fit_sib=False):
+    max_nbytes = 2147483647
+    if nbytes > max_nbytes:
+        raise ValueError('Too many bytes to handle for multiprocessing.')
+    n_tasks = num_cpus
+    f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
+    while int(nsnp / n_tasks) * nbytes > max_nbytes / 4 or f(nsnp, niid, n_tasks) > max_nbytes / 4:
+        n_tasks += num_cpus
+    return np.array_split(np.arange(nsnp), n_tasks)
+
+
+_var_dict = {}
+
+
+def _init_worker(y_, varcomps_, covar_, covar_shape, ped_, ped_shape, **kwargs):
+    _var_dict['y_'] = y_
+    _var_dict['varcomps_'] = varcomps_
+    for i in range(len(varcomps_) - 1):
+        _var_dict[f'varcomp_data_{i}_'] = kwargs[f'varcomp_data_{i}_']
+        _var_dict[f'varcomp_row_ind_{i}_'] = kwargs[f'varcomp_row_ind_{i}_']
+        _var_dict[f'varcomp_col_ind_{i}_'] = kwargs[f'varcomp_col_ind_{i}_']
+    if covar_ is not None and covar_shape is not None:
+        _var_dict['covar_'] = covar_
+        _var_dict['covar_shape'] = covar_shape
+    _var_dict['ped_'] = ped_
+    _var_dict['ped_shape'] = ped_shape
+
+
+# def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
+#                   fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False):
+#     ####### Construct family based genotype matrix #######
+#     G = read.get_gts_matrix(ped=pedigree, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
+#                                 ids=y.ids, parsum=parsum, sib=fit_sib, verbose=verbose, print_sample_info=print_sample_info)
+#     G.compute_freqs()
+#     #### Filter SNPs ####
+#     if verbose:
+#         print('Filtering based on MAF')
+#     G.filter_maf(min_maf)
+#     if verbose:
+#         print('Filtering based on missingness')
+#     G.filter_missingness(max_missing)
+#     if verbose:
+#         print(str(G.shape[2])+' SNPs that pass filters')
+#     #### Match phenotype ####
+#     y.filter_ids(G.ids)
+#     if G.ids.shape[0] > y.ids.shape[0]:
+#         G.filter_ids(y.ids)
+#     ##### Transform genotypes ######
+#     if verbose:
+#         print('Transforming genotypes')
+#     null_model = lmm.model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams)
+#     L = null_model.sigma_inv_root(tau, sigma2)
+#     G.diagonalise(L)
+#     ### Fit models for SNPs ###
+#     if verbose:
+#         print('Estimating SNP effects')
+#     alpha, alpha_cov = fit_models(np.array(y.gts[:,0],dtype=np.float32),G.gts)
+#     alpha_ses = compute_ses(alpha_cov)
+#     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
+
+
+def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
+                  fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False,
+                  impute_unrel=False, ignore_na_fams=False, ignore_na_rows=False):
+    y = np.frombuffer(_var_dict['y_'], dtype='float')
+    varcomps = _var_dict['varcomps_']
+    # no need to provide residual var arr
+    varcomp_arr_lst = tuple(
+        (
+            np.frombuffer(_var_dict[f'varcomp_data_{i}_'], dtype='float'),
+            np.frombuffer(_var_dict[f'varcomp_row_ind_{i}_'], dtype='uint32'),
+            np.frombuffer(_var_dict[f'varcomp_col_ind_{i}_'], dtype='uint32'),
+        ) for i in range(len(varcomps) - 1)
+    )
+    covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(
+        _var_dict['covar_shape']) \
+            if 'covar_' in _var_dict else None
+    ped = np.frombuffer(_var_dict['ped_'], dtype='str').reshape(
+        _var_dict['ped_shape'])
     ####### Construct family based genotype matrix #######
-    G = read.get_gts_matrix(ped=pedigree, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
-                                ids=y.ids, parsum=parsum, sib=fit_sib, verbose=verbose, print_sample_info=print_sample_info)
+    G = read.get_gts_matrix(ped=ped, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
+                            ids=pheno_ids, parsum=parsum, sib=fit_sib,
+                            include_unrel=impute_unrel,
+                            verbose=verbose, print_sample_info=print_sample_info)
+    # Check for empty fam labels
+    no_fam = np.array([len(x) == 0 for x in G.fams])
+    if np.sum(no_fam) > 0:
+        ValueError('No family label from pedigree for some individuals')
     G.compute_freqs()
+    # impute parental genotypes of unrelated individuals
+    if impute_unrel:
+        G = impute_unrel_par_gts(G, sib=fit_sib, parsum=parsum)
+    else:
+        logger.info('Not imputing unrelated individuals parental geno.')
     #### Filter SNPs ####
     if verbose:
-        print('Filtering based on MAF')
+        logger.info('Filtering based on MAF')
     G.filter_maf(min_maf)
     if verbose:
-        print('Filtering based on missingness')
+        logger.info()('Filtering based on missingness')
     G.filter_missingness(max_missing)
     if verbose:
-        print(str(G.shape[2])+' SNPs that pass filters')
-    #### Match phenotype ####
-    y.filter_ids(G.ids)
-    if G.ids.shape[0] > y.ids.shape[0]:
-        G.filter_ids(y.ids)
-    ##### Transform genotypes ######
+        logger.info()(str(G.shape[2])+' SNPs that pass filters')
+    #### Fill NAs ####
     if verbose:
-        print('Transforming genotypes')
-    null_model = lmm.model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams)
-    L = null_model.sigma_inv_root(tau, sigma2)
-    G.diagonalise(L)
+        logger.info('Imputing missing values with population frequencies')
+    if not ignore_na_fams and not ignore_na_rows:
+        # NAs = G.fill_NAs()
+        G = impute_missing(G)
+    G.mean_normalise()
     ### Fit models for SNPs ###
-    if verbose:
-        print('Estimating SNP effects')
-    alpha, alpha_cov = fit_models(np.array(y.gts[:,0],dtype=np.float32),G.gts)
-    alpha_ses = compute_ses(alpha_cov)
+    model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
+                           varcomps=varcomps, covar_X=covar, add_intercept=True)
+    alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
-def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
-                        fit_sib=False, parsum=False, max_missing=5, min_maf=0.01, batch_size=10000, 
-                        no_hdf5_out=False, no_txt_out=False):
+
+def process_chromosome(chrom_out, y, varcomp_lst,
+                       pedigree, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
+                       fit_sib=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, batch_size=10000, 
+                       no_hdf5_out=False, no_txt_out=False, num_cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -228,10 +383,10 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         par_status, gt_indices, fam_labels = find_par_gts(y.ids, pedigree, gts_id_dict)
         parcount = np.sum(par_status==0,axis=1)
         if np.sum(parcount>0)==0:
-            print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
+            logger.warning('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
             parsum = True
         elif 100 > np.sum(parcount>0) > 0:
-            print('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
+            logger.warning('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
     # Remove duplicates
@@ -265,25 +420,113 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
     alpha_ses[:] = np.nan
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
     freqs[:] = np.nan
+
+
+    nbytes = int((alpha.nbytes + alpha_cov.nbytes +
+                     alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
+    # Compute batches
+    batches = split_batches(
+        snp_ids.shape[0], len(y.ids), nbytes, num_cpus, parsum=parsum, fit_sib=fit_sib)
+    if len(batches) == 1:
+        logger.info('Using 1 batch')
+    else:
+        logger.info('Using '+str(len(batches))+' batches')
     ##############  Process batches of SNPs ##############
-    for i in range(0,batch_bounds.shape[0]):
-        if i==0:
-            print_sample_info = True
-            verbose = True
-        else:
-            print_sample_info = False
-            verbose = False
-        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(y, pedigree, 
-                    tau, sigma2, snp_ids=snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], bedfile=bedfile, bgenfile=bgenfile, 
-                    par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib, max_missing=max_missing, min_maf=min_maf,
-                    print_sample_info=print_sample_info, verbose=verbose)
+    # make shared memory for multiprocessing
+    y_ = RawArray('d', y.shape[0])
+    # write to shared memory
+    y_buffer = np.frombuffer(y_, dtype='float')
+    np.copyto(y_buffer, y)
+    if covariates is not None:
+        covar_ = RawArray(
+            'd', int(covariates.gts.shape[0] * covariates.gts.shape[1]))
+        covar_buffer = np.frombuffer(covar_, dtype='float').reshape(
+            (covariates.gts.shape[0], covariates.gts.shape[1]))
+        np.copyto(covar_buffer, covariates.gts)
+        covar_shape = covariates.gts.shape
+    else: covar_ = None; covar_shape = None
+    varcomps_ = sigmas
+    ped_ = RawArray(
+        'd', int(pedigree.shape[0] * pedigree.shape[1]))
+    ped_buffer = np.frombuffer(ped_, dtype='str').reshape(
+        (pedigree.shape[0], pedigree.shape[1]))
+    np.copyto(ped_buffer, pedigree)
+    ped_shape = pedigree.shape
+    varcomp_dict = {}
+    # put variance component data to shared memory
+    for i in range(len(varcomps_) - 1):
+        l = len(varcomp_lst[i][0])
+        # data
+        varcomp_dict[f'varcomp_data_{i}_'] = RawArray('d', l)
+        varcomp_dict[f'varcomp_data_{i}_buffer'] = np.frombuffer(
+            varcomp_dict[f'varcomp_data_{i}_'], dtype='float')
+        np.copyto(
+            varcomp_dict[f'varcomp_data_{i}_buffer'], varcomp_lst[i][0])
+        # row indices
+        varcomp_dict[f'varcomp_row_ind_{i}_'] = RawArray(ctypes.c_uint32, l)
+        varcomp_dict[f'varcomp_row_ind_{i}_buffer'] = np.frombuffer(
+            varcomp_dict[f'varcomp_row_ind_{i}_'], dtype='uint32')
+        np.copyto(
+            varcomp_dict[f'varcomp_row_ind_{i}_buffer'], varcomp_lst[i][1])
+        # col indices
+        varcomp_dict[f'varcomp_col_ind_{i}_'] = RawArray(ctypes.c_uint32, l)
+        varcomp_dict[f'varcomp_col_ind_{i}_buffer'] = np.frombuffer(
+            varcomp_dict[f'varcomp_col_ind_{i}_'], dtype='uint32')
+        np.copyto(
+            varcomp_dict[f'varcomp_col_ind_{i}_buffer'], varcomp_lst[i][2])
+    
+    process_batch_ = partial(process_batch, pheno_ids=y.ids,
+                             bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
+                             parsum=parsum, fit_sib=fit_sib,
+                             max_missing=max_missing, min_maf=min_maf,
+                             impute_unrel=impute_unrel,
+                             ignore_na_fams=ignore_na_fams,
+                             ignore_na_rows=ignore_na_rows)
+    _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
+    if debug:
+        _init_worker_(y_, varcomps_, covar_, covar_shape, ped_, ped_shape)
+        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[46]])
+        exit('Debug finishsed.')
+    with Pool(
+        processes=num_cpus,
+        initializer=_init_worker_,
+        initargs=(y_, varcomps_, covar_, covar_shape, ped_, ped_shape)
+    ) as pool:
+        result = pool.map(
+            process_batch_, [snp_ids[ind] for ind in batches], chunksize=1)
+    
+    for i in range(0, len(result)):
+        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses \
+            = result[i]
         # Fill in fitted SNPs
+        if len(batch_snps) == 0:
+            logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
+            continue
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses
         freqs[batch_indices] = batch_freqs
-        print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
+        logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
+    ##############  Process batches of SNPs ##############
+    # for i in range(0,batch_bounds.shape[0]):
+    #     if i==0:
+    #         print_sample_info = True
+    #         verbose = True
+    #     else:
+    #         print_sample_info = False
+    #         verbose = False
+    #     batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch(y, pedigree, 
+    #                 tau, sigma2, snp_ids=snp_ids[batch_bounds[i, 0]:batch_bounds[i, 1]], bedfile=bedfile, bgenfile=bgenfile, 
+    #                 par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib, max_missing=max_missing, min_maf=min_maf,
+    #                 print_sample_info=print_sample_info, verbose=verbose)
+    #     # Fill in fitted SNPs
+    #     batch_indices = np.array([snp_dict[x] for x in batch_snps])
+    #     alpha[batch_indices, :] = batch_alpha
+    #     alpha_cov[batch_indices, :, :] = batch_alpha_cov
+    #     alpha_ses[batch_indices, :] = batch_alpha_ses
+    #     freqs[batch_indices] = batch_freqs
+    #     print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
     ######## Save output #########
     if not no_hdf5_out:
         if chrom_out==0:
@@ -291,11 +534,11 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
         else:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5', chrom=chrom_out)
         write_output(chrom, snp_ids, pos, alleles, hdf5_outfile, parsum, fit_sib, alpha, alpha_ses, alpha_cov,
-                     sigma2, tau, freqs)
+                     sigmas, freqs)
     if not no_txt_out:
         if chrom_out==0:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz')
         else:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz', chrom=chrom_out)
         write_txt_output(chrom, snp_ids, pos, alleles, txt_outfile, parsum, fit_sib, alpha, alpha_cov,
-                     sigma2, tau, freqs)
+                     sigmas, freqs)

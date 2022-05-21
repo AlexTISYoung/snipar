@@ -3,6 +3,11 @@ import numpy as np
 from snipar.gtarray import gtarray
 from bgen_reader import open_bgen
 from snipar.utilities import *
+import logging
+
+
+logger = logging.getLogger(__name__)
+
 
 def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end=None):
     """
@@ -124,7 +129,7 @@ def get_snps(gts_f, snp_ids=None):
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=None, sib=False, parsum=False, start=0, end=None, include_unrel=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -141,7 +146,7 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
         imp_fams = None
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
-                                                                                sib=sib, verbose=print_sample_info) 
+                                                                                sib=sib, include_unrel=include_unrel, verbose=print_sample_info) 
     if np.sum(parcount>0)==0 and not parsum:
         if verbose:
             print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')

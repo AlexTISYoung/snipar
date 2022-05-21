@@ -1,7 +1,10 @@
 import numpy as np
 import numpy.ma as ma
+from numba import njit
 from snipar.utilities import make_id_dict
+import logging
 
+logger = logging.getLogger(__name__)
 class gtarray(object):
     """Define a genotype or PGS array that stores individual IDs, family IDs, and SNP information.
 
@@ -329,3 +332,129 @@ class gtarray(object):
                     for j in range(self.shape[1]):
                         self.gts[fam_indices[fam],j, :] = inv_root[famsize].dot(self.gts[fam_indices[fam],j, :])
         self.fam_indices = fam_indices
+
+
+@njit
+def _is_whole(n):
+    return n % 1 == 0
+
+
+@njit
+def _lin_imp(freq, g, gp):
+    res = (4 * freq + 2 * g - gp) / 3.
+    return min(2, max(res, 0))
+
+
+@njit
+def _po_imp(freq, g, gp):
+    if g == 0:
+        return freq
+    elif g == 1:
+        if gp == 0:
+            return 1 + freq
+        elif gp == 1:
+            return 2 + freq
+        else:  # gp == 2
+            return freq
+    else:  # g == 2
+        return 1 + freq
+
+
+@njit
+def _impute_unrel_pat_gts(gts: np.ndarray, freqs: np.ndarray, parsum: bool) -> np.ndarray:
+    missing_ind = gts[:, 1, 0] == -1
+    imp = 0.5 * gts[missing_ind, 0, :] + freqs
+    gts[missing_ind, 1, :] = imp
+    if parsum:
+        gts[missing_ind, 1, :] += imp
+    else:
+        gts[missing_ind, 2, :] = imp
+    return gts
+    
+
+@njit
+def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
+    for i in range(gts.shape[2]):
+        freq = freqs[i]
+        is_na = np.where(np.sum(np.isnan(gts[:,:,i]), axis=1) > 0)[0]
+        if len(is_na) == 0:
+            continue
+        for j in is_na:
+            mask = np.isnan(gts[j, :, i])
+            if gts.shape[1] == 2:
+                if np.sum(mask) == 2:
+                    gts[j, :, i] = freq * 2
+                if mask[0] and not mask[1]:
+                    gts[j, 0, i] = gts[j, 1, i] / 2
+                if not mask[0] and mask[1]:
+                    gts[j, 1, i] = gts[j, 0, i] + 2 * freq
+            elif gts.shape[1] == 3:
+                if mask[0]:
+                    if np.sum(mask[1:]) == 2:
+                        gts[j, :, i] = freq * 2
+                    elif np.sum(mask[1:]) == 0:
+                        gts[j, 0, i] = np.sum(gts[j, 1:, i]) / 2
+                    elif mask[1]:
+                        gts[j, 0, i] = gts[j, 2, i] / 2 + freq
+                        gts[j, 1, i] = freq * 2
+                    elif mask[2]:
+                        gts[j, 0, i] = gts[j, 1, i] / 2 + freq
+                        gts[j, 2, i] = freq * 2
+                else:
+                    if np.sum(mask[1:]) == 2:
+                        gts[j, 1:3, i] = gts[j, 0, i] / 2 + freq
+                    elif mask[1]:
+                        if _is_whole(gts[j, 2, i]):
+                            gts[j, 1, i] = _po_imp(freq, gts[j, 0, i], gts[i, 2, i])
+                        else:
+                           gts[j, 1, i] = _lin_imp(freq, gts[j, 0, i], gts[i, 2, i]) 
+                    elif mask[2]:
+                        if _is_whole(gts[j, 1, i]):
+                            gts[j, 2, i] = _po_imp(freq, gts[j, 0, i], gts[i, 1, i])
+                        else:
+                           gts[j, 2, i] = _lin_imp(freq, gts[j, 0, i], gts[i, 1, i])
+    return gts
+
+
+def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False) -> gtarray:
+    """Impute parental genotypes of unrelated individuals.
+
+    Args:
+        G (gtarray): gtarray object holding genetic data.
+        sib (bool, optional): Whether sib effect is modelled. Defaults to False.
+        parsum (bool, optional): Whether sum of parental genotypes is modelled. Defaults to False.
+
+    Returns:
+        gtarray: gtarray object with imputed parental genotypes.
+    """ 
+    if sib:
+        logger.warning(
+            'No need to impute parental genotypes of unrelated individuals if sib effect is modelled.'
+        )
+        return G
+    if G.freqs is None:
+        G.compute_freqs()
+    gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)
+    G.gts = ma.array(gts, mask=np.isnan(gts))
+    logger.info(
+        'Done imputing parental geotypes of unrelated individuals.'
+    )
+    return G
+
+
+def impute_missing(G: gtarray) -> gtarray:
+    """Imputing missing entries of the genotype design matrix.
+
+    Args:
+        G (gtarray): genotype design matrix.
+
+    Returns:
+        gtarray: genotype design matrix with NAs imputed.
+    """
+    if G.freqs is None:
+        G.compute_freqs()
+    gts = _impute_missing(G.gts.data, G.freqs)
+    G.gts = ma.array(gts, mask=np.isnan(gts))
+    assert G.gts.mask.sum() == 0
+    return G
+    

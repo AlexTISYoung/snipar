@@ -107,7 +107,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, parsum=False, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, parsum=False, include_unrel=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -125,7 +125,7 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
         imp_fams = None
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
-                                                                                sib=sib, verbose=print_sample_info)
+                                                                                sib=sib, include_unrel=include_unrel, verbose=print_sample_info)
     if np.sum(parcount>0)==0 and not parsum:
         if verbose:
             print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')

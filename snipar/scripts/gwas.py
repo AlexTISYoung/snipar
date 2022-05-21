@@ -12,7 +12,21 @@ Results:
         For each chromosome, a gzipped text file containing the SNP level summary statistics. 
         
 """
-import argparse, h5py
+import argparse
+import os
+# export OMP_NUM_THREADS=...
+os.environ['OMP_NUM_THREADS'] = '1'
+# export OPENBLAS_NUM_THREADS=...
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+# export MKL_NUM_THREADS=...
+os.environ['MKL_NUM_THREADS'] = '1'
+# export VECLIB_MAXIMUM_THREADS=...
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+# export NUMEXPR_NUM_THREADS=...
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
+
+
+import h5py
 import snipar.read as read
 import numpy as np
 import snipar.lmm as lmm
@@ -22,6 +36,8 @@ from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
 from snipar.utilities import get_parser_doc
+
+import logging
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -41,6 +57,7 @@ parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must b
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
+parser.add_argument('--fit_res', action='store_true', default=False,help='Use residualized phenotypes.')
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                     default=1)
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
@@ -52,14 +69,107 @@ parser.add_argument('--no_txt_out',action='store_true',help='Suppress text outpu
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
 parser.add_argument('--tau_init',type=float,help='Initial value for ratio between shared family environmental variance and residual variance',
                     default=1)
+
+parser.add_argument('--hapmap_bed', type=str,
+                        help='Bed file with observed hapmap3 snps (without suffix, chromosome number should be #).', default=None)
+parser.add_argument('--gcta_path', type=str,
+                    help='Path to gcta executable.', default=None)
+parser.add_argument('--grm_path', type=str,
+                    help='Path to gcta grm output (without prefix).', default=None)
+parser.add_argument('--plink_path', type=str,
+                    help='Path to plink2 executable.', default=None)
+parser.add_argument('--grm_npz_path', type=str,
+                    help='Path to subsetted grm npz file.', default=None)
+
+parser.add_argument('--ibdrel_path', type=str,
+                    help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+
+parser.add_argument('--grm_only', action='store_true', default=False,
+                    help='whether to only include grm variance component.')
+
+parser.add_argument('--zero_sib_entries', action='store_true', default=False,
+                    help='whether to only zero out grm entries fro sibling pair.')
+
+parser.add_argument('--sparse_thres', type=float,
+                    help='Threshold of GRM/IBD sparsity', default=0.05)
+
+parser.add_argument('--num_cpus', type=int,
+                    help='Number of cpus to distribute batches across', default=1)
+
+parser.add_argument('--from_chr',
+                    type=int,
+                    help='Which chromosome (>=). Should be used with to_chr parameter.')
+parser.add_argument('--to_chr',
+                    type=int,
+                    help='Which chromosome (<). Should be used with from_chr parameter.')
+
+parser.add_argument('--match_all',
+                    action='store_true', default=False,
+                    help='Match individual IDs from all genotype files or not.')
+
+parser.add_argument('--vc_out',
+                    type=str,
+                    help='Prefix of output filename for variance component array (without .npy).')
+
+parser.add_argument('--vc_in',
+                    type=str,
+                    help='Prefix of input filename for variance component array (without .npy).')
+
+parser.add_argument('--vc_list', 
+                    type=float,
+                    nargs='+',
+                    default=None,
+                    help='Pass in variance components as a list of floats.')
+
+parser.add_argument('--vc_only',
+                    action='store_true',
+                    help='Only perform variance component estimation.')
+
+parser.add_argument('--ignore_na_fams',
+                    action='store_true', default=False,
+                    help='Whether to ignore families with NA rows  in genotype design matrix or not.')
+
+parser.add_argument('--ignore_na_rows',
+                    action='store_true', default=False,
+                    help='Whether to ignore NA rows in genotype design matrix or not.')
+
+parser.add_argument('--impute_unrel',
+                    action='store_true', default=False,
+                    help='Whether to impute parental genotype of unrelated individuals or not.')
+
+parser.add_argument('--keep',
+                    default=None,
+                    type=str,
+                    help='Filename of IDs to be kept for analysis. (No header)')
+
+parser.add_argument('--debug',
+                    action='store_true', default=False,
+                    help='Debug code in single process mode.')
+
+parser.add_argument('--loglevel',
+                    type=str, default='INFO',
+                    help='Case insensitive Logging level: INFO, DEBUG, ...')
+
+
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
-# Set number of threads
+
+
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    loglevel = args.loglevel
+    # FORMAT = '%(process)d :: %(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
+    FORMAT = '%(process)d :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
+    numeric_level = getattr(logging, loglevel.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise ValueError('Invalid log level: %s' % loglevel)
+    logging.basicConfig(
+        format=FORMAT, level=numeric_level)
+    logger = logging.getLogger(__name__)
+
     # Set number of threads
     if args.threads is not None:
         num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
@@ -104,24 +214,44 @@ def main(args):
         print('Reading covariates')
         covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
         # Match to pheno ids
-        covariates.filter_ids(y.ids)
+        # covariates.filter_ids(y.ids)
     else:
         covariates = None
 
+
+    if args.bed:
+        ids, fam_labels = read.get_ids_with_par(bedfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel)
+    elif args.bgen:
+        ids, fam_labels = read.get_ids_with_par(bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel)
+    y.filter_ids(ids)
+    np.testing.assert_array_equal(ids, y.ids)
+    np.testing.assert_array_equal(fam_labels, y.fams)
+    if args.covar:
+        covariates.filter_ids(ids)
+        np.testing.assert_array_equal(ids, covariates.ids)
+        np.testing.assert_array_equal(fam_labels, covariates.fams)
+    del ids, fam_labels
+
+    # if args.covar:
+    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
+    # else:
+    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=None, keep=args.keep, impute_unrel=args.impute_unrel)
+
+    
     # Read pedigree
     if args.imp is None:
-        print('Reading pedigree from '+str(args.pedigree))
+        logger.info('Reading pedigree from '+str(args.pedigree))
         ped = np.loadtxt(args.pedigree,dtype=str)
         if ped.shape[1] < 4:
             raise(ValueError('Not enough columns in pedigree file'))
         elif ped.shape[1] > 4:
-            print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+            logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
         # Remove rows with missing parents
         sibpairs, ped = get_sibpairs_from_ped(ped)
         if sibpairs is not None:
-            print('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
+            logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
         else:
-            print('Found 0 sibling pairs')
+            logger.info('Found 0 sibling pairs')
     else:
         # Read pedigree
         par_gts_f = h5py.File(pargts_list[0],'r')
@@ -129,38 +259,99 @@ def main(args):
         ped = ped[1:ped.shape[0]]
         # Remove control fams
         controls = np.array([x[0]=='_' for x in ped[:,0]])
-        ped = ped[~controls,:]
+        ped = ped[~controls, :]
 
     ####### Fit null model ######
-    # Match to pedigree
-    ped_dict = make_id_dict(ped,1)
-    y.filter_ids(ped[:,1])
-    print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
-    ped_indices = np.array([ped_dict[x] for x in y.ids])
-    y.fams = ped[ped_indices,0]
+    # # Match to pedigree
+    # ped_dict = make_id_dict(ped,1)
+    # y.filter_ids(ped[:,1])
+    # print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
+    # ped_indices = np.array([ped_dict[x] for x in y.ids])
+    # y.fams = ped[ped_indices,0]
 
     # Fit variance components
-    print('Fitting variance components')
-    if args.covar is not None:
-        # Match covariates
-        covariates.filter_ids(y.ids)
-        # Fit null model
-        null_model, sigma2, tau, null_alpha, null_alpha_cov = lmm.fit_model(y.gts[:,0], covariates.gts, y.fams, add_intercept=True,
-                                                                            tau_init=args.tau_init)
-        # Adjust for covariates
-        y.gts[:,0] = y.gts[:,0]-(null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]]))
-    else:
-        # Fit null model
-        null_model, sigma2, tau = lmm.fit_model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams,
-                                                tau_init = args.tau_init, return_fixed = False)
-        y.gts[:,0] = y.gts[:,0]-np.mean(y.gts[:,0])
-    print('Family variance estimate: '+str(round(sigma2/tau,4)))
-    print('Residual variance estimate: ' + str(round(sigma2,4)))
+    # print('Fitting variance components')
+    # if args.covar is not None:
+    #     # Match covariates
+    #     covariates.filter_ids(y.ids)
+    #     # Fit null model
+    #     null_model, sigma2, tau, null_alpha, null_alpha_cov = lmm.fit_model(y.gts[:,0], covariates.gts, y.fams, add_intercept=True,
+    #                                                                         tau_init=args.tau_init)
+    #     # Adjust for covariates
+    #     y.gts[:,0] = y.gts[:,0]-(null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]]))
+    # else:
+    #     # Fit null model
+    #     null_model, sigma2, tau = lmm.fit_model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams,
+    #                                             tau_init = args.tau_init, return_fixed = False)
+    #     y.gts[:,0] = y.gts[:,0]-np.mean(y.gts[:,0])
+    # print('Family variance estimate: '+str(round(sigma2/tau,4)))
+    # print('Residual variance estimate: ' + str(round(sigma2,4)))
 
-    # Diagonalize y
-    print('Transforming phenotype')
-    L = null_model.sigma_inv_root(tau, sigma2)
-    y.diagonalise(L)
+    # # Diagonalize y
+    # print('Transforming phenotype')
+    # L = null_model.sigma_inv_root(tau, sigma2)
+    # y.diagonalise(L)
+
+
+    if args.ibdrel_path is not None:
+        # ids, fam_labels = match_grm_ids(
+        #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
+        id_dict = make_id_dict(ids)
+        grm_data, grm_row_ind, grm_col_ind = lmm.build_ibdrel_arr(
+            args.ibdrel_path, id_dict=id_dict, ignore_sib=args.zero_sib_entries, keep=ids, thres=args.sparse_thres)
+
+    if not args.grm_only:
+        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(y.fams)
+    
+    if 'grm_data' in locals() and not args.grm_only:
+        varcomp_lst = (
+            (grm_data, grm_row_ind, grm_col_ind),
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    elif args.grm_only:
+        varcomp_lst = (
+            (grm_data, grm_row_ind, grm_col_ind),
+        )
+    else:
+        varcomp_lst = (
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    if args.vc_list and args.vc_in:
+        raise ValueError('Only one of --vc_list and --vc_in is needed.')
+    if args.vc_list:
+        varcomps = tuple(args.vc_list)
+        if len(varcomps) != len(varcomp_lst) + 1:
+            raise ValueError('Supplied varcomps length does not match the length of ')
+    elif args.vc_in:
+        varcomps = tuple(np.load(f'{args.vc_in}.npz')['varcomps'])
+        if len(varcomps) != len(varcomp_lst) + 1:
+            raise ValueError('Supplied varcomps length does not match the length of ')
+    else:
+        varcomps = None
+    if args.covar is None:
+        model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+    else:
+        covar_1 = np.hstack((np.ones((len(y), 1), dtype=y.dtype), covariates.gts.data))
+        if args.fit_res:
+            alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y))
+            y = y -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
+            logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
+            model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+        else:
+            model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covar_1, add_intercept=True)
+    if not varcomps:
+        logger.info(f'Optimizing variance components...')
+        model.scipy_optimize()
+    else:
+        logger.info('varcomps supplied.')
+    if args.vc_out:
+        np.savez(f'{args.vc_out}', varcomps=np.array(model.varcomps))
+        logger.info(f'varcomps saved to {args.vc_out}.npz.')
+    logger.info(f'Variance components: {list(i / y.var() for i in model.varcomps)}')
+    if args.vc_only:
+        exit(0)
+    sigmas = model.varcomps
+    
 
     for i in range(chroms.shape[0]):
         if args.bed is not None:
@@ -173,10 +364,14 @@ def main(args):
             print('Estimating SNP effects for chromosome '+str(chroms[i]))
         else:
             print('Estimaing SNP effects')
-        process_chromosome(chroms[i], y, ped, tau, sigma2, args.out, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
-                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
-                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
-                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)
+        process_chromosome(chroms[i], y, varcomp_lst,
+                           ped, sigmas, args.out, covariates, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
+                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
+                           impute_unrel=args.impute_unrel,
+                           max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
+                           no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)
+
+
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)

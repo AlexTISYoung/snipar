@@ -2,8 +2,11 @@ import numpy as np
 from snipar.utilities import make_id_dict
 from snipar.pedigree import find_individuals_with_sibs
 from snipar.gtarray import gtarray
+import logging
 
-def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verbose=False):
+logger = logging.getLogger(__name__)
+
+def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, include_unrel=False, verbose=False):
     """
     Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
     It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
@@ -26,7 +29,13 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, verb
         print('Checking for observed/imputed parental genotypes')
     par_status, gt_indices, fam_labels = find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     # Find which individuals can be used
-    none_missing = np.min(gt_indices, axis=1) >= 0
+    if not include_unrel:
+        logger.info('filtering out unrel inds.')
+        print('filtering out unrel inds.')
+        none_missing = np.min(gt_indices, axis=1)
+        none_missing = none_missing >= 0
+    else:
+        none_missing = gt_indices[:, 0] >= 0
     N = np.sum(none_missing)
     if N == 0:
         raise ValueError(
