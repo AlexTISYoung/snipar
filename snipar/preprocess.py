@@ -118,8 +118,8 @@ def make_gts_matrix(gts, par_status, gt_indices, imp_gts=None, parsum = False):
     observed/imputed genotypes. 'gt_indices' has the indices in the observed/imputed genotype arrays;
     and par_status codes whether the parents are observed (0) or imputed (1).
     """
-    if np.min(gt_indices)<0:
-        raise(ValueError('Missing genotype index'))
+    # if np.min(gt_indices)<0:
+    #     raise(ValueError('Missing genotype index'))
     if imp_gts is None:
         if np.max(par_status)==1:
             raise(ValueError('No imputed parental genotypes provided'))
@@ -128,7 +128,8 @@ def make_gts_matrix(gts, par_status, gt_indices, imp_gts=None, parsum = False):
         gdim = 2
     else:
         gdim = 3
-    G = np.zeros((N,gdim,gts.shape[1]),np.float32)
+    # G = np.zeros((N,gdim,gts.shape[1]),np.float32)
+    G = np.full((N,gdim,gts.shape[1]), fill_value=-1, dtype=np.float32)
     # Proband genotypes
     G[:,0,:] = gts[gt_indices[:,0],:]
     # Paternal genotypes

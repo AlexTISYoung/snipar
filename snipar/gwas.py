@@ -247,7 +247,7 @@ def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, fit_sib=False):
 _var_dict = {}
 
 
-def _init_worker(y_, varcomps_, covar_, covar_shape, ped_, ped_shape, **kwargs):
+def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
     _var_dict['y_'] = y_
     _var_dict['varcomps_'] = varcomps_
     for i in range(len(varcomps_) - 1):
@@ -257,8 +257,8 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, ped_, ped_shape, **kwargs):
     if covar_ is not None and covar_shape is not None:
         _var_dict['covar_'] = covar_
         _var_dict['covar_shape'] = covar_shape
-    _var_dict['ped_'] = ped_
-    _var_dict['ped_shape'] = ped_shape
+    # _var_dict['ped_'] = ped_
+    # _var_dict['ped_shape'] = ped_shape
 
 
 # def process_batch(y, pedigree, tau, sigma2, snp_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
@@ -310,10 +310,10 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(
         _var_dict['covar_shape']) \
             if 'covar_' in _var_dict else None
-    ped = np.frombuffer(_var_dict['ped_'], dtype='str').reshape(
-        _var_dict['ped_shape'])
+    # ped = np.frombuffer(_var_dict['ped_'], dtype='str').reshape(
+    #     _var_dict['ped_shape'])
     ####### Construct family based genotype matrix #######
-    G = read.get_gts_matrix(ped=ped, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
+    G = read.get_gts_matrix(ped=None, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib,
                             include_unrel=impute_unrel,
                             verbose=verbose, print_sample_info=print_sample_info)
@@ -436,7 +436,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     y_ = RawArray('d', y.shape[0])
     # write to shared memory
     y_buffer = np.frombuffer(y_, dtype='float')
-    np.copyto(y_buffer, y)
+    np.copyto(y_buffer, y.gts.data.reshape(-1))
     if covariates is not None:
         covar_ = RawArray(
             'd', int(covariates.gts.shape[0] * covariates.gts.shape[1]))
@@ -446,12 +446,12 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         covar_shape = covariates.gts.shape
     else: covar_ = None; covar_shape = None
     varcomps_ = sigmas
-    ped_ = RawArray(
-        'd', int(pedigree.shape[0] * pedigree.shape[1]))
-    ped_buffer = np.frombuffer(ped_, dtype='str').reshape(
-        (pedigree.shape[0], pedigree.shape[1]))
-    np.copyto(ped_buffer, pedigree)
-    ped_shape = pedigree.shape
+    # ped_ = RawArray(
+    #     'd', int(pedigree.shape[0] * pedigree.shape[1]))
+    # ped_buffer = np.frombuffer(ped_, dtype='str').reshape(
+    #     (pedigree.shape[0], pedigree.shape[1]))
+    # np.copyto(ped_buffer, pedigree)
+    # ped_shape = pedigree.shape
     varcomp_dict = {}
     # put variance component data to shared memory
     for i in range(len(varcomps_) - 1):
@@ -484,13 +484,13 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                              ignore_na_rows=ignore_na_rows)
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
-        _init_worker_(y_, varcomps_, covar_, covar_shape, ped_, ped_shape)
+        _init_worker_(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[46]])
         exit('Debug finishsed.')
     with Pool(
         processes=num_cpus,
         initializer=_init_worker_,
-        initargs=(y_, varcomps_, covar_, covar_shape, ped_, ped_shape)
+        initargs=(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
     ) as pool:
         result = pool.map(
             process_batch_, [snp_ids[ind] for ind in batches], chunksize=1)

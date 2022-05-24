@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import fmin_l_bfgs_b, minimize, OptimizeResult
-from numpy.linalg import slogdet, solve, inv, cho_factor, cho_solve
+from numpy.linalg import slogdet, solve, inv
+from scipy.linalg import cho_factor, cho_solve
 from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import splu, SuperLU, spsolve, cg
 from typing import List, Dict, Tuple, Callable, NamedTuple

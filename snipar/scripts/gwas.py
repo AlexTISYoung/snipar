@@ -14,6 +14,10 @@ Results:
 """
 import argparse
 import os
+
+
+
+
 # export OMP_NUM_THREADS=...
 os.environ['OMP_NUM_THREADS'] = '1'
 # export OPENBLAS_NUM_THREADS=...
@@ -28,14 +32,21 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
 import h5py
 import snipar.read as read
+# import read
 import numpy as np
 import snipar.lmm as lmm
+# from .. import lmm as lmm
 from snipar.utilities import *
+# from snipar.utilities import *
+# from ..utilities import *
 from snipar.gwas import *
+# from ..gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
+# from ..pedigree import get_sibpairs_from_ped
 from snipar.utilities import get_parser_doc
+# from ..utilities import get_parser_doc
 
 import logging
 
@@ -225,12 +236,12 @@ def main(args):
         ids, fam_labels = read.get_ids_with_par(bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel)
     y.filter_ids(ids)
     np.testing.assert_array_equal(ids, y.ids)
-    np.testing.assert_array_equal(fam_labels, y.fams)
+    # np.testing.assert_array_equal(fam_labels, y.fams)
     if args.covar:
         covariates.filter_ids(ids)
         np.testing.assert_array_equal(ids, covariates.ids)
-        np.testing.assert_array_equal(fam_labels, covariates.fams)
-    del ids, fam_labels
+        # np.testing.assert_array_equal(fam_labels, covariates.fams)
+    # del ids, fam_labels
 
     # if args.covar:
     #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
@@ -301,7 +312,7 @@ def main(args):
             args.ibdrel_path, id_dict=id_dict, ignore_sib=args.zero_sib_entries, keep=ids, thres=args.sparse_thres)
 
     if not args.grm_only:
-        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(y.fams)
+        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(fam_labels)
     
     if 'grm_data' in locals() and not args.grm_only:
         varcomp_lst = (
@@ -329,16 +340,16 @@ def main(args):
     else:
         varcomps = None
     if args.covar is None:
-        model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+        model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
     else:
-        covar_1 = np.hstack((np.ones((len(y), 1), dtype=y.dtype), covariates.gts.data))
+        covar_1 = np.hstack((np.ones((y.shape[0], 1), dtype=y.dtype), covariates.gts.data))
         if args.fit_res:
             alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y))
             y = y -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
             logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
-            model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
         else:
-            model = lmm.LinearMixedModel(y, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covar_1, add_intercept=True)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covar_1, add_intercept=True)
     if not varcomps:
         logger.info(f'Optimizing variance components...')
         model.scipy_optimize()
@@ -347,7 +358,7 @@ def main(args):
     if args.vc_out:
         np.savez(f'{args.vc_out}', varcomps=np.array(model.varcomps))
         logger.info(f'varcomps saved to {args.vc_out}.npz.')
-    logger.info(f'Variance components: {list(i / y.var() for i in model.varcomps)}')
+    logger.info(f'Variance components: {list(i / y.gts.data.var() for i in model.varcomps)}')
     if args.vc_only:
         exit(0)
     sigmas = model.varcomps

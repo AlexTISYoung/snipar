@@ -138,9 +138,9 @@ def get_ids_with_par(gts_f: str,
         # logger.debug('#iid' + len(gts_ids))
         # logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
         # logger.debug(f'#ids present in both ped and geno: {len(np.intersect1d(ped[:, 1], gts_ids))}')
-        ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped,
-                                                                             fams,
+        ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped,                                
                                                                              gts_ids,
+                                                                             imp_fams=fams,
                                                                              ids=ids,
                                                                              sib=sib,
                                                                              impute_unrel=include_unrel)
@@ -152,9 +152,9 @@ def get_ids_with_par(gts_f: str,
         # logger.debug(f'Length of geno: {len(gts_ids)}')
         # logger.debug(f'#ids present in both phen and geno: {len(np.intersect1d(ids, gts_ids))}')
         # logger.debug(f'#ids present in both ped and geno: {len(np.intersect1d(ped[:, 1], gts_ids))}')
-        ids, observed_indices, imp_indices = preprocess.get_indices_given_ped(ped,
-                                                                             fams,
+        ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped,
                                                                              gts_ids,
+                                                                             imp_fams=fams,
                                                                              ids=ids,
                                                                              sib=sib,
                                                                              include_unrel=include_unrel)
@@ -168,8 +168,7 @@ def get_ids_with_par(gts_f: str,
     gts_id_dict = make_id_dict(gts_ids)
 
     # Find indices in reduced data
-    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, fams,
-                                                                 gts_id_dict)
+    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, fams)
     # print(len(par_status), len(observed_indices))
     # print(sum([i == j == -1 for i, j in par_status]))
     # print(sum([i == j == -1 for _,i, j in gt_indices]))
@@ -186,14 +185,14 @@ def get_ids_with_par(gts_f: str,
     # logger.debug(f'#both par geno: {sum([i == j == 0 for _,i, j in gt_indices])}')
     # logger.debug(f'#both par geno: {sum([i == j == 0 for i, j in par_status])}')
     # logger.debug(f'#one par geno: {sum([i + j == 1 for i, j in par_status])}')
-    # n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
+    n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
     # logger.debug(f'#unique fam_labels: {np.unique(fam_labels).__len__()}')
     # logger.debug(f'#empty fam_labels: {n_empty_fams}')
 
     # logger.debug(fam_labels[fam_labels == ''])
-    # # ind = fam_labels == ''
-    # fam_labels = fam_labels.astype('<U20')
-    # fam_labels[fam_labels == ''] = np.array([f'_not_{i}_' for i in range(n_empty_fams)], dtype='<U20')
+    # ind = fam_labels == ''
+    fam_labels = fam_labels.astype('<U20')
+    fam_labels[fam_labels == ''] = np.array([f'_not_{i}_' for i in range(n_empty_fams)], dtype='<U20')
     # # ind = np.array([i[4] == 'False' and i[5] == 'False' for i in ped])
     # logger.debug(f'#empty fam_labels after assignment: {sum([1 for i in fam_labels if len(i) == 0])}')
     # logger.debug(f'#unique fam_labels: {np.unique(fam_labels).__len__()}')
