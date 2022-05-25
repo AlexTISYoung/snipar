@@ -18,9 +18,6 @@ pgs = read.table(pgsfile,header=T,stringsAsFactors=F)
 
 # combine pgs with covariates
 covars = read.table('../covariates.fam',header=T,stringsAsFactors=F)
-covars = covars[match(pgs[,2],covars[,2]),]
-covars$pgs = scale(pgs[,3])
-write.table(covars,'GS_EA_13_weights_LDpred_p1.pgs.with_covariates.txt',quote=F,row.names=F)
 
 # Match with pedigree
 ids = pgs[,2]

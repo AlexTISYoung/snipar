@@ -50,6 +50,24 @@ gwas.py $gpardir/processed_traits_noadj.txt --out $gpardir/traits/$i/chr_@ --bge
 done
 
 ### PGS ###
+rm $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+for i in {1..22}
+do
+echo $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_chr$i'_v3_50k.ldm.sparse' >> $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+done
+# Compute PGS weights with SBayesR
+$gpardir/gctb_2.02_Linux/gctb --sbayes R \
+     --mldm $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt \
+     --pi 0.95,0.02,0.02,0.01 \
+     --gamma 0.0,0.01,0.1,1 \
+     --gwas-summary $gpardir/EA4_excl_UKBrel_STR_GS_2020_08_21.ma \
+     --chain-length 10000 \
+     --burn-in 2000 \
+     --out-freq 10 \
+     --out $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 \
+     --exclude-mhc \
+     --unscale-genotype
+
 # Compute PGS
 pgs.py $gpardir/pgs/GS_EA_13_weights_LDpred_p1 --weights $gpardir/pgs/GS_EA_13_weights_LDpred_p1.0000e+00_matched.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls
 # Compute grandparental PGS

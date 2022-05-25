@@ -146,6 +146,7 @@ fam$IID = sapply(fam[,2],function(x) strsplit(x,'_')[[1]][2])
 processed_traits$IID = fam[match(processed_traits$IID,fam$IID),2]
 processed_traits$FID = processed_traits$IID
 processed_traits = processed_traits[,c(dim(processed_traits)[2],1:(dim(processed_traits)[2]-1))]
+processed_traits[raw_traits$age<30,c('EA_years','EA_years_mid','EA_quals')] = NA
 # Write
 write.table(processed_traits,'grandpar/processed_traits_noadj.txt',quote=F,row.names=F)
 
@@ -154,3 +155,6 @@ agesex = data.frame(FID=processed_traits$FID,IID=processed_traits$IID,
                     age=raw_traits$age,
                     sex=sapply(raw_traits$sex,function(x) if (x==0){return('F')} else if (x==1){return('M')} else {return(NA)}))
 write.table(agesex,'grandpar/agesex.txt',quote=F,row.names=F)
+
+# Write correlation matrix
+write.csv(cor(processed_traits[,c('cog','vocab','EA_years','EA_years_mid','EA_quals')],use='pairwise.complete.obs'),'grandpar/EA_cog_vocab_corrs.csv',quote=F)
