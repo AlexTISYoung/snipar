@@ -11,7 +11,8 @@ npg_am_adj = function(pgi_imp,r,n){
   return(rcoef*pgi_imp)
 }
 
-pgsfile = 'GS_EA_13_weights_LDpred_p1.pgs.txt'
+#pgsfile = 'GS_EA_13_weights_LDpred_p1.pgs.txt'
+pgsfile = 'EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.pgs.txt'
 impfile = '../imputed/chr_1.hdf5'
 
 pgs = read.table(pgsfile,header=T,stringsAsFactors=F)
@@ -136,17 +137,32 @@ pgs_out = cbind(covars[,1:(dim(covars)[2]-1)],pgs[,-c(1:2)])
 write.table(pgs_out,'pgs_gpar_full.txt',quote=F,row.names=F)
 
 ## Load effects
-effects = read.table('fpgs_gpar.effects.txt',header=F,row.names=1)[29:35,]
-v = as.matrix(read.table('fpgs_gpar.vcov.txt')[29:35,29:35])
+effects = read.table('fpgs_gpar.effects.txt',header=F,row.names=1)[28:34,]
+v = as.matrix(read.table('fpgs_gpar.vcov.txt')[28:34,28:34])
 
-A = rbind(diag(7),
+ul = matrix(0,nrow=7,ncol=7)
+ul[1:3,1:3] = diag(3)
+A = rbind(ul[1:3,],
           c(0,0.5,0.5,0,0,0,0),
+          c(0,0,0,0.5,0.5,0,0),
+          c(0,0,0,0,0,0.5,0.5),
           c(0,0,0,0.25,0.25,0.25,0.25))
 
 all_effects = A%*%effects[,1]
 all_effects = cbind(all_effects,sqrt(diag(A%*%v%*%t(A))))
-dimnames(all_effects)[[1]] = c(dimnames(effects)[[1]],'parental','grandparental')
+dimnames(all_effects)[[1]] = c('direct','paternal_indirect','maternal_indirect','avg_parental_indirect',
+                                  'grandpaternal_NTC','grandmaternal_NTC','grandparental_avg_NTC')
 all_effects = cbind(all_effects,all_effects[,1]/all_effects[,2])
 all_effects = cbind(all_effects,1-pchisq(all_effects[,3]^2,1))
 dimnames(all_effects)[[2]] = c('est','S.E.','t','P')
+
+# Read effects from model without grandparents
+trio_effects = read.table('fpgs_par.effects.txt',row.names=1)[29:30,]
+trio_vcov = as.matrix(read.table('fpgs_par.vcov.txt')[29:30,29:30])
+A_trio = t(as.matrix(c(0.5,0.5)))
+avg_NTC = A_trio%*%trio_effects[,1]
+avg_NTC_SE = sqrt(t(A_trio%*%trio_vcov%*%t(A_trio)))
+all_effects = rbind(all_effects,c(avg_NTC,avg_NTC_SE,avg_NTC/avg_NTC_SE,1-pchisq((avg_NTC/avg_NTC_SE)^2,1)))
+dimnames(all_effects)[[1]][dim(all_effects)[1]] = 'avg_parental_NTC'
+write.table(all_effects,)
 

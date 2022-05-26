@@ -26,6 +26,18 @@ class pgs(object):
             self.alleles = alleles
         else:
             raise ValueError('All inputs must have the same dimension')
+    
+    def remove_zeros(self):
+        zero_weight = self.weights==0
+        n_zero = np.sum(zero_weight)
+        if n_zero>0:
+            print('Filtering '+str(n_zero)+' SNPs with zero weight')
+            self.snp_ids = self.snp_ids[~zero_weight]
+            self.snp_dict = make_id_dict(self.snp_ids)
+            self.weights = self.weights[~zero_weight]
+            self.alleles = self.alleles[~zero_weight]
+        else:
+            print('No zero weight SNPs found')
 
     def compute(self, garray, cols=None):
         """Compute polygenic score values from a given genotype array. Finds the SNPs in the genotype array

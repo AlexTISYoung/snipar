@@ -55,8 +55,8 @@ for i in {1..22}
 do
 echo $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_chr$i'_v3_50k.ldm.sparse' >> $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
 done
-# Compute PGS weights with SBayesR
-$gpardir/gctb_2.02_Linux/gctb --sbayes R \
+# Compute PGS weights with gctb SBayesR
+$gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      --mldm $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt \
      --pi 0.95,0.02,0.02,0.01 \
      --gamma 0.0,0.01,0.1,1 \
@@ -66,10 +66,12 @@ $gpardir/gctb_2.02_Linux/gctb --sbayes R \
      --out-freq 10 \
      --out $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 \
      --exclude-mhc \
-     --unscale-genotype
-
+     --unscale-genotype \
+     --impute-n 
+     
 # Compute PGS
-pgs.py $gpardir/pgs/GS_EA_13_weights_LDpred_p1 --weights $gpardir/pgs/GS_EA_13_weights_LDpred_p1.0000e+00_matched.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls
+Rscript sbayesr_to_snipar.R
+pgs.py $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls --beta_col beta --A1 A1 --A2 A2 --SNP SNP
 # Compute grandparental PGS
 R3script $gpardir/impute_gpar_PGS_GS.R
 

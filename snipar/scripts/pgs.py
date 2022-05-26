@@ -60,6 +60,8 @@ if __name__ == '__main__':
         p = pgs.pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
                 beta,
                 weights[:,allele_indices])
+        # Remove zeros
+        p.remove_zeros()
 
         ###### Compute PGS ########
         # Find observed and imputed files
