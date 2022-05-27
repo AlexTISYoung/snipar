@@ -164,5 +164,11 @@ avg_NTC = A_trio%*%trio_effects[,1]
 avg_NTC_SE = sqrt(t(A_trio%*%trio_vcov%*%t(A_trio)))
 all_effects = rbind(all_effects,c(avg_NTC,avg_NTC_SE,avg_NTC/avg_NTC_SE,1-pchisq((avg_NTC/avg_NTC_SE)^2,1)))
 dimnames(all_effects)[[1]][dim(all_effects)[1]] = 'avg_parental_NTC'
-write.table(all_effects,)
+
+# Read population effect
+pop_effect = read.table('fpgs_pop.effects.txt',row.names=1)
+all_effects = rbind(all_effects,c(pop_effect['proband',],pop_effect['proband',1]/pop_effect['proband',2],
+                                  1-pchisq((pop_effect['proband',1]/pop_effect['proband',2])^2,1)))
+dimnames(all_effects)[[1]][dim(all_effects)[1]]='population'
+write.csv(all_effects,'grandparental_EA_effects.csv',quote=F)
 

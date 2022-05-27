@@ -17,7 +17,10 @@ gcta64='/homes/nber/alextisyoung/gcta_1.93.2beta/gcta64'
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
 for i in {1..22}
 do
-$gpardir/vcftools-vcftools-581c231/bin/bin/vcftools --gzvcf /disk/genetics/sibling_consortium/GS20k/aokbay/imputed/HRC/vcf/chr$i.dose.vcf.gz --snps $hapdir/chr_$i'_MAF_0.01_call_0.99_Rsq_0.99.txt' --remove-indels --maf 0.01 --hwe 0.000001 --phased --recode --stdout | gzip -c > $hapdir/chr_$i.vcf.gz
+$gpardir/vcftools-vcftools-581c231/bin/bin/vcftools --gzvcf /disk/genetics/sibling_consortium/GS20k/aokbay/imputed/HRC/vcf/chr$i.dose.vcf.gz \
+     --snps $hapdir/chr_$i'_MAF_0.01_call_0.99_Rsq_0.99.txt' \
+     --remove-indels --maf 0.01 --hwe 0.000001 --phased --recode \
+     --stdout  --min-alleles 2 --max-alleles 2 | gzip -c > $hapdir/chr_$i.vcf.gz
 done
 ### Convert VCF to phased BGEN file ###
 for i in {1..22}
@@ -68,7 +71,7 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      --exclude-mhc \
      --unscale-genotype \
      --impute-n 
-     
+
 # Compute PGS
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls --beta_col beta --A1 A1 --A2 A2 --SNP SNP
