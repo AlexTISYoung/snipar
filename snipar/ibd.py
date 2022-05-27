@@ -340,7 +340,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         # Check for NAs
         if np.var(map) == 0:
             print('Map information not found in bim file.')
-            print('Using default map (decode sex averaged map on Hg19 coordinates)')
+            print('Using default map (decode sex averaged map on GRCh38 coordinates)')
             gts.map = decode_map_from_pos(chrom, gts.pos)
             pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
             print('Found map positions for '+str(pc_mapped)+'% of SNPs')
