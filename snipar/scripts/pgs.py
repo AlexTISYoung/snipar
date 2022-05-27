@@ -53,6 +53,10 @@ parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to hav
 parser.add_argument('--compute_controls', action='store_true', default=False,
                     help='Compute PGS for control families (default False)')
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
+parser.add_argument('--ibdrel_path', type=str,
+                        help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+parser.add_argument('--sparse_thres', type=float,
+                    help='Threshold of GRM/IBD sparsity', default=0.05)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
 def main(args):
@@ -155,6 +159,45 @@ def main(args):
         pg.filter_ids(y.ids)
         y.filter_ids(pg.ids)
         print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
+
+        if args.ibdrel_path is not None:
+            # ids, fam_labels = match_grm_ids(
+            #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
+            id_dict = make_id_dict(pg.ids)
+            grm_data, grm_row_ind, grm_col_ind = lmm.build_ibdrel_arr(
+                args.ibdrel_path, id_dict=id_dict, keep=pg.ids, thres=args.sparse_thres)
+        elif args.grm_path is not None or args.gcta_path is not None:
+            if args.grm_path is None:
+                lmm.run_gcta_grm(args.plink_path, args.gcta_path,
+                            args.hapmap_bed, args.outprefix, pg.ids)
+                grm_path = args.outprefix
+            else:
+                grm_path = args.grm_path
+            ids, fam_labels = lmm.match_grm_ids(
+                pg.ids, pg.fams, grm_path=grm_path, grm_source='gcta')
+            id_dict = make_id_dict(ids)
+            if args.grm_npz_path is not None:
+                grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr_from_npz(
+                    id_filepath=grm_path + '.grm.id', npz_path=args.grm_npz_path,
+                    ids=ids, id_dict=id_dict)
+            else:
+                grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr(
+                    grm_path, id_dict=id_dict, thres=args.sparse_thres)
+        if 'ids' in locals():
+            pg.filter_ids(ids)
+            y.filter_ids(pg.ids)
+        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(pg.fams)
+
+        if 'grm_data' in locals():
+            varcomp_lst = (
+                (grm_data, grm_row_ind, grm_col_ind),
+                (sib_data, sib_row_ind, sib_col_ind),
+            )
+        else:
+            varcomp_lst = (
+                (sib_data, sib_row_ind, sib_col_ind),
+            )
+        
         # Parental sum
         if args.parsum:
             if 'maternal' in pg.sid and 'paternal' in pg.sid:
@@ -174,10 +217,18 @@ def main(args):
             pg.scale()
         # Estimate effects
         print('Estimating direct effects and NTCs')
-        alpha_imp = lmm.fit_model(y.gts[:,0], pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        lmm_imp = lmm.LinearMixedModel(y.gts.data[:, 0], varcomp_arr_lst=varcomp_lst, covar_X=pg.gts.data, add_intercept=True)
+        # logger.info('Optimizing variance components...')
+        lmm_imp.scipy_optimize()
+        ZT_Vinv_Z_imp = lmm_imp.Z.T @ lmm_imp.Vinv_Z
+        alpha_imp = [np.linalg.solve(ZT_Vinv_Z_imp, lmm_imp.Z.T @ lmm_imp.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
         # Estimate population effect
         print('Estimating population effect')
-        alpha_proband = lmm.fit_model(y.gts[:,0], pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        lmm_proband = lmm.LinearMixedModel(y.gt.data[:, 0], varcomp_arr_lst=varcomp_lst, covar_X=pg.gts.data[:, 0], add_intercept=True)
+        # logger.info('Optimizing variance components...')
+        lmm_proband.scipy_optimize()
+        ZT_Vinv_Z_proband = lmm_proband.Z.T @ lmm_proband.Vinv_Z
+        alpha_proband = [np.linalg.solve(ZT_Vinv_Z_proband, lmm_proband.Z.T @ lmm_proband.Vinv_y), np.linalg.inv(ZT_Vinv_Z_proband)]
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]

@@ -294,9 +294,10 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 #     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
 
-def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, parsum=False,
-                  fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, print_sample_info=False,
-                  impute_unrel=False, ignore_na_fams=False, ignore_na_rows=False):
+def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
+                  parsum=False, fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, 
+                  print_sample_info=False, impute_unrel=False, ignore_na_fams=False, ignore_na_rows=False,
+                  add_jitter=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
     # no need to provide residual var arr
@@ -313,7 +314,7 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     # ped = np.frombuffer(_var_dict['ped_'], dtype='str').reshape(
     #     _var_dict['ped_shape'])
     ####### Construct family based genotype matrix #######
-    G = read.get_gts_matrix(ped=None, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
+    G = read.get_gts_matrix(ped_f=ped_f, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib,
                             include_unrel=impute_unrel,
                             verbose=verbose, print_sample_info=print_sample_info)
@@ -345,15 +346,16 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     G.mean_normalise()
     ### Fit models for SNPs ###
     model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
-                           varcomps=varcomps, covar_X=covar, add_intercept=True)
+                           varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
     alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
 
 def process_chromosome(chrom_out, y, varcomp_lst,
-                       pedigree, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
+                       pedigree, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
                        fit_sib=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, batch_size=10000, 
-                       no_hdf5_out=False, no_txt_out=False, num_cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False):
+                       no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False,
+                       add_jitter=False):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -401,11 +403,11 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         alleles = alleles[not_duplicated,:]
     snp_dict = make_id_dict(snp_ids)
     # Compute batches
-    batch_bounds = compute_batch_boundaries(snp_ids,batch_size)
-    if batch_bounds.shape[0] == 1:
-        print('Using 1 batch')
-    else:
-        print('Using '+str(batch_bounds.shape[0])+' batches')
+    # batch_bounds = compute_batch_boundaries(snp_ids,batch_size)
+    # if batch_bounds.shape[0] == 1:
+    #     print('Using 1 batch')
+    # else:
+    #     print('Using '+str(batch_bounds.shape[0])+' batches')
     alpha_dim = 2
     if fit_sib:
         alpha_dim += 1
@@ -426,7 +428,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                      alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
     # Compute batches
     batches = split_batches(
-        snp_ids.shape[0], len(y.ids), nbytes, num_cpus, parsum=parsum, fit_sib=fit_sib)
+        snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, fit_sib=fit_sib)
     if len(batches) == 1:
         logger.info('Using 1 batch')
     else:
@@ -476,19 +478,21 @@ def process_chromosome(chrom_out, y, varcomp_lst,
             varcomp_dict[f'varcomp_col_ind_{i}_buffer'], varcomp_lst[i][2])
     
     process_batch_ = partial(process_batch, pheno_ids=y.ids,
-                             bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
+                             bedfile=bedfile, bgenfile=bgenfile,
+                             par_gts_f=par_gts_f, ped_f=ped_f,
                              parsum=parsum, fit_sib=fit_sib,
                              max_missing=max_missing, min_maf=min_maf,
                              impute_unrel=impute_unrel,
                              ignore_na_fams=ignore_na_fams,
-                             ignore_na_rows=ignore_na_rows)
+                             ignore_na_rows=ignore_na_rows,
+                             add_jitter=add_jitter)
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
         _init_worker_(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[46]])
         exit('Debug finishsed.')
     with Pool(
-        processes=num_cpus,
+        processes=cpus,
         initializer=_init_worker_,
         initargs=(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
     ) as pool:

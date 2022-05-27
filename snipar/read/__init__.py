@@ -4,6 +4,7 @@ from bgen_reader import open_bgen
 import snipar.read.bed as bed
 import snipar.read.bgen as bgen
 import snipar.read.phenotype as phenotype
+from snipar.pedigree import get_sibpairs_from_ped
 import h5py
 import numpy as np
 from snipar.utilities import convert_str_array, make_id_dict
@@ -14,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_gts_matrix(ped=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, compute_controls = False, include_unrel=False, verbose=False, print_sample_info=False):
+def get_gts_matrix(ped_f=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, compute_controls = False, include_unrel=False, verbose=False, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
@@ -46,7 +47,7 @@ def get_gts_matrix(ped=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_id
 
     """
     ####### Find parental status #######
-    if ped is None and par_gts_f is None:
+    if ped_f is None and par_gts_f is None:
         raise(ValueError('Must provide one of pedigree and imputed parental genotypes file'))
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must provide one bed file or one bgen file'))
@@ -58,6 +59,10 @@ def get_gts_matrix(ped=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_id
         # Get pedigree
         ped = convert_str_array(par_gts_f['pedigree'])
         ped = ped[1:ped.shape[0],:]
+    else:
+        ped = np.loadtxt(ped_f, dtype=str)
+        # Remove rows with missing parents
+        sibpairs, ped = get_sibpairs_from_ped(ped)
     # Control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
     # Compute genotype matrices

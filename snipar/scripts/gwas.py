@@ -104,19 +104,8 @@ parser.add_argument('--zero_sib_entries', action='store_true', default=False,
 parser.add_argument('--sparse_thres', type=float,
                     help='Threshold of GRM/IBD sparsity', default=0.05)
 
-parser.add_argument('--num_cpus', type=int,
+parser.add_argument('--cpus', type=int,
                     help='Number of cpus to distribute batches across', default=1)
-
-parser.add_argument('--from_chr',
-                    type=int,
-                    help='Which chromosome (>=). Should be used with to_chr parameter.')
-parser.add_argument('--to_chr',
-                    type=int,
-                    help='Which chromosome (<). Should be used with from_chr parameter.')
-
-parser.add_argument('--match_all',
-                    action='store_true', default=False,
-                    help='Match individual IDs from all genotype files or not.')
 
 parser.add_argument('--vc_out',
                     type=str,
@@ -135,6 +124,10 @@ parser.add_argument('--vc_list',
 parser.add_argument('--vc_only',
                     action='store_true',
                     help='Only perform variance component estimation.')
+                
+parser.add_argument('--add_jitter',
+                    action='store_true',
+                    help='Whether to add jitter to diagonals of V.')
 
 parser.add_argument('--ignore_na_fams',
                     action='store_true', default=False,
@@ -310,6 +303,23 @@ def main(args):
         id_dict = make_id_dict(ids)
         grm_data, grm_row_ind, grm_col_ind = lmm.build_ibdrel_arr(
             args.ibdrel_path, id_dict=id_dict, ignore_sib=args.zero_sib_entries, keep=ids, thres=args.sparse_thres)
+    elif args.grm_path is not None or args.gcta_path is not None:
+        if args.grm_path is None:
+            lmm.run_gcta_grm(args.plink_path, args.gcta_path,
+                         args.hapmap_bed, args.outprefix, ids)
+            grm_path = args.outprefix
+        else:
+            grm_path = args.grm_path
+        ids, fam_labels = lmm.match_grm_ids(
+            ids, fam_labels, grm_path=grm_path, grm_source='gcta')
+        id_dict = make_id_dict(ids)
+        if args.grm_npz_path is not None:
+            grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr_from_npz(
+                id_filepath=grm_path + '.grm.id', npz_path=args.grm_npz_path,
+                ids=ids, id_dict=id_dict)
+        else:
+            grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr(
+                grm_path, id_dict=id_dict, thres=args.sparse_thres)
 
     if not args.grm_only:
         sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(fam_labels)
@@ -340,16 +350,16 @@ def main(args):
     else:
         varcomps = None
     if args.covar is None:
-        model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+        model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
     else:
         covar_1 = np.hstack((np.ones((y.shape[0], 1), dtype=y.dtype), covariates.gts.data))
         if args.fit_res:
             alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y))
             y = y -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
             logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
-            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
         else:
-            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covar_1, add_intercept=True)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
     if not varcomps:
         logger.info(f'Optimizing variance components...')
         model.scipy_optimize()
@@ -376,11 +386,11 @@ def main(args):
         else:
             print('Estimaing SNP effects')
         process_chromosome(chroms[i], y, varcomp_lst,
-                           ped, sigmas, args.out, covariates, bedfile=bedfiles[i], bgenfile=bgenfiles[i], 
+                           ped, sigmas, args.out, covariates, bedfile=bedfiles[i], bgenfile=bgenfiles[i], ped_f=args.pedigree,
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
                            impute_unrel=args.impute_unrel,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
-                           no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out)
+                           no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter)
 
 
 if __name__ == "__main__":

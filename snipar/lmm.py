@@ -1,3 +1,6 @@
+import subprocess
+import tempfile
+import gzip
 import numpy as np
 import pandas as pd
 from scipy.optimize import fmin_l_bfgs_b, minimize, OptimizeResult
@@ -5,7 +8,7 @@ from numpy.linalg import slogdet, solve, inv
 from scipy.linalg import cho_factor, cho_solve
 from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import splu, SuperLU, spsolve, cg
-from typing import List, Dict, Tuple, Callable, NamedTuple
+from typing import List, Dict, Tuple, Callable, NamedTuple, Optional
 from typing_extensions import Literal
 from collections import defaultdict
 from itertools import combinations_with_replacement, product
@@ -102,6 +105,132 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
         col_ind[n + i] = i
     logger.info('Done building ibd arr.')
     return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
+
+
+def build_grm_arr(grm_path: str, id_dict: IdDict,
+                  thres: float) -> SparseGRMRepr:
+    """Build GRM data array and corresponding indices.
+    """
+    gcta_id = dict()
+
+    row_n = 1  # index starts from 1 in gcta grm output
+    with open(f'{grm_path}.grm.id', 'r') as f:
+        for line in f:
+            id = line.strip().split('\t')[1]
+            gcta_id[row_n] = id
+            row_n += 1
+    n = len(id_dict)
+    # grm_arr = np.full(int(n * (n + 1) / 2), np.nan)
+    data = []
+    row_ind = []
+    col_ind = []
+
+    logger.info('Building grm...')
+    with gzip.open(f'{grm_path}.grm.gz', 'rt') as f:
+        for line in f:
+            id1, id2, _, gr = line.strip().split('\t')
+            gr_: float = float(gr)
+            if gr_ < thres:
+                # ignore relatedness coeffs less than thres
+                continue
+            id1, id2 = gcta_id[int(id1)], gcta_id[int(id2)]
+            if id1 not in id_dict or id2 not in id_dict:
+                # ignore individuals that are not in id_dict
+                continue
+            ind1, ind2 = id_dict[id1], id_dict[id2]
+            ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
+            data.append(gr_)
+            row_ind.append(ind1)
+            col_ind.append(ind2)
+    logger.info(f'Done building grm. nnz={len(data)}')
+    return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
+
+
+def match_grm_ids(ids: Ids,
+                  fam_labels: FamLabels,
+                  grm_path: str,
+                  grm_source: Literal['gcta', 'ibdrel'],
+                  ) -> Tuple[np.ndarray, np.ndarray]:
+    """Match ids with GRM individual ids.
+    """
+    orig_ids = pd.DataFrame({'ids': ids, 'fam_labels': fam_labels})
+    if grm_source == 'gcta':
+        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\s+', names=[
+                              '_', 'ids_'], dtype={'_': str, 'ids_': str})[['ids_']]
+    elif grm_source == 'ibdrel':
+        grm_ids = pd.read_csv(grm_path + '.seg',
+                              sep='\t')[['ID1', 'ID2']]
+        id1 = grm_ids['ID1'].to_numpy(dtype=str)
+        id2 = grm_ids['ID2'].to_numpy(dtype=str)
+        grm_ids = pd.DataFrame({'ids_': np.union1d(id1, id2)})
+    else:
+        raise ValueError('Incorrect source.')
+    orig_ids = orig_ids.merge(grm_ids, how='inner',
+                              left_on='ids', right_on='ids_')
+    return orig_ids['ids'].to_numpy(), orig_ids['fam_labels'].to_numpy()
+
+
+def run_gcta_grm(plink_path: str,
+                 gcta_path: str,
+                 filename: str,
+                 output_path: str,
+                 keep: Optional[List[str]] = None) -> None:
+    """
+    Build GRM using GCTM.
+
+    Args:
+        gcta_path : str
+            path of gcta64 executable.
+        filename : str
+            prefix of bed files; if '#' is in it, create a file containing file names of 22 chromosomes.
+        output_path : str
+            prefix of output path.
+        keep : Optional[List]
+            if List, create a txt file with each row being containing one IID to keep.
+    """
+    logger.info('Start running gcta grm...')
+    args = [
+        gcta_path,
+    ]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if keep is not None:
+            keep_file = f'{tmpdir}/keep.txt'
+            with open(keep_file, 'w') as f:
+                # f.write(f'#IID\n')
+                for k in keep:
+                    f.write(f'{str(k)}\t{str(k)}\n')
+
+        if '#' in filename:
+            args.append('--mbfile')
+            chr_file = f'{tmpdir}/chr.txt'
+            with open(chr_file, 'w') as f:
+                for i in range(1, 23):
+                    c = filename.replace('#', str(i))
+                    plink_args = [
+                        plink_path, '--bfile', c, '--rm-dup',
+                        'exclude-mismatch', '--make-bed', '--out',
+                        f'{tmpdir}/chr{str(i)}'
+                    ]
+                    if keep is not None:
+                        plink_args += ['--keep', keep_file]
+                    subprocess.run(plink_args)
+                    f.write(f'{tmpdir}/chr{str(i)}' + '\n')
+            args.append(chr_file)
+        else:
+            plink_args = [
+                plink_path, '--bfile', filename, '--rm-dup',
+                'exclude-mismatch', '--make-bed', '--out', f'{tmpdir}/chr'
+            ]
+            if keep is not None:
+                plink_args += ['--keep', keep_file]
+            subprocess.run(plink_args)
+            args += ['--bfile', f'{tmpdir}/chr']
+
+        args += ['--make-grm-gz', '--out', output_path]
+        subprocess.run(args)
+    logger.info('Finished running gcta grm.')
+
 
 '''
 class model(object):
@@ -453,8 +582,7 @@ class LinearMixedModel:
         self.logger.info(f'#individuals: {self.n}.')
 
         if add_intercept and self.has_covar:
-            ...
-             # self.Z = np.hstack((np.ones((self.n, 1),dtype=self.Z.dtype), self.Z))
+             self.Z = np.hstack((np.ones((self.n, 1),dtype=self.Z.dtype), self.Z))
             
         # def to_nz(arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         #     nz = arr.nonzero()[0]
@@ -1054,8 +1182,8 @@ class LinearMixedModel:
         def callbackF(Xi):
             print(Xi, nll(Xi))
         res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), # options={'gtol': 1e-5, 'eps': 1e-5},
-                                    method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],
-                                    callback=callbackF)
+                                    method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],)
+                                    # callback=callbackF)
         __varcomp_mats = self._varcomp_mats
         if not res.success:
             if self.n_varcomps == 2:
