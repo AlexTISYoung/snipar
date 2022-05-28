@@ -97,7 +97,102 @@ class pgs(object):
             for i in range(0, garray.gts.shape[1]):
                 pgs_val[:, i] = garray.gts[:, i, in_pgs_snps].dot(weights_compute)
 
-        return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
+        return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status)
+    
+    def am_adj(self):
+        # Check pgs columns
+        if 'paternal' in self.sid:
+            paternal_index = np.where(self.sid=='paternal')[0][0]
+        else:
+            raise(ValueError('No paternal PGS column found'))
+        if 'maternal' in self.sid:
+            maternal_index = np.where(self.sid=='maternal')[0][0]
+        else:
+            raise(ValueError('No maternal PGS column found'))
+        # count fams
+        fams = np.unique(self.fams, return_counts=True)
+        # Mapping of sibships to pgs rows
+        fam_dict = {}
+        for fam in fams[0]:
+            fam_dict[fam] = np.where(self.fams==fam)[0]
+        # record genotype status of parents in each fam
+        par_status_fams = np.zeros((fams[0].shape[0],2),dtype=int)
+        for i in range(fams[0].shape[0]):
+            par_status_fams[i,:] = self.par_status[fam_dict[fams[0][i]][0]]
+        # get family sizes including parents
+        fsizes = fams[1]+np.sum(par_status_fams==0,axis=1)
+        ## pgs matrix with observed sibs and parents for each fam
+        pgs_fam = np.zeros((fams[0].shape[0],np.max(fsizes)))
+        pgs_fam[:] = np.nan
+        # record whether sib or parent
+        is_sib = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
+        is_parent = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
+        # populate
+        for i in range(fams[0].shape[0]):
+            # Fill in sibs
+            sib_indices = fam_dict[fams[0][i]]
+            pgs_fam[i,0:sib_indices.shape[0]] = self.gts[sib_indices,0]
+            is_sib[i,0:sib_indices.shape[0]] = True
+            npar = 0
+            if par_status_fams[i,0] == 0:
+                pgs_fam[i,sib_indices.shape[0]] = self.gts[sib_indices[0],paternal_index]
+                is_parent[i,sib_indices.shape[0]] = True
+                npar = 1
+            if par_status_fams[i,1] == 0:
+                pgs_fam[i,sib_indices.shape[0]+npar] = self.gts[sib_indices[0],maternal_index]
+                is_parent[i,sib_indices.shape[0]+npar] = True
+        # normalize
+        pgs_fam = (pgs_fam-np.mean(pgs_fam[~np.isnan(pgs_fam)]))/np.std(pgs_fam[~np.isnan(pgs_fam)])
+        ### find correlation between maternal and paternal pgis
+        # grid search over r
+        print('Finding MLE for correlation between parents scores')
+        rvals = -0.999+np.arange(1000)*(2*0.999/999)
+        L_vals = np.zeros(1000)
+        for i in range(1000):
+            L_vals[i] = pgs_corr_likelihood(rvals[i],pgs_fam,is_sib,is_parent)
+        r_mle = rvals[np.argmin(L_vals)]
+        print('r='+str(round(r_mle,3)))
+
+def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
+    n_sib = np.sum(is_sib_fam)
+    n_par = np.sum(is_parent_fam)
+    # Full matrix
+    R = np.identity(n_sib+n_par,dtype=np.float_)
+    # sib submatrix
+    r_sib = (1+r)/2
+    R_sib = (1-r_sib)*np.identity(n_sib,dtype=np.float_)+r_sib*np.ones((n_sib,n_sib),dtype=np.float_)
+    R[0:n_sib,0:n_sib] = R_sib
+    # sib to parent
+    if n_par>0:
+        R[0:n_sib,n_sib:(n_sib+n_par)] = r_sib
+        R[n_sib:(n_sib+n_par),0:n_sib] = r_sib
+    # parent-to-parent
+    if n_par>1:
+        R[n_sib+n_par-1,n_sib+n_par-2] = r
+        R[n_sib+n_par-2,n_sib+n_par-1] = r
+    # return 
+    return R
+
+def pgs_corr_likelihood_fam(r,pg_fam,is_sib_fam,is_parent_fam):
+    sib_or_parent = np.logical_or(is_sib_fam,is_parent_fam)
+    R = pgs_corr_matrix(r,is_sib_fam,is_parent_fam)
+    slogdet_R = np.linalg.slogdet(R)
+    pg_vec = pg_fam[sib_or_parent].reshape((np.sum(sib_or_parent),1))
+    return slogdet_R[0]*slogdet_R[1]+pg_vec.T @ np.linalg.inv(R) @ pg_vec
+
+def pgs_corr_likelihood(r,pgs_fam,is_sib,is_parent):
+    L = 0
+    for i in range(pgs_fam.shape[0]):
+        L += pgs_corr_likelihood_fam(r,pgs_fam[i,:],is_sib[i,:],is_parent[i,:])
+    return L
+
+
+pgs_corr_matrix(0.5,np.array([True,True,False]),np.array([False,False,True]))
+
+
+        
+
+        
 
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.

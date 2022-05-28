@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse
+import argparse, code
 import numpy as np
 import snipar.pgs as pgs
 from snipar.gtarray import gtarray
@@ -61,7 +61,7 @@ if __name__ == '__main__':
                 beta,
                 weights[:,allele_indices])
         # Remove zeros
-        p.remove_zeros()
+        #p.remove_zeros()
 
         ###### Compute PGS ########
         # Find observed and imputed files

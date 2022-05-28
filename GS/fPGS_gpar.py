@@ -92,3 +92,16 @@ alpha_ses = np.sqrt(np.diag(alpha_cov))
 alpha_out = np.vstack((pg.sid[0:pg.gts.shape[1]],alpha.reshape((alpha.shape[0])),alpha_ses)).T
 np.savetxt(dir+'pgs/fpgs_par.effects.txt',alpha_out,fmt='%s')
 np.savetxt(dir+'pgs/fpgs_par.vcov.txt',alpha_cov,fmt='%s')
+
+## Drop parents and estimate population effect
+pg_dim = pg.gts.shape[1]
+pg.gts = pg.gts[:,0:(pg.gts.shape[1]-2)]
+xtx = pg.gts.T.dot(pheno_grm_inv.dot(pg.gts))
+xty = pg.gts.T.dot(pheno_grm_inv.dot(y.gts))
+alpha = np.linalg.solve(xtx,xty)
+alpha_cov = np.linalg.inv(xtx)
+alpha_ses = np.sqrt(np.diag(alpha_cov))
+# Save output
+alpha_out = np.vstack((pg.sid[0:pg.gts.shape[1]],alpha.reshape((alpha.shape[0])),alpha_ses)).T
+np.savetxt(dir+'pgs/fpgs_pop.effects.txt',alpha_out,fmt='%s')
+np.savetxt(dir+'pgs/fpgs_pop.vcov.txt',alpha_cov,fmt='%s')
