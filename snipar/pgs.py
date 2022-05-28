@@ -126,7 +126,8 @@ class pgs(object):
         pgs_fam[:] = np.nan
         # record whether sib or parent
         is_sib = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
-        is_parent = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
+        is_father = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
+        is_mother = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
         # populate
         for i in range(fams[0].shape[0]):
             # Fill in sibs
@@ -136,22 +137,25 @@ class pgs(object):
             npar = 0
             if par_status_fams[i,0] == 0:
                 pgs_fam[i,sib_indices.shape[0]] = self.gts[sib_indices[0],paternal_index]
-                is_parent[i,sib_indices.shape[0]] = True
+                is_father[i,sib_indices.shape[0]] = True
                 npar = 1
             if par_status_fams[i,1] == 0:
                 pgs_fam[i,sib_indices.shape[0]+npar] = self.gts[sib_indices[0],maternal_index]
-                is_parent[i,sib_indices.shape[0]+npar] = True
+                is_mother[i,sib_indices.shape[0]+npar] = True
+        is_parent = np.logical_or(is_father,is_mother)
         # normalize
-        pgs_fam = (pgs_fam-np.mean(pgs_fam[~np.isnan(pgs_fam)]))/np.std(pgs_fam[~np.isnan(pgs_fam)])
+        pgs_fam[is_sib] = (pgs_fam[is_sib]-np.mean(pgs_fam[is_sib]))/np.std(pgs_fam[is_sib])
+        pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
+        pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
         ### find correlation between maternal and paternal pgis
         # grid search over r
         print('Finding MLE for correlation between parents scores')
-        rvals = -0.999+np.arange(1000)*(2*0.999/999)
-        L_vals = np.zeros(1000)
-        for i in range(1000):
-            L_vals[i] = pgs_corr_likelihood(rvals[i],pgs_fam,is_sib,is_parent)
-        r_mle = rvals[np.argmin(L_vals)]
-        print('r='+str(round(r_mle,3)))
+rvals = -0.999+np.arange(1000)*(2*0.999/999)
+L_vals = np.zeros(1000)
+for i in range(1000):
+    L_vals[i] = pgs_corr_likelihood(rvals[i],pgs_fam,is_sib,is_parent)
+r_mle = rvals[np.argmin(L_vals)]
+print('r='+str(round(r_mle,3)))
 
 def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
     n_sib = np.sum(is_sib_fam)
