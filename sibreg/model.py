@@ -718,14 +718,14 @@ def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
                         gts[j, 1:3, i] = gts[j, 0, i] / 2 + freq
                     elif mask[1]:
                         if is_whole(gts[j, 2, i]):
-                            gts[j, 1, i] = po_imp(freq, gts[j, 0, i], gts[i, 2, i])
+                            gts[j, 1, i] = po_imp(freq, gts[j, 0, i], gts[j, 2, i])
                         else:
-                           gts[j, 1, i] = lin_imp(freq, gts[j, 0, i], gts[i, 2, i]) 
+                           gts[j, 1, i] = lin_imp(freq, gts[j, 0, i], gts[j, 2, i]) 
                     elif mask[2]:
                         if is_whole(gts[j, 1, i]):
-                            gts[j, 2, i] = po_imp(freq, gts[j, 0, i], gts[i, 1, i])
+                            gts[j, 2, i] = po_imp(freq, gts[j, 0, i], gts[j, 1, i])
                         else:
-                           gts[j, 2, i] = lin_imp(freq, gts[j, 0, i], gts[i, 1, i])
+                           gts[j, 2, i] = lin_imp(freq, gts[j, 0, i], gts[j, 1, i])
     return gts
 
 
