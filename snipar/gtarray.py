@@ -405,14 +405,14 @@ def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
                         gts[j, 1:3, i] = gts[j, 0, i] / 2 + freq
                     elif mask[1]:
                         if _is_whole(gts[j, 2, i]):
-                            gts[j, 1, i] = _po_imp(freq, gts[j, 0, i], gts[i, 2, i])
+                            gts[j, 1, i] = _po_imp(freq, gts[j, 0, i], gts[j, 2, i])
                         else:
-                           gts[j, 1, i] = _lin_imp(freq, gts[j, 0, i], gts[i, 2, i]) 
+                           gts[j, 1, i] = _lin_imp(freq, gts[j, 0, i], gts[j, 2, i]) 
                     elif mask[2]:
                         if _is_whole(gts[j, 1, i]):
-                            gts[j, 2, i] = _po_imp(freq, gts[j, 0, i], gts[i, 1, i])
+                            gts[j, 2, i] = _po_imp(freq, gts[j, 0, i], gts[j, 1, i])
                         else:
-                           gts[j, 2, i] = _lin_imp(freq, gts[j, 0, i], gts[i, 1, i])
+                           gts[j, 2, i] = _lin_imp(freq, gts[j, 0, i], gts[j, 1, i])
     return gts
 
 
@@ -456,5 +456,8 @@ def impute_missing(G: gtarray) -> gtarray:
     gts = _impute_missing(G.gts.data, G.freqs)
     G.gts = ma.array(gts, mask=np.isnan(gts))
     assert G.gts.mask.sum() == 0
+    logger.info(
+        'Done imputing missing genotypes.'
+    )
     return G
     
