@@ -104,6 +104,9 @@ if __name__ == '__main__':
             else:
                 pg = pg.add(pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls))
         print('PGS computed')
+        ####### AM adjustment #######
+        print('Computing correlation between maternal and paternal PGIs assuming equilibrium')
+        am = pg.am_adj()
         ####### Write PGS to file ########
         if args.compute_controls:
             pgs.write(pg[0], args.out + '.pgs.txt', scale_PGS=args.scale_pgs)

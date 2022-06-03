@@ -49,3 +49,23 @@ gs_pop = data.frame(IID=obj.gsbed$.fam$sample.ID,
                     pop=knn_1kg, prob=attributes(knn_1kg)$prob)
 
 write.table(gs_pop,'GS_population_assignment.txt',quote=F,row.names=F)
+
+### Compute PCs ###
+setwd('/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/')
+library(bigsnpr)
+obj.gsbed = bed('haplotypes/bedfiles/autosome.bed') # GS samples on HM3 SNPs
+
+king_unrel = read.table('king_unrelunrelated.txt')
+king_unrel = sapply(king_unrel[,2],function(x) strsplit(x,'->')[[1]][2])
+ind.norel <- match(c(king_unrel), obj.gsbed$fam$sample.ID)  # /!\ use $ID1 instead with old PLINK
+ind.norel=ind.norel[!is.na(ind.norel)]
+obj.svd <- bed_autoSVD(obj.gsbed, ind.row = ind.norel, k = 20,
+                       ncores = nb_cores())
+
+PCs <- matrix(NA, nrow(obj.gsbed), ncol(obj.svd$u))
+PCs[ind.norel, ] <- predict(obj.svd)
+proj <- bed_projectSelfPCA(obj.svd, obj.gsbed, ind.row=rows_along(obj.gsbed)[-ind.norel])
+PCs[-ind.norel, ] <- proj$OADP_proj
+dimnames(PCs)[[1]] = obj.gsbed$fam$sample.ID
+dimnames(PCs)[[2]] = paste('PC',1:20,sep='')
+write.table(PCs,'GS_PCs.txt',quote=F)

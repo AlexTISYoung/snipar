@@ -71,7 +71,7 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      --exclude-mhc \
      --unscale-genotype \
      --impute-n 
-
+     
 # Compute PGS
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls --beta_col beta --A1 A1 --A2 A2 --SNP SNP

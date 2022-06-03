@@ -2,6 +2,8 @@ from snipar.gtarray import gtarray
 import numpy as np
 from snipar.read import get_gts_matrix
 from snipar.utilities import *
+from scipy.optimize import fmin_l_bfgs_b
+from numba import njit, prange
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -150,13 +152,15 @@ class pgs(object):
         ### find correlation between maternal and paternal pgis
         # grid search over r
         print('Finding MLE for correlation between parents scores')
-rvals = -0.999+np.arange(1000)*(2*0.999/999)
-L_vals = np.zeros(1000)
-for i in range(1000):
-    L_vals[i] = pgs_corr_likelihood(rvals[i],pgs_fam,is_sib,is_parent)
-r_mle = rvals[np.argmin(L_vals)]
-print('r='+str(round(r_mle,3)))
+        r_init = np.corrcoef(pgs_fam[is_mother].flatten(),pgs_fam[is_father].flatten())
+        optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
+                                  args=(pgs_fam, is_sib, is_parent),
+                                  approx_grad=True,
+                                  bounds=(-0.999,0.999))
+        code.interact(local=locals())
+        print('r='+str(round(r_mle,3)))
 
+@njit
 def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
     n_sib = np.sum(is_sib_fam)
     n_par = np.sum(is_parent_fam)
@@ -177,6 +181,7 @@ def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
     # return 
     return R
 
+@njit
 def pgs_corr_likelihood_fam(r,pg_fam,is_sib_fam,is_parent_fam):
     sib_or_parent = np.logical_or(is_sib_fam,is_parent_fam)
     R = pgs_corr_matrix(r,is_sib_fam,is_parent_fam)
@@ -184,12 +189,16 @@ def pgs_corr_likelihood_fam(r,pg_fam,is_sib_fam,is_parent_fam):
     pg_vec = pg_fam[sib_or_parent].reshape((np.sum(sib_or_parent),1))
     return slogdet_R[0]*slogdet_R[1]+pg_vec.T @ np.linalg.inv(R) @ pg_vec
 
+@njit(parallel=True)
 def pgs_corr_likelihood(r,pgs_fam,is_sib,is_parent):
     L = 0
-    for i in range(pgs_fam.shape[0]):
-        L += pgs_corr_likelihood_fam(r,pgs_fam[i,:],is_sib[i,:],is_parent[i,:])
+    for i in prange(pgs_fam.shape[0]):
+        L += pgs_corr_likelihood_fam(r, pgs_fam[i,:], is_sib[i,:], is_parent[i,:])
     return L
 
+def pgs_cor_lik(r, *args):
+    pgs_fam, is_sib, is_parent = args
+    return pgs_corr_likelihood(r, pgs_fam, is_sib, is_parent)
 
 pgs_corr_matrix(0.5,np.array([True,True,False]),np.array([False,False,True]))
 

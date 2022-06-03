@@ -64,6 +64,11 @@ do
 $plink --bfile $hapdir/bedfiles/chr_$i --remove $hapdir/bedfiles/pca/non_european_samples.txt --make-bed --out $hapdir/bedfiles/chr_$i
 done 
 
+### Convert VCF to phased BGEN file ###
+for i in {1..22}
+do
+$qctool -g $hapdir/chr_$i.vcf.gz -og $hapdir/chr_$i.bgen -os $hapdir/chr_$i.sample -excl-snpids $hapdir/bedfiles/autosome-merge.missnp -excl-samples  $hapdir/bedfiles/pca/non_european_samples.txt > chr_$i.log&
+done
 ### Recode bgen to use proper sample IDs and remove multi-allelic/duplicated SNPs ###
 for i in {1..22}
 do
@@ -80,11 +85,18 @@ pip install snipar
 ## make directories
 mkdir $gpardir/ibd $gpardir/imputed $gpardir/traits
 ## Infer IBD
-ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@ 
+# LD prune variants to reduce computation time
+for i in {1..22}
+do
+$plink --bfile $hapdir/bedfiles/chr_$i --maf 0.05 --indep 10 10 10 --out $hapdir/bedfiles/pruned/chr_$i
+$plink --bfile chr_$i --extract $hapdir/bedfiles/pruned/chr_$i.prune.in --make-bed --out $hapdir/bedfiles/pruned/chr_$i
+done
+#ibd.py --bed $hapdir/bedfiles/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@ 
+ibd.py --bed $hapdir/bedfiles/pruned/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@_pruned 
 #Estimated mean genotyping error probability: 0.000151
 
 ## Impute
-impute.py --ibd $gpardir/ibd/chr_@.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c
+impute.py --ibd $gpardir/ibd/chr_@_pruned.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c --chr_range 6-10
 
 ### GWAS ###
 for i in {1..5}
@@ -94,23 +106,24 @@ gwas.py $gpardir/processed_traits_noadj.txt --out $gpardir/traits/$i/chr_@ --bge
 done
 
 ### PGS ###
-rm $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+rm $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
 for i in {1..22}
 do
-echo $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_chr$i'_v3_50k.ldm.sparse' >> $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+echo $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_chr$i'_v3_50k.ldm.sparse' >> $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
 done
 # Compute PGS weights with gctb SBayesR
-$gpardir/gctb_2.02_Linux/gctb --sbayes R \
-     --mldm $gpardir/gctb_2.02_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt \
+$gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
+     --mldm $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt \
      --pi 0.95,0.02,0.02,0.01 \
      --gamma 0.0,0.01,0.1,1 \
-     --gwas-summary $gpardir/EA4_excl_UKBrel_STR_GS_2020_08_21.ma \
+     --gwas-summary $gpardir/pgs/EA4.ma \
      --chain-length 10000 \
      --burn-in 2000 \
      --out-freq 10 \
-     --out $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 \
+     --out $gpardir/pgs/EA4_hm3 \
      --exclude-mhc \
-     --unscale-genotype
+     --unscale-genotype \
+     --impute-n 
 
 # Compute PGS
 Rscript sbayesr_to_snipar.R
