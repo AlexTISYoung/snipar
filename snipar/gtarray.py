@@ -333,7 +333,7 @@ class gtarray(object):
                         self.gts[fam_indices[fam],j, :] = inv_root[famsize].dot(self.gts[fam_indices[fam],j, :])
         self.fam_indices = fam_indices
 
-    def am_adj(self):
+    def estimate_r(self):
         # Check pgs columns
         if 'paternal' in self.sid:
             paternal_index = np.where(self.sid=='paternal')[0][0]
@@ -384,14 +384,77 @@ class gtarray(object):
         ### find correlation between maternal and paternal pgis
         # grid search over r
         print('Finding MLE for correlation between parents scores')
-        r_init = np.corrcoef(pgs_fam[is_mother].flatten(),pgs_fam[is_father].flatten())
+        code.interact(local=locals())
+        ## Initialize with correlation from sibs and between parents
+        # correlation between parents
+        bpg = np.sum(self.par_status==0,axis=1)==2
+        n_bpg = np.sum(bpg)
+        if n_bpg>0:
+            r_bpg = np.corrcoef(self.gts[bpg,1],self.gts[bpg,2])[0,1]
+        else:
+            r_bpg = 0
+        # Correlation from sibs
+        sib_2 = np.sum(is_sib,axis=1)>1
+        n_sib_2 = np.sum(sib_2)
+        if n_sib_2>0:
+            r_sib = 2*np.corrcoef(pgs_fam[sib_2,0],pgs_fam[sib_2,1])[0,1]-1
+        else:
+            r_sib = 0
+        # Initialize at weighted average
+        r_init = n_bpg*r_bpg+n_sib_2*r_sib
+        r_init = r_init/(n_bpg+n_sib_2)
+        # Find MLE
         optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
                                 args=(pgs_fam, is_sib, is_parent),
                                 approx_grad=True,
-                                bounds=(-0.999,0.999))
-        code.interact(local=locals())
+                                bounds=[(-0.999,0.999)])
         #print('r='+str(round(r_mle,3)))
-        return optimized
+        if optimized[2]['warnflag']==0:
+            r=optimized[0][0]
+        else:
+            print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
+            r=r_init
+        # fam size dict
+        fsizes = dict(zip(list(fams[0]),list(fams[1])))
+        return r, fsizes
+    
+    def am_adj(self):
+        print('Estimating correlation between maternal and paternal PGSs assuming equilibrium')
+        r, fsizes = self.estimate_r()
+        print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4)))
+        # Check pgs columns
+        if 'paternal' in self.sid:
+            paternal_index = np.where(self.sid=='paternal')[0][0]
+        else:
+            raise(ValueError('No paternal PGS column found'))
+        if 'maternal' in self.sid:
+            maternal_index = np.where(self.sid=='maternal')[0][0]
+        else:
+            raise(ValueError('No maternal PGS column found'))
+        # Adjust imputed parental PGSs
+        npar = np.sum(self.par_status==0,axis=1)
+        print('Adjuting imputed PGSs for assortative mating')
+        for i in range(self.gts.shape[0]):
+            # No parents genotyped
+            if npar==0:
+                self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
+            # One parent genotyped
+            if npar==1:
+                # Father imputed
+                if self.par_status[i,paternal_index] == 1:
+                    self.gts[i,paternal_index] = opg_am_adj(self.gts[i,paternal_index],self.gts[i,maternal_index],r,fsizes[self.fams[i]])
+                # Mother imputed
+                if self.par_status[i,maternal_index] == 1:
+                    self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
+        return r
+        
+def opg_am_adj(pgi_imp, pgi_obs, r, n):
+    rcoef = r/((2**n)*(1+r)-r)
+    return rcoef*pgi_obs+(1+rcoef)*pgi_imp
+
+def npg_am_adj(r,n):
+  rcoef = (1+r)/(1+(1-(1/2)**(n-1))*r)
+  return rcoef
 
 @njit
 def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
@@ -402,7 +465,8 @@ def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
     np.fill_diagonal(R, 1.0)
     # sib submatrix
     r_sib = (1+r)/2
-    R_sib = (1-r_sib)*np.identity(n_sib,dtype=np.float_)+r_sib*np.ones((n_sib,n_sib),dtype=np.float_)
+    R_sib = r_sib*np.ones((n_sib,n_sib),dtype=np.float_)
+    np.fill_diagonal(R_sib,1.0)
     R[0:n_sib,0:n_sib] = R_sib
     # sib to parent
     if n_par>0:
@@ -421,15 +485,53 @@ def pgs_corr_likelihood_fam(r,pg_fam,is_sib_fam,is_parent_fam):
     R = pgs_corr_matrix(r,is_sib_fam,is_parent_fam)
     slogdet_R = np.linalg.slogdet(R)
     pg_vec = pg_fam[sib_or_parent].reshape((np.sum(sib_or_parent),1))
-    return slogdet_R[0]*slogdet_R[1]+pg_vec.T @ np.linalg.inv(R) @ pg_vec
+    L_fam = slogdet_R[0]*slogdet_R[1]+pg_vec.T @ np.linalg.inv(R) @ pg_vec
+    return L_fam[0,0]
 
 @njit(parallel=True)
 def pgs_corr_likelihood(r,pgs_fam,is_sib,is_parent):
-    L = 0
+    L = 0.0
     for i in prange(pgs_fam.shape[0]):
         L += pgs_corr_likelihood_fam(r, pgs_fam[i,:], is_sib[i,:], is_parent[i,:])
     return L
 
 def pgs_cor_lik(r, *args):
     pgs_fam, is_sib, is_parent = args
-    return pgs_corr_likelihood(r, pgs_fam, is_sib, is_parent)
+    return pgs_corr_likelihood(r[0], pgs_fam, is_sib, is_parent)
+
+def simulate_r_inf(r, nfam, nsib, npar):
+    is_sib = np.zeros((nfam,nsib+npar),dtype=np.bool_)
+    is_sib[:,0:nsib] = True
+    is_parent = np.zeros((nfam,nsib+npar),dtype=np.bool_)
+    is_parent[:,nsib:(nsib+npar)] = True
+    R = pgs_corr_matrix(r,is_sib[0,:],is_parent[0,:])
+    pgs_fam = np.random.multivariate_normal(np.zeros((nsib+npar)), R, size=nfam)
+    # correlation between parents
+    if npar==2:
+        bpg = np.ones((nfam),dtype=bool)
+    else:
+        bpg = np.zeros((nfam),dtype=bool)
+    n_bpg = np.sum(bpg)
+    if n_bpg>0:
+        r_bpg = np.corrcoef(pgs_fam[:,nsib],pgs_fam[:,nsib+1])[0,1]
+    else:
+        r_bpg = 0
+    # Correlation from sibs
+    if nsib>1:
+        sib_2 = np.ones((nfam),dtype=bool)
+    else:
+        sib_2 = np.zeros((nfam),dtype=bool)
+    n_sib_2 = np.sum(sib_2)
+    if n_sib_2>0:
+        r_sib = 2*np.corrcoef(pgs_fam[sib_2,0],pgs_fam[sib_2,1])[0,1]-1
+    else:
+        r_sib = 0
+    # Initialize at weighted average
+    r_init = n_bpg*r_bpg+n_sib_2*r_sib
+    r_init = r_init/(n_bpg+n_sib_2)
+    # Find MLE
+    optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
+                            args=(pgs_fam, is_sib, is_parent),
+                            approx_grad=True,
+                            bounds=[(-0.999,0.999)])
+    return np.array([r_init,optimized[0][0]])
