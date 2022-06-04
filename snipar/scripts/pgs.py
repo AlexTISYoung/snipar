@@ -107,7 +107,10 @@ if __name__ == '__main__':
         print('PGS computed')
         ####### Assortative mating adjustment #######
         if not args.no_am_adj:
-            r_am = pg.am_adj()
+            if args.compute_controls:
+                r_am = pg[0].am_adj()
+            else:
+                r_am = pg.am_adj()
         ####### Write PGS to file ########
         if args.compute_controls:
             pgs.write(pg[0], args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
