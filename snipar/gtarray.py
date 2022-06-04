@@ -3,7 +3,6 @@ import numpy.ma as ma
 from snipar.utilities import make_id_dict
 from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
-import code
 
 class gtarray(object):
     """Define a genotype or PGS array that stores individual IDs, family IDs, and SNP information.
@@ -384,7 +383,6 @@ class gtarray(object):
         ### find correlation between maternal and paternal pgis
         # grid search over r
         print('Finding MLE for correlation between parents scores')
-        code.interact(local=locals())
         ## Initialize with correlation from sibs and between parents
         # correlation between parents
         bpg = np.sum(self.par_status==0,axis=1)==2
@@ -422,30 +420,33 @@ class gtarray(object):
         print('Estimating correlation between maternal and paternal PGSs assuming equilibrium')
         r, fsizes = self.estimate_r()
         print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4)))
-        # Check pgs columns
-        if 'paternal' in self.sid:
-            paternal_index = np.where(self.sid=='paternal')[0][0]
+        if r>0:    
+            # Check pgs columns
+            if 'paternal' in self.sid:
+                paternal_index = np.where(self.sid=='paternal')[0][0]
+            else:
+                raise(ValueError('No paternal PGS column found'))
+            if 'maternal' in self.sid:
+                maternal_index = np.where(self.sid=='maternal')[0][0]
+            else:
+                raise(ValueError('No maternal PGS column found'))
+            # Adjust imputed parental PGSs
+            npar = np.sum(self.par_status==0,axis=1)
+            print('Adjuting imputed PGSs for assortative mating')
+            for i in range(self.gts.shape[0]):
+                # No parents genotyped
+                if npar==0:
+                    self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
+                # One parent genotyped
+                if npar==1:
+                    # Father imputed
+                    if self.par_status[i,paternal_index] == 1:
+                        self.gts[i,paternal_index] = opg_am_adj(self.gts[i,paternal_index],self.gts[i,maternal_index],r,fsizes[self.fams[i]])
+                    # Mother imputed
+                    if self.par_status[i,maternal_index] == 1:
+                        self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
         else:
-            raise(ValueError('No paternal PGS column found'))
-        if 'maternal' in self.sid:
-            maternal_index = np.where(self.sid=='maternal')[0][0]
-        else:
-            raise(ValueError('No maternal PGS column found'))
-        # Adjust imputed parental PGSs
-        npar = np.sum(self.par_status==0,axis=1)
-        print('Adjuting imputed PGSs for assortative mating')
-        for i in range(self.gts.shape[0]):
-            # No parents genotyped
-            if npar==0:
-                self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
-            # One parent genotyped
-            if npar==1:
-                # Father imputed
-                if self.par_status[i,paternal_index] == 1:
-                    self.gts[i,paternal_index] = opg_am_adj(self.gts[i,paternal_index],self.gts[i,maternal_index],r,fsizes[self.fams[i]])
-                # Mother imputed
-                if self.par_status[i,maternal_index] == 1:
-                    self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
+            print('Estimated correlation is negative, so not performing assortative mating adjustment')
         return r
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
