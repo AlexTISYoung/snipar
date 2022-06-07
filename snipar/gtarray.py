@@ -302,7 +302,7 @@ class gtarray(object):
         else:
             add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
 
-        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index])
+        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:])
 
     def diagonalise(self,inv_root):
         """
