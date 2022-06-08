@@ -435,15 +435,15 @@ class gtarray(object):
             print('Adjuting imputed PGSs for assortative mating')
             for i in range(self.gts.shape[0]):
                 # No parents genotyped
-                if npar==0:
+                if npar[i]==0:
                     self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
                 # One parent genotyped
-                if npar==1:
+                if npar[i]==1:
                     # Father imputed
-                    if self.par_status[i,paternal_index] == 1:
+                    if self.par_status[i,0] == 1:
                         self.gts[i,paternal_index] = opg_am_adj(self.gts[i,paternal_index],self.gts[i,maternal_index],r,fsizes[self.fams[i]])
                     # Mother imputed
-                    if self.par_status[i,maternal_index] == 1:
+                    if self.par_status[i,1] == 1:
                         self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
         else:
             print('Estimated correlation is negative, so not performing assortative mating adjustment')
