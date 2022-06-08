@@ -21,7 +21,7 @@ import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
-from snipar.utilities import get_parser_doc
+from snipar.docgen import get_parser_doc
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',

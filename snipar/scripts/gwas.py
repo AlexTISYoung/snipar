@@ -32,21 +32,14 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 
 import h5py
 import snipar.read as read
-# import read
 import numpy as np
 import snipar.lmm as lmm
-# from .. import lmm as lmm
 from snipar.utilities import *
-# from snipar.utilities import *
-# from ..utilities import *
 from snipar.gwas import *
-# from ..gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
-# from ..pedigree import get_sibpairs_from_ped
-from snipar.utilities import get_parser_doc
-# from ..utilities import get_parser_doc
+from snipar.docgen import get_parser_doc
 
 import logging
 
@@ -166,7 +159,7 @@ def main(args):
     """
     loglevel = args.loglevel
     # FORMAT = '%(process)d :: %(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
-    FORMAT = '%(process)d :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
+    FORMAT = '%(process)d :: %(asctime)-10s :: %(levelname)s :: %(message)s'
     numeric_level = getattr(logging, loglevel.upper(), None)
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % loglevel)
@@ -354,9 +347,10 @@ def main(args):
     else:
         covar_1 = np.hstack((np.ones((y.shape[0], 1), dtype=y.dtype), covariates.gts.data))
         if args.fit_res:
-            alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y))
-            y = y -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
-            logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y)}')
+            alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y.gts))
+            y.gts = y.gts -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
+            logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y.gts)}')
+            covariates = None
             model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
         else:
             model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
@@ -372,7 +366,7 @@ def main(args):
     if args.vc_only:
         exit(0)
     sigmas = model.varcomps
-    
+
 
     for i in range(chroms.shape[0]):
         if args.bed is not None:
@@ -386,7 +380,8 @@ def main(args):
         else:
             print('Estimaing SNP effects')
         process_chromosome(chroms[i], y, varcomp_lst,
-                           ped, sigmas, args.out, covariates, bedfile=bedfiles[i], bgenfile=bgenfiles[i], ped_f=args.pedigree,
+                           ped, sigmas, args.out, covariates, 
+                           bedfile=bedfiles[i], bgenfile=bgenfiles[i], ped_f=args.pedigree,
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
                            impute_unrel=args.impute_unrel,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 

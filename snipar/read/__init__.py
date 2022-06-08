@@ -213,13 +213,14 @@ def get_ids_with_par(gts_f: str,
     logger.info(f'{len(obs_only_ids)} individuals with both parents observed.')
 
     if include_unrel:
-        missing_ids = [i for i in range(len(par_status)) if par_status[i, 0] == -1 and par_status[i, 1] == -1]
-        logger.info(f'{len(missing_ids)} individuals with both parents missing.')
+        # missing_ids = [i for i in range(len(par_status)) if par_status[i, 0] == -1 and par_status[i, 1] == -1]
+        missing_ids = np.array([par_status[i, 0] == -1 and par_status[i, 1] == -1 for i in range(len(par_status))])
+        # logger.info(f'{len(missing_ids)} individuals with both parents missing.')
+        logger.info(f'{sum(missing_ids)} individuals with both parents missing.')
     one_missing_ids = [i for i in range(len(par_status)) if sum(par_status[i, :]) <= 0 and par_status[i, 0] * par_status[i, 1] < 0]
     if len(one_missing_ids) > 0:
         logger.error(f'{len(one_missing_ids)} individuals have one missing parent and one non-missing parent.')
         exit(-1)
-        
     ##### testing code
     # print(np.where(ped[:, 1] == ids[0])[0])
     # ids_id = [np.where(ped[:, 1] == i)[0][0] for i in ids]

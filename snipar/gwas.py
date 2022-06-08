@@ -16,6 +16,7 @@ from multiprocessing import Pool, RawArray
 from functools import partial
 import ctypes
 import logging
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -333,10 +334,10 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
         logger.info('Filtering based on MAF')
     G.filter_maf(min_maf)
     if verbose:
-        logger.info()('Filtering based on missingness')
+        logger.info('Filtering based on missingness')
     G.filter_missingness(max_missing)
     if verbose:
-        logger.info()(str(G.shape[2])+' SNPs that pass filters')
+        logger.info(str(G.shape[2])+' SNPs that pass filters')
     #### Fill NAs ####
     if verbose:
         logger.info('Imputing missing values with population frequencies')

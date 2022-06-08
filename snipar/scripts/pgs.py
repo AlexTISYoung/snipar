@@ -20,7 +20,7 @@ from snipar.gtarray import gtarray
 import snipar.read as read
 import snipar.lmm as lmm
 from snipar.utilities import *
-from snipar.utilities import get_parser_doc
+from snipar.docgen import get_parser_doc
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
