@@ -6,7 +6,7 @@ from snipar.utilities import make_id_dict
 import numpy as np
 
 class sumstats(object):
-    def __init__(self,chrom,sid,pos, A1, A2, freqs, direct, direct_SE, avg_NTC, avg_NTC_SE, population, population_SE, r_direct_avg_NTC, r_direct_pop, ldscores = None, map=None):
+    def __init__(self,chrom,sid,pos, A1, A2, freqs, direct, direct_SE, avg_NTC, avg_NTC_SE, population, population_SE, r_direct_avg_NTC, r_direct_pop, r_paternal_maternal, ldscores = None, map=None):
         sizes = np.array([sid.shape[0],pos.shape[0],A1.shape[0],A2.shape[0],freqs.shape[0],direct.shape[0],
                             avg_NTC.shape[0],population.shape[0],r_direct_avg_NTC.shape[0],r_direct_pop.shape[0]])
         if np.unique(sizes).shape[0] > 1:
@@ -36,6 +36,9 @@ class sumstats(object):
         self.r_direct_avg_NTC.mask = np.isnan(self.r_direct_avg_NTC)
         self.r_direct_pop = ma.array(r_direct_pop, dtype=float)
         self.r_direct_pop.mask = np.isnan(self.r_direct_pop)
+        if r_paternal_maternal is not None:
+            self.r_paternal_maternal = ma.array(r_paternal_maternal, dtype=float)
+            self.r_paternal_maternal.mask = np.isnan(self.r_paternal_maternal)
         if ldscores is not None:
             if not ldscores.shape[0] == sid.shape[0]:
                 raise(ValueError('LD scores must have same size as other sumstats'))
@@ -66,6 +69,8 @@ class sumstats(object):
         self.population_SE = ma.concatenate([self.population_SE, s2.population_SE])
         self.r_direct_avg_NTC = ma.concatenate([self.r_direct_avg_NTC, s2.r_direct_avg_NTC])
         self.r_direct_pop = ma.concatenate([self.r_direct_pop, s2.r_direct_pop])
+        if hasattr(self, 'r_paternal_maternal') and hasattr(s2, 'r_paternal_maternal'):
+            self.r_paternal_maternal = ma.concatenate([self.r_paternal_maternal, s2.r_paternal_maternal])
         if self.ldscores is not None and s2.ldscores is not None:
             self.ldscores = ma.concatenate([self.ldscores, s2.ldscores])
         if self.map is not None and s2.map is not None:
@@ -86,6 +91,8 @@ class sumstats(object):
         self.population_SE = self.population_SE[filter_pass]
         self.r_direct_avg_NTC = self.r_direct_avg_NTC[filter_pass]
         self.r_direct_pop = self.r_direct_pop[filter_pass]
+        if hasattr(self, 'r_paternal_maternal'):
+            self.r_paternal_maternal = self.r_paternal_maternal[filter_pass]
         if self.ldscores is not None:
             self.ldscores = self.ldscores[filter_pass]
         if self.map is not None:
@@ -106,7 +113,16 @@ class sumstats(object):
         r_dir_avg_NTC_Z = (self.r_direct_avg_NTC-np.mean(self.r_direct_avg_NTC))/np.std(self.r_direct_avg_NTC)
         r_dir_pop_Z = (self.r_direct_pop-np.mean(self.r_direct_pop))/np.std(self.r_direct_pop)
         good_corrs = np.logical_and(np.abs(r_dir_avg_NTC_Z) < max_Z, np.abs(r_dir_pop_Z) < max_Z)
+        if hasattr(self, 'r_paternal_maternal'):
+            print('filtering on r_paternal_maternal')
+            r_paternal_maternal_Z = (self.r_paternal_maternal-np.mean(self.r_paternal_maternal))/np.std(self.r_paternal_maternal)
+            good_corrs = np.logical_and(good_corrs,np.abs(r_paternal_maternal_Z) < max_Z)
         self.filter(good_corrs)
+    def filter_eff(self,max_Z):
+        direct_Z = self.direct / self.direct_SE
+        pop_Z = self.population / self.population_SE
+        good = np.logical_and(np.abs(direct_Z) < max_Z, np.abs(pop_Z) < max_Z)
+        self.filter(good)
     def scores_from_ldsc(self,ld_files):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(ld_files.shape[0]):
@@ -120,15 +136,15 @@ class sumstats(object):
                 self.ldscores.mask[ld_indices] = False
             else:
                 raise(ValueError('No SNPs in common between LD scores and summary statistics'))
-    def cor_direct_pop(self, n_blocks):
+    def cor_direct_pop(self, n_blocks, reweight):
         print('Computing correlation between direct and population effects')
         r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = jacknife_est(self.direct,self.population,np.power(self.direct_SE,2),
-                                                                np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks)
+                                                                np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks, reweight)
         return r_dir_pop, r_dir_pop_SE, r_dir_pop_delete
-    def cor_direct_avg_NTC(self, n_blocks):
+    def cor_direct_avg_NTC(self, n_blocks, reweight):
         print('Computing correlation between direct effects and average NTCs')
         r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = jacknife_est(self.direct,self.avg_NTC,np.power(self.direct_SE,2),
-                                                                                np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks)
+                                                                                np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks, reweight)
         return r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete
     def compute_ld_scores(self, bedfiles, chroms, ld_wind, ld_out=None):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
@@ -143,7 +159,7 @@ class sumstats(object):
             else:
                 raise(ValueError('No SNPs in common between LD scores and sumstats'))
 
-def read_sumstats_file(sumstats_file, chrom):
+def read_sumstats_file(sumstats_file, chrom, filter_corr_parental_maternal=True):
     print('Reading sumstats from '+sumstats_file)
     # Read header
     sumstats_file_o = gzip.open(sumstats_file,'r')
@@ -158,21 +174,30 @@ def read_sumstats_file(sumstats_file, chrom):
     else:
         parname = 'avg_NTC'
     # Find column indices
-    colnames = ['SNP','pos','A1','A2','freq','direct_Beta',
+    if 'paternal_Beta' in sumstats_header and filter_corr_parental_maternal:
+        colnames = ['SNP','pos','A1','A2','freq','direct_Beta',
                 'direct_SE',parname+'_Beta',parname+'_SE',
-                'population_Beta','population_SE','r_direct_'+parname,'r_direct_population']
+                'population_Beta','population_SE','r_direct_'+parname,'r_direct_population', 'r_paternal_maternal']
+    else:
+        colnames = ['SNP','pos','A1','A2','freq','direct_Beta',
+                    'direct_SE',parname+'_Beta',parname+'_SE',
+                    'population_Beta','population_SE','r_direct_'+parname,'r_direct_population']
     col_indices = tuple([np.where(sumstats_header==x)[0][0] for x in colnames])
     # Read summary statistics
     s = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
     # Return sumstats class
-    return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
-                    s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12])
+    if 'paternal_Beta' in sumstats_header and filter_corr_parental_maternal:
+        return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
+                        s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12],s[:,13])
+    else:
+        return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
+                        s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12],None)
 
-def read_sumstats_files(sumstats_files, chroms):
-    s = read_sumstats_file(sumstats_files[0], chroms[0])
+def read_sumstats_files(sumstats_files, chroms, filter_corr_parental_maternal=True):
+    s = read_sumstats_file(sumstats_files[0], chroms[0], filter_corr_parental_maternal)
     if chroms.shape[0]>1:
         for i in range(1,sumstats_files.shape[0]):
-            s.concatenate(read_sumstats_file(sumstats_files[i], chroms[i]))
+            s.concatenate(read_sumstats_file(sumstats_files[i], chroms[i], filter_corr_parental_maternal))
     return s
 
 @njit
@@ -192,7 +217,7 @@ def jacknife(z1,z2,v1,v2,r,w_1,w_2,w_c,n_blocks,block_size):
         jack_delete[i] = compute_corr(z1[mask[i,:]],z2[mask[i,:]],v1[mask[i,:]],v2[mask[i,:]],r[mask[i,:]],w_1[mask[i,:]],w_2[mask[i,:]],w_c[mask[i,:]])
     return jack_delete
 
-def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
+def jacknife_est(z1,z2,v1,v2,r,l,n_blocks, reweight=True):
     # Weights for variance of z1
     w_1 = np.power(v1*l,-1)
     w_1 = w_1/np.sum(w_1)
@@ -203,7 +228,10 @@ def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
     w_c = np.power(v1*v2*(1+np.power(r,2))*l,-1)
     w_c = w_c/np.sum(w_c)
     # Estimate
-    est = compute_corr(z1,z2,v1,v2,r,w_1,w_2,w_c)
+    if reweight:
+        var1, var2, est, w_1, w_2, w_c = reweighting(z1,z2,v1,v2,r,l,w_1,w_2,w_c)
+    else:
+        est = compute_corr(z1,z2,v1,v2,r,w_1,w_2,w_c)
     # Calculate blocks
     block_size = int(np.floor(z1.shape[0]/n_blocks))
     # Get jacknife ests
@@ -212,3 +240,48 @@ def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
     # Compute jacknife-variance
     jack_var = ((n_blocks-1)/n_blocks)*np.sum(np.power(jack_delete-np.mean(jack_delete),2))
     return est, np.sqrt(jack_var), jack_delete
+
+def reweighting(z1, z2, v1, v2, r, l, w_1_init, w_2_init, w_c_init, thres=1e-5, max_iter=10):
+    w_1 = w_1_init
+    w_2 = w_2_init
+    w_c = w_c_init
+    # w_1 = var_weight(0.001, v1)
+    # w_2 = var_weight(0.001, v2)
+    # w_c = cov_weight(0.001, 0.001, 0., v1, v2, r)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        var1_old = np.sum(w_1 * (np.power(z1, 2) - v1))
+        var2_old = np.sum(w_2 * (np.power(z2, 2) - v2))
+        corr_old = np.sum(w_c * (z1 * z2 - r * np.sqrt(v1 * v2))) / np.sqrt(var1_old * var2_old)
+        cnt = 0
+        while True:
+            w_1 = var_weight(var1_old, v1, l)
+            w_1 = w_1 / np.sum(w_1)
+            w_2 = var_weight(var2_old, v2, l)
+            w_2 = w_2 / np.sum(w_2)
+            w_c = cov_weight(var1_old, var2_old, corr_old, v1, v2, r, l)
+            w_c = w_c / np.sum(w_c)
+            var1 = np.sum(w_1 * (z1 ** 2 - v1))
+            var2 = np.sum(w_2 * (z2 ** 2 - v2))
+            corr = np.sum(w_c * (z1 * z2 - r * np.sqrt(v1 * v2))) / np.sqrt(var1 * var2)
+            # corr = compute_corr(z1,z2,v1,v2,r,w_1,w_2,w_c)
+            cnt += 1
+            if  np.abs(corr - corr_old) < thres:
+                break
+            if cnt == max_iter:
+                print('WARNING: max_iter reached.')
+                break
+            var1_old = var1.copy()
+            var2_old = var2.copy()
+            corr_old = corr.copy()
+    return var1, var2, corr, w_1, w_2, w_c
+
+@njit
+def var_weight(var, sigma2, l):
+    return np.power(var + sigma2, -2) #* np.power(l, -1)
+
+@njit
+def cov_weight(var1, var2, corr, sigma12, sigma22, rs, l):
+    return np.power(
+        (var1 + sigma12) * (var2 + sigma22) + np.power(corr * np.sqrt(var1 * var2) + rs * np.sqrt(sigma12 * sigma22), 2), 
+        -1
+    ) #* np.power(l, -1)
