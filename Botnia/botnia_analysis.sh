@@ -96,7 +96,7 @@ ibd.py --bed $hapdir/bedfiles/pruned/chr_@ --king $gpardir/king.kin0 --agesex $g
 #Estimated mean genotyping error probability: 0.000151
 
 ## Impute
-impute.py --ibd $gpardir/ibd/chr_@_pruned.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c --chr_range 6-10
+impute.py --ibd $gpardir/ibd/chr_@_pruned.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c --chr_range 6
 
 ### GWAS ###
 for i in {1..5}
@@ -105,29 +105,33 @@ mkdir $gpardir/traits/$i
 gwas.py $gpardir/processed_traits_noadj.txt --out $gpardir/traits/$i/chr_@ --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --covar $gpardir/covariates.fam --phen_index $i --threads 40
 done
 
+mkdir $gpardir/traits/EA
+gwas.py $gpardir/phenotypes/EA.txt --out $gpardir/traits/EA/chr_@ --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --threads 40
+
+
+
 ### PGS ###
-rm $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+rm $gpardir/gctb_2.03beta_Linux/ukb_50k_bigset_2.8M/ukb50k_2.8M_shrunk_sparse.mldmlist
 for i in {1..22}
 do
-echo $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_chr$i'_v3_50k.ldm.sparse' >> $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt
+echo $gpardir/gctb_2.03beta_Linux/ukb_50k_bigset_2.8M/ukb50k_shrunk_chr$i'_mafpt01.ldm.sparse' >> $gpardir/gctb_2.03beta_Linux/ukb_50k_bigset_2.8M/ukb50k_2.8M_shrunk_sparse.mldmlist
 done
 # Compute PGS weights with gctb SBayesR
 $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
-     --mldm $gpardir/gctb_2.03beta_Linux/ukbEURu_hm3_shrunk_sparse/ukbEURu_hm3_sparse_mldm_list.txt \
+     --mldm $gpardir/gctb_2.03beta_Linux/ukb_50k_bigset_2.8M/ukb50k_2.8M_shrunk_sparse.mldmlist \
      --pi 0.95,0.02,0.02,0.01 \
      --gamma 0.0,0.01,0.1,1 \
      --gwas-summary $gpardir/pgs/EA4.ma \
      --chain-length 10000 \
      --burn-in 2000 \
      --out-freq 10 \
-     --out $gpardir/pgs/EA4_hm3 \
+     --out $gpardir/pgs/EA4_2.8m \
      --exclude-mhc \
-     --unscale-genotype \
-     --impute-n 
-
+     --unscale-genotype
+     
 # Compute PGS
 Rscript sbayesr_to_snipar.R
-pgs.py $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --compute_controls --beta_col beta --A1 A1 --A2 A2 --SNP SNP
+pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --A1 A1 --A2 A2 --SNP SNP
 # Compute grandparental PGS
 R3script $gpardir/impute_gpar_PGS_GS.R
 

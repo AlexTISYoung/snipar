@@ -24,8 +24,8 @@ population = data.frame(CHR=d$chromosome,
 
 write.table(population,'population.sumstats',quote=F,row.names=F)
 
-command = paste('/usr/local/bin/python ~/ldsc/ldsc.py --h2 direct.sumstats --ref-ld-chr ../../ibd/ --w-ld-chr ../../ibd/ --out direct')
+command = paste('/ludc/Tools/Software/Python/versions/2.7.16/bin/python /ludc/Active_Projects/BOTNIA_AYoung_analysis/Private//ldsc/ldsc.py --h2 direct.sumstats --ref-ld-chr ../../ibd/ --w-ld-chr ../../ibd/ --out direct')
 system(command)
 
-command = paste('/usr/local/bin/python ~/ldsc/ldsc.py --h2 population.sumstats --ref-ld-chr ../../ibd/ --w-ld-chr ../../ibd/ --out population')
+command = paste('/ludc/Tools/Software/Python/versions/2.7.16/bin/python /ludc/Active_Projects/BOTNIA_AYoung_analysis/Private//ldsc/ldsc.py --h2 population.sumstats --ref-ld-chr ../../ibd/ --w-ld-chr ../../ibd/ --out population')
 system(command)
