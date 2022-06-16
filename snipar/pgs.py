@@ -151,7 +151,47 @@ def write(pg,filename,scale_PGS = False):
     return None
 
 class pgarray(gtarray):
-    
+
+    def add(self,garray):
+        """
+        Adds another gtarray of the same dimension to this array and returns the sum. It matches IDs before summing.
+        """
+        if type(garray)==pgarray:
+            pass
+        else:
+            raise ValueError('Must add to another pgarray')
+
+        if not self.gts.ndim == garray.gts.ndim:
+            raise ValueError('Arrays must have same number of dimensions')
+
+        if self.gts.ndim == 2:
+            if not self.gts.shape[1] == garray.gts.shape[1]:
+                raise ValueError('Arrays must have same dimensions (apart from first)')
+
+        if self.gts.ndim == 3:
+            if not self.gts.shape[1:3] == garray.gts.shape[1:3]:
+                raise ValueError('Arrays must have same dimensions (apart from first)')
+
+        # Match IDs
+        common_ids = list(self.id_dict.keys() & garray.id_dict.keys())
+        if len(common_ids) == 0:
+            raise ValueError('No IDs in common')
+        self_index = np.array([self.id_dict[x] for x in common_ids])
+        other_index = np.array([garray.id_dict[x] for x in common_ids])
+
+        # Out
+        if self.ids.ndim == 1:
+            ids_out = self.ids[self_index]
+        else:
+            ids_out = self.ids[self_index, :]
+
+        if self.gts.ndim ==2:
+            add_gts = self.gts[self_index, :]+garray.gts[other_index, :]
+        else:
+            add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
+
+        return pgarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:])
+
     def estimate_r(self):
         # Check pgs columns
         if 'paternal' in self.sid:
