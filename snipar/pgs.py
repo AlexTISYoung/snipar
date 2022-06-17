@@ -98,9 +98,8 @@ class pgs(object):
             for i in range(0, garray.gts.shape[1]):
                 pgs_val[:, i] = ma.dot(garray.gts[:, i, in_pgs_snps], weights_compute)
 
-        return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status)
+        return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status, ped=garray.ped)
         
-
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
