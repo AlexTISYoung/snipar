@@ -87,6 +87,12 @@ if __name__ == '__main__':
         else:
             ped = None
         print('Computing PGS')
+        if args.bed is not None:
+            print('Observed genotypes file: '+bedfiles[0])
+        if args.bgen is not None:
+            print('Observed genotypes file: '+bgenfiles[0])
+        if args.imp is not None:
+            print('Imputed genotypes file: '+pargts_list[0])
         pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
         for i in range(1,chroms.shape[0]):
             if args.bed is not None:
@@ -118,7 +124,7 @@ if __name__ == '__main__':
         ####### Write PGS to file ########
         if args.compute_controls:
             pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs)
-            pg[1].writee(args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs)
+            pg[1].write(args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs)
             pg[2].write(args.out + '.pgs.control_maternal.txt', scale=args.scale_pgs)
             pg[3].write(args.out + '.pgs.control_sibling.txt', scale=args.scale_pgs)
         else:
