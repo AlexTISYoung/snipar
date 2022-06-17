@@ -23,15 +23,16 @@ if __name__ == '__main__':
                         help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
     parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
     parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
-    parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
-    parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
-    parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='nt1')
-    parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='nt2')
+    parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='SNP')
+    parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='b')
+    parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='A1')
+    parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='A2')
     parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
     parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
     parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
     parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
     parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
+    parser.add_argument('--grandpar',action='store_true',default=False,help='Perform three generational analysis with imputed/observed grandparental scores')
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
@@ -49,18 +50,7 @@ if __name__ == '__main__':
             raise ValueError('Provide only one of --bedfiles and --bgenfiles')
         print('Computing PGS from weights file')
         ####### Read PGS #######
-        if args.sep is None:
-            weights = np.loadtxt(args.weights,dtype=str)
-        else:
-            weights = np.loadtxt(args.weights,dtype=args.sep)
-        colnames = weights[0,:]
-        weights = weights[1:weights.shape[0],:]
-        print('Read weights for '+str(weights.shape[0])+' variants')
-        beta = np.array(weights[:,np.where(colnames == args.beta_col)[0][0]],dtype=np.float64)
-        allele_indices = np.array([np.where(colnames==args.A1)[0][0],np.where(colnames==args.A2)[0][0]])
-        p = pgs.pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
-                beta,
-                weights[:,allele_indices])
+        p = pgs.read_weights(args.weights, SNP=args.SNP, beta_col = args.beta_col, A1=args.A1, A2=args.A2, sep=args.sep)
         # Remove zeros
         p.remove_zeros()
 
@@ -99,6 +89,12 @@ if __name__ == '__main__':
         print('Computing PGS')
         pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
         for i in range(1,chroms.shape[0]):
+            if args.bed is not None:
+                print('Observed genotypes file: '+bedfiles[i])
+            if args.bgen is not None:
+                print('Observed genotypes file: '+bgenfiles[i])
+            if args.imp is not None:
+                print('Imputed genotypes file: '+pargts_list[i])
             if args.compute_controls:
                 pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
                 pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
@@ -111,6 +107,14 @@ if __name__ == '__main__':
                 r_am = pg[0].am_adj()
             else:
                 r_am = pg.am_adj()
+        else:
+            r_am = 0
+        ####### Compute grandparental PGSs #######
+        if args.grandpar:
+            if args.compute_controls:
+                pg[0].compute_grandpar(r_am)
+            else:
+                pg.compute_grandpar(r_am)
         ####### Write PGS to file ########
         if args.compute_controls:
             pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs)
@@ -123,15 +127,7 @@ if __name__ == '__main__':
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
-        pgs_f = open(args.pgs,'r')
-        pgs_header = pgs_f.readline().split(' ')
-        pgs_header[len(pgs_header)-1] = pgs_header[len(pgs_header)-1].split('\n')[0]
-        ncols = len(pgs_header)
-        pgs_cols = tuple([x for x in range(2,ncols)])
-        pg = gtarray(np.loadtxt(args.pgs,usecols = pgs_cols, skiprows=1),
-                     np.loadtxt(args.pgs,usecols = 1, dtype=str, skiprows=1),
-                     sid=np.array(pgs_header[2:ncols]),
-                     fams=np.loadtxt(args.pgs,usecols = 0, dtype=str, skiprows=1))
+        pg = pgs.read_pgs(args.pgs)
     else:
         raise ValueError('Weights or PGS must be provided')
 
@@ -154,6 +150,8 @@ if __name__ == '__main__':
                 pg.gts = pg.gts.dot(trans_matrix)
                 pg.sid = np.delete(pg.sid,parcols[1])
                 pg.sid[parcols[0]] = 'parental'
+            elif 'parental' in pg.sid:
+                pass
             else:
                 raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
         # Scale
@@ -167,6 +165,10 @@ if __name__ == '__main__':
         # Estimate population effect
         print('Estimating population effect')
         alpha_proband = lmm.fit_model(y.gts[:,0], pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
+        # Fit grandparental model
+        if args.grandpar:
+            print('Fitting three generational model with imputed/observed grandparental scores')
+
         # Get print out for fixed mean effects
         alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
         alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]

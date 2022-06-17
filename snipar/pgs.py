@@ -100,6 +100,50 @@ class pgs(object):
 
         return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status, ped=garray.ped)
         
+def read_weights(weights, SNP='SNP', beta_col='b', A1='A1', A2='A2', sep=None):
+    if sep is None:
+        weights = np.loadtxt(weights,dtype=str)
+    else:
+        weights = np.loadtxt(weights,dtype=str, delimiter=sep)
+    colnames = weights[0,:]
+    weights = weights[1:weights.shape[0],:]
+    print('Read weights for '+str(weights.shape[0])+' variants')
+    beta = np.array(weights[:,np.where(colnames == beta_col)[0][0]],dtype=np.float64)
+    allele_indices = np.array([np.where(colnames==A1)[0][0],np.where(colnames==A2)[0][0]])
+    return pgs(weights[:,np.where(colnames==SNP)[0][0]],
+            beta,
+            weights[:,allele_indices])
+
+def read_pgs(pgs_file):
+    pgs_f = open(pgs_file,'r')
+    pgs_header = pgs_f.readline().split(' ')
+    pgs_header[len(pgs_header)-1] = pgs_header[len(pgs_header)-1].split('\n')[0]
+    ncols = len(pgs_header)
+    if pgs_header[0]=='FID' and pgs_header[1]=='IID':
+        precols = 2
+    else:
+        raise(ValueError('First two columns of PGS file must be FID and IID'))
+    if pgs_header[2]=='FATHER_ID' and pgs_header[3]=='MOTHER_ID':
+        precols = 4
+    pgs_cols = tuple([x for x in range(precols,ncols)])
+    # Read pedigree
+    if precols==4:
+        ped = np.loadtxt(pgs_file,usecols=tuple([x for x in range(4)]),dtype=str, skiprows=1)
+    else:
+        ped = None
+    if ped is not None:
+        par_status = np.array(ped=='NA',dtype=int)
+    else:
+        par_status = None
+    pg = pgarray(np.loadtxt(pgs_file,usecols = pgs_cols, skiprows=1),
+                    np.loadtxt(pgs_file,usecols = 1, dtype=str, skiprows=1),
+                    sid=np.array(pgs_header[precols:ncols]),
+                    fams=np.loadtxt(pgs_file,usecols = 0, dtype=str, skiprows=1),
+                    par_status = par_status,
+                    ped=ped)
+    return pg
+
+
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
@@ -333,6 +377,54 @@ class pgarray(gtarray):
         print('Writing PGS to ' + filename)
         np.savetxt(filename, pg_out, fmt='%s')
         return pg_out
+    
+    def compute_grandpar(self, r):
+        # Check we have required information
+        if self.ped is None:
+            raise(ValueError('Pedigree needed for grandparental model'))
+        if self.par_status is None:
+            raise(ValueError('Parental genotype status needed to compute grandparents'))
+        # Check pgs columns
+        if 'paternal' in self.sid:
+            paternal_index = np.where(self.sid=='paternal')[0][0]
+        else:
+            raise(ValueError('No paternal PGS column found'))
+        if 'maternal' in self.sid:
+            maternal_index = np.where(self.sid=='maternal')[0][0]
+        else:
+            raise(ValueError('No maternal PGS column found'))
+        # Find individuals with both parents genotyped
+        bpg = np.sum(self.par_status==0,axis=1)==2
+        n_bpg = np.sum(bpg)
+        print('Found '+str(n_bpg)+' individuals with both parents genotyped for which grandparental scores will be computed')
+        ## Create grandparental PGS matrix
+        gpar = np.zeros((self.gts.shape[0],4))
+        gpar[:] = np.nan
+        if n_bpg>0:
+            # Find their parents' IDs
+            ped_dict = make_id_dict(self.ped,1)
+            bpg_ped = self.ped[[ped_dict[x] for x in self.ids[bpg]],:]
+            ## Fill
+            for i in range(bpg_ped.shape[0]):
+                i_index = self.id_dict[bpg_ped[i,1]]
+                ## Paternal grandparental scores
+                # Find imputed grandparents
+                if bpg_ped[i,2] in self.id_dict:
+                    gpar[i_index, 0:2] = self.gts[self.id_dict[bpg_ped[i,2]],[paternal_index,maternal_index]]
+                else:
+                    # linear imputation from father if no imputed
+                    gpar[i_index, 0:2] = (1+r)*self.gts[i_index, paternal_index]/2.0
+                ## Maternal grandparental scores
+                # Find imputed grandparents
+                if bpg_ped[i,3] in self.id_dict:
+                    gpar[i_index, 2:4] = self.gts[self.id_dict[bpg_ped[i,3]],[paternal_index,maternal_index]]
+                else:
+                    # linear imputation from mother if no imputed
+                    gpar[i_index, 2:4] = (1+r)*self.gts[i_index, maternal_index]/2.0
+        ## Append to PGS matrix
+        self.gts = np.hstack((self.gts,gpar))
+        self.sid = np.hstack((self.sid,np.array(['gpp','gpm','gmp','gmm'])))
+        return bpg_ped
 
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
