@@ -138,17 +138,17 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
     else:
         return pgs.compute(G,cols)
 
-def write(pg,filename,scale_PGS = False):
-    if scale_PGS:
-        # Rescale by observed proband PGS
-        pg.gts = pg.gts / np.std(pg.gts[:, 0])
-    ####### Write PGS to file ########
-    pg_out = np.column_stack((pg.fams,pg.ids,pg.gts))
-    pg_header = np.column_stack((np.array(['FID','IID']).reshape(1,2),pg.sid.reshape(1,pg.sid.shape[0])))
-    pg_out = np.row_stack((pg_header,pg_out))
-    print('Writing PGS to ' + filename)
-    np.savetxt(filename, pg_out, fmt='%s')
-    return None
+#def write(pg,filename,scale_PGS = False):
+#    if scale_PGS:
+#        # Rescale by observed proband PGS
+#        pg.gts = pg.gts / np.std(pg.gts[:, 0])
+#    ####### Write PGS to file ########
+#    pg_out = np.column_stack((pg.fams,pg.ids,pg.gts))
+#    pg_header = np.column_stack((np.array(['FID','IID']).reshape(1,2),pg.sid.reshape(1,pg.sid.shape[0])))
+#    pg_out = np.row_stack((pg_header,pg_out))
+#    print('Writing PGS to ' + filename)
+#    np.savetxt(filename, pg_out, fmt='%s')
+#    return None
 
 class pgarray(gtarray):
 
@@ -308,6 +308,25 @@ class pgarray(gtarray):
         else:
             print('Estimated correlation is negative, so not performing assortative mating adjustment')
         return r
+
+    def scale(self):
+        # Rescale by observed proband PGS
+        proband_sd = np.std(self.gts[:, 0])
+        self.gts = self.gts / proband_sd
+        return proband_sd
+
+    def write(self, filename, scale=False):
+        if scale:
+            self.scale()
+        ####### Write PGS to file ########  
+        parent_genotyped = self.par_status == 0
+        pg_out = np.column_stack((self.fams,self.ids,parent_genotyped,self.gts))
+        pg_header = np.column_stack((np.array(['FID','IID','father_genotyped','mother_genotyped']).reshape(1,4),self.sid.reshape(1,self.sid.shape[0])))
+        pg_out = np.row_stack((pg_header,pg_out))
+        print('Writing PGS to ' + filename)
+        np.savetxt(filename, pg_out, fmt='%s')
+        return pg_out
+
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
     rcoef = r/((2**n)*(1+r)-r)

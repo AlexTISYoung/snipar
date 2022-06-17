@@ -113,12 +113,12 @@ if __name__ == '__main__':
                 r_am = pg.am_adj()
         ####### Write PGS to file ########
         if args.compute_controls:
-            pgs.write(pg[0], args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[1],args.out + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[2], args.out + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[3],args.out + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
+            pg.write(pg[0], args.out + '.pgs.txt', scale=args.scale_pgs)
+            pg.write(pg[1],args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs)
+            pg.write(pg[2], args.out + '.pgs.control_maternal.txt', scale=args.scale_pgs)
+            pg.write(pg[3],args.out + '.pgs.control_sibling.txt', scale=args.scale_pgs)
         else:
-            pgs.write(pg, args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pg.write(pg, args.out + '.pgs.txt', scale=args.scale_pgs)
     elif args.pgs is not None:
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
