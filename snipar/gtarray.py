@@ -33,7 +33,7 @@ class gtarray(object):
         G : :class:`snipar.gtarray`
 
     """
-    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None):
+    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None, ped=None):
         if type(garray) == np.ndarray or type(garray) == np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -126,6 +126,10 @@ class gtarray(object):
                 raise ValueError('Incompatible par status array')
         else:
             self.par_status = None
+        if ped is not None:
+            self.ped = ped
+        else:
+            self.ped = None
 
         self.mean_normalised = False
 
@@ -226,6 +230,8 @@ class gtarray(object):
             self.shape = self.gts.shape
             if self.fams is not None:
                 self.fams = self.fams[indices]
+            if self.par_status is not None:
+                self.par_status = self.par_status[indices, :]
 
     def mean_normalise(self):
         """
@@ -298,8 +304,12 @@ class gtarray(object):
             add_gts = self.gts[self_index, :]+garray.gts[other_index, :]
         else:
             add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
+        if self.ped is None:
+            ped = garray.ped
+        else:
+            ped = self.ped
 
-        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:])
+        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:], ped=ped)
 
     def diagonalise(self,inv_root):
         """

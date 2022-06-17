@@ -189,8 +189,12 @@ class pgarray(gtarray):
             add_gts = self.gts[self_index, :]+garray.gts[other_index, :]
         else:
             add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
+        if self.ped is None:
+            ped = garray.ped
+        else:
+            ped = self.ped
 
-        return pgarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:])
+        return pgarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:], ped=ped)
 
     def estimate_r(self):
         # Check pgs columns
@@ -320,8 +324,12 @@ class pgarray(gtarray):
             self.scale()
         ####### Write PGS to file ########  
         parent_genotyped = self.par_status == 0
-        pg_out = np.column_stack((self.fams,self.ids,parent_genotyped,self.gts))
-        pg_header = np.column_stack((np.array(['FID','IID','father_genotyped','mother_genotyped']).reshape(1,4),self.sid.reshape(1,self.sid.shape[0])))
+        ped_dict = make_id_dict(self.ped,1)
+        ped_indices = np.array([ped_dict[x] for x in self.ids])
+        parent_ids = self.ped[ped_indices,2:4]
+        parent_ids[~parent_genotyped] = 'NA'
+        pg_out = np.column_stack((self.fams,self.ids,parent_ids,self.gts))
+        pg_header = np.column_stack((np.array(['FID','IID','FATHER_ID','MOTHER_ID']).reshape(1,4),self.sid.reshape(1,self.sid.shape[0])))
         pg_out = np.row_stack((pg_header,pg_out))
         print('Writing PGS to ' + filename)
         np.savetxt(filename, pg_out, fmt='%s')
