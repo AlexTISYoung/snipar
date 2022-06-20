@@ -584,6 +584,7 @@ def make_and_fit_model(y, pg, pg_cols, covariates=None):
     return alpha, X_cols
 
 def write_estimates(outprefix, alpha, cols):
+    cols = cols.reshape((cols.shape[0],1))
     # Find cols
     alpha_out = np.zeros((alpha[0].shape[0], 2))
     alpha_out[:, 0] = alpha[0]
@@ -592,6 +593,8 @@ def write_estimates(outprefix, alpha, cols):
     np.savetxt(outprefix + '.effects.txt',
                 np.hstack((cols, np.array(alpha_out, dtype='S'))),
                 delimiter='\t', fmt='%s')
-    alpha_cov_out = np.vstack((np.hstack((np.array(['']),cols)),np.hstack((cols,alpha[1]))))
+    vcols = np.zeros((1,cols.shape[0]+1),dtype=cols.dtype)
+    vcols[0,1:vcols.shape[1]] = cols[:,0]
+    alpha_cov_out = np.vstack((vcols, np.hstack((cols,alpha[1]))))
     print('Saving sampling variance-covariance matrix to '+outprefix+ '.vcov.txt')
     np.savetxt(outprefix+ '.vcov.txt',alpha_cov_out)
