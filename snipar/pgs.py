@@ -5,6 +5,7 @@ from snipar.utilities import *
 from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
 import numpy.ma as ma
+import snipar.lmm as lmm
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -425,7 +426,6 @@ class pgarray(gtarray):
         self.gts = np.hstack((self.gts,gpar))
         self.sid = np.hstack((self.sid,np.array(['gpp','gpm','gmp','gmm'])))
         return bpg_ped
-
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
     rcoef = r/((2**n)*(1+r)-r)
@@ -514,3 +514,84 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             approx_grad=True,
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
+
+def fit_pgs_model(y, pg, ngen, covariates=None, fit_sib=False, parsum=False, outprefix=None):
+    if ngen in [1,2,3]:
+        pass
+    else:
+        raise(ValueError('ngen must be 1, 2, or 3'))
+    # Check if IDs are aligned
+    if not np.array_equal(y.ids,pg.ids):
+        pg.filter_ids(y.ids)
+        y.filter_ids(pg.ids)
+    # Check covariate IDs are aligned
+    if covariates is not None:
+        if not np.array_equal(pg.ids,covariates.ids):
+            covariates.filter_ids(pg.ids)
+    ## Fit model
+    if ngen==1:
+        print('Fitting 1 generation model (proband only)')
+        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], covariates=covariates)
+    elif ngen==2 or ngen==3:
+        if fit_sib:
+            if 'sib' in pg.sid:
+                pg_cols = ['proband','sib']
+            else:
+                raise(ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)'))
+        else:
+            pg_cols = ['proband']
+        if parsum:
+            if 'maternal' in pg.sid and 'paternal' in pg.sid:
+                parcols = np.sort(np.array([np.where(pg.sid=='maternal')[0][0],np.where(pg.sid=='paternal')[0][0]]))
+                trans_matrix = np.identity(pg.gts.shape[1])
+                trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
+                trans_matrix = np.delete(trans_matrix,parcols[1],1)
+                pg.gts = pg.gts.dot(trans_matrix)
+                pg.sid = np.delete(pg.sid,parcols[1])
+                pg.sid[parcols[0]] = 'parental'
+            elif 'parental' in pg.sid:
+                pass
+            else:
+                raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
+            pg_cols.append('parental')
+        else:
+            pg_cols += ['paternal','maternal']
+        if ngen==2:
+            print('Fitting 2 generation model (proband and observed/imputed parents)')
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, covariates=covariates)
+        elif ngen==3:
+            print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
+            pg_cols += ['gpp','gpm','gmp','gmm']
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, covariates=covariates)
+    # Save to file
+    if outprefix is not None:
+        write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
+    return alpha, alpha_cols
+        
+def make_and_fit_model(y, pg, pg_cols, covariates=None):
+    pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
+    if covariates is not None:
+        X = np.hstack((covariates.gts,pg.gts[:,pg_col_indices]))
+        X_cols = np.hstack((np.array(['intercept']),covariates.sid,pg_cols))
+    else:
+        X = pg.gts[:, pg_col_indices]
+        X_cols = np.hstack((np.array(['intercept']),pg_cols))
+    # Check for NAs
+    no_NA = np.sum(np.isnan(X),axis=1)==0
+    print('Sample size: '+str(np.sum(no_NA)))
+    # Remove NAs
+    alpha = lmm.fit_model(y.gts[no_NA,0], X[no_NA,:], pg.fams[no_NA], add_intercept=True, return_model=False, return_vcomps=False)
+    return alpha, X_cols
+
+def write_estimates(outprefix, alpha, cols):
+    # Find cols
+    alpha_out = np.zeros((alpha[0].shape[0], 2))
+    alpha_out[:, 0] = alpha[0]
+    alpha_out[:, 1] = np.sqrt(np.diag(alpha[1]))
+    print('Saving effect estimates to '+outprefix+ '.effects.txt')
+    np.savetxt(outprefix + '.effects.txt',
+                np.hstack((cols, np.array(alpha_out, dtype='S'))),
+                delimiter='\t', fmt='%s')
+    alpha_cov_out = np.vstack((np.hstack((np.array(['']),cols)),np.hstack((cols,alpha[1]))))
+    print('Saving sampling variance-covariance matrix to '+outprefix+ '.vcov.txt')
+    np.savetxt(outprefix+ '.vcov.txt',alpha_cov_out)

@@ -30,9 +30,15 @@ if __name__ == '__main__':
     parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
     parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
     parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
+    parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
     parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
     parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
-    parser.add_argument('--grandpar',action='store_true',default=False,help='Perform three generational analysis with imputed/observed grandparental scores')
+    parser.add_argument('--grandpar',action='store_true',default=False,help='Calculate imputed/observed grandparental PGS for individuals with both parents genotyped')
+    parser.add_argument('--gen_models',
+                        type=parseNumRange,
+                        nargs='*',
+                        action=NumRangeAction,
+                        help='Which multi-generational models should be fit. Default fits 1 and 2 generation models. Specify a range by, for example, 1-3, where 3 fits a model with parental and grandparental scores', default='1-2')    
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
@@ -142,49 +148,32 @@ if __name__ == '__main__':
         # Read phenotype
         y = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
+        if args.covar is not None:
+            print('Reading covariates')
+            covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
+            # Match to pheno ids
+            covariates.filter_ids(y.ids)
+        else:
+            covariates = None
         # Remove individuals without phenotype observations from PGS
+        # and match IDs
         pg.filter_ids(y.ids)
         y.filter_ids(pg.ids)
-        print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
-        # Parental sum
-        if args.parsum:
-            if 'maternal' in pg.sid and 'paternal' in pg.sid:
-                parcols = np.sort(np.array([np.where(pg.sid=='maternal')[0][0],np.where(pg.sid=='paternal')[0][0]]))
-                trans_matrix = np.identity(pg.gts.shape[1])
-                trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
-                trans_matrix = np.delete(trans_matrix,parcols[1],1)
-                pg.gts = pg.gts.dot(trans_matrix)
-                pg.sid = np.delete(pg.sid,parcols[1])
-                pg.sid[parcols[0]] = 'parental'
-            elif 'parental' in pg.sid:
-                pass
-            else:
-                raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
+        if covariates is not None:
+            covariates.filter_ids(pg.ids)
+        print('Sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
         # Scale
         if args.scale_phen:
             y.scale()
         if args.scale_pgs:
             pg.scale()
-        # Estimate effects
-        print('Estimating direct effects and NTCs')
-        alpha_imp = lmm.fit_model(y.gts[:,0], pg.gts, pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
-        # Estimate population effect
-        print('Estimating population effect')
-        alpha_proband = lmm.fit_model(y.gts[:,0], pg.gts[:, 0], pg.fams, add_intercept=True, return_model=False, return_vcomps=False)
-        # Fit grandparental model
-        if args.grandpar:
-            print('Fitting three generational model with imputed/observed grandparental scores')
-
-        # Get print out for fixed mean effects
-        alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
-        alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]
-        alpha_out[0:pg.sid.shape[0], 1] = np.sqrt(np.diag(alpha_imp[1])[1:(1+pg.sid.shape[0])])
-        alpha_out[pg.sid.shape[0],0] = alpha_proband[0][1]
-        alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
-        print('Saving estimates to '+args.out+ '.effects.txt')
-        outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
-        np.savetxt(args.out + '.effects.txt',
-                   np.hstack((outcols, np.array(alpha_out, dtype='S'))),
-                   delimiter='\t', fmt='%s')
-        print('Saving sampling covariance matrix of estimates to ' + args.out + '.vcov.txt')
-        np.savetxt(args.out + '.vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+        ## Estimate models
+        if '1' in args.gen_models:
+            print('Estimating population effect (1 generation model)')
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
+        if '2' in args.gen_models:
+            print('Estimating direct effect and parental NTCs (2 generation model)')
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
+        if '2' in args.gen_models:
+            print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)        
