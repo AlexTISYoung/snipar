@@ -133,7 +133,7 @@ def read_pgs(pgs_file):
     else:
         ped = None
     if ped is not None:
-        par_status = np.array(ped=='NA',dtype=int)
+        par_status = np.array(ped[:,2:4]=='NA',dtype=int)
     else:
         par_status = None
     pg = pgarray(np.loadtxt(pgs_file,usecols = pgs_cols, skiprows=1),
