@@ -74,8 +74,10 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      
 ## Compute PGS
 Rscript sbayesr_to_snipar.R
-pgs.py $gpardir/pgs/test --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
+pgs.py $gpardir/pgs/EA4_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
 # Estimated correlation between maternal and paternal PGSs: 0.1481
+
+pgs.py $gpardir/pgs/results/16 --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index 16 --scale_pgs --scale_phen
 
 # Compute grandparental PGS
 R3script $gpardir/impute_gpar_PGS_GS.R
