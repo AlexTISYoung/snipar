@@ -38,6 +38,8 @@ $plink --merge-list $hapdir/bedfiles/merge_list.txt --make-bed --out $hapdir/bed
 
 ### Infer relations with KING
 $king -b $hapdir/bedfiles/autosome.bed --related --cpus 20 --prefix $gpardir/king
+### Infer all pairwise IBD segments
+$king -b $hapdir/bedfiles/autosome.bed --ibdseg --cpus 80 --prefix $gpardir/king
 
 ### Load snipar python virtualenv ###
 source $gpardir/env/bin/activate
@@ -76,8 +78,10 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
 # Estimated correlation between maternal and paternal PGSs: 0.1481
-
-pgs.py $gpardir/pgs/results/16 --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index 16 --scale_pgs --scale_phen
+for i in {1..16}
+do
+pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg
+done
 
 # Compute grandparental PGS
 R3script $gpardir/impute_gpar_PGS_GS.R
