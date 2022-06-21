@@ -406,7 +406,7 @@ class pgarray(gtarray):
             ped_dict = make_id_dict(self.ped,1)
             bpg_ped = self.ped[[ped_dict[x] for x in self.ids[bpg]],:]
             # Find the mean of the mothers and fathers
-            parent_means = np.mean(self.gts[bpg,[paternal_index, maternal_index]],axis=0)
+            parent_means = np.mean(self.gts[bpg,:],axis=0)[[paternal_index, maternal_index]]
             ## Fill
             for i in range(bpg_ped.shape[0]):
                 i_index = self.id_dict[bpg_ped[i,1]]
