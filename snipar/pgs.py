@@ -93,10 +93,18 @@ class pgs(object):
 
         ### Compute PGS
         if garray.ndim == 2:
+            geno_means = np.mean(garray.gts[:, in_pgs_snps],axis=0)
+            garray.gts = garray.gts[:, in_pgs_snps]-geno_means
             pgs_val = ma.dot(garray.gts[:, in_pgs_snps],weights_compute)
         elif garray.ndim == 3:
+            geno_means = np.mean(garray.gts[:, 0, in_pgs_snps], axis=0)
             pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
             for i in range(0, garray.gts.shape[1]):
+                if garray.sid[i]=='parental':
+                    sf = 2.0                
+                else:
+                    sf = 1.0
+                garray.gts[:, i, in_pgs_snps] = garray.gts[:, i, in_pgs_snps]-sf*geno_means
                 pgs_val[:, i] = ma.dot(garray.gts[:, i, in_pgs_snps], weights_compute)
 
         return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status, ped=garray.ped)
