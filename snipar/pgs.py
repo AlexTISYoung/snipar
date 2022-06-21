@@ -405,6 +405,8 @@ class pgarray(gtarray):
             # Find their parents' IDs
             ped_dict = make_id_dict(self.ped,1)
             bpg_ped = self.ped[[ped_dict[x] for x in self.ids[bpg]],:]
+            # Find the mean of the mothers and fathers
+            parent_means = np.mean(self.gts[bpg,[paternal_index, maternal_index]],axis=0)
             ## Fill
             for i in range(bpg_ped.shape[0]):
                 i_index = self.id_dict[bpg_ped[i,1]]
@@ -414,14 +416,14 @@ class pgarray(gtarray):
                     gpar[i_index, 0:2] = self.gts[self.id_dict[bpg_ped[i,2]],[paternal_index,maternal_index]]
                 else:
                     # linear imputation from father if no imputed
-                    gpar[i_index, 0:2] = (1+r)*self.gts[i_index, paternal_index]/2.0
+                    gpar[i_index, 0:2] = parent_means[0]+(1+r)*(self.gts[i_index, paternal_index]-parent_means[0])/2.0
                 ## Maternal grandparental scores
                 # Find imputed grandparents
                 if bpg_ped[i,3] in self.id_dict:
                     gpar[i_index, 2:4] = self.gts[self.id_dict[bpg_ped[i,3]],[paternal_index,maternal_index]]
                 else:
                     # linear imputation from mother if no imputed
-                    gpar[i_index, 2:4] = (1+r)*self.gts[i_index, maternal_index]/2.0
+                    gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
         ## Append to PGS matrix
         self.gts = np.hstack((self.gts,gpar))
         self.sid = np.hstack((self.sid,np.array(['gpp','gpm','gmp','gmm'])))
@@ -597,4 +599,4 @@ def write_estimates(outprefix, alpha, cols):
     vcols[0,1:vcols.shape[1]] = cols[:,0]
     alpha_cov_out = np.vstack((vcols, np.hstack((cols,alpha[1]))))
     print('Saving sampling variance-covariance matrix to '+outprefix+ '.vcov.txt')
-    np.savetxt(outprefix+ '.vcov.txt',alpha_cov_out)
+    np.savetxt(outprefix+ '.vcov.txt',alpha_cov_out, fmt='%s')
