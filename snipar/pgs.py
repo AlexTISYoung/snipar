@@ -248,6 +248,13 @@ class pgarray(gtarray):
 
         return pgarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:], ped=ped)
 
+    def filter_bpg(self):
+        if self.par_status is None:
+            raise(ValueError('Parental genotype status unknown so cannot restrict to both parents genotyped sample'))
+        else:
+            bpg_ids = self.ids[np.sum(self.par_status==0, axis=1)==2]
+            self.filter_ids(bpg_ids)
+
     def estimate_r(self):
         # Check pgs columns
         if 'paternal' in self.sid:

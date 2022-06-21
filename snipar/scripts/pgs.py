@@ -38,7 +38,8 @@ if __name__ == '__main__':
                         type=parseNumRange,
                         nargs='*',
                         action=NumRangeAction,
-                        help='Which multi-generational models should be fit. Default fits 1 and 2 generation models. Specify a range by, for example, 1-3, where 3 fits a model with parental and grandparental scores', default='1-2')    
+                        help='Which multi-generational models should be fit. Default fits 1 and 2 generation models. Specify a range by, for example, 1-3, where 3 fits a model with parental and grandparental scores', default='1-2')
+    parser.add_argument('--bpg',action='store_true', default=False, help='Restrict sample to those with both parents genotyped')    
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
     parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
@@ -155,6 +156,10 @@ if __name__ == '__main__':
             covariates.filter_ids(y.ids)
         else:
             covariates = None
+        # Restrict sample to both parents genotyped
+        if args.bpg:
+            print('Restricting to individuals with both parents genotyped')
+            pg.filter_bpg()
         # Remove individuals without phenotype observations from PGS
         # and match IDs
         pg.filter_ids(y.ids)
