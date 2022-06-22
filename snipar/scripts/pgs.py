@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-import argparse, code
+import argparse
 import numpy as np
 import snipar.pgs as pgs
-from snipar.gtarray import gtarray
 import snipar.read as read
-import snipar.lmm as lmm
 from snipar.utilities import *
+from snipar.slmm import build_ibdrel_arr, build_sib_arr
 
 ######### Command line arguments #########
 if __name__ == '__main__':
@@ -42,6 +41,10 @@ if __name__ == '__main__':
     parser.add_argument('--bpg',action='store_true', default=False, help='Restrict sample to those with both parents genotyped')    
     parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                         default=1)
+    parser.add_argument('--ibdrel_path', type=str,
+                        help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+    parser.add_argument('--sparse_thres', type=float,
+                    help='Threshold of GRM/IBD sparsity', default=0.05)
     parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
     parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
     parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to have variance 1 among the phenotyped individuals',default=False)
@@ -167,6 +170,22 @@ if __name__ == '__main__':
         if covariates is not None:
             covariates.filter_ids(pg.ids)
         print('Sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
+        ## Load sparse GRM 
+        if args.ibdrel_path is not None:
+            grm_data, grm_row_ind, grm_col_ind = build_ibdrel_arr(
+                args.ibdrel_path, id_dict=pg.id_dict, keep=pg.ids, thres=args.sparse_thres)
+        ## Build sparse sib GRM
+        sib_data, sib_row_ind, sib_col_ind = build_sib_arr(pg.fams)
+        ## GRM list
+        if 'grm_data' in locals():
+            varcomp_lst = (
+                (grm_data, grm_row_ind, grm_col_ind),
+                (sib_data, sib_row_ind, sib_col_ind),
+            )
+        else:
+            varcomp_lst = (
+                (sib_data, sib_row_ind, sib_col_ind),
+            )
         # Scale
         if args.scale_phen:
             y.scale()

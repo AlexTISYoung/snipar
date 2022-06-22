@@ -5,7 +5,7 @@ from snipar.utilities import *
 from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
 import numpy.ma as ma
-import snipar.lmm as lmm
+import snipar.slmm as slmm
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -532,7 +532,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
 
-def fit_pgs_model(y, pg, ngen, covariates=None, fit_sib=False, parsum=False, outprefix=None):
+def fit_pgs_model(y, pg, ngen, varcomp_lst, covariates=None, fit_sib=False, parsum=False, outprefix=None):
     if ngen in [1,2,3]:
         pass
     else:
@@ -548,7 +548,7 @@ def fit_pgs_model(y, pg, ngen, covariates=None, fit_sib=False, parsum=False, out
     ## Fit model
     if ngen==1:
         print('Fitting 1 generation model (proband only)')
-        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], covariates=covariates)
+        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], varcomp_lst, covariates=covariates)
     elif ngen==2 or ngen==3:
         if fit_sib:
             if 'sib' in pg.sid:
@@ -575,17 +575,17 @@ def fit_pgs_model(y, pg, ngen, covariates=None, fit_sib=False, parsum=False, out
             pg_cols += ['paternal','maternal']
         if ngen==2:
             print('Fitting 2 generation model (proband and observed/imputed parents)')
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, covariates=covariates)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=covariates)
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             pg_cols += ['gpp','gpm','gmp','gmm']
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, covariates=covariates)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=covariates)
     # Save to file
     if outprefix is not None:
         write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
     return alpha, alpha_cols
-        
-def make_and_fit_model(y, pg, pg_cols, covariates=None):
+
+def make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=None):
     pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
     if covariates is not None:
         X = np.hstack((covariates.gts,pg.gts[:,pg_col_indices]))
@@ -596,8 +596,12 @@ def make_and_fit_model(y, pg, pg_cols, covariates=None):
     # Check for NAs
     no_NA = np.sum(np.isnan(X),axis=1)==0
     print('Sample size: '+str(np.sum(no_NA)))
-    # Remove NAs
-    alpha = lmm.fit_model(y.gts[no_NA,0], X[no_NA,:], pg.fams[no_NA], add_intercept=True, return_model=False, return_vcomps=False)
+    # Define LMM
+    slmm_model = slmm.LinearMixedModel(y.gts[no_NA,0], varcomp_arr_lst=varcomp_lst, covar_X=X[no_NA,:], add_intercept=True)
+    # Optimize Lmm
+    slmm_model.scipy_optimize()
+    ZT_Vinv_Z_imp = slmm_model.Z.T @ slmm_model.Vinv_Z
+    alpha = [np.linalg.solve(ZT_Vinv_Z_imp, slmm_model.Z.T @ slmm_model.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
     return alpha, X_cols
 
 def write_estimates(outprefix, alpha, cols):
