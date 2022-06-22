@@ -2,6 +2,8 @@ import numpy as np
 from os import path
 import argparse
 import re
+from typing import Tuple
+
 def make_id_dict(x,col=0):
     """
     Make a dictionary that maps from the values in the given column (col) to their row-index in the input array
@@ -134,3 +136,14 @@ class NumRangeAction(argparse.Action):
         result.sort()
         result = result.astype(str).tolist()
         setattr(args, self.dest, result)
+
+def coord2linear(ind1: int, ind2: int) -> int:
+    row_ind, col_ind = max(ind1, ind2), min(ind1, ind2)
+    return int(row_ind * (row_ind + 1) / 2 + col_ind)
+
+
+def linear2coord(ind: int) -> Tuple[int, int]:
+    ind += 1
+    ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
+    ind2 = ind - (ind1 - 1) * ind1 / 2
+    return int(ind1 - 1), int(ind2 - 1)

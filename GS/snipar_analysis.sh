@@ -80,18 +80,5 @@ pgs.py $gpardir/pgs/EA4_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_0
 # Estimated correlation between maternal and paternal PGSs: 0.1481
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg
+pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg --ibdrel_path $gpardir/king
 done
-
-# Compute grandparental PGS
-R3script $gpardir/impute_gpar_PGS_GS.R
-
-### Compute GRM ###
-$gcta64 --make-grm-bin --bfile /disk/genetics/sibling_consortium/GS20k/GS20k_TopStrand --maf 0.05 --thread-num 40 --out $gpardir/grms/R
-python $gpardir/make_grms.py
-
-### Compute variance components ###
-mkdir $gpardir/grms/varcomps
-$gcta64 --mgrm $gpardir/grms/mgrm.txt --reml --reml-no-lrt --pheno $gpardir/processed_traits_noadj.txt --mpheno 16 --qcovar $gpardir/pgs/GS_EA_13_weights_LDpred_p1.pgs.with_covariates.txt --out $gpardir/grms/varcomps/16 --thread-num 20
-
-### Estimate grandparental PGS model ###

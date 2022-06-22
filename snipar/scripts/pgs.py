@@ -194,10 +194,10 @@ if __name__ == '__main__':
         ## Estimate models
         if '1' in args.gen_models:
             print('Estimating population effect (1 generation model)')
-            alpha_1 = pgs.fit_pgs_model(y, pg, 1, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
         if '2' in args.gen_models:
             print('Estimating direct effect and parental NTCs (2 generation model)')
-            alpha_2 = pgs.fit_pgs_model(y, pg, 2, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
         if '2' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
-            alpha_3 = pgs.fit_pgs_model(y, pg, 3, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)        
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)        
