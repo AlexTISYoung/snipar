@@ -597,9 +597,12 @@ def make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=None):
     no_NA = np.sum(np.isnan(X),axis=1)==0
     print('Sample size: '+str(np.sum(no_NA)))
     # Define LMM
-    slmm_model = slmm.LinearMixedModel(y.gts[no_NA,0], varcomp_arr_lst=varcomp_lst, covar_X=X[no_NA,:], add_intercept=True)
+    slmm_model = slmm.LinearMixedModel(np.array(y.gts[no_NA,0],dtype=float), 
+                    varcomp_arr_lst=varcomp_lst, covar_X=np.array(X[no_NA,:],dtype=float), add_intercept=True)
     # Optimize Lmm
     slmm_model.scipy_optimize()
+    # Print variance components
+    print(f'Variance components: {list(i for i in slmm_model.varcomps)}')
     ZT_Vinv_Z_imp = slmm_model.Z.T @ slmm_model.Vinv_Z
     alpha = [np.linalg.solve(ZT_Vinv_Z_imp, slmm_model.Z.T @ slmm_model.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
     return alpha, X_cols
