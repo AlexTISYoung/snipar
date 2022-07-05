@@ -80,5 +80,5 @@ pgs.py $gpardir/pgs/EA4_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_0
 # Estimated correlation between maternal and paternal PGSs: 0.1481
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg --ibdrel_path $gpardir/king
+pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg --sparse_thres 0.025 --ibdrel_path $gpardir/king
 done

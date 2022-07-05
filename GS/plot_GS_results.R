@@ -81,5 +81,3 @@ theme_minimal() + theme(axis.line = element_line(color="black"),
 
 
 ggsave('gpar_plot.pdf',plot=gpar_plot,width=10,height=5)
-
-
