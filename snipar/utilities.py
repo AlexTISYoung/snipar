@@ -1,4 +1,6 @@
+from typing import Dict
 import numpy as np
+import bgen_reader
 from os import path
 import argparse
 import re
@@ -157,3 +159,28 @@ def get_parser_doc(parser):
         doc += arg_doc
     
     return doc
+
+
+def open_bgen(filename: str, verbose: bool = False) -> bgen_reader.open_bgen:
+    """Wrapper of bgen_reader.open_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.open_bgen(filename, verbose=verbose)
+    if bgen.samples[0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = bgen_reader.open_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+    return bgen
+
+
+def read_bgen(filename: str, verbose: bool = False) -> Dict:
+    """Wrapper of bgen_reader.read_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.read_bgen(filename, verbose=verbose)
+    if bgen['samples'][0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = bgen_reader.read_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+    return bgen
+        

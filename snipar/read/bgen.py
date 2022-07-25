@@ -1,7 +1,6 @@
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.gtarray import gtarray
-from bgen_reader import open_bgen
 from snipar.utilities import *
 
 def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end=None):

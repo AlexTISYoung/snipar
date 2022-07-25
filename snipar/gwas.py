@@ -1,6 +1,5 @@
 import h5py
 import numpy as np
-from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
 from math import log10
@@ -278,6 +277,9 @@ def process_chromosome(chrom_out, y, pedigree, tau, sigma2, outprefix, bedfile=N
                     par_gts_f = par_gts_f, parsum=parsum, fit_sib=fit_sib, max_missing=max_missing, min_maf=min_maf,
                     print_sample_info=print_sample_info, verbose=verbose)
         # Fill in fitted SNPs
+        if len(batch_snps) == 0:
+            print('Done batch '+str(i+1)+' out of '+str(batch_bounds.shape[0]))
+            continue
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
