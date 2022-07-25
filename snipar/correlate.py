@@ -176,20 +176,75 @@ def read_sumstats_files(sumstats_files, chroms):
     return s
 
 @njit
-def compute_corr(z1,z2,v1,v2,r,w_1,w_2,w_c,l):
-    cov_12 = np.sum(w_c*(z1*z2-r*np.sqrt(v1*v2)))
-    var_1 = np.sum(w_1*(np.power(z1,2)-v1))
-    var_2 = np.sum(w_2*(np.power(z2,2)-v2))
+def estimate_var(z,v,w):
+    return np.sum(w*(np.power(z,2)-v))
+
+@njit
+def estimate_weights(v_est,v,l):
+    w = np.power((v_est+v)*l,-1)
+    w = w/np.sum(w)
+    return w
+
+@njit
+def reweighted_estimate_var(z, v, l, tol=1e-8, max_iter=10**3):
+    # Initialize weights
+    w = np.power(v*l,-1)
+    w = w/np.sum(w)
+    # Initialize estimate
+    v_est = estimate_var(z, v, w)
+    # Iterate to convergence
+    v_diff = np.inf
+    n_iter = 0
+    while v_diff > tol and n_iter < max_iter:
+        w = estimate_weights(v_est, v, l)
+        v_est_new = estimate_var(z, v, w)
+        v_diff = np.abs(v_est_new-v_est)
+        v_est = v_est_new
+        n_iter += 1
+    return v_est 
+
+@njit
+def estimate_cov(z1, z2, v1, v2, r, w):
+    return np.sum(w*(z1*z2-r*np.sqrt(v1*v2)))
+
+@njit
+def estimate_cov_weights(v1, v2, r, var_1, var_2, c, l):
+    w = np.power(((var_1+v1)*(var_2+v2)+np.power(c+r*np.sqrt(v1*v2),2))*l,-1)
+    w = w/np.sum(w)
+    return w
+
+@njit
+def reweighted_estimate_cov(z1, z2, v1, v2, r, l, var_1, var_2, tol=1e-8, max_iter=10**3):
+    # Initialize weights
+    w = np.power(((var_1+v1)*(var_2+v2)+np.power(r,2)*v1*v2)*l,-1)
+    w = w/np.sum(w)
+    # Initialize estimate
+    c_est = estimate_cov(z1, z2, v1, v2, r, w)
+    # Iterate to convergence
+    c_diff = np.inf
+    n_iter = 0
+    while c_diff > tol and n_iter < max_iter:
+        w = estimate_cov_weights(v1, v2, r, var_1, var_2, c_est, l)
+        c_est_new = estimate_cov(z1, z2, v1, v2, r, w)
+        c_diff = np.abs(c_est_new-c_est)
+        c_est = c_est_new
+        n_iter += 1
+    return c_est 
+
+@njit
+def compute_corr(z1,z2,v1,v2,r,l):
+    var_1 = reweighted_estimate_var(z1,v1,l)
+    var_2 = reweighted_estimate_var(z2,v2,l)
+    cov_12 = reweighted_estimate_cov(z1, z2, v1, v2, r, l, var_1, var_2)
     corr = cov_12/np.sqrt(var_1*var_2)
     reg_21 = cov_12/var_1
     resid_2 = z2-reg_21*z1
     v_resid_2 = v2+(reg_21**2)*v1-2*reg_21*r*np.sqrt(v1*v2)
-    w_s = np.power(v_resid_2*l,-1)
-    v_s = np.sum(w_s*(np.power(resid_2,2)-v_resid_2))/np.sum(w_s)
+    v_s = reweighted_estimate_var(resid_2, v_resid_2, l)
     return np.array([var_1, var_2, cov_12, corr, reg_21, v_s/var_2],dtype=np.float_)
 
 @njit(parallel=True)
-def jacknife(z1,z2,v1,v2,r,w_1,w_2,w_c,l,n_blocks,block_size):
+def jacknife(z1,z2,v1,v2,r,l,n_blocks,block_size):
     # Construct jacknife blocks
     jack_delete = np.zeros((n_blocks,6),dtype=np.float_)
     mask = np.ones((n_blocks, z1.shape[0]),dtype=np.bool_)
@@ -198,25 +253,16 @@ def jacknife(z1,z2,v1,v2,r,w_1,w_2,w_c,l,n_blocks,block_size):
     mask[n_blocks-1, (block_size*(n_blocks-1)):z1.shape[0]] = False
     # Compute jacknife values 
     for i in prange(n_blocks):
-        jack_delete[i,:] = compute_corr(z1[mask[i,:]],z2[mask[i,:]],v1[mask[i,:]],v2[mask[i,:]],r[mask[i,:]],w_1[mask[i,:]],w_2[mask[i,:]],w_c[mask[i,:]],l[mask[i,:]])
+        jack_delete[i,:] = compute_corr(z1[mask[i,:]],z2[mask[i,:]],v1[mask[i,:]],v2[mask[i,:]],r[mask[i,:]],l[mask[i,:]])
     return jack_delete
 
 def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
-    # Weights for variance of z1
-    w_1 = np.power(v1*l,-1)
-    w_1 = w_1/np.sum(w_1)
-    # Weights for variance of z2
-    w_2 = np.power(v2*l,-1)
-    w_2 = w_2/np.sum(w_2)
-    # Weights for covariace
-    w_c = np.power(v1*v2*(1+np.power(r,2))*l,-1)
-    w_c = w_c/np.sum(w_c)
     # Estimate
-    est = compute_corr(z1,z2,v1,v2,r,w_1,w_2,w_c,l)
+    est = compute_corr(z1,z2,v1,v2,r,l)
     # Calculate blocks
     block_size = int(np.floor(z1.shape[0]/n_blocks))
     # Get jacknife ests
-    jack_delete = jacknife(z1,z2,v1,v2,r,w_1,w_2,w_c,l,int(n_blocks),block_size)
+    jack_delete = jacknife(z1,z2,v1,v2,r,l,int(n_blocks),block_size)
     n_blocks = jack_delete.shape[0]
     # Compute jacknife-variance
     jack_vars = np.zeros((jack_delete.shape[1]),dtype=np.float_)
