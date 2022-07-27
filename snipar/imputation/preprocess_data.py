@@ -19,7 +19,7 @@ import logging
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
-from bgen_reader import open_bgen, read_bgen
+from snipar.utilities import open_bgen, read_bgen
 from snipar.config import nan_integer
 from tqdm import tqdm
 import statsmodels.api as sm

@@ -1,4 +1,8 @@
+from typing import Any, Dict, Optional, Union
+from pathlib import Path
 import numpy as np
+import pandas as pd
+import bgen_reader
 from os import path
 import argparse
 import re
@@ -157,3 +161,53 @@ def get_parser_doc(parser):
         doc += arg_doc
     
     return doc
+
+
+class _bgen:
+    """Simple wrapper class of bgen_reader.open_bgen that controls access to sample ids."""
+    def __init__(self, 
+                 filepath: Union[str, Path],
+                 samples_filepath: Optional[Union[str, Path]] = None,
+                 allow_complex: bool = False,
+                 verbose: bool = True,):
+        self._bgen = bgen_reader.open_bgen(filepath, allow_complex=allow_complex, verbose=verbose)
+        self._samples = self._read_sample(samples_filepath)
+        if self._bgen.samples.shape[0] != self._samples.shape[0]:
+            raise ValueError('sample file length and bgen file length do not match.')
+    
+    @property
+    def samples(self) -> np.ndarray:
+        return self._samples
+    
+    def __getattr__(self, name: str) -> Any:
+        """Access to attributes other than sample ids."""
+        return getattr(self._bgen, name)
+    
+    def _read_sample(self, samples_filepath: str) -> np.ndarray:
+        return pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy(dtype=str)
+
+
+def open_bgen(filename: str, verbose: bool = False) -> bgen_reader.open_bgen:
+    """Wrapper of bgen_reader.open_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.open_bgen(filename, verbose=verbose)
+    if bgen.samples[0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = _bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+    return bgen
+
+
+def read_bgen(filename: str, verbose: bool = False) -> Dict:
+    """Wrapper of bgen_reader.read_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.read_bgen(filename, verbose=verbose)
+    if bgen['samples'][0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = bgen_reader.read_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+        bgen['samples'] = pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy()
+    return bgen
+        
