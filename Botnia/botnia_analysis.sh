@@ -49,6 +49,9 @@ $king -b $hapdir/bedfiles/autosome.bed --related --cpus 20 --prefix $gpardir/kin
 #               MZ      PO      FS      2nd
 #  =====================================================
 #  Inference    28     4778    6805      5
+### Find unrelated subsample
+$king -b $hapdir/bedfiles/pruned/autosome.bed --unrelated --cpus 20 --prefix $gpardir/unrelated
+
 
 ### Perform PCA to identify European samples
 mkdir $hapdir/bedfiles/pca
@@ -95,6 +98,11 @@ done
 ibd.py --bed $hapdir/bedfiles/pruned/chr_@ --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --ld_out --threads 20 --out $gpardir/ibd/chr_@_pruned 
 #Estimated mean genotyping error probability: 0.000151
 
+### Infer pairwise IBD segments
+$plink --merge-list $hapdir/bedfiles/pruned/merge_list.txt --make-bed --out $hapdir/bedfiles/pruned/autosome
+$king -b $hapdir/bedfiles/pruned/autosome.bed --ibdseg --cpus 80 --prefix $gpardir/king
+### 
+
 ## Impute
 impute.py --ibd $gpardir/ibd/chr_@_pruned.ibd --bgen $hapdir/chr_@_haps --king $gpardir/king.kin0 --agesex $gpardir/phenotypes/agesex.txt --threads 40 --out $gpardir/imputed/chr_@ -c --chr_range 6
 
@@ -131,16 +139,20 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      
 # Compute PGS
 Rscript sbayesr_to_snipar.R
-pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --A1 A1 --A2 A2 --SNP SNP
-# Compute grandparental PGS
-R3script $gpardir/impute_gpar_PGS_GS.R
-
-### Compute GRM ###
-$gcta64 --make-grm-bin --bfile /disk/genetics/sibling_consortium/GS20k/GS20k_TopStrand --maf 0.05 --thread-num 40 --out $gpardir/grms/R
-python $gpardir/make_grms.py
-
-### Compute variance components ###
-mkdir $gpardir/grms/varcomps
-$gcta64 --mgrm $gpardir/grms/mgrm.txt --reml --reml-no-lrt --pheno $gpardir/processed_traits_noadj.txt --mpheno 16 --qcovar $gpardir/pgs/GS_EA_13_weights_LDpred_p1.pgs.with_covariates.txt --out $gpardir/grms/varcomps/16 --thread-num 20
+pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
+# Estimated correlation between maternal and paternal PGSs: 0.0732
 
 ### Estimate grandparental PGS model ###
+mkdir $gpardir/pgs/results
+for i in {1..8}
+do
+pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_2.8m.pgs.txt --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.025 --ibdrel_path $gpardir/king
+done
+
+### Perform family based GWAS ###
+mkdir $gpardir/phenotypes/gwas
+for i in {1..8}
+do
+mkdir $gpardir/phenotypes/gwas/$i/
+gwas.py $gpardir/phenotypes/processed_traits_noadj.txt --out $gpardir/phenotypes/gwas/$i/chr_@ --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --covar $gpardir/phenotypes/covariates.txt --phen_index $i 
+done

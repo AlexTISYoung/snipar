@@ -49,3 +49,21 @@ bgen_ids = read.table('../../chr_22.sample')
 bgen_indices = match(non_eur[,1],bgen_ids[,2])-1
 bgen_non_eur = paste('sample',bgen_indices,sep='_')
 write.table(non_eur,'non_european_samples_bgen.txt',quote=F,row.names=F,col.names=F)
+
+#### Compute Botnia PCs ####
+library(bigsnpr)
+obj.gsbed = bed('/ludc/Active_Projects/BOTNIA_AYoung_analysis/Private/haplotypes/bedfiles/pruned/autosome.bed') 
+
+king_unrel = read.table('/ludc/Active_Projects/BOTNIA_AYoung_analysis/Private/unrelatedunrelated.txt')
+ind.norel <- match(king_unrel[,2], obj.gsbed$fam$sample.ID)  
+ind.norel=ind.norel[!is.na(ind.norel)]
+obj.svd <- bed_autoSVD(obj.gsbed, ind.row = ind.norel, k = 20,
+                       ncores = nb_cores())
+
+PCs <- matrix(NA, nrow(obj.gsbed), ncol(obj.svd$u))
+PCs[ind.norel, ] <- predict(obj.svd)
+proj <- bed_projectSelfPCA(obj.svd, obj.gsbed, ind.row=rows_along(obj.gsbed)[-ind.norel])
+PCs[-ind.norel, ] <- proj$OADP_proj
+dimnames(PCs)[[1]] = obj.gsbed$fam$sample.ID
+dimnames(PCs)[[2]] = paste('PC',1:20,sep='')
+write.table(PCs,'PCs.txt',quote=F)
