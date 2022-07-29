@@ -43,7 +43,7 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument('--ibdrel_path', type=str,
                         help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
-    parser.add_argument('--sparse_thres', type=float,
+    parser.add_argument('--sparse_thresh', type=float,
                     help='Threshold of GRM/IBD sparsity', default=0.05)
     parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
     parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
@@ -170,22 +170,6 @@ if __name__ == '__main__':
         if covariates is not None:
             covariates.filter_ids(pg.ids)
         print('Sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
-        ## Load sparse GRM 
-        if args.ibdrel_path is not None:
-            grm_data, grm_row_ind, grm_col_ind = build_ibdrel_arr(
-                args.ibdrel_path, id_dict=pg.id_dict, keep=pg.ids, thres=args.sparse_thres)
-        ## Build sparse sib GRM
-        sib_data, sib_row_ind, sib_col_ind = build_sib_arr(pg.fams)
-        ## GRM list
-        if 'grm_data' in locals():
-            varcomp_lst = (
-                (grm_data, grm_row_ind, grm_col_ind),
-                (sib_data, sib_row_ind, sib_col_ind),
-            )
-        else:
-            varcomp_lst = (
-                (sib_data, sib_row_ind, sib_col_ind),
-            )
         # Scale
         if args.scale_phen:
             y.scale()
@@ -194,10 +178,10 @@ if __name__ == '__main__':
         ## Estimate models
         if '1' in args.gen_models:
             print('Estimating population effect (1 generation model)')
-            alpha_1 = pgs.fit_pgs_model(y, pg, 1, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
         if '2' in args.gen_models:
             print('Estimating direct effect and parental NTCs (2 generation model)')
-            alpha_2 = pgs.fit_pgs_model(y, pg, 2, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)
-        if '2' in args.gen_models:
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+        if '3' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
-            alpha_3 = pgs.fit_pgs_model(y, pg, 3, varcomp_lst, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out)        
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)        

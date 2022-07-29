@@ -532,7 +532,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
 
-def fit_pgs_model(y, pg, ngen, varcomp_lst, covariates=None, fit_sib=False, parsum=False, outprefix=None):
+def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, outprefix=None, sparse_thresh=0.025):
     if ngen in [1,2,3]:
         pass
     else:
@@ -548,7 +548,7 @@ def fit_pgs_model(y, pg, ngen, varcomp_lst, covariates=None, fit_sib=False, pars
     ## Fit model
     if ngen==1:
         print('Fitting 1 generation model (proband only)')
-        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], varcomp_lst, covariates=covariates)
+        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     elif ngen==2 or ngen==3:
         if fit_sib:
             if 'sib' in pg.sid:
@@ -575,17 +575,17 @@ def fit_pgs_model(y, pg, ngen, varcomp_lst, covariates=None, fit_sib=False, pars
             pg_cols += ['paternal','maternal']
         if ngen==2:
             print('Fitting 2 generation model (proband and observed/imputed parents)')
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=covariates)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             pg_cols += ['gpp','gpm','gmp','gmm']
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=covariates)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     # Save to file
     if outprefix is not None:
         write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
     return alpha, alpha_cols
 
-def make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=None):
+def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025):
     pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
     if covariates is not None:
         X = np.hstack((covariates.gts,pg.gts[:,pg_col_indices]))
@@ -596,7 +596,10 @@ def make_and_fit_model(y, pg, pg_cols, varcomp_lst, covariates=None):
     # Check for NAs
     no_NA = np.sum(np.isnan(X),axis=1)==0
     print('Sample size: '+str(np.sum(no_NA)))
-    # Define LMM
+    ## Read GRM
+    id_dict = make_id_dict(pg.ids[no_NA])
+    varcomp_lst = make_grms(pg.fams[no_NA], ibdrel_path=ibdrel_path, id_dict=id_dict, keep=pg.ids[no_NA], sparse_thresh=sparse_thresh)
+    ## Define LMM
     slmm_model = slmm.LinearMixedModel(np.array(y.gts[no_NA,0],dtype=float), 
                     varcomp_arr_lst=varcomp_lst, covar_X=np.array(X[no_NA,:],dtype=float), add_intercept=True)
     # Optimize Lmm
@@ -622,3 +625,21 @@ def write_estimates(outprefix, alpha, cols):
     alpha_cov_out = np.vstack((vcols, np.hstack((cols,alpha[1]))))
     print('Saving sampling variance-covariance matrix to '+outprefix+ '.vcov.txt')
     np.savetxt(outprefix+ '.vcov.txt',alpha_cov_out, fmt='%s')
+
+def make_grms(fams, ibdrel_path=None, id_dict=None, keep=None, sparse_thresh=0.05):
+    if ibdrel_path is not None:
+        grm_data, grm_row_ind, grm_col_ind = slmm.build_ibdrel_arr(
+            ibdrel_path, id_dict=id_dict, keep=keep, thres=sparse_thresh)
+    ## Build sparse sib GRM
+    sib_data, sib_row_ind, sib_col_ind = slmm.build_sib_arr(fams)
+    ## GRM list
+    if 'grm_data' in locals():
+        varcomp_lst = (
+            (grm_data, grm_row_ind, grm_col_ind),
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    else:
+        varcomp_lst = (
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    return varcomp_lst
