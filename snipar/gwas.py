@@ -16,7 +16,6 @@ from multiprocessing import Pool, RawArray
 from functools import partial
 import ctypes
 import logging
-import time
 
 
 logger = logging.getLogger(__name__)
@@ -297,7 +296,8 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 
 def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
                   parsum=False, fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, 
-                  print_sample_info=False, impute_unrel=False, ignore_na_fams=False, ignore_na_rows=False,
+                  print_sample_info=False, impute_unrel=False, unrelated_inds=None,
+                  ignore_na_fams=False, ignore_na_rows=False,
                   add_jitter=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
@@ -348,13 +348,17 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     ### Fit models for SNPs ###
     model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
                            varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
-    alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
+    if unrelated_inds is None:
+        alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
+    else:
+        alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
+
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
 
 def process_chromosome(chrom_out, y, varcomp_lst,
                        pedigree, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
-                       fit_sib=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, batch_size=10000, 
+                       fit_sib=False, parsum=False, impute_unrel=False, unrelated_inds=None, max_missing=5, min_maf=0.01, batch_size=10000, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False,
                        add_jitter=False):
     ######## Check for bed/bgen #######
@@ -484,13 +488,14 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                              parsum=parsum, fit_sib=fit_sib,
                              max_missing=max_missing, min_maf=min_maf,
                              impute_unrel=impute_unrel,
+                             unrelated_inds=unrelated_inds,
                              ignore_na_fams=ignore_na_fams,
                              ignore_na_rows=ignore_na_rows,
                              add_jitter=add_jitter)
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
         _init_worker_(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
-        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[46]])
+        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[0]])
         exit('Debug finishsed.')
     with Pool(
         processes=cpus,

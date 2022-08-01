@@ -148,7 +148,7 @@ def get_ids_with_par(gts_f: str,
                                                                              imp_fams=fams,
                                                                              ids=ids,
                                                                              sib=sib,
-                                                                             impute_unrel=include_unrel)
+                                                                             include_unrel=include_unrel)
         gts_ids = gts_f_.iid[observed_indices, 1]
         # logger.debug(f'Length of observed geno: {len(gts_ids)}')
     elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
@@ -214,9 +214,9 @@ def get_ids_with_par(gts_f: str,
 
     if include_unrel:
         # missing_ids = [i for i in range(len(par_status)) if par_status[i, 0] == -1 and par_status[i, 1] == -1]
-        missing_ids = np.array([par_status[i, 0] == -1 and par_status[i, 1] == -1 for i in range(len(par_status))])
+        unrelated_inds = np.array([par_status[i, 0] == -1 and par_status[i, 1] == -1 for i in range(len(par_status))])
         # logger.info(f'{len(missing_ids)} individuals with both parents missing.')
-        logger.info(f'{sum(missing_ids)} individuals with both parents missing.')
+        logger.info(f'{sum(unrelated_inds)} individuals with both parents missing.')
     one_missing_ids = [i for i in range(len(par_status)) if sum(par_status[i, :]) <= 0 and par_status[i, 0] * par_status[i, 1] < 0]
     if len(one_missing_ids) > 0:
         logger.error(f'{len(one_missing_ids)} individuals have one missing parent and one non-missing parent.')
@@ -251,5 +251,7 @@ def get_ids_with_par(gts_f: str,
     # print(sum([i == 'False' and j == 'False' for _, _, _, _, i, j in ped[ids_id, :]]), 'test if the ids truly have imputed father and observed mother')
     
     if return_info:
+        if include_unrel:
+            return ids, fam_labels, unrelated_inds
         return ids, fam_labels, par_status, gt_indices
     return ids, fam_labels

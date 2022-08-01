@@ -700,11 +700,40 @@ class LinearMixedModel:
             for j in range(c):
                 out[i, :, j] = lu.solve(dense_mat[i, :, j])
         return out
-
     
+    @staticmethod
+    def sp_mul_dense3d(sps_mat: csc_matrix,
+                       dense_mat: np.ndarray) -> np.ndarray:
+        """Compute product of given sparse matrix and given 3-d dense array; used for repeated OLS.
 
-    # testing
-    def fit_snps_eff(self, gts: np.ndarray, fam_labels: np.ndarray, ignore_na_fams: bool = True, ignore_na_rows: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        Args:
+            sps_mat (csc_matrix): 2-d sparse matrix.
+            dense_mat (np.ndarray): 3-d dense array.
+
+        Raises:
+            ValueError: dense_mat should be 3-d.
+            ValueError: 2nd dimensions of both inputs should match.
+
+        Returns:
+            np.ndarray: 3-d dense array.
+        """
+        if dense_mat.ndim != 3:
+            raise ValueError('dense_mat must be a 3-d array.')
+        n1: int
+        n2: int
+        m: int
+        n: int
+        c: int
+        n1, n2 = sps_mat.shape
+        m, n, c = dense_mat.shape
+        if n != n2:
+            raise ValueError(f'Input dims do not match: {n2} and {n}.')
+        out: np.ndarray = np.empty((m, n1, c))
+        for i in range(m):
+            out[i, :, :] = sps_mat.dot(dense_mat[i, :, :])
+        return out
+
+    def fit_snps_eff(self, gts: np.ndarray, fam_labels: np.ndarray, ignore_na_fams: bool = False, ignore_na_rows: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Perform repeated OLS to estimate SNP effects and sampling variance-covariance.
 
         Args:
@@ -720,7 +749,7 @@ class LinearMixedModel:
         n, k, l = gts.shape
         assert n == self.n
         if self.has_covar:
-            logger.critical(f'starting... ignore_na_fams: {ignore_na_fams}. ignore_na_rows: {ignore_na_rows}.')
+            # logger.critical(f'starting... ignore_na_fams: {ignore_na_fams}. ignore_na_rows: {ignore_na_rows}.')
             if not ignore_na_fams and not ignore_na_rows:
                 gts_ = gts.reshape((gts.shape[0], int(k * l)))
                 M_X: np.ndarray = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
@@ -737,9 +766,10 @@ class LinearMixedModel:
                 y: np.ndarray = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
                 self.logger.info('Start estimating snp effects...')
                 Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, X_)
-                Vinv_y: np.ndarray = self.V_lu.solve(y)
+                # Vinv_y: np.ndarray = self.V_lu.solve(y)
                 XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
-                XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_, Vinv_y)
+                # XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_, Vinv_y)
+                XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
                 alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
                 alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
             else:
@@ -780,7 +810,7 @@ class LinearMixedModel:
             # XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
             # XT_Vinv_y: np.ndarray = np.einsum('...ij,i', gts, self.Vinv_y)
 
-            logger.critical(f'starting... ignore_na_fams: {ignore_na_fams}. ignore_na_rows: {ignore_na_rows}.')
+            # logger.critical(f'starting... ignore_na_fams: {ignore_na_fams}. ignore_na_rows: {ignore_na_rows}.')
             if not ignore_na_fams and not ignore_na_rows:
                 Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, gts)
                 XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
@@ -825,12 +855,91 @@ class LinearMixedModel:
                     alpha[i,:] = np.linalg.solve(xtx,xty)
                     alpha_cov[i,:,:] = np.linalg.inv(xtx)
 
-        # alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
-        # alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
         alpha_ses: np.ndarray = np.sqrt(
             np.diagonal(alpha_cov, axis1=1, axis2=2))
         return alpha, alpha_cov, alpha_ses
 
+
+    def fit_snps_eff_meta(self, gts: np.ndarray, fam_labels: np.ndarray, 
+                          unrelated_inds: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Perform repeated OLS to estimate SNP effects and sampling variance-covariance.
+
+        Args:
+            gts (np.ndarray): 3-d array of genetic data.
+
+        Raises:
+            RuntimeError: should adjust for covariates if not yet.
+            ValueError: gts should be 3-d.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
+        """
+        n, k, l = gts.shape
+        logger.info('starting meta-analysis' + f' {(n,k,l)}')
+        S: np.ndarray = np.zeros((l, k + 1, k + 1), dtype=gts.dtype)
+        alpha_hat: np.ndarray = np.zeros((l, k + 1), dtype=gts.dtype)
+        assert n == self.n
+        if self.has_covar:
+            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_rel = self._ols_FLW(gts[~unrelated_inds, :, :], self.y[~unrelated_inds], self.Z[~unrelated_inds, :], ~unrelated_inds)
+            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_unrel = self._ols_FLW(gts[unrelated_inds, np.newaxis, 0, :], self.y[unrelated_inds], self.Z[unrelated_inds, :], unrelated_inds)
+        else:
+            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_rel = self._ols(gts[~unrelated_inds, :, :], self.y[~unrelated_inds], ~unrelated_inds)
+            # newaxis: keep dimension
+            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_unrel = self._ols(gts[unrelated_inds, np.newaxis, 0, :], self.y[unrelated_inds], unrelated_inds)
+        alpha_cross_cov: np.ndarray = np.einsum('...ij,...jk', alpha_cov_Vinv_X_rel, self.sp_mul_dense3d(self.V[~unrelated_inds, :][:, unrelated_inds], alpha_cov_Vinv_X_unrel.transpose(0, 2, 1)))
+        S[:, :k, k:] = alpha_cross_cov
+        S[:, k:, :k] = alpha_cross_cov.transpose(0, 2, 1)
+        A: np.ndarray
+        if k == 2:
+            A = np.block([[np.eye(k)], [np.ones(2)]])
+        elif k == 3:
+            A = np.block([[np.eye(k)], [np.array([1, 0.5, 0.5])]])
+        else:
+            raise ValueError('Shape of gts is wrong.')
+        Sinv_A: np.ndarray = np.zeros((l, S.shape[1], A.shape[1]), dtype=gts.dtype)
+        for ind in range(l):
+            Sinv_A[ind, :, :] = solve(S[ind, :, :], A)
+        alpha_cov: np.ndarray = inv(A.T @ Sinv_A)
+        alpha: np.ndarray = np.einsum('...ij,kj', alpha_cov, A)
+        alpha = np.einsum('...ij,...j', alpha, solve(S, alpha_hat))
+        alpha_ses: np.ndarray = np.sqrt(
+            np.diagonal(alpha_cov, axis1=1, axis2=2))
+        return alpha, alpha_cov, alpha_ses
+
+    def _ols_FLW(self, gts, y, Z, inds):
+        n, k, l = gts.shape
+        # if len(shape_) == 3:
+        gts_ = gts.reshape((n, int(k * l)))
+        M_X: np.ndarray = gts_ - Z.dot(solve(Z.T @ Z, Z.T.dot(gts_)))
+        # logger.info('Projecting genotype...')
+        X: np.ndarray = M_X.reshape((n, k, l)).transpose(2, 0, 1)
+        y_: np.ndarray = y - Z @ solve(Z.T @ Z, Z.T.dot(y))
+        # self.logger.info('Start estimating snp effects...')
+        Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V[inds, :][:, inds], X)
+        XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X, Vinv_X)
+        XT_Vinv_y: np.ndarray = Vinv_X.transpose(0, 2, 1).dot(y_)
+        alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+        alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
+        return alpha, alpha_cov, np.einsum('...ij,...kj', alpha_cov, Vinv_X)
+    
+    def _ols(self, gts, y, inds):
+        gts = gts.transpose(2, 0, 1)
+        Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V[inds, :][:, inds], gts)
+        XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
+        XT_Vinv_y: np.ndarray = Vinv_X.transpose(0, 2, 1).dot(y)
+        alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+        alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
+        return alpha, alpha_cov, np.einsum('...ij,...kj', alpha_cov, Vinv_X)
+
+    def _simple_fit(self, gts, inds):
+        gts = gts.transpose(2, 0, 1)
+        Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V[inds, :][:, inds], gts)
+        XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
+        XT_Vinv_y: np.ndarray = Vinv_X.transpose(0, 2, 1).dot(self.y[inds])
+        alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+        alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
+        return alpha, alpha_cov
+    
     # deprecated
     def _build_sp_mat_(self, arr: np.ndarray, nonzero_ind: np.ndarray, n: int) -> csc_matrix:
         """Build sparse matrix using given lower triangular entries.

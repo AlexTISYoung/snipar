@@ -14,6 +14,7 @@ Results:
 """
 import argparse
 import os
+import time
 
 
 
@@ -132,7 +133,11 @@ parser.add_argument('--ignore_na_rows',
 
 parser.add_argument('--impute_unrel',
                     action='store_true', default=False,
-                    help='Whether to impute parental genotype of unrelated individuals or not.')
+                    help='Whether to include unrelated individuals and impute their parental genotypes or not.')
+
+parser.add_argument('--meta_analyze',
+                    action='store_true', default=False,
+                    help='Whether to run gwases on related and unrelated individuals separately and meta-analyze the results (only takes effect if --impute_unrel is included).')
 
 parser.add_argument('--keep',
                     default=None,
@@ -175,6 +180,8 @@ def main(args):
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
 
+    logger.info(f'Output will be written to {args.out}.')
+
     # Check arguments
     if args.bed is None and args.bgen is None:
         raise(ValueError('Must provide one of --bedfiles and --bgenfiles'))
@@ -216,10 +223,11 @@ def main(args):
         covariates = None
 
 
-    if args.bed:
-        ids, fam_labels = read.get_ids_with_par(bedfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel)
-    elif args.bgen:
-        ids, fam_labels = read.get_ids_with_par(bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel)
+    if args.impute_unrel and args.meta_analyze:
+        ids, fam_labels, unrelated_inds = read.get_ids_with_par(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel, return_info=True)
+    else:
+        unrelated_inds = None
+        ids, fam_labels = read.get_ids_with_par(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel, return_info=False)
     y.filter_ids(ids)
     np.testing.assert_array_equal(ids, y.ids)
     # np.testing.assert_array_equal(fam_labels, y.fams)
@@ -343,7 +351,7 @@ def main(args):
     else:
         varcomps = None
     if args.covar is None:
-        model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
+        model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
     else:
         covar_1 = np.hstack((np.ones((y.shape[0], 1), dtype=y.dtype), covariates.gts.data))
         if args.fit_res:
@@ -351,9 +359,9 @@ def main(args):
             y.gts = y.gts -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
             logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y.gts)}')
             covariates = None
-            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
         else:
-            model = lmm.LinearMixedModel(y.gts.reshape(-1), varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
+            model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
     if not varcomps:
         logger.info(f'Optimizing variance components...')
         model.scipy_optimize()
@@ -367,7 +375,7 @@ def main(args):
         exit(0)
     sigmas = model.varcomps
 
-
+    start = time.time()
     for i in range(chroms.shape[0]):
         if args.bed is not None:
             print('Observed genotypes file: '+bedfiles[i])
@@ -383,10 +391,11 @@ def main(args):
                            ped, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i], ped_f=args.pedigree,
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
-                           impute_unrel=args.impute_unrel,
+                           impute_unrel=args.impute_unrel, unrelated_inds=unrelated_inds,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
-                           no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter)
-
+                           no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter,
+                           debug=args.debug)
+    logger.info(f'Time used: {time.time() - start}.')
 
 if __name__ == "__main__":
     args=parser.parse_args()
