@@ -16,7 +16,7 @@ The imputation method and the family-based GWAS and polygenic score models are d
 Installation
 ------------
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 Installing Using pip
 ~~~~~~~~~~~~~~~~~~~~
