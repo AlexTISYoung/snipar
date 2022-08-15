@@ -16,7 +16,6 @@ plink2='/ludc/Tools/Software/Plink/v2.00a2.3LM/plink2'
 plink='/ludc/Tools/Software/Plink/v1.90p/plink'
 qctool='/ludc/Tools/Software/qctool/2.0.6/qctool'
 king=$gpardir'king/king'
-#gcta64='/homes/nber/alextisyoung/gcta_1.93.2beta/gcta64'
 
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
 # Read info files
@@ -137,6 +136,21 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
      --exclude-mhc \
      --unscale-genotype
      
+$plink \
+    --bfile $hapdir/bedfiles/autosome \
+    --clump-p1 5e-8 \
+    --clump-r2 0.1 \
+    --clump-kb 250 \
+    --clump $gpardir/pgs/EA4_reduced.sumstats \
+    --clump-snp-field SNP \
+    --clump-field p \
+    --out $gpardir/pgs/EA4_GWS_clumped 
+
+$plink \
+    --bfile $hapdir/bedfiles/autosome \
+    --score $gpardir/pgs/EA4_GWS_leadsnps.sumstats 4 5 9 header \
+    --out $gpardir/pgs/EA4_GWS.pgs
+
 # Compute PGS
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
@@ -146,7 +160,7 @@ pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/
 mkdir $gpardir/pgs/results
 for i in {1..8}
 do
-pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_2.8m.pgs.txt --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.025 --ibdrel_path $gpardir/king
+pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_2.8m.pgs.txt --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king
 done
 
 ### Perform family based GWAS ###
