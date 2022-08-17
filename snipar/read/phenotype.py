@@ -58,7 +58,7 @@ def match_phenotype(G,y,pheno_ids):
 def read_covariates(covar, pheno_ids=None, missing_char = 'NA'):
     covar = Pheno(covar, missing=missing_char).read()
     X = np.array(covar.val)
-    X = gtarray(X, ids=np.array(covar.iid)[:,1])
+    X = gtarray(X, ids=np.array(covar.iid)[:,1], sid=covar.sid)
     if pheno_ids is not None:
         in_covar = np.array([x in X.id_dict for x in pheno_ids])
         if np.sum((~in_covar))>0:

@@ -195,7 +195,7 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
     del gts
     if imp_gts is not None:
         del imp_gts
-    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
 
 def read_sibs_from_bgen(bgenfile,sibpairs):
     bgen = open_bgen(bgenfile, verbose=True)
