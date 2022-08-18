@@ -6,6 +6,7 @@ from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
 import numpy.ma as ma
 import snipar.slmm as slmm
+from pysnptools.snpreader import Bed
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
