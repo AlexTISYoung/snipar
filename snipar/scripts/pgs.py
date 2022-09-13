@@ -114,13 +114,34 @@ def main(args):
         else:
             ped = None
         print('Computing PGS')
+        if bedfiles[0] is not None:
+            print('Observed genotype file: '+bedfiles[0])
+        if bgenfiles[0] is not None:
+            print('Observed genotype file: '+bgenfiles[0])
+        if pargts_list[0] is not None:
+            print('Imputed parental genotype file: '+pargts_list[0])
         pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
         for i in range(1,chroms.shape[0]):
+            if bedfiles[i] is not None:
+                print('Observed genotype file: '+bedfiles[i])
+            if bgenfiles[i] is not None:
+                print('Observed genotype file: '+bgenfiles[i])
+            if pargts_list[i] is not None:
+                print('Imputed parental genotype file: '+pargts_list[i])
             if args.compute_controls:
                 pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
-                pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
+                if pg_i[0] is not None:
+                    if pg is None:
+                        pg = pg_i
+                    else:
+                        pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
             else:
-                pg = pg.add(pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls))
+                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+                if pg_i is not None:
+                    if pg is not None:
+                        pg = pg.add(pg_i)
+                    else:
+                        pg = pg_i
         print('PGS computed')
         ####### Write PGS to file ########
         if args.compute_controls:

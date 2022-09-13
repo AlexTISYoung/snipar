@@ -2,6 +2,8 @@ from snipar.gtarray import gtarray
 import numpy as np
 from snipar.read import get_gts_matrix
 from snipar.utilities import *
+from pysnptools.snpreader import Bed
+from bgen_reader import open_bgen
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -57,35 +59,37 @@ class pgs(object):
         in_pgs_snps = np.array([x in self.snp_dict for x in garray.sid])
         nmatch = np.sum(in_pgs_snps)
         if nmatch==0:
-            raise ValueError('No overlap between PGS SNPs and genotype SNPs')
-        # Get weights
-        matched_snps = garray.sid[in_pgs_snps]
-        matched_alleles = garray.alleles[in_pgs_snps,:]
-        snp_indices = np.zeros((nmatch),dtype=int)
-        for i in range(0,nmatch):
-            snp_indices[i] = self.snp_dict[matched_snps[i]]
-        weights_compute = self.weights[snp_indices]
-        alleles = self.alleles[snp_indices,:]
+            print('No overlap between PGS SNPs and genotype SNPs')
+            return None
+        else:
+            # Get weights
+            matched_snps = garray.sid[in_pgs_snps]
+            matched_alleles = garray.alleles[in_pgs_snps,:]
+            snp_indices = np.zeros((nmatch),dtype=int)
+            for i in range(0,nmatch):
+                snp_indices[i] = self.snp_dict[matched_snps[i]]
+            weights_compute = self.weights[snp_indices]
+            alleles = self.alleles[snp_indices,:]
 
-        # Match alleles and adjust weights
-        a_match = np.logical_and(alleles[:,0] == matched_alleles[:, 0], alleles[:,1] == matched_alleles[:, 1])
-        a_reverse = np.logical_and(alleles[:,0] == matched_alleles[:, 1], alleles[:,1] == matched_alleles[:, 0])
-        a_nomatch = np.logical_and(np.logical_not(a_match), np.logical_not(a_reverse))
-        n_nomatch = np.sum(a_nomatch)
-        if n_nomatch > 0:
-            print('Removing ' + str(n_nomatch) + ' SNPs due to allele mismatch between genotypes and PGS alleles')
-            weights_compute[a_nomatch] = 0
-        weights_compute[a_reverse] = -weights_compute[a_reverse]
+            # Match alleles and adjust weights
+            a_match = np.logical_and(alleles[:,0] == matched_alleles[:, 0], alleles[:,1] == matched_alleles[:, 1])
+            a_reverse = np.logical_and(alleles[:,0] == matched_alleles[:, 1], alleles[:,1] == matched_alleles[:, 0])
+            a_nomatch = np.logical_and(np.logical_not(a_match), np.logical_not(a_reverse))
+            n_nomatch = np.sum(a_nomatch)
+            if n_nomatch > 0:
+                print('Removing ' + str(n_nomatch) + ' SNPs due to allele mismatch between genotypes and PGS alleles')
+                weights_compute[a_nomatch] = 0
+            weights_compute[a_reverse] = -weights_compute[a_reverse]
 
-        ### Compute PGS
-        if garray.ndim == 2:
-            pgs_val = garray.gts[:, in_pgs_snps].dot(weights_compute)
-        elif garray.ndim == 3:
-            pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
-            for i in range(0, garray.gts.shape[1]):
-                pgs_val[:, i] = garray.gts[:, i, in_pgs_snps].dot(weights_compute)
+            ### Compute PGS
+            if garray.ndim == 2:
+                pgs_val = garray.gts[:, in_pgs_snps].dot(weights_compute)
+            elif garray.ndim == 3:
+                pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
+                for i in range(0, garray.gts.shape[1]):
+                    pgs_val[:, i] = garray.gts[:, i, in_pgs_snps].dot(weights_compute)
 
-        return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
+            return gtarray(pgs_val, garray.ids, sid=cols, fams=garray.fams)
 
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
@@ -108,21 +112,37 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
             observed/imputed maternal PGS
 
     """
-    G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=verbose)
-    if sib:
-        cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
+    # Check for SNP overlap
+    if bedfile is not None:
+        bed = Bed(bedfile, count_A1=True)
+        snp_ids = bed.sid
+    if bgenfile is not None:
+        bgen = open_bgen(bgenfile)
+        snp_ids = bgen.ids
+        if np.unique(snp_ids).shape[0] == 1:
+            snp_ids = bgen.rsids
+    snp_set = set(snp_ids)
+    in_snp_set = np.array([x in snp_set for x in pgs.snp_ids])
+    if np.sum(in_snp_set)==0:
+        print('No overlap between variants in weights file and observed genotypes')
+        return None
     else:
-        cols = np.array(['proband', 'paternal', 'maternal'])
-    if compute_controls:
-        pgs_out = [pgs.compute(x,cols) for x in G[0:3]]
+        # Get genotype matrix
+        G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=verbose)
         if sib:
-            o_cols = np.array(['proband', 'sibling', 'parental'])
+            cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
         else:
-            o_cols = np.array(['proband','parental'])
-        pgs_out.append(pgs.compute(G[3], o_cols))
-        return pgs_out
-    else:
-        return pgs.compute(G,cols)
+            cols = np.array(['proband', 'paternal', 'maternal'])
+        if compute_controls:
+            pgs_out = [pgs.compute(x,cols) for x in G[0:3]]
+            if sib:
+                o_cols = np.array(['proband', 'sibling', 'parental'])
+            else:
+                o_cols = np.array(['proband','parental'])
+            pgs_out.append(pgs.compute(G[3], o_cols))
+            return pgs_out
+        else:
+            return pgs.compute(G,cols)
 
 def write(pg,filename,scale_PGS = False):
     if scale_PGS:

@@ -7,7 +7,7 @@ from snipar.read.bed import read_sibs_from_bed
 from snipar.read.bgen import read_sibs_from_bgen
 from snipar.utilities import make_id_dict
 from snipar.utilities import outfile_name
-from bgen_reader import open_bgen
+from snipar.utilities import open_bgen
 
 ####### Transition Matrix ######
 @njit
