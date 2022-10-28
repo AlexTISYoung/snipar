@@ -33,6 +33,7 @@ if __name__ == '__main__':
     parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
     parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
     parser.add_argument('--grandpar',action='store_true',default=False,help='Calculate imputed/observed grandparental PGS for individuals with both parents genotyped')
+    parser.add_argument('--gparsum',action='store_true',default = False, help='Use the sum of maternal grandparents and the sum of paternal grandparents in the regression (useful when no grandparents genotyped)')
     parser.add_argument('--gen_models',
                         type=parseNumRange,
                         nargs='*',
@@ -178,10 +179,10 @@ if __name__ == '__main__':
         ## Estimate models
         if '1' in args.gen_models:
             print('Estimating population effect (1 generation model)')
-            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
         if '2' in args.gen_models:
             print('Estimating direct effect and parental NTCs (2 generation model)')
-            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
         if '3' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
-            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)        
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)        

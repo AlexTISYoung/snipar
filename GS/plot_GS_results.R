@@ -81,3 +81,30 @@ theme_minimal() + theme(axis.line = element_line(color="black"),
 
 
 ggsave('gpar_plot.pdf',plot=gpar_plot,width=10,height=5)
+
+
+model_effects = c('direct','paternal','maternal','parental','grand_paternal','grand_maternal','grandparental')
+
+ea_plot = data.frame(phenotype=rep('EA',7),effect=model_effects)
+ea_plot$standardized_effect=as.vector(t(results['EA',model_effects]))
+
+ea_plot$effect = factor(ea_plot$effect,
+                          levels=model_effects)
+
+
+
+ea_plot_SE = data.frame(phenotype=rep('EA',7),effect=model_effects)
+ea_plot_SE$standardized_effect=as.vector(t(results['EA',paste(model_effects,'SE',sep="_")]))
+
+ea_plot_lower = ea_plot$standardized_effect+qnorm(0.025)*ea_plot_SE$standardized_effect
+ea_plot_upper = ea_plot$standardized_effect-qnorm(0.025)*ea_plot_SE$standardized_effect
+
+gpar_plot = ggplot(ea_plot,aes(x = phenotype,y = standardized_effect,fill = effect)) +
+  geom_col(position = position_dodge(0.75),width=0.75)+
+  geom_errorbar(ymin = ea_plot_lower,ymax=ea_plot_upper,position=position_dodge(0.75),width=0.25, size=0.5)+
+  theme_minimal() + theme(axis.line = element_line(color="black"),
+                          axis.ticks = element_line(color="black"),
+                          panel.border = element_blank())+ylim(-0.175,0.325)
+
+
+ggsave('gpar_plot_EA.pdf',plot=gpar_plot,width=5,height=5)

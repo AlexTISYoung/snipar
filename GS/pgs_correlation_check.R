@@ -2,7 +2,7 @@ library(rhdf5)
 setwd('/disk/genetics/sibling_consortium/GS20k/alextisyoung/grandpar/pgs')
 
 ## Read control PGS
-pgsfile_o = 'GS_EA_13_weights_LDpred_p1.pgs.control_sibling.txt'
+pgsfile_o = 'EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.pgs.control_sibling.txt'
 
 pgs_o = read.table(pgsfile_o,header=T,stringsAsFactors=F)
 pgs_o = pgs_o[order(pgs_o[,1]),]
@@ -15,7 +15,7 @@ f2 = fams[fam_counts==2]
 pgs_o = pgs_o[pgs_o[,1]%in%f2,]
 
 ## Read true parental PGS
-pgsfile = 'GS_EA_13_weights_LDpred_p1.pgs.txt'
+pgsfile = 'EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.pgs.txt'
 pgs = read.table(pgsfile,header=T,stringsAsFactors=F)
 
 pgs_o = cbind(pgs_o, pgs[match(pgs_o$IID,pgs$IID),c('paternal','maternal')])

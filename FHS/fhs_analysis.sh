@@ -31,8 +31,8 @@ $gsdir/gctb_2.03beta_Linux/gctb --sbayes R \
      --impute-n 
      
 ## Compute PGS
-pgs.py $pgsdir/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $pgsdir/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.snpRes --bed $gpardir/bedfiles/chr@_filtered --imp $gpardir/parent_imputed/chr_@ --beta_col A1Effect --SNP Name --grandpar
-# Estimated correlation between maternal and paternal PGSs: 0.1481
+pgs.py $pgsdir/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3 --weights $pgsdir/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.weights.txt --bgen $gpardir/bgen/chr@ --imp $gpardir/parent_imputed/chr_@ --beta_col beta --grandpar# Estimated correlation between maternal and paternal PGSs: 0.1481
+# Corr: 0.1188
 for i in {1..16}
 do
 pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --bpg --sparse_thres 0.025 --ibdrel_path $gpardir/king

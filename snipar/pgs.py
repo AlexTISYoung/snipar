@@ -532,7 +532,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
 
-def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, outprefix=None, sparse_thresh=0.025):
+def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025):
     if ngen in [1,2,3]:
         pass
     else:
@@ -578,7 +578,31 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
-            pg_cols += ['gpp','gpm','gmp','gmm']
+            if gparsum:
+                if 'gpp' in pg.sid and 'gpm' in pg.sid and 'gmp' in pg.sid and 'gmm' in pg.sid:
+                    # Sum of paternal grandparents
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gpm']]))
+                    trans_matrix = np.identity(pg.gts.shape[1])
+                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
+                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
+                    pg.gts = pg.gts.dot(trans_matrix)
+                    pg.sid = np.delete(pg.sid,parcols[1])
+                    pg.sid[parcols[0]] = 'gp'
+                    # Sum of maternal grandparents
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gmp','gmm']]))
+                    trans_matrix = np.identity(pg.gts.shape[1])
+                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
+                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
+                    pg.gts = pg.gts.dot(trans_matrix)
+                    pg.sid = np.delete(pg.sid,parcols[1])
+                    pg.sid[parcols[0]] = 'gm'
+                elif 'gp' in pg.sid and 'gm' in pg.sid:
+                    pass
+                else:
+                    raise(ValueError('Grandparental PGSs not found so cannot sum (--gparsum option given)'))
+                pg_cols += ['gp','gm']
+            else:
+                pg_cols += ['gpp','gpm','gmp','gmm']
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     # Save to file
     if outprefix is not None:

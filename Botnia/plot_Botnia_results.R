@@ -60,6 +60,10 @@ plot_ests$effect = factor(plot_ests$effect,
 plot_ests$phenotype = factor(plot_ests$phenotype,
                              levels=dimnames(results)[[1]])
 
+results = results[dimnames(results)[[1]]!='EA',]
+plot_ests = plot_ests[plot_ests$phenotype!='EA',]
+plot_ses = plot_ses[plot_ses$phenotype!='EA',]
+
 plot_lower = plot_ests[,3]+qnorm(0.025)*plot_ses[,3]
 plot_upper = plot_ests[,3]-qnorm(0.025)*plot_ses[,3]
 
@@ -77,6 +81,12 @@ theme_minimal() + theme(axis.line = element_line(color="black"),
 
 
 ggsave('gpar_plot.pdf',plot=gpar_plot,width=10,height=5)
+
+fst = 0.1
+f = sqrt(fst)/2
+f1 = 0.5-f
+f2 = 0.5+f
+(0.5*f^2+0.5*f^2)/(0.5*0.5)
 
 
 ## GWAS
