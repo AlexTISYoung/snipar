@@ -533,6 +533,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
     return np.array([r_init,optimized[0][0]])
 
 def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025):
+    pg.gts = ma.array(pg.gts,fill_value=np.nan)
     if ngen in [1,2,3]:
         pass
     else:
@@ -563,7 +564,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                 trans_matrix = np.identity(pg.gts.shape[1])
                 trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
                 trans_matrix = np.delete(trans_matrix,parcols[1],1)
-                pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
+                pg.gts = pg.gts.dot(trans_matrix)
                 pg.sid = np.delete(pg.sid,parcols[1])
                 pg.sid[parcols[0]] = 'parental'
             elif 'parental' in pg.sid:
@@ -585,7 +586,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
+                    pg.gts = pg.gts.dot(trans_matrix)
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gp'
                     # Sum of maternal grandparents
@@ -593,7 +594,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
+                    pg.gts = pg.gts.dot(trans_matrix)
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gm'
                 elif 'gp' in pg.sid and 'gm' in pg.sid:
