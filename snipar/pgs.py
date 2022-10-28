@@ -586,16 +586,16 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
                     pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,parcols[1])
-                    pg.sid[parcols[0]] = 'gp'
+                    pg.sid = np.delete(pg.sid,gparcols[1])
+                    pg.sid[gparcols[0]] = 'gp'
                     # Sum of maternal grandparents
                     gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gmp','gmm']]))
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
                     pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,parcols[1])
-                    pg.sid[parcols[0]] = 'gm'
+                    pg.sid = np.delete(pg.sid,gparcols[1])
+                    pg.sid[gparcols[0]] = 'gm'
                 elif 'gp' in pg.sid and 'gm' in pg.sid:
                     pass
                 else:
