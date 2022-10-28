@@ -144,7 +144,7 @@ def read_pgs(pgs_file):
         par_status = np.array(ped[:,2:4]=='NA',dtype=int)
     else:
         par_status = None
-    pg = pgarray(np.loadtxt(pgs_file,usecols = pgs_cols, skiprows=1),
+    pg = pgarray(np.genfromtxt(pgs_file,usecols = pgs_cols, skip_header=1, missing_values=['nan','NA','N/A']),
                     np.loadtxt(pgs_file,usecols = 1, dtype=str, skiprows=1),
                     sid=np.array(pgs_header[precols:ncols]),
                     fams=np.loadtxt(pgs_file,usecols = 0, dtype=str, skiprows=1),
@@ -563,7 +563,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                 trans_matrix = np.identity(pg.gts.shape[1])
                 trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
                 trans_matrix = np.delete(trans_matrix,parcols[1],1)
-                pg.gts = pg.gts.dot(trans_matrix)
+                pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
                 pg.sid = np.delete(pg.sid,parcols[1])
                 pg.sid[parcols[0]] = 'parental'
             elif 'parental' in pg.sid:
@@ -585,7 +585,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
+                    pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gp'
                     # Sum of maternal grandparents
@@ -593,7 +593,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
+                    pg.gts = ma.dot(pg.gts,trans_matrix,strict=True)
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gm'
                 elif 'gp' in pg.sid and 'gm' in pg.sid:
@@ -612,10 +612,10 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
 def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025):
     pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
     if covariates is not None:
-        X = np.hstack((covariates.gts,pg.gts[:,pg_col_indices]))
+        X = np.hstack((covariates.gts,np.array(pg.gts[:,pg_col_indices])))
         X_cols = np.hstack((np.array(['intercept']),covariates.sid,pg_cols))
     else:
-        X = pg.gts[:, pg_col_indices]
+        X = np.array(pg.gts[:, pg_col_indices])
         X_cols = np.hstack((np.array(['intercept']),pg_cols))
     # Check for NAs
     no_NA = np.sum(np.isnan(X),axis=1)==0
