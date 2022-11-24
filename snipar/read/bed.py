@@ -107,7 +107,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, parsum=False, include_unrel=False, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, parsum=False, include_unrel=False, robust=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -144,9 +144,15 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
         if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*imp_fams.shape[0]):
             imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices, :])
             imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
+            if robust:
+                num_obs_par_al = np.array(par_gts_f['num_observed_parental_alleles'][imp_indices, :])
+                num_obs_par_al = num_obs_par_al[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
         else:
             imp_gts = np.array(par_gts_f['imputed_par_gts'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
             imp_gts = imp_gts[imp_indices,:]
+            if robust:
+                num_obs_par_al = np.array(par_gts_f['num_observed_parental_alleles'][:,np.arange(in_obs_sid.shape[0])[in_obs_sid]])
+                num_obs_par_al = num_obs_par_al[imp_indices,:]
         imp_fams = imp_fams[imp_indices]
         # Check for allele flip
         nflip = np.sum(allele_flip)
@@ -180,7 +186,11 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
     del gts
     if imp_gts is not None:
         del imp_gts
+    if robust:
+        num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, G.shape[0])
+        return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+
 
 def read_sibs_from_bed(bedfile,sibpairs):
     bed = Bed(bedfile, count_A1=True)

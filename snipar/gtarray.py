@@ -31,12 +31,14 @@ class gtarray(object):
              [N x 2] numpy matrix that records whether parents have observed or imputed genotypes/PGS, where N matches size of ids.
              The first column is for the father of that individual; the second column is for the mother of that individual.
              If the parent is neither observed nor imputed, the value is -1; if observed, 0; and if imputed, 1.
+        num_obs_par_al : :class:`~numpy:numpy.array'
+             2 dimensioanal numpy arrray, with each entry holding the number of observed parental alleles for each individual on each locus.
 
     Returns:
         G : :class:`snipar.gtarray`
 
     """
-    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None):
+    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None, num_obs_par_al=None):
         if type(garray) == np.ndarray or type(garray) == np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -129,6 +131,16 @@ class gtarray(object):
                 raise ValueError('Incompatible par status array')
         else:
             self.par_status = None
+        
+        if num_obs_par_al is not None:
+            if self.ndim == 2 and num_obs_par_al.shape[0] == self.shape[0] and num_obs_par_al.shape[1] == self.shape[1]:
+                self.num_obs_par_al = num_obs_par_al
+            elif self.ndim == 3 and num_obs_par_al.shape[0] == self.shape[0] and num_obs_par_al.shape[1] == self.shape[2]:
+                self.num_obs_par_al = num_obs_par_al
+            else:
+                raise ValueError('Incompatible par status array')
+        else:
+            self.num_obs_par_al = None
 
         self.mean_normalised = False
 
@@ -180,6 +192,7 @@ class gtarray(object):
         if verbose:
             print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
         self.filter(freqs_pass)
+        return freqs_pass
 
     def filter_missingness(self, max_missing = 5, verbose=False):
         if self.ndim == 2:

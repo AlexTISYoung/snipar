@@ -147,6 +147,22 @@ def make_gts_matrix(gts, par_status, gt_indices, imp_gts=None, parsum = False):
             G[par_status[:, 1] == 1, 2, :] = imp_gts[gt_indices[par_status[:, 1] == 1, 2], :]
     return G
 
+def make_num_obs_par_al_matrix(num_obs_par_al, par_status,gt_indices, N):
+    """
+    Used in get_gts_matrix to construct the family based genotype matrix given
+    observed/imputed genotypes. 'gt_indices' has the indices in the observed/imputed genotype arrays;
+    and par_status codes whether the parents are observed (0) or imputed (1).
+    """
+    G = np.full((N,num_obs_par_al.shape[1]), fill_value=2, dtype=np.float16)
+
+    # Paternal genotypes
+    G[(par_status[:, 0] == 0)&(par_status[:, 1] == 0), :] = 4
+    # print(num_obs_par_al[gt_indices[par_status[:, 1] == 1, 2], :].shape)
+    # print(num_obs_par_al[gt_indices[par_status[:, 0] == 1, 1], :].shape)
+    G[(par_status[:, 0] == 1), :] = num_obs_par_al[gt_indices[par_status[:, 0] == 1, 1], :]
+    G[(par_status[:, 1] == 1), :] = num_obs_par_al[gt_indices[par_status[:, 1] == 1, 2], :]
+    return G
+
 def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = False):
     """
     Used in get_gts_matrix to find the mean genotype in each sibship (family) for each SNP or for a PGS.

@@ -116,7 +116,7 @@ def compute_ses(alpha_cov):
         alpha_ses[i,:] = np.sqrt(np.diag(alpha_cov[i,:,:]))
     return alpha_ses
 
-def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_ses, alpha_cov, sigmas, freqs):
+def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_ses, alpha_cov, sigmas, freqs, robust=False):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -126,15 +126,16 @@ def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alph
     outfile['bim'] = encode_str_array(outbim)
     X_length = 1
     outcols = ['direct']
-    if sib:
-        X_length += 1
-        outcols.append('sib')
-    if parsum:
-        X_length += 1
-        outcols.append('avg_NTC')
-    else:
-        X_length += 2
-        outcols = outcols + ['paternal','maternal']
+    if not robust:
+        if sib:
+            X_length += 1
+            outcols.append('sib')
+        if parsum:
+            X_length += 1
+            outcols.append('avg_NTC')
+        else:
+            X_length += 2
+            outcols = outcols + ['paternal','maternal']
     outfile.create_dataset('estimate_covariance', (snp_ids.shape[0], X_length, X_length), dtype='f', chunks=True,
                            compression='gzip', compression_opts=9)
     outfile.create_dataset('estimate', (snp_ids.shape[0], X_length), dtype='f', chunks=True, compression='gzip',
@@ -159,11 +160,23 @@ def outarray_effect(est, ses, freqs, vy):
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_cov, sigmas, freqs):
+def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, alpha, alpha_cov, sigmas, freqs, robust=False):
     outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
     header = ['chromosome','SNP','pos','A1','A2','freq']
     # Which effects to estimate
     effects = ['direct']
+    if robust:
+        i = 0
+        vy = sum(sigmas)
+        outstack = [outbim]
+        outstack.append(outarray_effect(alpha[:,0],np.sqrt(alpha_cov[:,0,0]),freqs,vy))
+        header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10_P']
+        # outstack.append(np.round(alpha_corr_out,6))
+        # Output array
+        outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
+        print('Writing text output to '+outfile)
+        np.savetxt(outfile, outarray, fmt='%s')
+        return
     if sib:
         effects.append('sib')
     if not parsum:
@@ -297,7 +310,7 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
                   parsum=False, fit_sib=False, max_missing=5, min_maf=0.01, verbose=False, 
                   print_sample_info=False, impute_unrel=False, unrelated_inds=None,
-                  ignore_na_fams=False, ignore_na_rows=False,
+                  ignore_na_fams=False, ignore_na_rows=False, robust=False,
                   add_jitter=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
@@ -317,7 +330,7 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     ####### Construct family based genotype matrix #######
     G = read.get_gts_matrix(ped_f=ped_f, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib,
-                            include_unrel=impute_unrel,
+                            include_unrel=impute_unrel, robust=robust,
                             verbose=verbose, print_sample_info=print_sample_info)
     # Check for empty fam labels
     no_fam = np.array([len(x) == 0 for x in G.fams])
@@ -344,14 +357,19 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
     if not ignore_na_fams and not ignore_na_rows:
         # NAs = G.fill_NAs()
         G = impute_missing(G)
-    G.mean_normalise()
+    if not robust:
+        G.mean_normalise()
     ### Fit models for SNPs ###
     model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
                            varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
-    if unrelated_inds is None:
-        alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
+    if robust:
+        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
     else:
-        alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
+        if unrelated_inds is None:
+            alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
+        else:
+            alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
+    
 
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
@@ -359,7 +377,7 @@ def process_batch(snp_ids, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_
 def process_chromosome(chrom_out, y, varcomp_lst,
                        pedigree, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None, ped_f=None,
                        fit_sib=False, parsum=False, impute_unrel=False, unrelated_inds=None, max_missing=5, min_maf=0.01, batch_size=10000, 
-                       no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False,
+                       no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False, robust=False,
                        add_jitter=False):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
@@ -413,11 +431,14 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     #     print('Using 1 batch')
     # else:
     #     print('Using '+str(batch_bounds.shape[0])+' batches')
-    alpha_dim = 2
-    if fit_sib:
-        alpha_dim += 1
-    if not parsum:
-        alpha_dim += 1
+    if robust:
+        alpha_dim = 1
+    else:
+        alpha_dim = 2
+        if fit_sib:
+            alpha_dim += 1
+        if not parsum:
+            alpha_dim += 1
     # Create output files
     alpha = np.zeros((snp_ids.shape[0],alpha_dim),dtype=np.float32)
     alpha[:] = np.nan
@@ -491,6 +512,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                              unrelated_inds=unrelated_inds,
                              ignore_na_fams=ignore_na_fams,
                              ignore_na_rows=ignore_na_rows,
+                             robust=robust,
                              add_jitter=add_jitter)
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
@@ -551,4 +573,4 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         else:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz', chrom=chrom_out)
         write_txt_output(chrom, snp_ids, pos, alleles, txt_outfile, parsum, fit_sib, alpha, alpha_cov,
-                     sigmas, freqs)
+                     sigmas, freqs, robust=robust)

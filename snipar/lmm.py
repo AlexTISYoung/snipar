@@ -1371,3 +1371,96 @@ class LinearMixedModel:
                 hessian[i, j] = 0.5 * \
                     self.y @ P_varcomp_mats[i] @ P_varcomp_mats[j] @ P_y
         return ll, grad, hessian
+
+    def robust_est(self, gts: np.ndarray, num_obs_par_al: np.ndarray, par_status: np.ndarray):
+        n, k, l = gts.shape
+        assert n == self.n
+        if self.has_covar:
+            gts_ = gts.reshape((gts.shape[0], int(k * l)))
+            M_X: np.ndarray = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
+            logger.info('Projecting genotype...')
+            X: np.ndarray = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
+            y: np.ndarray = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
+        else:
+            X: np.ndarray = gts.transpose(2, 0, 1)
+            y: np.ndarray = self.y - self.y.mean()
+
+        print('start robust', gts.shape, num_obs_par_al.shape)
+        alpha = np.full((l,1), fill_value=np.nan)
+        alpha_ses = np.full((l,1), fill_value=np.nan)
+        alpha_cov = np.full((l,1,1), fill_value=np.nan)
+        ct = 0
+        for s in range(X.shape[0]):
+            if np.isnan(num_obs_par_al[:, s]).all():
+                ct += 1
+                continue
+            notnan = np.isfinite(num_obs_par_al[:, s])
+            both = (num_obs_par_al[:, s] == 4) * notnan
+            pat = (num_obs_par_al[:, s] == 3) * (par_status[:, 0] == 0) * notnan
+            mat = (num_obs_par_al[:, s] == 3) * (par_status[:, 1] == 0)  * notnan
+            one = (num_obs_par_al[:, s] == 3) * ((par_status[:, 0] == 1) & (par_status[:, 1] == 1)) * notnan
+            if s == 1000:
+                exit()
+                # print('xxx', np.sum((num_obs_par_al[:, s] == 3) * (par_status[:, 0] == 0) * (par_status[:, 0] == 1) * notnan ))
+            print(both.sum(), pat.sum(), mat.sum(), one.sum(), np.sum((num_obs_par_al[:, s] == 2) * notnan))
+            if both.sum() == 0 or one.sum() == 0 or pat.sum() == 0 or mat.sum() == 0:
+                ct += 1
+                continue
+            X_both = X[s, both, :]
+            X_pat = X[s, pat, :]
+            X_mat = X[s, mat, :]
+            X_one = X[s, one, :]
+            y_both = y[both]
+            y_pat = y[pat]
+            y_mat = y[mat]
+            y_one = y[one]
+            V_both = self.V[both, :][:, both]
+            V_pat = self.V[pat, :][:, pat]
+            V_mat = self.V[mat, :][:, mat]
+            V_one = self.V[one, :][:, one]
+            # print(np.sum(both), pat.sum(), mat.sum(), one.sum())
+            for d in range(0, X_both.shape[1]):
+                X_both[:, d] = X_both[:, d] - np.mean(X_both[:, d], axis=0)
+                X_pat[:, d] = X_pat[:, d] - np.mean(X_pat[:, d], axis=0)
+                X_mat[:, d] = X_mat[:, d] - np.mean(X_mat[:, d], axis=0)
+                X_one[:, d] = X_one[:, d] - np.mean(X_one[:, d], axis=0)
+            
+            Vinv_X: np.ndarray = spsolve(V_both, X_both)
+            XT_Vinv_X: np.ndarray = X_both.T @ Vinv_X
+            XT_Vinv_y = Vinv_X.T @ y_both
+            alpha_both: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha_cov_both: np.ndarray = np.linalg.inv(XT_Vinv_X)
+
+            Vinv_X: np.ndarray = spsolve(V_mat, X_mat)
+            XT_Vinv_X: np.ndarray = X_mat.T @ Vinv_X
+            XT_Vinv_y = Vinv_X.T @ y_mat
+            alpha_mat: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha_cov_mat: np.ndarray = np.linalg.inv(XT_Vinv_X)
+
+            Vinv_X: np.ndarray = spsolve(V_pat, X_pat)
+            XT_Vinv_X: np.ndarray = X_pat.T @ Vinv_X
+            XT_Vinv_y = Vinv_X.T @ y_pat
+            alpha_pat: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha_cov_pat: np.ndarray = np.linalg.inv(XT_Vinv_X)
+
+            Vinv_X: np.ndarray = spsolve(V_one, X_one)
+            XT_Vinv_X: np.ndarray = X_one.T @ Vinv_X
+            XT_Vinv_y = Vinv_X.T @ y_one
+            alpha_one: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha_cov_one: np.ndarray = np.linalg.inv(XT_Vinv_X)
+
+            robust_var = (
+                alpha_cov_both[0, 0]**(-1) + alpha_cov_one[0, 0]**(-1) + \
+                alpha_cov_pat[0, 0]**(-1) + alpha_cov_mat[0, 0]**(-1)
+                )**(-1)
+            robust_alpha = robust_var * \
+                (
+                    alpha_cov_both[0,0]**(-1) * alpha_both[0] + alpha_cov_one[0,0]**(-1) * alpha_one[0] + \
+                    alpha_cov_pat[0,0]**(-1) * alpha_pat[0] + alpha_cov_mat[0,0]**(-1) * alpha_mat[0]
+                )
+            alpha[s,0] = robust_alpha
+            alpha_cov[s,0,0] = robust_var
+            alpha_ses[s,0] = robust_var ** 0.5
+        print(ct, X.shape)
+        print(np.isnan(alpha[:]).sum(), alpha.shape)
+        return alpha, alpha_cov, alpha_ses

@@ -15,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_gts_matrix(ped_f=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, compute_controls = False, include_unrel=False, verbose=False, print_sample_info=False):
+def get_gts_matrix(ped_f=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, compute_controls = False, include_unrel=False, robust=False, verbose=False, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
@@ -69,22 +69,22 @@ def get_gts_matrix(ped_f=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_
     if bedfile is not None:
         G = [bed.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], bedfile, par_gts_f=par_gts_f,
                                       snp_ids=snp_ids, ids=ids, sib=sib, 
-                                      parsum=parsum, include_unrel=include_unrel,
+                                      parsum=parsum, include_unrel=include_unrel, robust=robust,
                                       verbose=verbose, print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(bed.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),], bedfile,
                                                 par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, 
-                                                parsum=parsum, include_unrel=include_unrel,
+                                                parsum=parsum, include_unrel=include_unrel, robust=robust,
                                                 verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], bedfile, 
                                             par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, 
-                                            parsum=parsum, include_unrel=include_unrel,
+                                            parsum=parsum, include_unrel=include_unrel, robust=robust,
                                             verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], bedfile, 
                                             par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, 
-                                            parsum=parsum, include_unrel=include_unrel,
+                                            parsum=parsum, include_unrel=include_unrel, robust=robust,
                                             verbose=verbose, print_sample_info = print_sample_info))
             return G
         else:
@@ -92,22 +92,22 @@ def get_gts_matrix(ped_f=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_
     elif bgenfile is not None:
         G = [bgen.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
-                                                    parsum=parsum, include_unrel=include_unrel,
+                                                    parsum=parsum, include_unrel=include_unrel,  robust=robust,
                                                     verbose=verbose, print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
-                                                    parsum=parsum, include_unrel=include_unrel,
+                                                    parsum=parsum, include_unrel=include_unrel, robust=robust,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
-                                                    parsum=parsum, include_unrel=include_unrel,
+                                                    parsum=parsum, include_unrel=include_unrel, robust=robust,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, 
-                                                    parsum=parsum, include_unrel=include_unrel,
+                                                    parsum=parsum, include_unrel=include_unrel, robust=robust,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             return G
         else:
