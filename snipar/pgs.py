@@ -534,6 +534,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
 
 def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025):
     pg.gts = ma.array(pg.gts,fill_value=np.nan)
+    pg.gts = pg.gts.filled()
     if ngen in [1,2,3]:
         pass
     else:
