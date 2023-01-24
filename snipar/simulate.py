@@ -48,6 +48,29 @@ def impute_all_fams_phased(haps,freqs,ibd):
             imp[i,j] = impute_from_sibs_phased(haps[i,0,j,:],haps[i,1,j,:],ibd[i,j,:],freqs[j])
     return imp
 
+# Simulate frequencies: either all one value, or sampled from density proportional to 1/x
+def simulate_freqs(nsnp, maf=None, min_maf=None):
+    if maf is not None:
+        if 0.5>=maf>0:
+            freqs = maf*np.ones((nsnp))
+        else:
+            raise(ValueError('MAF must be between zero and 0.5'))
+    else:
+        if 0.5>=min_maf>0:
+            C = -1/np.log(2*min_maf)
+            u = np.random.uniform(0,1,nsnp)
+            freqs = min_maf*np.exp(u/C)
+        else:
+            raise(ValueError('minimum MAF must be between zero and 0.5'))
+    return freqs
+
+@njit
+def simulate_haplotypes(freqs,nfam):
+    haps = np.zeros((nfam,2,freqs.shape[0],2),dtype=np.bool_)
+    for i in prange(freqs.shape[0]):
+        haps[:, :, i, :] = np.random.binomial(1,freqs[i],(nfam,2,2))
+    return haps
+
 @njit
 def simulate_recombinations(map):
     map_start = map[0]
@@ -74,6 +97,32 @@ def meiosis(map,n=1):
                 recomb_vector[r,first_snp:recomb_vector.shape[1]] = ~recomb_vector[r,first_snp:recomb_vector.shape[1]]
     # Return
     return recomb_vector
+
+@njit
+def produce_next_gen_unlinked(father_indices,mother_indices,males,females):
+    ngen = np.zeros((father_indices.shape[0],2,males.shape[1],2),dtype=np.bool_)
+    ibd = np.zeros((father_indices.shape[0],males.shape[1],2),dtype=np.bool_)
+    for i in prange(ngen.shape[0]):
+        # Paternal sib 1
+        meiosis_p1 = np.random.binomial(1,0.5,(ngen.shape[2]))
+        ngen[i, 0, meiosis_p1==0, 0] = males[father_indices[i],meiosis_p1==0,0]
+        ngen[i, 0, meiosis_p1==1, 0] = males[father_indices[i],meiosis_p1==1,1]
+        # Paternal sib 2
+        meiosis_p2 = np.random.binomial(1,0.5,(ngen.shape[2]))
+        ngen[i, 1, meiosis_p2==0, 0] = males[father_indices[i],meiosis_p2==0,0]
+        ngen[i, 1, meiosis_p2==1, 0] = males[father_indices[i],meiosis_p2==1,1]
+        # Maternal sib 1
+        meiosis_m1 = np.random.binomial(1,0.5,(ngen.shape[2]))
+        ngen[i, 0, meiosis_m1==0, 1] = females[mother_indices[i],meiosis_m1==0,0]
+        ngen[i, 0, meiosis_m1==1, 1] = females[mother_indices[i],meiosis_m1==1,1]
+        # Maternal sib 2
+        meiosis_m2 = np.random.binomial(1,0.5,(ngen.shape[2]))
+        ngen[i, 1, meiosis_m2==0, 1] = females[mother_indices[i],meiosis_m2==0,0]
+        ngen[i, 1, meiosis_m2==1, 1] = females[mother_indices[i],meiosis_m2==1,1]
+        # IBD
+        ibd[i, :, 0] = meiosis_p1==meiosis_p2
+        ibd[i, :, 1] = meiosis_m1==meiosis_m2
+    return ngen, ibd
 
 
 @njit(parallel=True)

@@ -15,9 +15,12 @@ parser.add_argument('--chr_range',
                 help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('n_causal',type=int,help='Number of causal loci')
 parser.add_argument('outprefix',type=str,help='Prefix for simulation output files')
-parser.add_argument('--n_random',type=int,help='Number of generations of random mating',default=1)
-parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating',default=0)
-parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating)',default=None)
+parser.add_argument('--nfam',type=int,help='Number of families to simulate. If inputting bgen and not given, will be one half of samples in bgen by default.',default=None)
+parser.add_argument('--min_maf',type=float,help='Minimum minor allele frequency for simulated genotyped, which will be simulted from density proportional to 1/x',default=0.05)
+parser.add_argument('--maf',type=float,help='Minor allele frequency for simulated genotypes (not needed when providing bgen files)',default=None)
+parser.add_argument('--n_random',type=int,help='Number of generations of random mating (default 1)',default=1)
+parser.add_argument('--n_am',type=int,help='Number of generations of assortative mating (default 0)',default=0)
+parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents (for assortative mating). Default 0.',default=None)
 parser.add_argument('--h2_direct',type=float,help='Heritability due to direct effects in first generation',default=None)
 parser.add_argument('--h2_total',type=float,help='Total variance explained by direct effects and indirect genetic effects from parents',default=None)
 parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
@@ -82,37 +85,59 @@ def main(args):
     beta_vert = args.beta_vert
     ncausal = args.n_causal
 
-    bgenfiles, chroms = parse_obsfiles(args.bgen, obsformat='bgen', chromosomes=args.chr_range)
-
-    # Read genotypes
-    haps = []
-    maps = []
-    snp_ids = []
-    alleles = []
-    positions = []
-    for i in range(bgenfiles.shape[0]):
-        print('Reading in chromosome '+str(chroms[i]))
-        # Read bgen
-        bgen = open_bgen(bgenfiles[i], verbose=True)
-        # Read map
-        map = decode_map_from_pos(chroms[i], bgen.positions)
-        not_nan = np.logical_not(np.isnan(map))
-        maps.append(map[not_nan])
-        positions.append(bgen.positions[not_nan])
-        # Snp
-        snp_ids.append(bgen.rsids[not_nan])
+    if args.bgen is None:
+        # Unlinked recombination
+        unlinked = True
+        nfam = args.nfam
+        # Chromosomes
+        chroms = [1]
+        # Simulate allele frequencies
+        freqs = simulate_freqs(ncausal, maf=args.maf, min_maf=args.min_maf)
+        # Simulate haplotypes 
+        haps = [simulate_haplotypes(freqs,args.nfam)]
+        # SNP IDs
+        snp_ids = [np.array(np.arange(1,ncausal+1),dtype=str)]
         # Alleles
-        alleles.append(np.array([x.split(',') for x in bgen.allele_ids[not_nan]]))
+        alleles = np.zeros((ncausal,2),dtype=str)
+        alleles[:, 0] = 'A'
+        alleles[:, 1] = 'G'
+        alleles = [alleles]
+        # Positions
+        positions = [np.arange(1,ncausal+1)]
+        # Maps
+        maps = [np.arange(1,ncausal+1)]
+    else:
+        bgenfiles, chroms = parse_obsfiles(args.bgen, obsformat='bgen', chromosomes=args.chr_range)
+        unlinked = False
         # Read genotypes
-        gts = bgen.read(([x for x in range(bgen.samples.shape[0])], [x for x in range(bgen.ids.shape[0])]), np.bool_)[:, :,
-            np.array([0, 2])]
-        gts = gts[:,not_nan]
-        nfam = int(np.floor(gts.shape[0] / 2))
-        ngen = np.zeros((nfam, 2, gts.shape[1], 2), dtype=np.bool_)
-        ngen[:, 0, :, :] = gts[0:nfam, :, :]
-        ngen[:, 1, :, :] = gts[nfam:(2 * nfam), :, :]
-        del gts
-        haps.append(ngen)
+        haps = []
+        maps = []
+        snp_ids = []
+        alleles = []
+        positions = []
+        for i in range(bgenfiles.shape[0]):
+            print('Reading in chromosome '+str(chroms[i]))
+            # Read bgen
+            bgen = open_bgen(bgenfiles[i], verbose=True)
+            # Read map
+            map = decode_map_from_pos(chroms[i], bgen.positions)
+            not_nan = np.logical_not(np.isnan(map))
+            maps.append(map[not_nan])
+            positions.append(bgen.positions[not_nan])
+            # Snp
+            snp_ids.append(bgen.rsids[not_nan])
+            # Alleles
+            alleles.append(np.array([x.split(',') for x in bgen.allele_ids[not_nan]]))
+            # Read genotypes
+            gts = bgen.read(([x for x in range(bgen.samples.shape[0])], [x for x in range(bgen.ids.shape[0])]), np.bool_)[:, :,
+                np.array([0, 2])]
+            gts = gts[:,not_nan]
+            nfam = int(np.floor(gts.shape[0] / 2))
+            ngen = np.zeros((nfam, 2, gts.shape[1], 2), dtype=np.bool_)
+            ngen[:, 0, :, :] = gts[0:nfam, :, :]
+            ngen[:, 1, :, :] = gts[nfam:(2 * nfam), :, :]
+            del gts
+            haps.append(ngen)
 
     # Simulate population
     total_matings = ngen_random+ngen_am
@@ -160,20 +185,21 @@ def main(args):
             mother_indices = random_mating_indices(nfam)
         # Assortative mating
         if gen>=ngen_random:
-            # Compute parental phenotypes
-            print('Computing parental phenotypes')
             # Match assortatively
             print('Matching assortatively')
             father_indices, mother_indices = am_indices(Y_p, Y_m, r_y)
             # Print variances
             print('Parental phenotypic correlation: '+str(round(np.corrcoef(Y_p[father_indices],Y_m[mother_indices])[0,1],4)))
             print('Parental genotypic correlation: '+str(round(np.corrcoef(G_p[father_indices],G_m[mother_indices])[0,1],4)))
-        # Generate haplotpyes of new generation
+        # Generate haplotypes of new generation
         new_haps = []
         ibd = []
         for chr in range(0,len(haps)):
             print('Chromosome '+str(chroms[0]+chr))
-            new_haps_chr, ibd_chr = produce_next_gen(father_indices,mother_indices,old_haps[chr][:,0,:,:],old_haps[chr][:,1,:,:],maps[chr])
+            if unlinked:
+                new_haps_chr, ibd_chr = produce_next_gen_unlinked(father_indices,mother_indices,old_haps[chr][:,0,:,:],old_haps[chr][:,1,:,:])
+            else:
+                new_haps_chr, ibd_chr = produce_next_gen(father_indices,mother_indices,old_haps[chr][:,0,:,:],old_haps[chr][:,1,:,:],maps[chr])
             new_haps.append(new_haps_chr)
             ibd.append(ibd_chr)
         # Compute indirect effect component
