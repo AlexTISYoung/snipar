@@ -57,7 +57,7 @@ class Person:
 
 def create_pedigree(king_address, agesex_address):
     """Creates pedigree table from agesex file and kinship file in KING format.
-
+    
     Args:
         king_address : str
             Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
@@ -71,7 +71,7 @@ def create_pedigree(king_address, agesex_address):
             Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
             Age column is used for distinguishing between parent and child in a parent-offspring relationship inferred from the kinship file.
             ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
-
+    
     Returns:
         pd.DataFrame:
             A pedigree table with 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Each row represents an individual.
@@ -79,14 +79,23 @@ def create_pedigree(king_address, agesex_address):
 
     kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
     logging.info("loaded kinship file")
+    # Filter MZ
+    mz_kin = kinship.loc[kinship['InfType']=='Dup/MZ']
+    if mz_kin.shape[0]>0:
+        print('Found '+str(mz_kin.shape[0])+' duplicates/MZ twin pairs. Removing one from each pair')
+        mz_id1 = set(np.unique(mz_kin.loc[:,['ID1']]))
+        id1_in_mz = np.array([x in mz_id1 for x in kinship.ID1])
+        id2_in_mz = np.array([x in mz_id1 for x in kinship.ID2])
+        in_mz = np.logical_or(id1_in_mz,id2_in_mz)
+        kinship = kinship.drop(kinship[in_mz].index)
     agesex = pd.read_csv(agesex_address, delim_whitespace=True)
     agesex["IID"] = agesex["IID"].astype(str)
     agesex["FID"] = agesex["FID"].astype(str)
     logging.info("loaded agesex file")
     agesex = agesex.set_index("IID")
     logging.info("creating age and sex dictionaries")
-    kinship = pd.merge(kinship, agesex.rename(columns={"sex": "sex1", "age": "age1"}), left_on="ID1", right_index=True)
-    kinship = pd.merge(kinship, agesex.rename(columns={"sex": "sex2", "age": "age2"}), left_on="ID2", right_index=True)
+    kinship = pd.merge(kinship, agesex.rename(columns={"sex":"sex1", "age":"age1"}), left_on="ID1", right_index=True)
+    kinship = pd.merge(kinship, agesex.rename(columns={"sex":"sex2", "age":"age2"}), left_on="ID2", right_index=True)
     logging.info("dictionaries created")
     people = {}
     fid_counter = 0
@@ -114,20 +123,20 @@ def create_pedigree(king_address, agesex_address):
         if p1 is None:
             p1 = Person(id1)
             people[id1] = p1
-
+        
         p2 = people.get(id2)
         if p2 is None:
             p2 = Person(id2)
             people[id2] = p2
 
         if relation == "PO":
-            if age1 > age2 + 12:
+            if age1 >  age2+12:
                 if sex1 == "F":
                     p2.mid = p1.id
                 if sex1 == "M":
                     p2.pid = p1.id
 
-            if age2 > age1 + 12:
+            if age2 > age1+12:
                 if sex2 == "F":
                     p1.mid = p2.id
                 if sex2 == "M":
@@ -137,7 +146,7 @@ def create_pedigree(king_address, agesex_address):
                 p1.fid = str(fid_counter)
                 p2.fid = str(fid_counter)
                 fid_counter += 1
-
+            
             if p1.fid is None and p2.fid is not None:
                 p1.fid = p2.fid
 
@@ -154,16 +163,16 @@ def create_pedigree(king_address, agesex_address):
             fid_counter += 1
 
         if p.mid is None:
-            # default mother id
+            #default mother id
             p.mid = p.fid + "___M"
 
         if p.pid is None:
-            # default father ir
+            #default father ir
             p.pid = p.fid + "___P"
-
+        
         data.append((p.fid, p.id, p.pid, p.mid))
 
-    data = pd.DataFrame(data, columns=['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']).astype(str)
+    data = pd.DataFrame(data, columns = ['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']).astype(str)
     return data
 
 def find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only = False):
