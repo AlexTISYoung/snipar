@@ -41,6 +41,7 @@ from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
 from snipar.docgen import get_parser_doc
+from snipar.read import build_ped_from_par_gts
 
 import logging
 
@@ -61,6 +62,7 @@ parser.add_argument('--out', type=str, help="The summary statistics will output 
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
+parser.add_argument('--sib_diff',action='store_true',help='Use sibling difference method',default=False)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--fit_res', action='store_true', default=False,help='Use residualized phenotypes.')
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
@@ -135,6 +137,10 @@ parser.add_argument('--impute_unrel',
                     action='store_true', default=False,
                     help='Whether to include unrelated individuals and impute their parental genotypes or not.')
 
+parser.add_argument('--cond_gaussian',
+                    action='store_true', default=False,
+                    help='Whether to impute parental genotypes of unrelated individuals using the conditional Gaussian method or not.')
+
 parser.add_argument('--robust',
                     action='store_true', default=False,
                     help='Whether to use the robust estimator')
@@ -183,6 +189,7 @@ def main(args):
         num_threads = numba_config.NUMBA_NUM_THREADS
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
+    print('Number of processes: '+str(args.cpus))
 
     logger.info(f'Output will be written to {args.out}.')
 
@@ -229,28 +236,7 @@ def main(args):
     # if --robust is true, set impute_unrel to false
     if args.robust:
         args.impute_unrel = False
-        print("XXX", args.impute_unrel)
 
-    if args.impute_unrel and args.meta_analyze:
-        ids, fam_labels, unrelated_inds = read.get_ids_with_par(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel, return_info=True)
-    else:
-        unrelated_inds = None
-        ids, fam_labels = read.get_ids_with_par(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, include_unrel=args.impute_unrel, return_info=False)
-    y.filter_ids(ids)
-    np.testing.assert_array_equal(ids, y.ids)
-    # np.testing.assert_array_equal(fam_labels, y.fams)
-    if args.covar:
-        covariates.filter_ids(ids)
-        np.testing.assert_array_equal(ids, covariates.ids)
-        # np.testing.assert_array_equal(fam_labels, covariates.fams)
-    # del ids, fam_labels
-
-    # if args.covar:
-    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
-    # else:
-    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=None, keep=args.keep, impute_unrel=args.impute_unrel)
-
-    
     # Read pedigree
     if args.imp is None:
         logger.info('Reading pedigree from '+str(args.pedigree))
@@ -261,18 +247,85 @@ def main(args):
             logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
         # Remove rows with missing parents
         sibpairs, ped = get_sibpairs_from_ped(ped)
+        imp_fams = None
         if sibpairs is not None:
             logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
         else:
             logger.info('Found 0 sibling pairs')
     else:
         # Read pedigree
-        par_gts_f = h5py.File(pargts_list[0],'r')
-        ped = convert_str_array(par_gts_f['pedigree'])
-        ped = ped[1:ped.shape[0]]
-        # Remove control fams
-        controls = np.array([x[0]=='_' for x in ped[:,0]])
-        ped = ped[~controls, :]
+        ped, imp_fams = build_ped_from_par_gts(pargts_list[0])
+    
+
+    if args.impute_unrel and (args.meta_analyze or args.cond_gaussian):
+        ids, fam_labels, unrelated_inds = read.get_ids_with_par(
+            bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
+            y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
+            return_info=True
+        )
+    elif args.sib_diff:
+        unrelated_inds = None
+        ids = y.ids
+        fam_labels = y.fams
+        ped_dict = make_id_dict(ped,1)
+        y.filter_ids(ped[:,1])
+        print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
+        ped_indices = np.array([ped_dict[x] for x in y.ids])
+        y.fams = ped[ped_indices,0]
+        ids = y.ids
+        fam_labels = y.fams
+        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, return_info=False)
+    else:
+        unrelated_inds = None
+        ids, fam_labels = read.get_ids_with_par(
+            bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
+            y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
+            return_info=False
+        )
+    # if not args.sib_diff:  
+    y.filter_ids(ids)
+    if args.sib_diff:
+        ids = y.ids
+        fam_labels = y.fams
+    np.testing.assert_array_equal(ids, y.ids)
+    # np.testing.assert_array_equal(fam_labels, y.fams)
+    if args.covar:
+        if not args.sib_diff:
+            covariates.filter_ids(ids)
+            np.testing.assert_array_equal(ids, covariates.ids)
+        else:
+            covariates.filter_ids(y.ids)
+        # np.testing.assert_array_equal(fam_labels, covariates.fams)
+    # del ids, fam_labels
+
+    # if args.covar:
+    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
+    # else:
+    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=None, keep=args.keep, impute_unrel=args.impute_unrel)
+
+    
+    # # Read pedigree
+    # if args.imp is None:
+    #     logger.info('Reading pedigree from '+str(args.pedigree))
+    #     ped = np.loadtxt(args.pedigree,dtype=str)
+    #     if ped.shape[1] < 4:
+    #         raise(ValueError('Not enough columns in pedigree file'))
+    #     elif ped.shape[1] > 4:
+    #         logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+    #     # Remove rows with missing parents
+    #     sibpairs, ped = get_sibpairs_from_ped(ped)
+    #     if sibpairs is not None:
+    #         logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
+    #     else:
+    #         logger.info('Found 0 sibling pairs')
+    # else:
+    #     # Read pedigree
+    #     par_gts_f = h5py.File(pargts_list[0],'r')
+    #     ped = convert_str_array(par_gts_f['pedigree'])
+    #     ped = ped[1:ped.shape[0]]
+    #     # Remove control fams
+    #     controls = np.array([x[0]=='_' for x in ped[:,0]])
+    #     ped = ped[~controls, :]
 
     ####### Fit null model ######
     # # Match to pedigree
@@ -396,10 +449,10 @@ def main(args):
         else:
             print('Estimaing SNP effects')
         process_chromosome(chroms[i], y, varcomp_lst,
-                           ped, sigmas, args.out, covariates, 
-                           bedfile=bedfiles[i], bgenfile=bgenfiles[i], ped_f=args.pedigree,
-                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, parsum=args.parsum, 
-                           impute_unrel=args.impute_unrel, unrelated_inds=unrelated_inds, robust=args.robust,
+                           ped, imp_fams, sigmas, args.out, covariates, 
+                           bedfile=bedfiles[i], bgenfile=bgenfiles[i],
+                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, 
+                           impute_unrel=args.impute_unrel, unrelated_inds=unrelated_inds, cond_gaussian=args.cond_gaussian, robust=args.robust,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter,
                            debug=args.debug)

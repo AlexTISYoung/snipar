@@ -94,6 +94,8 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
     for row in king.itertuples():
         id1 = row.ID1
         id2 = row.ID2
+        if row.PropIBD > 0.8:
+            raise ValueError(f'Impossible ibd relatedness {row.PropIBD} for pair ({id1}, {id2}).')
         ind1, ind2 = id_dict[id1], id_dict[id2]
         ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
         data[row.Index] = 0. if ignore_sib and row.InfType == 'FS' else row.PropIBD # if row.PropIBD > thres else 0.
@@ -1399,10 +1401,10 @@ class LinearMixedModel:
             pat = (num_obs_par_al[:, s] == 3) * (par_status[:, 0] == 0) * notnan
             mat = (num_obs_par_al[:, s] == 3) * (par_status[:, 1] == 0)  * notnan
             one = (num_obs_par_al[:, s] == 3) * ((par_status[:, 0] == 1) & (par_status[:, 1] == 1)) * notnan
-            if s == 1000:
-                exit()
+            # if s == 1000:
+            #     exit()
                 # print('xxx', np.sum((num_obs_par_al[:, s] == 3) * (par_status[:, 0] == 0) * (par_status[:, 0] == 1) * notnan ))
-            print(both.sum(), pat.sum(), mat.sum(), one.sum(), np.sum((num_obs_par_al[:, s] == 2) * notnan))
+            # print(both.sum(), pat.sum(), mat.sum(), one.sum(), np.sum((num_obs_par_al[:, s] == 2) * notnan))
             if both.sum() == 0 or one.sum() == 0 or pat.sum() == 0 or mat.sum() == 0:
                 ct += 1
                 continue
@@ -1461,6 +1463,37 @@ class LinearMixedModel:
             alpha[s,0] = robust_alpha
             alpha_cov[s,0,0] = robust_var
             alpha_ses[s,0] = robust_var ** 0.5
-        print(ct, X.shape)
-        print(np.isnan(alpha[:]).sum(), alpha.shape)
+        return alpha, alpha_cov, alpha_ses
+    
+    def sib_diff_est(self, gts: np.ndarray, num_obs_par_al: np.ndarray, par_status: np.ndarray):
+        n, k, l = gts.shape
+        print(n)
+        assert n == self.n
+        alpha = np.full((l,1), fill_value=np.nan)
+        alpha_ses = np.full((l,1), fill_value=np.nan)
+        alpha_cov = np.full((l,1,1), fill_value=np.nan)
+        if self.has_covar:
+            gts_ = gts.reshape((gts.shape[0], int(k * l)))
+            M_X: np.ndarray = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
+            logger.info('Projecting genotype...')
+            X_: np.ndarray = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
+            y: np.ndarray = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
+            self.logger.info('Start estimating snp effects...')
+            Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, X_)
+            # Vinv_y: np.ndarray = self.V_lu.solve(y)
+            XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
+            # XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_, Vinv_y)
+            XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
+            alpha[:, 0] = solve(XT_Vinv_X, XT_Vinv_y)[:, 0]
+            alpha_cov[:, 0, 0] = np.linalg.inv(XT_Vinv_X)[:, 0, 0]
+
+        else:
+            gts_ = gts.transpose(2, 0, 1)
+            Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, gts_)
+            XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts_, Vinv_X)
+            XT_Vinv_y: np.ndarray = np.einsum('...ij,i', gts_, self.Vinv_y)
+            alpha[:, 0] = solve(XT_Vinv_X, XT_Vinv_y)[:,0]
+            alpha_cov[:, 0, 0] = np.ndarray = np.linalg.inv(XT_Vinv_X)[:,0,0]
+        alpha_ses[:, 0] = np.sqrt(
+            alpha_cov)[:, 0, 0]
         return alpha, alpha_cov, alpha_ses

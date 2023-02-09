@@ -107,7 +107,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, obs_sid_index
 
-def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, parsum=False, include_unrel=False, robust=False, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, include_unrel=False, robust=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -119,13 +119,13 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
     if ids is None:
         ids = gts_ids
     # Get families with imputed parental genotypes
-    if par_gts_f is not None:
-        imp_fams = convert_str_array(par_gts_f['families'])
-    else:
-        imp_fams = None
+    # if par_gts_f is not None:
+    #     imp_fams = convert_str_array(par_gts_f['families'])
+    # else:
+    #     imp_fams = None
     ### Find ids with observed/imputed parents and indices of those in observed/imputed data
     ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
-                                                                                sib=sib, include_unrel=include_unrel, verbose=print_sample_info)
+                                                                                sib=sib, sib_diff=sib_diff, include_unrel=include_unrel, verbose=print_sample_info)
     if np.sum(parcount>0)==0 and not parsum:
         if verbose:
             print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
@@ -180,7 +180,11 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
         else:
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
             G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
-        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=not sib_diff).gts
+    elif sib_diff:
+        G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
+        G[:,0,:] = gts[gt_indices[:,0],:]
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=not sib_diff).gts
     else:
         G = preprocess.make_gts_matrix(gts, par_status, gt_indices, parsum=parsum, imp_gts=imp_gts)
     del gts

@@ -6,7 +6,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, include_unrel=False, verbose=False):
+def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, include_unrel=False, verbose=True):
     """
     Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
     It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
@@ -20,6 +20,8 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, incl
     # Find individuals with genotyped siblings
     if sib:
         # Look in full genotype sample in case some genotyped sibs are not in ids
+        # if sib_diff:
+        #     all_sibs = True
         ids = gts_ids
         ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
         if verbose:
@@ -59,6 +61,42 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, incl
                                                gt_indices[par_status[:, 1] == 1, 2]))))
     # Return ids with imputed/observed parents
     return ids, observed_indices, imp_indices, parcount
+
+def get_indices_given_ped_sibs(ped, gts_ids, imp_fams=None, ids=None, verbose=True):
+    """
+    Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
+    It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
+    and the indices of the imputed parental genotypes for those individuals.
+    """
+    # Made dictionary for observed genotypes
+    gts_id_dict = make_id_dict(gts_ids)
+    # If IDs not provided, use all individuals with observed genotypes
+    if ids is None:
+        ids = gts_ids
+    ids = gts_ids
+    # Find individuals with genotyped siblings
+    ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
+    if verbose:
+        print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
+    ### Find parental status
+    if verbose:
+        print('Checking for observed/imputed parental genotypes')
+    gt_indices, fam_labels = find_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
+    # Find which individuals can be used
+    # logger.info('filtering out unrel inds.')
+    print('filtering out unrel inds.')
+    none_missing = gt_indices >= 0
+    N = np.sum(none_missing)
+    if N == 0:
+        raise ValueError(
+            'No individuals with phenotype observations and complete observed/imputed genotype observations')
+    # Take those that can be used
+    gt_indices = gt_indices[none_missing]
+    ids = ids[none_missing]
+    # Find indices of individuals
+    observed_indices = np.sort(np.unique(gt_indices))
+    # Return ids
+    return ids, observed_indices
 
 def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     """
@@ -111,6 +149,35 @@ def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
                         gt_indices[i, 2] = imp_index
                         par_status[i, 1] = 1
     return par_status, gt_indices, fam_labels
+
+def find_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
+    """
+    Used in get_gts_matrix to find whether individuals have observed genotypes, and to
+    find the indices.
+    'gt_indices' records the relevant index of the parent in the observed/imputed genotype arrays
+    'fam_labels' records the family of the individual based on the pedigree
+    """
+    # Indices of obsered genotypes in relevant arrays
+    gt_indices = np.zeros((pheno_ids.shape[0]),dtype=int)
+    gt_indices[:] = -1
+    ## Build dictionaries
+    # Where each individual is in the pedigree
+    ped_dict = make_id_dict(ped,1)
+    # Where the imputed data is for each family
+    if imp_fams is not None:
+        fam_dict = make_id_dict(imp_fams)
+    # Store family ID of each individual
+    fam_labels = np.zeros((pheno_ids.shape[0]),dtype=ped.dtype)
+    # Find status and find indices
+    for i in range(0,pheno_ids.shape[0]):
+        # Find index in genotypes
+        if pheno_ids[i] in gts_id_dict:
+            gt_indices[i] = gts_id_dict[pheno_ids[i]]
+        # Find index in pedigree
+        if pheno_ids[i] in ped_dict:
+            ped_i = ped[ped_dict[pheno_ids[i]], :]
+            fam_labels[i] = ped_i[0]
+    return gt_indices, fam_labels
 
 def make_gts_matrix(gts, par_status, gt_indices, imp_gts=None, parsum = False):
     """
@@ -169,7 +236,9 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
     The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
     If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
     """
+    print(len(ids))
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids, ped, gts_ids)
+    print(len(ids))
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
     # Compute sums of genotypes in each family
@@ -181,6 +250,7 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
         fam_counts[i] = fam_indices.shape[0]
     # Place in vector corresponding to IDs
     if remove_proband:
+        print('removed probands')
         gts_id_dict = make_id_dict(gts_ids)
     G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
     for i in range(0,ids.shape[0]):
@@ -191,6 +261,7 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
         G_sib[i,:] = G_sib[i,:]/float(n_i)
+    print('G_sib', G_sib.shape, len(ids))
     if return_famsizes:
         return [gtarray(G_sib, ids),fam_counts,fam_sums]
     else:

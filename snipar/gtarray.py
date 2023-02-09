@@ -1,7 +1,11 @@
 import numpy as np
 import numpy.ma as ma
+import h5py
 from numba import njit
-from snipar.utilities import make_id_dict
+from snipar.utilities import make_id_dict, convert_str_array
+from snipar.lmm import SparseGRMRepr, Ids, IdDict
+from scipy.sparse import csc_matrix, tril
+from scipy.sparse.linalg import spsolve
 import logging
 
 logger = logging.getLogger(__name__)
@@ -383,7 +387,313 @@ def _impute_unrel_pat_gts(gts: np.ndarray, freqs: np.ndarray, parsum: bool) -> n
     else:
         gts[missing_ind, 2, :] = imp
     return gts
+
+
+def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
+                                   grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool, true_par=None, par_ids=None) -> np.ndarray:
+    # gts = G.gts
+    # print("XXX", sum(complete), sum(incomplete))
+    freqs = G.freqs
+    ids = G.ids
+    id_dict = G.id_dict
+    # missing_ind = G.gts[:, 1, 0] == -1
+
+    # par_gts_f = h5py.File(par_gts_f,'r')
+    # # Get pedigree
+    # ped = convert_str_array(par_gts_f['pedigree'])
+    # ped = ped[1:ped.shape[0],:]
+    # c = 0
+    # for i in range(gts.shape[0]):
+        
+    #     x = ped[:,2] == ids[i]
+    #     y = ped[:,3] == ids[i]
+    #     if x.sum() > 0 or y.sum() > 0:
+    #         if x.sum() > 2 or y.sum()>2:
+    #             print(x.sum(), y.sum())
+    #         if x.sum() > 0 and y.sum() > 0:
+    #             print(x.sum(), y.sum())
+    #         if x.sum()>0:
+    #             if '3637242' in ped[x, 1] or '1095399' in ped[x, 1]:
+    #                 continue
+    #             c+= x.sum()
+    #         elif y.sum()>0:
+    #             if '3637242' in ped[x, 1]:
+    #                 continue
+    #             c+=y.sum()
+    # print(c)
+    # exit()
+    # tril_mat: csc_matrix = csc_matrix((data, (row_ind, col_ind)), shape=(self.n, self.n))
+    # R21 = np.zeros((gts.shape[0], missing_ind.sum())).T
+    # R22 = np.zeros((missing_ind.sum(), missing_ind.sum()))
+    unrelated_inds_dict = make_id_dict(unrelated_inds)
+    # assert missing_ind.sum() == unrelated_inds.__len__()
+    R12_data, R12_row, R12_col = [], [], []
+    ## R22_data, R22_row, R22_col = [], [], []
+    for i in range(len(grm[0])):
+        row = grm[1][i]
+        col = grm[2][i]
+        row_in = row in unrelated_inds
+        col_in = col in unrelated_inds
+        if not row_in and not col_in:
+            continue
+        elif row_in and col_in:
+            if row == col:
+                continue
+            R12_row.append(unrelated_inds_dict[row])
+            # R12_col.append(unrelated_inds_dict[col])
+            R12_col.append(col)
+            R12_data.append(grm[0][i])
+            R12_row.append(unrelated_inds_dict[col])
+            # R12_col.append(unrelated_inds_dict[row])
+            R12_col.append(row)
+            R12_data.append(grm[0][i])
+            # ind1, ind2 = unrelated_inds_dict[row], unrelated_inds_dict[col]
+            # ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
+            # R22_data.append(grm[0][i])
+            # R22_row.append(ind1)
+            # R22_col.append(ind2)
+        else:
+            if row_in and not col_in:
+                ind1, ind2 = row, col
+            else:
+                ind2, ind1 = row, col
+            R12_row.append(unrelated_inds_dict[ind1])
+            # R12_row.append(unrelated_inds_dict[ind2])
+            R12_col.append(ind2)
+            R12_data.append(grm[0][i])
+    # print(c, d, e, len(unrelated_inds)); exit()
+    R12_col += [idx for idx in unrelated_inds]
+    # R12_col += [unrelated_inds_dict[idx] for idx in unrelated_inds]
+    R12_row += [unrelated_inds_dict[idx] for idx in unrelated_inds]
+    R12_data += [0.5 for k in range(len(unrelated_inds))]
+
+    # """
+    # Get pedigree
+    # par_gts_f = h5py.File(par_gts_f,'r')
+    # ped = convert_str_array(par_gts_f['pedigree'])
+    # ped = ped[1:ped.shape[0],:]
+    for i in unrelated_inds:
+        x = ped[:,2] == ids[i]
+        y = ped[:,3] == ids[i]
+        # assert x.sum() * y.sum() == 0
+        if x.sum() == 0 and y.sum() == 0:
+            continue
+        inds = np.where(x)[0] if x.sum()>0 else np.where(y)[0]
+        for j in inds:
+            iid = ped[j, 1]
+            if iid not in ids:
+                continue
+            R12_row.append(unrelated_inds_dict[i])
+            R12_col.append(id_dict[iid])
+            R12_data.append(0.25)
+    # """
+        
+        
+    R12_row = np.array(R12_row, dtype='uint32')
+    R12_col = np.array(R12_col, dtype='uint32')
+    R12_data = np.array(R12_data)
+    R12 = csc_matrix((R12_data, (R12_row, R12_col)), shape=(len(unrelated_inds), G.shape[0]))
+    # R12 = csc_matrix((R12_data, (R12_row, R12_col)), shape=(len(unrelated_inds), len(unrelated_inds)))
+    R22 = csc_matrix((grm[0], (grm[1], grm[2])), shape=(G.shape[0], G.shape[0]))
+    R22_triu: csc_matrix = tril(R22, k=-1, format='csc')
+    R22 = R22 + R22_triu.T
+
+    # for snp in range(G.shape[2]):
+    #     a_minus_mu = G.gts[:, 0, snp] - 2 * freqs[snp]
+    #     # print(a_minus_mu.shape, R22.shape, R12.shape)
+    #     # print((R12 @ spsolve(R22, a_minus_mu)).shape); exit()
+    #     G.gts[unrelated_inds, 1, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
+    # import numpy.testing as npt
+    a_minus_mu = G.gts[:, 0, :] - 2 * freqs
+    # npt.assert_array_almost_equal(R12 @ spsolve(R22, a_minus_mu) + 2 * freqs, G.gts[unrelated_inds, 1, :])
+    G.gts[unrelated_inds, 1, :] = R12 @ spsolve(R22, a_minus_mu) + 2 * freqs
+
+    # #### 删掉 (par_ids)
+    # inds = np.array([i for i in range(G.shape[0]) if ids[i] not in par_ids])
+    # R22 = R22[inds, :][:, inds]
+    # R12 = R12[:, inds]
+    # G_ = np.full((len(unrelated_inds), 1, G.shape[2]), fill_value=np.nan)
+    # for snp in range(G.shape[2]):
+    #     # a_minus_mu = G.gts[:, 0, snp] - 2 * freqs[snp]
+    #     a_minus_mu = G.gts[inds, 0, snp] - 2 * freqs[snp]
+    #     # print(a_minus_mu.shape, R22.shape, R12.shape)
+    #     # print((R12 @ spsolve(R22, a_minus_mu)).shape); exit()
+    #     G_[:, 0, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
+    #     # G.gts[unrelated_inds, 1, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
     
+    # for fam in range(len(unrelated_inds)):
+    #     G_[fam, 0, G_[fam, 0, :] < 0] = 0
+    #     G_[fam, 0, G_[fam, 0, :] > 2] = 2
+    # v1 = []
+    # v2 = []
+    # for i in range(G.shape[2]):
+    #     if G.gts[unrelated_inds, 0, i].mean() / 2 < 0.05 or G.gts[unrelated_inds, 0, i].mean() / 2 > 0.95:
+    #         continue
+    #     v1.append( (np.cov(2*G_[:, 0, i], G.gts[unrelated_inds, 1, i]) / np.var(2*G_[:, 0, i]))[0,1] )
+    #     # print(np.corrcoef(2*G_[:, 0, :].flatten(), true_par[:,:].flatten()))
+    #     # print(np.corrcoef(G.gts[unrelated_inds, 0, 0] + 2*freqs[0], G.gts[unrelated_inds, 1, 0]))
+    #     v2.append((np.cov(G.gts[unrelated_inds, 0, i] + 2*freqs[i], G.gts[unrelated_inds, 1, i]) / np.var(G.gts[unrelated_inds, 0, i] + 2*freqs[i]))[0,1])
+    # print((G_<0).sum())
+    # v1 = np.array(v1)
+    # v2 = np.array(v2)
+    # print(np.quantile(v1, [0, 0.25, 0.5, 0.75, 1]))
+    # #### 删掉
+
+    # ## 删掉
+    # for f in range(G.shape[2]):
+    #     print(freqs[f], (G.gts[unrelated_inds, 1, f]<0).sum() / len(unrelated_inds),(G.gts[unrelated_inds, 1, f]>2).sum() / len(unrelated_inds),
+    #     (G.gts[unrelated_inds, 1, f]==-1).sum(), (G.gts[:, 0, f]==-1).sum())
+    #     print(G.gts[unrelated_inds, 1, f].mean() / 2, )# G.gts[unrelated_inds, 1, f].mean() / 2)
+    #     break
+    #     # exit()
+    # print()
+    # print('lower', (G.gts[unrelated_inds, 1, :] < 0).sum() / len(unrelated_inds) / G.shape[2])
+    # print('higher', (G.gts[unrelated_inds, 1, :] > 2).sum() / len(unrelated_inds) / G.shape[2])
+    ## 删掉
+    for fam in unrelated_inds:
+        G.gts[fam, 1, G.gts[fam, 1, :] < 0] = 0
+        G.gts[fam, 1, G.gts[fam, 1, :] > 2] = 2
+
+    if parsum:
+        G.gts[unrelated_inds, 1, :] += G.gts[unrelated_inds, 1, :]
+    else:
+        G.gts[unrelated_inds, 2, :] = G.gts[unrelated_inds, 1, :]
+    # print(G.gts[unrelated_inds, 1, :].sum())
+    # print((G.gts[:, 1, :] < 0).shape, ((G.gts[unrelated_inds, 1, :]<0) | (G.gts[unrelated_inds, 1, :]>2)).sum() / len(unrelated_inds) / G.gts.shape[2])
+    return G.gts.data
+    
+def _impute_unrel_pat_gts_cond_gau_(G: gtarray, par_gts_f: str, 
+                                   grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool) -> np.ndarray:
+    # gts = G.gts
+    par_gts_f = h5py.File(par_gts_f,'r')
+    ped = convert_str_array(par_gts_f['pedigree'])
+    ped = ped[1:ped.shape[0],:]
+    freqs = G.freqs
+    ids = G.ids
+    id_dict = G.id_dict
+    missing_ind = G.gts[:, 1, 0] == -1
+    # unrelated_inds = np.setdiff1d(np.arange(G.shape[0]), unrelated_inds)
+    R22 = csc_matrix((grm[0][0], (grm[0][1], grm[0][2])), shape=(G.shape[0], G.shape[0]))
+    R22_ = csc_matrix((grm[1][0], (grm[1][1], grm[1][2])), shape=(G.shape[0], G.shape[0]))
+    # R22_i = csc_matrix(([1 for i in range(len(grm[1][0]))], (grm[1][1], grm[1][2])), shape=(G.shape[0], G.shape[0]))
+    # R22_sub = R22 * R22_i
+    for i,j in zip(grm[0][1], grm[0][2]):
+        if R22_[i, j] == 0:
+            R22[i, j] = 0.
+    R22.eliminate_zeros()
+
+    R22_triu: csc_matrix = tril(R22, k=-1, format='csc')
+    R22 = R22 + R22_triu.T
+    R22_triu: csc_matrix = tril(R22_, k=-1, format='csc')
+    R22_ = R22_ + R22_triu.T
+
+    x = spsolve(R22_, np.ones(R22.shape[0]))
+    x = spsolve(R22, np.ones(R22.shape[0]))
+    assert np.sum(R22.indices - R22_.indices) == 0
+    assert np.sum(R22.indptr - R22_.indptr) == 0
+    print(np.quantile(R22.data[R22.data < 1], [0., 0.25, 0.5, 0.75, 1]))
+    # print(R22.diagonal)
+    x = tril(R22, k=-1, format='csc')
+    print(np.quantile(tril(R22, k=-1, format='csc').diagonal(), [0.9, 1]))
+    exit()
+    # print(grm[0][0])
+    # print(grm[1][0])
+    # print((R22 - R22_).power(2).sum()**0.5); exit()
+    # print((R22[:, unrelated_inds][unrelated_inds, :] - R22_[:, unrelated_inds][unrelated_inds, :]).power(2).sum()**0.5); exit()
+
+    # unrelated_inds_dict = make_id_dict(unrelated_inds)
+    # assert missing_ind.sum() == unrelated_inds.__len__()
+    R12_data, R12_row, R12_col = [], [], []
+    c = 0
+    d = 0
+    e = 0
+    for i in range(len(grm[0][0])):
+        row = grm[0][1][i]
+        col = grm[0][2][i]
+        if row == col:
+            c+= 1
+            continue
+        d += 1
+        if R22_[row, col] != 0 and row != col:
+            R12_row.append(row)
+            R12_col.append(col)
+            R12_data.append(R22[row, col])
+            # R12_data.append(grm[0][0][i])
+            R12_row.append(col)
+            R12_col.append(row)
+            R12_data.append(R22[row, col])
+            # R12_data.append(grm[0][0][i])
+        # ind1, ind2 = unrelated_inds_dict[row], unrelated_inds_dict[col]
+        # ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
+        # R22_data.append(grm[0][i])
+        # R22_row.append(ind1)
+        # R22_col.append(ind2)
+
+    # print(c, d, e, len(unrelated_inds)); exit()
+    R12_col += [idx for idx in range(G.shape[0])]
+    R12_row += [idx for idx in range(G.shape[0])]
+    R12_data += [0.5 for k in range(G.shape[0])]
+
+    # Get pedigree
+    par_gts_f = h5py.File(par_gts_f,'r')
+    ped = convert_str_array(par_gts_f['pedigree'])
+    ped = ped[1:ped.shape[0],:]
+    c = 0
+    print(R12_row.__len__())
+    # for i in unrelated_inds:
+    #     x = ped[:,2] == ids[i]
+    #     y = ped[:,3] == ids[i]
+    #     assert x.sum() * y.sum() == 0
+    #     inds = np.where(x)[0] if x.sum()>0 else np.where(y)[0]
+    #     for j in inds:
+    #         iid = ped[j, 1]
+    #         if iid not in ids:
+    #             continue
+    #         # print(iid in ids)
+    #         R12_row.append(unrelated_inds_dict[i])
+    #         R12_col.append(id_dict[iid])
+    #         R12_data.append(0.25)
+        
+        
+    R12_row = np.array(R12_row, dtype='uint32')
+    R12_col = np.array(R12_col, dtype='uint32')
+    R12_data = np.array(R12_data)
+
+    R12 = csc_matrix((R12_data, (R12_row, R12_col)), shape=(G.shape[0], G.shape[0]))
+    # R22 = csc_matrix((grm[0], (grm[1], grm[2])), shape=(G.shape[0], G.shape[0]))
+    R22_triu: csc_matrix = tril(R22, k=-1, format='csc')
+    R22 = R22 + R22_triu.T
+    # R22 = R22[:, unrelated_inds][unrelated_inds, :]
+    # R22[[i for i in range(R22.shape[0])], [i for i in range(R22.shape[0])]] = 1.0001
+    print('sum', (R22 - R22.T).sum())
+    print(R12.shape, R22.shape)
+    for snp in range(G.shape[2]):
+        a_minus_mu = G.gts[:, 0, snp] - 2 * freqs[snp]
+        # print(a_minus_mu.shape, R22.shape, R12.shape)
+        # print((R12 @ spsolve(R22, a_minus_mu)).shape); exit()
+        G.gts[:, 1, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
+        # break
+    # for f in range(G.shape[2]):
+    #     print(freqs[f], (G.gts[:, 1, f]<0).sum() / G.shape[0],(G.gts[:, 1, f]>2).sum() / G.shape[0],
+    #     (G.gts[:, 1, f]==-1).sum(), (G.gts[:, 0, f]==-1).sum())
+    #     print(G.gts[:, 1, f].mean() / 2, )# G.gts[unrelated_inds, 1, f].mean() / 2)
+        # exit()
+    print('lower', (G.gts[:, 1, :] < 0).sum() / G.shape[0] / G.shape[2])
+    print('higher', (G.gts[:, 1, :] > 2).sum() / G.shape[0] / G.shape[2])
+    for fam in range(G.shape[0]):
+        G.gts[fam, 1, G.gts[fam, 1, :] < 0] = 0
+        G.gts[fam, 1, G.gts[fam, 1, :] > 2] = 2
+
+    print('lower', (G.gts[:, 1, :] < 0).sum() / G.shape[0] / G.shape[2])
+    print('higher', (G.gts[:, 1, :] > 2).sum() / G.shape[0] / G.shape[2])
+    # if parsum:
+    #     G.gts[unrelated_inds, 1, :] += G.gts[unrelated_inds, 1, :]
+    # else:
+    #     G.gts[unrelated_inds, 2, :] = G.gts[unrelated_inds, 1, :]
+    # print(G.gts[unrelated_inds, 1, :].sum())
+    # print((G.gts[:, 1, :] < 0).shape, ((G.gts[unrelated_inds, 1, :]<0) | (G.gts[unrelated_inds, 1, :]>2)).sum() / len(unrelated_inds) / G.gts.shape[2])
+    exit()
+    return gts
 
 @njit
 def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
@@ -429,7 +739,7 @@ def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
     return gts
 
 
-def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False) -> gtarray:
+def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False, ped: np.ndarray = None, grm: SparseGRMRepr = None, unrelated_inds: Ids = None, true_par=None, par_ids=None) -> gtarray:
     """Impute parental genotypes of unrelated individuals.
 
     Args:
@@ -447,7 +757,16 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False) ->
         return G
     if G.freqs is None:
         G.compute_freqs()
-    gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)
+    ### calculate imputation accuracy
+    # if True:
+    #     gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds, true_par=true_par, par_ids=par_ids)
+    #     return gts
+    if grm is not None and unrelated_inds is not None:
+        gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds)
+    elif grm is None and unrelated_inds is None:
+        gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)
+    else:
+        raise TypeError('One of grm and unrelated_inds is None.')
     G.gts = ma.array(gts, mask=np.isnan(gts))
     logger.info(
         'Done imputing parental geotypes of unrelated individuals.'
