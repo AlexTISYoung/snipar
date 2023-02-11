@@ -4,7 +4,7 @@ from snipar.ibd import write_segs_from_matrix
 from snipar.map import decode_map_from_pos
 from snipar.utilities import *
 from snipar.simulate import *
-import code
+
 parser = argparse.ArgumentParser()
 parser.add_argument('n_causal',type=int,help='Number of causal loci')
 parser.add_argument('h2',type=float,help='Heritability due to direct effects in first generation',default=None)
@@ -151,7 +151,6 @@ def main(args):
         snp_count += snp_ids[i].shape[0]
         # count
     np.savetxt(args.outprefix+'causal_effects.txt',causal_out,fmt='%s')
-    code.interact(local=locals())
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)
