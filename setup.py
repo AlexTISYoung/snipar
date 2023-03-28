@@ -30,7 +30,7 @@ setup(name='snipar',
       license='MIT',
       include_package_data=True,
       package_data={'': ['*.pxd', '*.pyx']},
-      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py','snipar/example/snipar_example_data.py'],
+      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py','snipar/example/snipar_example_data.py','snipar/scripts/simulate.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha
@@ -62,6 +62,7 @@ setup(name='snipar',
             'gitpython==3.1.24',
             'scikit-learn==1.0.2',
             'statsmodels==0.13.2',
+            'numdifftools>=0.9.39'
             ],
       test_suite="snipar/tests",
       zip_safe=False,
