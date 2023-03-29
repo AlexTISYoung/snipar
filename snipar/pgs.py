@@ -7,6 +7,8 @@ from numba import njit, prange
 import numpy.ma as ma
 import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
+import numdifftools as nd
+from snipar.pgs_am import *
 
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -274,7 +276,7 @@ class pgarray(gtarray):
             bpg_ids = self.ids[np.sum(self.par_status==0, axis=1)==2]
             self.filter_ids(bpg_ids)
 
-    def estimate_r(self):
+    def estimate_r(self, return_se=True):
         # Check pgs columns
         if 'paternal' in self.sid:
             paternal_index = np.where(self.sid=='paternal')[0][0]
@@ -323,7 +325,6 @@ class pgarray(gtarray):
         pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
         pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
         ### find correlation between maternal and paternal pgis
-        # grid search over r
         print('Finding MLE for correlation between parents scores')
         ## Initialize with correlation from sibs and between parents
         # correlation between parents
@@ -348,21 +349,25 @@ class pgarray(gtarray):
                                 args=(pgs_fam, is_sib, is_parent),
                                 approx_grad=True,
                                 bounds=[(-0.999,0.999)])
-        #print('r='+str(round(r_mle,3)))
         if optimized[2]['warnflag']==0:
             r=optimized[0][0]
+            hess = nd.Hessian(pgs_cor_lik)
+            hess = float(hess([r], pgs_fam, is_sib, is_parent))
+            r_se = np.sqrt(2/hess)
         else:
             print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
             r=r_init
+            r_se = (1-r**2)/np.sqrt(n_bpg+n_sib_2-1)
         # fam size dict
         fsizes = dict(zip(list(fams[0]),list(fams[1])))
-        return r, fsizes
+        return r, r_se, fsizes
     
     def am_adj(self):
         print('Estimating correlation between maternal and paternal PGSs assuming equilibrium')
-        r, fsizes = self.estimate_r()
-        print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4)))
-        if r>0:    
+        r, r_se, fsizes = self.estimate_r()
+        r_z = r/r_se
+        print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4))+' S.E.='+str(round(r_se,4)))
+        if r_z>2:    
             # Check pgs columns
             if 'paternal' in self.sid:
                 paternal_index = np.where(self.sid=='paternal')[0][0]
@@ -388,14 +393,19 @@ class pgarray(gtarray):
                     if self.par_status[i,1] == 1:
                         self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
         else:
-            print('Estimated correlation is negative, so not performing assortative mating adjustment')
-        return r
+            print('Signal to noise ratio for correlation estimate too small, so not performing assortative mating adjustment. Use --force_am_adj to override')
+        return r, r_se
 
-    def scale(self):
+    def scale(self, sf=None):
+        if sf is None:
+            if 'proband' in self.sid:
+                proband_index = np.where(self.sid=='proband')[0][0]
+            else:
+                raise(ValueError('Cannot scale as no proband column found and no scale factor provided'))
+            sf = np.std(self.gts[:, proband_index])
         # Rescale by observed proband PGS
-        proband_sd = np.std(self.gts[:, 0])
-        self.gts = self.gts / proband_sd
-        return proband_sd
+        self.gts = self.gts / sf
+        return sf
 
     def write(self, filename, scale=False):
         if scale:
@@ -688,3 +698,89 @@ def make_grms(fams, ibdrel_path=None, id_dict=None, keep=None, sparse_thresh=0.0
             (sib_data, sib_row_ind, sib_col_ind),
         )
     return varcomp_lst
+
+######## Assortative mating adjustment in two-generation model ###########
+
+def h2f_parse(h2f_str):
+    h2f_split = h2f_str.split(',')
+    if not len(h2f_split)==2:
+        raise(ValueError('Invalid h2f input. Please use estimate,se format, such as 0.5,0.01.'))
+    h2f = float(h2f_split[0])
+    h2f_se = float(h2f_split[1].split('\n')[0])
+    return h2f, h2f_se
+
+def am_adj_2gen_calc(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se, verbose=True):
+    # Get estimates
+    estimates = alpha_from_alpha(delta, delta_se, alpha, h2f, h2f_se, rk)
+    estimates['h2_eq'] = h2f/(1-estimates['r'])
+    estimates['rk'] = rk
+    # Get ses
+    ses = {'rk':rk_se,
+           'k':k_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
+           'r':r_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
+           'h2_eq':h2eq_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
+           'rho':rho_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
+           'alpha_delta':se_alpha_from_alpha(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se)}
+    # Print
+    if verbose:
+        for par in ['rk','k','r','h2_eq','rho','alpha_delta']:
+            print(par+': '+str(round(estimates[par],4))+' ('+str(round(ses[par],4))+')')
+    # Return
+    return estimates, ses
+
+def write_2gen_adj_ests(estimates,ses, outprefix=''):
+    pars = np.array(['k','r','h2_eq','rho','alpha_delta'])
+    outarray = np.zeros((pars.shape[0],2))
+    parcount = 0
+    for par in pars:
+        outarray[parcount,:] = [estimates[par],ses[par]]
+        parcount += 1
+    outarray = np.hstack((pars.reshape((pars.shape[0],1)),outarray))
+    outarray = np.vstack((np.array(['parameter','estimate','SE']).reshape((1,3)),outarray))
+    np.savetxt(outprefix+'.am_adj_pars.txt',outarray,fmt='%s')
+    return outarray
+
+def am_adj_2gen(estimates, estimate_cols, h2f, h2f_se, rk=None, rk_se=None, pg=None, y_std=1, pg_std=1):
+    """
+    Adjust 2-generation model results for assortative mating (assuming equilibrium)
+    """
+    ##### Check we have r, or a pg object to estimate r with #####
+    if pg is None:
+        if rk is None:
+            raise(ValueError('Need estimate of correlation between parents PGIs if not providing pg object to use to estimate'))
+        if rk_se is None:
+            raise(ValueError('Need standard error of correlation between parents PGIs if not providing pg object to use to estimate')) 
+    ##### Find estimates and their sampling variance-covariance #####
+    if 'proband' in estimate_cols:
+        proband_index = np.where(estimate_cols=='proband')[0][0]
+    else:
+        raise(ValueError('Proband coefficient (direct effect) estimate needed for adjustment'))
+    # If separate maternal and paternal NTC estimates, take average
+    if 'paternal' in estimate_cols and 'maternal' in estimate_cols:
+        paternal_index = np.where(estimate_cols=='paternal')[0][0]
+        maternal_index = np.where(estimate_cols=='maternal')[0][0]
+        est_cols = [proband_index, paternal_index, maternal_index]
+        estimate = estimates[0][est_cols].reshape((3,1))
+        estimate_cov = estimates[1][np.ix_(est_cols,est_cols)]
+        A =  np.array([[1,0,0],[0,0.5,0.5]])
+        estimate = A @ estimate
+        estimate_cov = A @ estimate_cov @ A.T
+    elif 'parental' in estimate_cols:
+        est_cols = [proband_index, np.where(estimate_cols=='parental')[0][0]]
+        estimate = estimates[0][est_cols].reshape((2,1))
+        estimate_cov = estimates[1][np.ix_(est_cols,est_cols)]
+    else:
+        raise(ValueError('Need parental NTC estimate(s) for adjustment')) 
+    # Adjust for non-normalized pgs/phenotype
+    estimate = estimate/(y_std*pg_std)
+    estimate_cov = estimate_cov/((y_std*pg_std)**2)
+    ##### Estimate correlation between parents' PGIs ######
+    if rk is None:
+        rk, rk_se, fam_sizes = pg.estimate_r()
+    ##### Estimate equilibrium quantities ######
+    print('Computing equilibrium adjusted quantities')
+    adj_estimates, adj_ses = am_adj_2gen_calc(estimate[0,0], np.sqrt(estimate_cov[0,0]), 
+                                              estimate[1,0], np.sqrt(estimate_cov[0,0]), 
+                                              estimate_cov[0,1]/np.sqrt(estimate_cov[0,0]*estimate_cov[1,1]), 
+                                              h2f, h2f_se, rk, rk_se, verbose=True)
+    return adj_estimates, adj_ses

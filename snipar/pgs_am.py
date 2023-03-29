@@ -84,7 +84,7 @@ def alpha_from_rho(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
     alpha = (rho['rho'] - delta/beta)/(rho['rho']*(1+rho['rho']*rho['k']*rho['r']))
     if return_all:
-        return {'alpha':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
+        return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
         return alpha
 
@@ -100,7 +100,7 @@ def alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
     alpha = (1-rho['r']*(1-2*rho['k']))*(alpha/delta)-(1-rho['rho'])
     alpha = alpha/(1+rho['rho']*rho['k']*rho['r'])
     if return_all:
-        return {'alpha':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
+        return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
         return alpha
 
@@ -166,7 +166,6 @@ def check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
     # Check standard error estimates
     return np.mean(k_ests), se_check(k_ests,se_k_ests), np.mean(r_ests), se_check(r_ests,se_r_ests), np.mean(h2eq_ests), se_check(h2eq_ests,se_h2eq_ests), np.mean(rho_ests), se_check(rho_ests,se_rho_ests), np.mean(alpha_from_rho_ests), se_check(alpha_from_rho_ests,se_alpha_from_rho_ests), np.mean(alpha_from_alpha_ests), se_check(alpha_from_alpha_ests,se_alpha_from_alpha_ests)
     
-
 def run_simulation_check(n, h2_eq, r_y, k, delta_se, alpha_se, rk_se, h2f_se):
     # Set parameters
     r_delta = r_y*h2_eq
@@ -185,5 +184,3 @@ def run_simulation_check(n, h2_eq, r_y, k, delta_se, alpha_se, rk_se, h2f_se):
     print('alpha: '+str(round(alpha,3)))
     # Run simulation
     return check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
-
-run_simulation_check(10**3, 0.8, 0.5, 0.5, 0.01*np.sqrt(2), 0.01, 0.01, 0.01)
