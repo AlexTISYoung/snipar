@@ -80,8 +80,6 @@ def rho_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
         return estimate_rho(x[0], se_delta, x[1], se_h2f, x[2],return_all=False)
     return delta_method(est_rho, np.array([delta, h2f, rk]), np.diag([se_delta**2, se_h2f**2, se_rk**2]))
 
-
-
 def alpha_from_rho(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
     alpha = (rho['rho'] - delta/beta)/(rho['rho']*(1+rho['rho']*rho['k']*rho['r']))
