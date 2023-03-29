@@ -20,6 +20,7 @@ from numba import set_num_threads
 from numba import config as numba_config
 from snipar.utilities import *
 from snipar.utilities import get_parser_doc
+
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in chr_range (optional argument)')
 parser.add_argument('--chr_range',
@@ -85,17 +86,23 @@ def main(args):
     # Compute correlations 
     print('Using '+str(s.sid.shape[0])+' SNPs to compute correlations')
     r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = s.cor_direct_pop(args.n_blocks)
-    print('Correlation between direct and population effects: '+str(round(r_dir_pop,4))+' (S.E. '+str(round(r_dir_pop_SE,4))+')')
+    print('Correlation between direct and population effects: '+str(round(r_dir_pop[0],4))+' (S.E. '+str(round(r_dir_pop_SE[0],4))+')')
+    print('Regression coefficient of population on direct effects: '+str(round(r_dir_pop[1],4))+' (S.E. '+str(round(r_dir_pop_SE[1],4))+')')
+    print('Proportion of variance in population effects uncorrelated with direct effects: '+str(round(r_dir_pop[2],4))+' (S.E. '+str(round(r_dir_pop_SE[2],4))+')')
     r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks)
-    print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC,4))+' (S.E. '+str(round(r_dir_avg_NTC_SE,4))+')')
+    print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC[0],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[0],4))+')')
+    print('Regression coefficient of average NTCs on direct effects: '+str(round(r_dir_avg_NTC[1],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[1],4))+')')
+    print('Proportion of variance in average NTCs uncorrelated with direct effects: '+str(round(r_dir_avg_NTC[2],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[2],4))+')')
 
     outfile = str(args.out)+'_corrs.txt'
     print('Saving correlation estimates to '+outfile)
-    first_col = np.array(['r_direct_population','r_direct_avg_NTC']).reshape((2,1))
+    first_col = np.array(['r_direct_population','reg_population_direct','v_population_uncorr_direct','r_direct_avg_NTC','reg_avg_NTC_direct','v_avg_NTC_uncorr_direct']).reshape((6,1))
     header = np.array(['correlation','est','SE']).reshape((1,3))
-    cor_out = np.zeros((2,2))
-    cor_out[0,:] = np.array([r_dir_pop,r_dir_pop_SE])
-    cor_out[1,:] = np.array([r_dir_avg_NTC,r_dir_avg_NTC_SE])
+    cor_out = np.zeros((6,2))
+    cor_out[0:3,0] = r_dir_pop
+    cor_out[0:3,1] = r_dir_pop_SE
+    cor_out[3:6,0] = r_dir_avg_NTC
+    cor_out[3:6,1] = r_dir_avg_NTC_SE
     outarray = np.vstack((header,np.hstack((first_col,cor_out))))
     np.savetxt(outfile,outarray,fmt='%s')
 
