@@ -135,8 +135,8 @@ def get_ids_with_par(gts_f: str,
         king['ID2'] = king['ID2'].astype(str)
 
         # remove one individual from each pair of MZ twins
-        rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
-        # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
+        # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
+        rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
         if len(rm_mz) > 0:
             ids = np.setdiff1d(ids, rm_mz)
             print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree.')
@@ -267,9 +267,22 @@ def get_ids_with_par(gts_f: str,
 def get_ids_with_sibs(gts_f: str,
                       par_gts_f: str,
                       ids: np.ndarray = None,
+                      ibdrel_path: str = None,
                       return_info: bool = False) -> Tuple[np.ndarray, np.ndarray]:
     """Find ids with sibs and family labels.
     """
+    if ibdrel_path is not None:
+        king = pd.read_csv(ibdrel_path + '.seg',
+                        sep='\t')[['ID1', 'ID2', 'InfType']]
+        king['ID1'] = king['ID1'].astype(str)
+        king['ID2'] = king['ID2'].astype(str)
+
+        # remove one individual from each pair of MZ twins
+        rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
+        # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
+        if len(rm_mz) > 0:
+            ids = np.setdiff1d(ids, rm_mz)
+            print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree.')
     # Imputed parental file
     par_gts_f_ = h5py.File(par_gts_f, 'r')
     # Genotype file
