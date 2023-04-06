@@ -79,6 +79,15 @@ def create_pedigree(king_address, agesex_address):
 
     kinship = pd.read_csv(king_address, delimiter="\t").astype(str)
     logging.info("loaded kinship file")
+    # Filter MZ
+    mz_kin = kinship.loc[kinship['InfType']=='Dup/MZ']
+    if mz_kin.shape[0]>0:
+        print('Found '+str(mz_kin.shape[0])+' duplicates/MZ twin pairs. Removing one from each pair')
+        mz_id1 = set(np.unique(mz_kin.loc[:,['ID1']]))
+        id1_in_mz = np.array([x in mz_id1 for x in kinship.ID1])
+        id2_in_mz = np.array([x in mz_id1 for x in kinship.ID2])
+        in_mz = np.logical_or(id1_in_mz,id2_in_mz)
+        kinship = kinship.drop(kinship[in_mz].index)
     agesex = pd.read_csv(agesex_address, delim_whitespace=True)
     agesex["IID"] = agesex["IID"].astype(str)
     agesex["FID"] = agesex["FID"].astype(str)
