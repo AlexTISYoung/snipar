@@ -91,8 +91,11 @@ parser.add_argument('--grm_npz_path', type=str,
 parser.add_argument('--ibdrel_path', type=str,
                     help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
 
-parser.add_argument('--grm_only', action='store_true', default=False,
-                    help='whether to only include grm variance component.')
+parser.add_argument('--grm_var', action='store_true', default=False,
+                    help='whether to include grm variance component.')
+
+parser.add_argument('--sib_var', action='store_true', default=False,
+                    help='whether to include sib variance component.')
 
 parser.add_argument('--zero_sib_entries', action='store_true', default=False,
                     help='whether to only zero out grm entries fro sibling pair.')
@@ -182,6 +185,14 @@ def main(args):
         format=FORMAT, level=numeric_level)
     logger = logging.getLogger(__name__)
 
+    if not args.sib_var and not args.grm_var:
+        raise argparse.ArgumentTypeError('At least one of --sib_var and --grm_var.')
+    if args.impute_unrel and args.cond_gaussian:
+        if args.ibdrel_path is None and args.grm_path is None:
+            raise argparse.ArgumentTypeError('Need to input GRM.')
+    if args.cond_gaussian and not args.impute_unrel:
+        raise argparse.ArgumentTypeError('Need --impute_unrel if --cond_gaussian is supplied.')
+            
     # Set number of threads
     if args.threads is not None:
         num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
@@ -255,7 +266,12 @@ def main(args):
     else:
         # Read pedigree
         ped, imp_fams = build_ped_from_par_gts(pargts_list[0])
-    
+        print(ped[(ped[:, 4] == 'True')&(ped[:, 5] == 'True')].shape)
+    # import pandas as pd
+    # pd.DataFrame({'ID': ped[:,1]}).to_csv('../../output/robust_ids.txt', sep='\t', index=False)
+    # pd.DataFrame({'ID': ped[(ped[:,4] == 'False') & (ped[:,5] == 'False'),1]}).to_csv('../../output/sibdiff_ids.txt', sep='\t', index=False)
+    print('robust sample:', ped[:,1].shape)
+    print('sib-siff sample:', ped[(ped[:,4] == 'False') & (ped[:,5] == 'False'),1].shape)
 
     if args.impute_unrel and (args.meta_analyze or args.cond_gaussian):
         ids, fam_labels, unrelated_inds = read.get_ids_with_par(
@@ -272,9 +288,11 @@ def main(args):
         print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
         ped_indices = np.array([ped_dict[x] for x in y.ids])
         y.fams = ped[ped_indices,0]
+        # print(ped[ped_indices,0].shape); exit()
         ids = y.ids
         fam_labels = y.fams
-        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], y.ids, return_info=False)
+        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], 
+                                                 y.ids, return_info=False, ibdrel_path=args.ibdrel_path)
     else:
         unrelated_inds = None
         ids, fam_labels = read.get_ids_with_par(
@@ -383,19 +401,110 @@ def main(args):
             grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr(
                 grm_path, id_dict=id_dict, thres=args.sparse_thres)
 
-    if not args.grm_only:
+    if args.sib_var:
         sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(fam_labels)
+    ######删除
+    # np.savez('grm.npz', grm_data=grm_data, grm_row_ind=grm_row_ind, grm_col_ind=grm_col_ind,
+    #     sib_data=sib_data,sib_row_ind=sib_row_ind, sib_col_ind=sib_col_ind)
+    # np.savez('ids.npz', ids=ids)
+    '''
+    from scipy.sparse import csc_matrix, diags, tril
+    from scipy.sparse.linalg import eigs, splu, eigsh, norm
+    # from sksparse.cholmod import cholesky
+    import sys
+
+    # varcomps = [0.7731090909600168, 1e-05, 0.16952864357052766]
+    # grm = csc_matrix((grm_data, (grm_row_ind, grm_col_ind)), shape=(len(ids),len(ids)))
+    # grm = grm+ tril(grm, k=-1, format='csc').T
+    # w , v = eigsh(grm, k=20)
+    import pandas as pd
+    # df = pd.DataFrame(v, columns = [f'ibd_PC_{i}' for i in range(1, 21)])
+    # df['FID'] = ids.astype('int64')
+    # df['IID'] = ids.astype('int64')
+    # col = df.pop("IID")
+    # df.insert(0, col.name, col)
+    # col = df.pop("FID")
+    # df.insert(0, col.name, col)
+    # print(df.max())
+    # cov = pd.read_csv('/disk/genetics/ukb/alextisyoung/phenotypes/covariates.txt', sep=' ')
+    # df = df.merge(cov, on=['FID', 'IID'])
+    # print(df.head())
+    y = pd.read_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/UKB_EA_eid_changed_filtered.pheno', sep='\t')
+    df= pd.read_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen.txt', sep=' ')
+    df1 = df.merge(y, on=['FID', 'IID'])
+    df = df1[[i for i in df.columns]]
+    y = df1[[i for i in y.columns]]
+    print(y.head())
+    print(df.head())
+    print(df.shape, y.shape)
+    y.to_csv('UKB_EA_eid_changed_filtered_ibd_eigen.pheno', sep=' ', na_rep='NA', index=False)
+    df.to_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen_filtered.txt', sep=' ', na_rep='NA', index=False)
+    # df.to_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen.txt', sep=' ', index=False)
     
-    if 'grm_data' in locals() and not args.grm_only:
+    exit()
+    sibs = csc_matrix((sib_data, (sib_row_ind, sib_col_ind)),)# shape=(len(ids),len(ids)))
+    sibs = sibs+ tril(sibs, k=-1, format='csc').T
+    res = diags(np.ones(grm.shape[0]), format='csc')
+    V = varcomps[0] * grm + varcomps[1] * sibs + varcomps[2] * res
+    factor = cholesky(V)
+    L = factor.L()
+    p = factor.P()
+    p_row_inds = [i for i in range(V.shape[0])]
+    P = csc_matrix((np.ones(V.shape[0]), (p_row_inds, p)), shape=(V.shape[0], V.shape[0]))
+    L = P.T@L
+
+    # import code
+    # code.interact(local=locals())
+    # exit()
+    # print(grm_data[grm_data<1].max(), grm_data[grm_data<1].min())
+    # res = diags(np.ones(V.shape[0]), format='csc')
+    # sibs = csc_matrix((sib_data, (sib_row_ind, sib_col_ind)),)# shape=(len(ids),len(ids)))
+    # sibs = sibs+ tril(sibs, k=-1, format='csc').T
+    # V = sibs
+    # V = V + 0.5 * res
+    # print(V.diagonal)
+    # grm_data = [1, 0.5, 1]
+    # grm_row_ind = [0, 1,1]
+    # grm_col_ind = [0, 0,1]
+    # ids = [1,2]
+    # V = csc_matrix((grm_data, (grm_row_ind, grm_col_ind)), shape=(len(ids),len(ids)))
+    # V = V+ tril(V, k=-1, format='csc').T
+    # print(V[:10, :10].A)
+    # V[range(0, len(ids)), range(0, len(ids))] = 1.0001
+    from snipar.gtarray import gtarray
+    y = np.random.normal(0, 1, size=len(ids))
+    # n = V.shape[0]
+    # LU = splu(V,diag_pivot_thresh=0) # sparse LU decomposition
+  
+    # if ( LU.perm_r == np.arange(n) ).all() and ( LU.U.diagonal() > 0 ).all(): # check the matrix A is positive definite.
+    # L = LU.L.dot( diags(LU.U.diagonal()**0.5) )
+    # p_row_inds = [i for i in range(V.shape[0])]
+    # P = csc_matrix((np.ones(V.shape[0]), (p_row_inds,LU.perm_r)), shape=(V.shape[0], V.shape[0]))
+    # L = P.T@L
+    # else:
+    #     sys.exit('The matrix is not positive definite')
+
+    y = L @ y
+
+    y = gtarray(y, ids=np.array(ids))
+    del L, V, P
+    # print(np.abs((L@L.T-V).data).sum())
+    # import code
+    # code.interact(local=locals())
+    '''
+    #########
+    
+    # if 'grm_data' in locals() and args.sib_var:
+    if args.grm_var and args.sib_var:
         varcomp_lst = (
             (grm_data, grm_row_ind, grm_col_ind),
             (sib_data, sib_row_ind, sib_col_ind),
         )
-    elif args.grm_only:
+    elif args.grm_var:
         varcomp_lst = (
             (grm_data, grm_row_ind, grm_col_ind),
         )
-    else:
+    elif args.sib_var:
         varcomp_lst = (
             (sib_data, sib_row_ind, sib_col_ind),
         )
@@ -435,6 +544,23 @@ def main(args):
     if args.vc_only:
         exit(0)
     sigmas = model.varcomps
+    if args.cond_gaussian or args.grm_var:
+        if args.sib_var:
+            varcomp_lst = (
+                (grm_data, grm_row_ind, grm_col_ind),
+                (sib_data, sib_row_ind, sib_col_ind),
+            )
+        else:
+            varcomp_lst = (
+                (grm_data, grm_row_ind, grm_col_ind),
+            )
+    elif args.sib_var:
+        varcomp_lst = (
+            (sib_data, sib_row_ind, sib_col_ind),
+        )
+    else:
+        raise RuntimeError('Impossible choice.')
+
 
     start = time.time()
     for i in range(chroms.shape[0]):
@@ -451,7 +577,7 @@ def main(args):
         process_chromosome(chroms[i], y, varcomp_lst,
                            ped, imp_fams, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
-                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, 
+                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum,
                            impute_unrel=args.impute_unrel, unrelated_inds=unrelated_inds, cond_gaussian=args.cond_gaussian, robust=args.robust,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter,

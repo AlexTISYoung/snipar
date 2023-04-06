@@ -1,8 +1,11 @@
 import numpy as np
+import pandas as pd
+from scipy import stats
 from os import path
 import argparse
 import re
 from typing import Tuple
+from numpy.typing import ArrayLike
 
 
 def make_id_dict(x,col=0):
@@ -172,3 +175,12 @@ def linear2coord(ind: int) -> Tuple[int, int]:
     ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
     ind2 = ind - (ind1 - 1) * ind1 / 2
     return int(ind1 - 1), int(ind2 - 1)
+
+
+def corr_test(arr1: ArrayLike, arr2: ArrayLike) -> Tuple[float, np.ndarray]:
+    # https://stackoverflow.com/questions/30390476/equivalent-of-rs-of-cor-test-in-python
+    corr = stats.pearsonr(arr1, arr2)
+    z = np.arctanh(corr[0])
+    sigma = 1/ ((len(arr1) - 3) ** 0.5)
+    cint = z + np.array([-1, 1]) * sigma * stats.norm.ppf((1+0.95)/2)
+    return corr[0], np.tanh(cint)

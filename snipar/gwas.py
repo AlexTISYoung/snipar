@@ -265,10 +265,10 @@ def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, sib=False):
 _var_dict = {}
 
 
-def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
+def _init_worker(y_, n_vararr_, varcomps_, covar_, covar_shape, **kwargs):
     _var_dict['y_'] = y_
     _var_dict['varcomps_'] = varcomps_
-    for i in range(len(varcomps_) - 1):
+    for i in range(n_vararr_):
         _var_dict[f'varcomp_data_{i}_'] = kwargs[f'varcomp_data_{i}_']
         _var_dict[f'varcomp_row_ind_{i}_'] = kwargs[f'varcomp_row_ind_{i}_']
         _var_dict[f'varcomp_col_ind_{i}_'] = kwargs[f'varcomp_col_ind_{i}_']
@@ -312,7 +312,7 @@ def _init_worker(y_, varcomps_, covar_, covar_shape, **kwargs):
 #     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
 
-def process_batch(snp_ids, ped, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
+def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
                   parsum=False, fit_sib=False, sib_diff=False, max_missing=5, min_maf=0.01, verbose=False, 
                   print_sample_info=False, impute_unrel=False, unrelated_inds=None,
                   ignore_na_fams=False, ignore_na_rows=False, robust=False, cond_gaussian=False,
@@ -325,7 +325,7 @@ def process_batch(snp_ids, ped, imp_fams, pheno_ids=None, bedfile=None, bgenfile
             np.frombuffer(_var_dict[f'varcomp_data_{i}_'], dtype='float'),
             np.frombuffer(_var_dict[f'varcomp_row_ind_{i}_'], dtype='uint32'),
             np.frombuffer(_var_dict[f'varcomp_col_ind_{i}_'], dtype='uint32'),
-        ) for i in range(len(varcomps) - 1)
+        ) for i in range(n_vararr)
     )
     covar = np.frombuffer(_var_dict['covar_'], dtype='float').reshape(
         _var_dict['covar_shape']) \
@@ -333,14 +333,6 @@ def process_batch(snp_ids, ped, imp_fams, pheno_ids=None, bedfile=None, bgenfile
     # ped = np.frombuffer(_var_dict['ped_'], dtype='str').reshape(
     #     _var_dict['ped_shape'])
     ####### Construct family based genotype matrix #######
-    par_ids = []
-    for i in ped:
-        if i[4] == 'True' and i[5] == 'True':
-            if i[2] in pheno_ids:
-                par_ids.append(i[2])
-            if i[3] in pheno_ids:
-                par_ids.append(i[3])
-    par_ids = np.unique(par_ids)
     G = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=sib_diff,
                             include_unrel=impute_unrel, robust=robust,
@@ -356,6 +348,14 @@ def process_batch(snp_ids, ped, imp_fams, pheno_ids=None, bedfile=None, bgenfile
     if (impute_unrel and cond_gaussian) and not sib_diff:
         # unrelated_inds = np.where(np.array([G.par_status[i, 0] == 0 and G.par_status[i, 1] == 0 for i in range(len(G.par_status))]))[0]
         # true_par = G.gts[unrelated_inds, 1, :]
+        # par_ids = []
+        # for i in ped:
+        #     if i[4] == 'True' and i[5] == 'True':
+        #         if i[2] in pheno_ids:
+        #             par_ids.append(i[2])
+        #         if i[3] in pheno_ids:
+        #             par_ids.append(i[3])
+        # par_ids = np.unique(par_ids)
         G = impute_unrel_par_gts(G, sib=fit_sib, parsum=parsum, ped=ped, unrelated_inds=unrelated_inds, grm=varcomp_arr_lst[0], ) #true_par=true_par, par_ids=par_ids)
         # return G
     elif impute_unrel and not sib_diff:
@@ -382,14 +382,28 @@ def process_batch(snp_ids, ped, imp_fams, pheno_ids=None, bedfile=None, bgenfile
     if not robust:
         G.mean_normalise()
     ### Fit models for SNPs ###
-    model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
-                           varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
+    # print(n_vararr)
+    # print("#"*16, min(varcomp_arr_lst[1][0])); exit()
+    if n_vararr + 1 == len(varcomps):
+        model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
+                            varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
+    elif n_vararr == len(varcomps) == 2: # grm is for imputation
+        print("#"*16, varcomps, min(varcomp_arr_lst[1][0]))
+        model = lmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst[1:],
+                            varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
     if robust:
-        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
+        # import pandas as pd
+        # pd.DataFrame({'ID': G.ids}).to_csv('../../output/robust_ids.txt', sep='\t', index=False)
+        # exit()
+        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status, G.ids)
     elif sib_diff:
+        # import pandas as pd
+        # pd.DataFrame({'ID': G.ids}).to_csv('sibdiff_ids.txt', sep='\t', index=False)
+        # exit()
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data, G.num_obs_par_al, G.par_status)
     else:
         if unrelated_inds is None or cond_gaussian:
+            print(G.ids.shape);exit()
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
         else:
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
@@ -506,7 +520,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     # ped_shape = pedigree.shape
     varcomp_dict = {}
     # put variance component data to shared memory
-    for i in range(len(varcomps_) - 1):
+    for i in range(len(varcomp_lst)):
         l = len(varcomp_lst[i][0])
         # data
         varcomp_dict[f'varcomp_data_{i}_'] = RawArray('d', l)
@@ -526,7 +540,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
             varcomp_dict[f'varcomp_col_ind_{i}_'], dtype='uint32')
         np.copyto(
             varcomp_dict[f'varcomp_col_ind_{i}_buffer'], varcomp_lst[i][2])
-    process_batch_ = partial(process_batch, pheno_ids=y.ids,
+    process_batch_ = partial(process_batch, pheno_ids=y.ids, n_vararr=len(varcomp_lst),
                              bedfile=bedfile, bgenfile=bgenfile,
                              par_gts_f=par_gts_f, ped=ped, imp_fams=imp_fams,
                              parsum=parsum, fit_sib=fit_sib, sib_diff=sib_diff,
@@ -540,22 +554,25 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                              add_jitter=add_jitter)
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
-        _init_worker_(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
+        _init_worker_(y_, len(varcomp_lst), varcomps_, covar_, covar_shape,) # ped_, ped_shape)
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[0]])
+        # gts = process_batch_(snp_ids[batches[0]])
+        # import code
+        # code.interact(local=locals())
         exit('Debug finishsed.')
     with Pool(
         processes=cpus,
         initializer=_init_worker_,
-        initargs=(y_, varcomps_, covar_, covar_shape,) # ped_, ped_shape)
+        initargs=(y_, len(varcomp_lst), varcomps_, covar_, covar_shape,) # ped_, ped_shape)
     ) as pool:
         result = pool.map(
             process_batch_, [snp_ids[ind] for ind in batches], chunksize=1)
     
     ##### 删除
-    # cnt = 0
+    cnt = 0
     # print('############')
-    # res = np.hstack(result)
-    # np.savez(f'res_{chrom_out}', res=res)
+    # res = np.vstack(result)
+    # np.savez(f'accuracy_and_bias_{chrom_out}', res=res)
     # print(np.quantile(res, [0, 0.25,0.5,0.75,1]))
     # exit()
         
@@ -568,7 +585,6 @@ def process_chromosome(chrom_out, y, varcomp_lst,
             logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
             continue
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
-        print(batch_alpha.shape)
         alpha[batch_indices, :] = batch_alpha
         alpha_cov[batch_indices, :, :] = batch_alpha_cov
         alpha_ses[batch_indices, :] = batch_alpha_ses

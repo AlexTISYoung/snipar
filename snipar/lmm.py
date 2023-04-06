@@ -99,6 +99,8 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
         ind1, ind2 = id_dict[id1], id_dict[id2]
         ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
         data[row.Index] = 0. if ignore_sib and row.InfType == 'FS' else row.PropIBD # if row.PropIBD > thres else 0.
+        if ind1 == ind2: raise RuntimeError('ind2 and ind2 cannot equal')
+        # data[row.Index] = min(0.5, row.PropIBD) # if row.PropIBD > thres else 0.
         row_ind[row.Index] = ind1
         col_ind[row.Index] = ind2
     for i in range(len(keep)):
@@ -755,7 +757,7 @@ class LinearMixedModel:
             if not ignore_na_fams and not ignore_na_rows:
                 gts_ = gts.reshape((gts.shape[0], int(k * l)))
                 M_X: np.ndarray = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
-                logger.info('Projecting genotype...')
+                # logger.info('Projecting genotype...')
                 X_: np.ndarray = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
                 # if __debug__:
                 #     M: np.ndarray = - self.Z @ solve(self.Z.T @ self.Z, self.Z.T)
@@ -766,7 +768,7 @@ class LinearMixedModel:
                 # self.logger.info('Projecting phenotype...')
                 # y: np.ndarray = M @ self.y
                 y: np.ndarray = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
-                self.logger.info('Start estimating snp effects...')
+                # self.logger.info('Start estimating snp effects...')
                 Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, X_)
                 # Vinv_y: np.ndarray = self.V_lu.solve(y)
                 XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_, Vinv_X)
@@ -1293,7 +1295,7 @@ class LinearMixedModel:
         def callbackF(Xi):
             print(Xi, nll(Xi))
         res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), # options={'gtol': 1e-5, 'eps': 1e-5},
-                                    method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],)
+                                    method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],) #.00001 * yvar
                                     # callback=callbackF)
         __varcomp_mats = self._varcomp_mats
         if not res.success:
@@ -1467,7 +1469,7 @@ class LinearMixedModel:
     
     def sib_diff_est(self, gts: np.ndarray, num_obs_par_al: np.ndarray, par_status: np.ndarray):
         n, k, l = gts.shape
-        print(n)
+        print('n with sibs:', n)
         assert n == self.n
         alpha = np.full((l,1), fill_value=np.nan)
         alpha_ses = np.full((l,1), fill_value=np.nan)

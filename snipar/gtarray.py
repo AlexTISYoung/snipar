@@ -392,11 +392,13 @@ def _impute_unrel_pat_gts(gts: np.ndarray, freqs: np.ndarray, parsum: bool) -> n
 def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
                                    grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool, true_par=None, par_ids=None) -> np.ndarray:
     # gts = G.gts
-    # print("XXX", sum(complete), sum(incomplete))
+    # unrelated_inds = np.arange(G.shape[0])
     freqs = G.freqs
     ids = G.ids
     id_dict = G.id_dict
     # missing_ind = G.gts[:, 1, 0] == -1
+    # import numpy.testing as npt
+    # npt.assert_array_equal(np.where(missing_ind)[0], unrelated_inds);exit()
 
     # par_gts_f = h5py.File(par_gts_f,'r')
     # # Get pedigree
@@ -426,9 +428,8 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
     # R21 = np.zeros((gts.shape[0], missing_ind.sum())).T
     # R22 = np.zeros((missing_ind.sum(), missing_ind.sum()))
     unrelated_inds_dict = make_id_dict(unrelated_inds)
-    # assert missing_ind.sum() == unrelated_inds.__len__()
     R12_data, R12_row, R12_col = [], [], []
-    ## R22_data, R22_row, R22_col = [], [], []
+    # '''
     for i in range(len(grm[0])):
         row = grm[1][i]
         col = grm[2][i]
@@ -461,12 +462,13 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
             # R12_row.append(unrelated_inds_dict[ind2])
             R12_col.append(ind2)
             R12_data.append(grm[0][i])
-    # print(c, d, e, len(unrelated_inds)); exit()
+    # '''
+    # '''
     R12_col += [idx for idx in unrelated_inds]
     # R12_col += [unrelated_inds_dict[idx] for idx in unrelated_inds]
     R12_row += [unrelated_inds_dict[idx] for idx in unrelated_inds]
     R12_data += [0.5 for k in range(len(unrelated_inds))]
-
+    # '''
     # """
     # Get pedigree
     # par_gts_f = h5py.File(par_gts_f,'r')
@@ -488,26 +490,29 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
             R12_data.append(0.25)
     # """
         
-        
+    # '''
     R12_row = np.array(R12_row, dtype='uint32')
     R12_col = np.array(R12_col, dtype='uint32')
     R12_data = np.array(R12_data)
     R12 = csc_matrix((R12_data, (R12_row, R12_col)), shape=(len(unrelated_inds), G.shape[0]))
-    # R12 = csc_matrix((R12_data, (R12_row, R12_col)), shape=(len(unrelated_inds), len(unrelated_inds)))
     R22 = csc_matrix((grm[0], (grm[1], grm[2])), shape=(G.shape[0], G.shape[0]))
     R22_triu: csc_matrix = tril(R22, k=-1, format='csc')
     R22 = R22 + R22_triu.T
+    # _n = G.shape[0]
+    # R22=csc_matrix((np.ones(_n), (np.arange(0, _n), np.arange(0, _n))), shape=(_n, _n))
+    # '''
 
     # for snp in range(G.shape[2]):
     #     a_minus_mu = G.gts[:, 0, snp] - 2 * freqs[snp]
     #     # print(a_minus_mu.shape, R22.shape, R12.shape)
     #     # print((R12 @ spsolve(R22, a_minus_mu)).shape); exit()
     #     G.gts[unrelated_inds, 1, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
-    # import numpy.testing as npt
-    a_minus_mu = G.gts[:, 0, :] - 2 * freqs
-    # npt.assert_array_almost_equal(R12 @ spsolve(R22, a_minus_mu) + 2 * freqs, G.gts[unrelated_inds, 1, :])
-    G.gts[unrelated_inds, 1, :] = R12 @ spsolve(R22, a_minus_mu) + 2 * freqs
+    ## import numpy.testing as npt
+    # a_minus_mu = G.gts[:, 0, :] - 2 * freqs
+    ## npt.assert_array_almost_equal(R12 @ spsolve(R22, a_minus_mu) + 2 * freqs, G.gts[unrelated_inds, 1, :])
+    # G.gts[unrelated_inds, 1, :] = R12 @ spsolve(R22, a_minus_mu) + 2 * freqs
 
+    # G.gts[unrelated_inds, 1, :] = 0.5 * G.gts[unrelated_inds, 0, :] + freqs
     # #### 删掉 (par_ids)
     # inds = np.array([i for i in range(G.shape[0]) if ids[i] not in par_ids])
     # R22 = R22[inds, :][:, inds]
@@ -518,7 +523,7 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
     #     a_minus_mu = G.gts[inds, 0, snp] - 2 * freqs[snp]
     #     # print(a_minus_mu.shape, R22.shape, R12.shape)
     #     # print((R12 @ spsolve(R22, a_minus_mu)).shape); exit()
-    #     G_[:, 0, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
+    #     G_[:, 0, snp] = R12  @ spsolve(R22, a_minus_mu) + 2 * freqs[snp]
     #     # G.gts[unrelated_inds, 1, snp] = (R12 * 2 * freqs[snp] * (1 - freqs[snp])) @ spsolve(R22 * 2 * freqs[snp] * (1 - freqs[snp]), a_minus_mu) + 2 * freqs[snp]
     
     # for fam in range(len(unrelated_inds)):
@@ -526,16 +531,24 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
     #     G_[fam, 0, G_[fam, 0, :] > 2] = 2
     # v1 = []
     # v2 = []
+    # v3 = []
+    # v4 = []
     # for i in range(G.shape[2]):
     #     if G.gts[unrelated_inds, 0, i].mean() / 2 < 0.05 or G.gts[unrelated_inds, 0, i].mean() / 2 > 0.95:
     #         continue
     #     v1.append( (np.cov(2*G_[:, 0, i], G.gts[unrelated_inds, 1, i]) / np.var(2*G_[:, 0, i]))[0,1] )
-    #     # print(np.corrcoef(2*G_[:, 0, :].flatten(), true_par[:,:].flatten()))
-    #     # print(np.corrcoef(G.gts[unrelated_inds, 0, 0] + 2*freqs[0], G.gts[unrelated_inds, 1, 0]))
     #     v2.append((np.cov(G.gts[unrelated_inds, 0, i] + 2*freqs[i], G.gts[unrelated_inds, 1, i]) / np.var(G.gts[unrelated_inds, 0, i] + 2*freqs[i]))[0,1])
-    # print((G_<0).sum())
-    # v1 = np.array(v1)
-    # v2 = np.array(v2)
+        
+    #     v3.append( np.corrcoef(2*G_[:, 0, i], G.gts[unrelated_inds, 1, i])[0,1] )
+    #     v4.append( np.corrcoef(G.gts[unrelated_inds, 0, i] + 2*freqs[i], G.gts[unrelated_inds, 1, i])[0,1] )
+
+
+    # res = np.full((v1.__len__(), 4), fill_value=np.nan)
+    # res[:,0] = v1
+    # res[:,1] = v2
+    # res[:,2] = v3
+    # res[:,3] = v4
+    # return res
     # print(np.quantile(v1, [0, 0.25, 0.5, 0.75, 1]))
     # #### 删掉
 
@@ -554,6 +567,8 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
         G.gts[fam, 1, G.gts[fam, 1, :] < 0] = 0
         G.gts[fam, 1, G.gts[fam, 1, :] > 2] = 2
 
+    # print(np.corrcoef(G.gts[unrelated_inds, 0, 0], G.gts[unrelated_inds, 1, 0]))
+    # exit()
     if parsum:
         G.gts[unrelated_inds, 1, :] += G.gts[unrelated_inds, 1, :]
     else:
@@ -759,9 +774,14 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False, pe
         G.compute_freqs()
     ### calculate imputation accuracy
     # if True:
+    #     print('calculate imputation accuracy')
     #     gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds, true_par=true_par, par_ids=par_ids)
     #     return gts
+    ####
     if grm is not None and unrelated_inds is not None:
+        logger.info(
+            'Imputing parental geotypes using conditional gaussian.'
+        )
         gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds)
     elif grm is None and unrelated_inds is None:
         gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)

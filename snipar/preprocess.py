@@ -73,7 +73,7 @@ def get_indices_given_ped_sibs(ped, gts_ids, imp_fams=None, ids=None, verbose=Tr
     # If IDs not provided, use all individuals with observed genotypes
     if ids is None:
         ids = gts_ids
-    ids = gts_ids
+    # ids = gts_ids
     # Find individuals with genotyped siblings
     ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
     if verbose:
