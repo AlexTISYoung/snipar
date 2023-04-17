@@ -175,6 +175,9 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
         outstack.append(outarray_effect(alpha[:,0],np.sqrt(alpha_cov[:,0,0]),freqs,vy))
         header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10_P']
         # outstack.append(np.round(alpha_corr_out,6))
+        # if sib_diff:
+        #     outstack.append(np.round(alpha[:,1], decimals=6))
+        #     header += ['fixed'+'_Beta']
         # Output array
         outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
         print('Writing text output to '+outfile)
@@ -379,6 +382,12 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         G = impute_missing(G)
     elif sib_diff or fit_sib:
         G.fill_NAs()
+    
+    # if sib_diff:
+    #     print('1', G.gts[:, 0, :].mean())
+    #     print('doing extra stuff........')
+    #     G.gts[:, 0, :] -= G.gts[:, 1, :]
+    #     print('2', G.gts[:, 0, :].mean())
     if not robust:
         G.mean_normalise()
     ### Fit models for SNPs ###
@@ -403,11 +412,9 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data, G.num_obs_par_al, G.par_status)
     else:
         if unrelated_inds is None or cond_gaussian:
-            print(G.ids.shape);exit()
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
         else:
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
-    
 
     return G.freqs, G.sid, alpha, alpha_cov, alpha_ses
 
@@ -471,6 +478,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     #     print('Using '+str(batch_bounds.shape[0])+' batches')
     if robust or sib_diff:
         alpha_dim = 1
+        # if sib_diff: alpha_dim = 2
     else:
         alpha_dim = 2
         if fit_sib:

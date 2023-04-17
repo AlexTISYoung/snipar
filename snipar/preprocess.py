@@ -236,9 +236,7 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
     The gtarray that is returned is indexed based on the subset of ids provided from sibships of size 2 or greater.
     If remove_proband=True, then the genotype/PGS of the index individual is removed from the fam_mean given for that individual.
     """
-    print(len(ids))
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids, ped, gts_ids)
-    print(len(ids))
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
     # Compute sums of genotypes in each family
@@ -261,7 +259,6 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
             G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
             n_i = n_i-1
         G_sib[i,:] = G_sib[i,:]/float(n_i)
-    print('G_sib', G_sib.shape, len(ids))
     if return_famsizes:
         return [gtarray(G_sib, ids),fam_counts,fam_sums]
     else:

@@ -1472,6 +1472,7 @@ class LinearMixedModel:
         print('n with sibs:', n)
         assert n == self.n
         alpha = np.full((l,1), fill_value=np.nan)
+        # alpha = np.full((l,2), fill_value=np.nan)
         alpha_ses = np.full((l,1), fill_value=np.nan)
         alpha_cov = np.full((l,1,1), fill_value=np.nan)
         if self.has_covar:
