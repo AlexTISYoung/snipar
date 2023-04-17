@@ -404,7 +404,7 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         # import pandas as pd
         # pd.DataFrame({'ID': G.ids}).to_csv('../../output/robust_ids.txt', sep='\t', index=False)
         # exit()
-        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status, G.ids)
+        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
     elif sib_diff:
         # import pandas as pd
         # pd.DataFrame({'ID': G.ids}).to_csv('sibdiff_ids.txt', sep='\t', index=False)
