@@ -711,25 +711,30 @@ def h2f_parse(h2f_str):
 
 def am_adj_2gen_calc(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se, verbose=True):
     # Get estimates
-    estimates = alpha_from_alpha(delta, delta_se, alpha, h2f, h2f_se, rk)
-    estimates['h2_eq'] = h2f/(1-estimates['r'])
+    estimates = v_eta_delta(delta, delta_se, alpha, h2f, h2f_se, rk)
     estimates['rk'] = rk
+    estimates['delta'] = delta
+    estimates['alpha'] = alpha
     # Get ses
     ses = {'rk':rk_se,
            'k':k_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'r':r_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'h2_eq':h2eq_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'rho':rho_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
-           'alpha_delta':se_alpha_from_alpha(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se)}
+           'alpha_delta':se_alpha_from_alpha(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se),
+           'delta':delta_se,
+           'alpha':alpha_se,
+           'r_delta_alpha':r_delta_alpha,
+           'v_eta_delta':se_v_eta_delta(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se)}
     # Print
     if verbose:
-        for par in ['rk','k','r','h2_eq','rho','alpha_delta']:
+        for par in ['rk','k','r','h2_eq','rho','alpha_delta','v_eta_delta']:
             print(par+': '+str(round(estimates[par],4))+' ('+str(round(ses[par],4))+')')
     # Return
     return estimates, ses
 
 def write_2gen_adj_ests(estimates,ses, outprefix=''):
-    pars = np.array(['k','r','h2_eq','rho','alpha_delta'])
+    pars = np.array(['delta','alpha','rk','k','r','h2_eq','rho','alpha_delta','v_eta_delta'])
     outarray = np.zeros((pars.shape[0],2))
     parcount = 0
     for par in pars:

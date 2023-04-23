@@ -17,7 +17,7 @@ def delta_method(f, x, v_x):
     v_f = grad_f@v_x@grad_f.T
     return np.sqrt(v_f) 
 
-def estimate_k(delta, se_delta, h2f, se_h2f, rk):
+def estimate_k(delta, se_delta, h2f, se_h2f, rk, bound=True):
     """Estimate k, the fraction of random-mating heritability explained by PGI
 
     Args:
@@ -31,7 +31,13 @@ def estimate_k(delta, se_delta, h2f, se_h2f, rk):
         _type_: _description_
     """
     zf_inv = se_h2f/h2f
-    return (1-rk)*(1-zf_inv**(2))*(delta**2-se_delta**2)/h2f
+    k =(1-rk)*(1-zf_inv**(2))*(delta**2-se_delta**2)/h2f
+    if k<0 and bound:
+        return 0
+    elif k>1 and bound:
+        return 1
+    else:
+        return k
 
 def k_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
     """Standard error of estimate of k, the fraction of random-mating heritability explained by PGI
@@ -82,7 +88,7 @@ def rho_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
 
 def alpha_from_rho(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
-    alpha = (rho['rho'] - delta/beta)/(rho['rho']*(1+rho['rho']*rho['k']*rho['r']))
+    alpha = (rho['rho'] - delta/beta)/((delta/beta)*(1+rho['r']))
     if return_all:
         return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
@@ -97,8 +103,8 @@ def se_alpha_from_rho(delta, se_delta, beta, beta_se, r_delta_beta, h2f, se_h2f,
 
 def alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
-    alpha = (1-rho['r']*(1-2*rho['k']))*(alpha/delta)-(1-rho['rho'])
-    alpha = alpha/(1+rho['rho']*rho['k']*rho['r'])
+    alpha = (rho['rho']+rho['k']*rho['r'])*(alpha/delta)-(1-rho['rho'])
+    alpha = alpha/(1+rho['r'])
     if return_all:
         return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
@@ -110,6 +116,27 @@ def se_alpha_from_alpha(delta, se_delta, alpha, se_alpha, r_delta_alpha, h2f, se
     v_x = np.diag([se_delta**2, se_alpha**2, se_h2f**2, se_rk**2])
     v_x[0,1] = r_delta_alpha*se_delta*se_alpha
     return delta_method(est_alpha, np.array([delta, alpha, h2f, rk]), v_x)
+
+def v_eta_delta(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
+    alpha_all = alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True)
+    h2_eq = h2f/(1-alpha_all['r'])
+    v_ed = 2*(1+alpha_all['r'])*alpha_all['alpha_delta']*(1+alpha_all['alpha_delta'])*h2_eq
+    if return_all == True:
+        return {'v_eta_delta':v_ed, 
+                'alpha_delta':alpha_all['alpha_delta'], 
+                'rho':alpha_all['rho'], 
+                'r':alpha_all['r'], 
+                'k':alpha_all['k'],
+                'h2_eq':h2_eq}
+    else:
+        return v_ed
+
+def se_v_eta_delta(delta, se_delta, alpha, se_alpha, r_delta_alpha, h2f, se_h2f, rk, se_rk):
+    def est_v_ed(x):
+        return v_eta_delta(x[0], se_delta, x[1], x[2], se_h2f, x[3], return_all=False)
+    v_x = np.diag([se_delta**2, se_alpha**2, se_h2f**2, se_rk**2])
+    v_x[0,1] = r_delta_alpha*se_delta*se_alpha
+    return delta_method(est_v_ed, np.array([delta, alpha, h2f, rk]), v_x)
 
 # Simulate sample estimates
 def simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
