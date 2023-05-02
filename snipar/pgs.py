@@ -709,23 +709,33 @@ def h2f_parse(h2f_str):
     h2f_se = float(h2f_split[1].split('\n')[0])
     return h2f, h2f_se
 
-def am_adj_2gen_calc(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se, verbose=True):
+def am_adj_2gen_calc(delta, delta_se, ab, ab_se, r_delta_ab, h2f, h2f_se, rk, rk_se, is_beta=False, verbose=True):
     # Get estimates
-    estimates = v_eta_delta(delta, delta_se, alpha, h2f, h2f_se, rk)
+    if is_beta:
+        estimates = v_eta_delta(delta, delta_se, h2f, h2f_se, rk, beta=ab)
+        estimates['beta'] = ab
+    else:
+        estimates = v_eta_delta(delta, delta_se, h2f, h2f_se, rk, alpha=ab)
+        estimates['alpha'] = ab
     estimates['rk'] = rk
     estimates['delta'] = delta
-    estimates['alpha'] = alpha
+    
     # Get ses
     ses = {'rk':rk_se,
            'k':k_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'r':r_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'h2_eq':h2eq_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
            'rho':rho_se(delta, delta_se, h2f, h2f_se, rk, rk_se),
-           'alpha_delta':se_alpha_from_alpha(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se),
            'delta':delta_se,
-           'alpha':alpha_se,
-           'r_delta_alpha':r_delta_alpha,
-           'v_eta_delta':se_v_eta_delta(delta, delta_se, alpha, alpha_se, r_delta_alpha, h2f, h2f_se, rk, rk_se)}
+           'v_eta_delta':se_v_eta_delta(delta, delta_se, ab, ab_se, r_delta_ab, h2f, h2f_se, rk, rk_se, is_beta=is_beta)}
+    if is_beta:
+        ses['alpha_delta'] = se_alpha_from_beta(delta, delta_se, ab, ab_se, r_delta_ab, h2f, h2f_se, rk, rk_se)
+        ses['beta'] = ab_se
+        ses['r_delta_beta'] = r_delta_ab
+    else:
+        ses['alpha_delta'] = se_alpha_from_alpha(delta, delta_se, ab, ab_se, r_delta_ab, h2f, h2f_se, rk, rk_se)
+        ses['alpha'] = ab_se
+        ses['r_delta_alpha'] = r_delta_ab
     # Print
     if verbose:
         for par in ['rk','k','r','h2_eq','rho','alpha_delta','v_eta_delta']:

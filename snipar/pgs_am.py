@@ -86,21 +86,6 @@ def rho_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
         return estimate_rho(x[0], se_delta, x[1], se_h2f, x[2],return_all=False)
     return delta_method(est_rho, np.array([delta, h2f, rk]), np.diag([se_delta**2, se_h2f**2, se_rk**2]))
 
-def alpha_from_rho(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
-    rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
-    alpha = (rho['rho'] - delta/beta)/((delta/beta)*(1+rho['r']))
-    if return_all:
-        return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
-    else:
-        return alpha
-
-def se_alpha_from_rho(delta, se_delta, beta, beta_se, r_delta_beta, h2f, se_h2f, rk, se_rk):
-    def est_alpha(x):
-        return alpha_from_rho(x[0], se_delta, x[1], x[2], se_h2f, x[3], return_all=False)
-    v_x = np.diag([se_delta**2, beta_se**2, se_h2f**2, se_rk**2])
-    v_x[0,1] = r_delta_beta*se_delta*beta_se
-    return delta_method(est_alpha, np.array([delta, beta, h2f, rk]), v_x)
-
 def alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
     alpha = (rho['rho']+rho['k']*rho['r'])*(alpha/delta)-(1-rho['rho'])
@@ -115,10 +100,32 @@ def se_alpha_from_alpha(delta, se_delta, alpha, se_alpha, r_delta_alpha, h2f, se
         return alpha_from_alpha(x[0], se_delta, x[1], x[2], se_h2f, x[3], return_all=False)
     v_x = np.diag([se_delta**2, se_alpha**2, se_h2f**2, se_rk**2])
     v_x[0,1] = r_delta_alpha*se_delta*se_alpha
+    v_x[1,0] = v_x[0,1]
     return delta_method(est_alpha, np.array([delta, alpha, h2f, rk]), v_x)
 
-def v_eta_delta(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
-    alpha_all = alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True)
+def alpha_from_beta(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
+    rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
+    alpha = (rho['rho']-delta/beta)/((delta/beta)*(1+rho['r']))
+    if return_all:
+        return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
+    else:
+        return alpha
+
+def se_alpha_from_beta(delta, se_delta, beta, se_beta, r_delta_beta, h2f, se_h2f, rk, se_rk):
+    def est_alpha(x):
+        return alpha_from_beta(x[0], se_delta, x[1], x[2], se_h2f, x[3], return_all=False)
+    v_x = np.diag([se_delta**2, se_beta**2, se_h2f**2, se_rk**2])
+    v_x[0,1] = r_delta_beta*se_delta*se_beta
+    v_x[1,0] = v_x[0,1]
+    return delta_method(est_alpha, np.array([delta, beta, h2f, rk]), v_x)
+
+def v_eta_delta(delta, se_delta, h2f, se_h2f, rk, alpha=None, beta=None, return_all=True):
+    if alpha is not None:
+        alpha_all = alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True)
+    elif beta is not None:
+        alpha_all = alpha_from_beta(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True)
+    else:
+        raise(ValueError('Must provide average NTC or population effect'))
     h2_eq = h2f/(1-alpha_all['r'])
     v_ed = 2*(1+alpha_all['r'])*alpha_all['alpha_delta']*(1+alpha_all['alpha_delta'])*h2_eq
     if return_all == True:
@@ -131,12 +138,17 @@ def v_eta_delta(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
     else:
         return v_ed
 
-def se_v_eta_delta(delta, se_delta, alpha, se_alpha, r_delta_alpha, h2f, se_h2f, rk, se_rk):
-    def est_v_ed(x):
-        return v_eta_delta(x[0], se_delta, x[1], x[2], se_h2f, x[3], return_all=False)
-    v_x = np.diag([se_delta**2, se_alpha**2, se_h2f**2, se_rk**2])
-    v_x[0,1] = r_delta_alpha*se_delta*se_alpha
-    return delta_method(est_v_ed, np.array([delta, alpha, h2f, rk]), v_x)
+def se_v_eta_delta(delta, se_delta, ab, se_ab, r_delta_ab, h2f, se_h2f, rk, se_rk, is_beta=False):
+    if is_beta:
+        def est_v_ed(x):
+            return v_eta_delta(x[0], se_delta, x[1], se_h2f, x[2], beta=x[3], return_all=False)
+    else:
+        def est_v_ed(x):
+            return v_eta_delta(x[0], se_delta, x[1], se_h2f, x[2], alpha=x[3], return_all=False)
+    v_x = np.diag([se_delta**2, se_h2f**2, se_rk**2, se_ab**2])
+    v_x[0,3] = r_delta_ab*se_delta*se_ab
+    v_x[3,0] = v_x[0,3]
+    return delta_method(est_v_ed, np.array([delta, h2f, rk, ab]), v_x)
 
 # Simulate sample estimates
 def simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):

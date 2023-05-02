@@ -571,6 +571,7 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
     else:
         V[a_count,:] = compute_vcomps(G_males, G_females, Y_males, Y_females, delta_p=delta_p, delta_m=delta_m,
                                         v_indirect=v_indirect, eta_p=eta_p, eta_m=eta_m)
+    V = np.vstack((V_header,V))
     # Record pedigree
     if v_indirect==0:
         ped[(a_count*2*nfam):((a_count+1)*2*nfam),:] = create_ped_output(G_males, G_females, Y_males, Y_females, Y_p, Y_m, delta_p, delta_m, 
