@@ -22,3 +22,6 @@ outputs/**
 **.mmm
 **.metafile
 docs/source/**
+simulations
+old_simulations
+example_data
