@@ -152,36 +152,38 @@ computed from .bed files by providing them through the --bed argument to :ref:`c
 Polygenic score analyses
 ------------------------
 
-In addition to family based GWAS, *snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
-and for performing family based polygenic score analyses. 
-Here, we give some examples of how to use this script. The script computes a PGS
-from a :ref:`weights file <weights>`. 
-For the tutorial, we provide a weights file (direct_weights.txt) in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format
-where the weights are the true direct genetic effect of the SNP. 
+For an exercise involving polygenic score analysis, please see the :ref:`Simulation Exercse <simulation>`.
 
-To compute the PGS from the weights in direct_weights.txt, use the following command:
+.. In addition to family based GWAS, *snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
+.. and for performing family based polygenic score analyses. 
+.. Here, we give some examples of how to use this script. The script computes a PGS
+.. from a :ref:`weights file <weights>`. 
+.. For the tutorial, we provide a weights file (direct_weights.txt) in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format
+.. where the weights are the true direct genetic effect of the SNP. 
 
-    ``pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt``
+.. To compute the PGS from the weights in direct_weights.txt, use the following command:
+
+..     ``pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt``
     
-This uses the weights in the weights file to compute the PGS for each genotyped individual for whom observed or imputed parental genotypes are available.
-It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. 
+.. This uses the weights in the weights file to compute the PGS for each genotyped individual for whom observed or imputed parental genotypes are available.
+.. It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. 
 
-To estimate direct, paternal, and maternal effects of the PGS, use the following command:
+.. To estimate direct, paternal, and maternal effects of the PGS, use the following command:
 
-    ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
+..     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
 
-This uses a linear mixed model that has a random effect for mean differences between families (defined as sibships here) and fixed effects for the direct,
-paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
-The estimated effects and their standard errors are output to direct.effects.txt, described :ref:`here <pgs_effects>`. 
-The sampling variance-covariance matrix of the direct effect and paternal and maternal NTCs is output to direct.vcov.txt, described :ref:`here <pgs_vcov>`.
+.. This uses a linear mixed model that has a random effect for mean differences between families (defined as sibships here) and fixed effects for the direct,
+.. paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
+.. The estimated effects and their standard errors are output to direct.effects.txt, described :ref:`here <pgs_effects>`. 
+.. The sampling variance-covariance matrix of the direct effect and paternal and maternal NTCs is output to direct.vcov.txt, described :ref:`here <pgs_vcov>`.
 
-Estimates of the direct effect of the PGS should be equal to 1 in expectation since
-we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
-The paternal/maternal NTC estimates capture the correlation between the direct and indirect parental effects. The population effect estimate
-should be greater than 1, since this captures both the direct effect of the PGS, and the correlation between direct and indirect parental effects.
+.. Estimates of the direct effect of the PGS should be equal to 1 in expectation since
+.. we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
+.. The paternal/maternal NTC estimates capture the correlation between the direct and indirect parental effects. The population effect estimate
+.. should be greater than 1, since this captures both the direct effect of the PGS, and the correlation between direct and indirect parental effects.
 
-If parental genotypes have been imputed from sibling data alone, 
-then imputed paternal and maternal PGS are perfectly correlated, 
-and the above regression on proband, paternal, and maternal PGS becomes collinear. 
-To deal with this, add the --parsum option to the above command, 
-which will estimate the average NTC rather than separate maternal and paternal NTCs.
+.. If parental genotypes have been imputed from sibling data alone, 
+.. then imputed paternal and maternal PGS are perfectly correlated, 
+.. and the above regression on proband, paternal, and maternal PGS becomes collinear. 
+.. To deal with this, add the --parsum option to the above command, 
+.. which will estimate the average NTC rather than separate maternal and paternal NTCs.
