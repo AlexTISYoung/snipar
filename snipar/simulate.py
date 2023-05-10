@@ -72,9 +72,9 @@ def simulate_first_gen(nfam, ncausal, maf=None,min_maf=0.05):
         # SNP IDs
         snp_ids = [np.array(np.arange(1,ncausal+1),dtype=str)]
         # Alleles
-        alleles = np.zeros((ncausal,2),dtype=str)
-        alleles[:, 0] = 'A'
-        alleles[:, 1] = 'G'
+        alleles = np.zeros((ncausal,2),dtype='S10')
+        alleles[:, 0] = 'A1'
+        alleles[:, 1] = 'A2'
         alleles = [alleles]
         # Positions
         positions = [np.arange(1,ncausal+1)]

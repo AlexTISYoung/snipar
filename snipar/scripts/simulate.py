@@ -5,6 +5,8 @@ from snipar.ibd import write_segs_from_matrix
 from snipar.map import decode_map_from_pos
 from snipar.utilities import *
 from snipar.simulate import *
+from pysnptools.snpreader import SnpData,Bed
+import code
 
 parser = argparse.ArgumentParser()
 parser.add_argument('n_causal',type=int,help='Number of causal loci')
@@ -89,33 +91,50 @@ def main(args):
     np.savetxt(args.outprefix+'VCs.txt',V,fmt='%s')
     ### Save pedigree and fam files
     print('Writing pedigree and fam files')
-    np.savetxt(args.outprefix+'sibs.ped',ped[:,0:4],fmt='%s')
-    np.savetxt(args.outprefix+'sibs.fam',ped,fmt='%s')
+    n_last = ped[ped.shape[0]-1,0].split('_')[0]
+    last_gen = [x.split('_')[0]==n_last for x in ped[:,0]]
+    np.savetxt(args.outprefix+'pedigree.txt',ped,fmt='%s')
+    #np.savetxt(args.outprefix+'sibs.fam',ped[last_gen,:],fmt='%s')
+    phen_out = ped[last_gen,:]
+    np.savetxt(args.outprefix+'phenotype.txt',phen_out[:,[0,1,5]],fmt='%s')
     ## Save to HDF5 file
-    print('Saving genotypes to '+args.outprefix+'genotypes.hdf5')
-    hf = h5py.File(args.outprefix+'genotypes.hdf5','w')
-    # save pedigree
-    hf['ped'] = encode_str_array(ped)
+    print('Saving genotypes')
     # save offspring genotypes
     for i in range(len(new_haps)):
         print('Writing genotypes for chromosome '+str(chroms[i]))
         bim_i = np.vstack((snp_ids[i], maps[i], positions[i], alleles[i][:,0],alleles[i][:,1])).T
-        hf['chr_'+str(chroms[i])+'_bim'] = encode_str_array(bim_i)
-        gts_chr = np.sum(new_haps[i], axis=3, dtype=np.uint8)
-        hf['chr_'+str(chroms[i])] = gts_chr.reshape((gts_chr.shape[0]*2,gts_chr.shape[2]),order='C')
+        np.savetxt(args.outprefix+'chr_'+str(chroms[i])+'.bim',bim_i,fmt='%s')
+        snp_pos = np.hstack((np.array([str(chroms[i]) for x in range(bim_i.shape[0])]).reshape(bim_i.shape[0],1),bim_i[:,1:3]))
+        gts_chr = SnpData(iid=ped[last_gen,0:2],sid=snp_ids[i],pos=np.array(snp_pos,dtype=str),
+                          val=np.sum(new_haps[i], axis=3, dtype=np.uint8).reshape((new_haps[i].shape[0]*2,new_haps[i].shape[2])))
+        Bed.write(args.outprefix+'chr_'+str(chroms[i])+'.bed',gts_chr,count_A1=True,_require_float32_64=False)
         # # Imputed parental genotypes
         if args.impute or args.unphased_impute:
             print('Imputing parental genotypes and saving')
-            freqs = np.mean(gts_chr, axis=(0, 1)) / 2.0
+            freqs = np.mean(gts_chr.val, axis=0) / 2.0
+            imp_ped = ped[last_gen,0:4]
+            imp_ped = np.hstack((imp_ped,np.zeros((imp_ped.shape[0],2),dtype=bool)))
             # Phased
             if args.impute:
+                hf = h5py.File(args.outprefix+'phased_impute_chr_'+str(chroms[i])+'.hdf5','w')
                 phased_imp = impute_all_fams_phased(new_haps[i],freqs,ibd[i])
-                hf['imp_chr'+str(chroms[i])] = phased_imp
+                hf['imputed_par_gts'] = phased_imp
+                hf['bim_values'] = encode_str_array(bim_i)
+                hf['bim_columns'] = encode_str_array(np.array(['rsid','map','position','allele1','allele2']))
+                hf['pedigree'] = encode_str_array(imp_ped)
+                hf['families'] = encode_str_array(imp_ped[0::2,0])
+                hf.close()
             # Unphased
             if args.unphased_impute:
+                hf = h5py.File(args.outprefix+'unphased_impute_chr_'+str(chroms[i])+'.hdf5','w')
                 ibd[i] = np.sum(ibd[i],axis=2)
                 imp = impute_all_fams(gts_chr, freqs, ibd[i])
-                hf['unphased_imp_chr_'+str(chroms[i])] = imp
+                hf['imputed_par_gts'] = imp
+                hf['bim_values'] = encode_str_array(bim_i)
+                hf['bim_columns'] = encode_str_array(np.array(['rsid','map','position','allele1','allele2']))
+                hf['pedigree'] = encode_str_array(imp_ped)
+                hf['families'] = encode_str_array(imp_ped[0::2,0])
+                hf.close()
             # Parental genotypes
         if args.save_par_gts:
             print('Saving true parental genotypes')
@@ -127,9 +146,10 @@ def main(args):
     hf.close()
     #### Write IBD segments
     snp_count = 0
-    sibpairs = ped[1:ped.shape[0],1].reshape((int(ped.shape[0]/2),2))
+    sibpairs = ped[last_gen,1]
+    sibpairs = sibpairs.reshape((int(sibpairs.shape[0]/2),2))
     if args.v_indir==0:
-        causal_out = np.zeros((a.shape[0],4),dtype='U30')
+        causal_out = np.zeros((a.shape[0],5),dtype='U30')
     else:
         causal_out = np.zeros((a.shape[0],5),dtype='U30')
     for i in range(len(haps)):
@@ -143,8 +163,10 @@ def main(args):
         # Causal effects
         if args.v_indir==0:
             a_chr = a[snp_count:(snp_count + snp_ids[i].shape[0])]
+            a_chr_v1 = a_chr+np.random.normal(0,np.std(a_chr),a_chr.shape)
             causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],
-                                                                                    a_chr)).T
+                                                                                    a_chr,a_chr_v1)).T
+            causal_out = np.vstack((np.array(['SNP','A1','A2','direct','direct_v1']).reshape((1,5)),causal_out))
         else:
             a_chr = a[snp_count:(snp_count + snp_ids[i].shape[0]),:]
             causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],

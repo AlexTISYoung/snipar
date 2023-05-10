@@ -105,13 +105,12 @@ class pgs(object):
             geno_means = np.mean(garray.gts[:, 0, in_pgs_snps], axis=0)
             pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
             for i in range(0, garray.gts.shape[1]):
-                if garray.sid[i]=='parental':
+                if cols[i]=='parental':
                     sf = 2.0                
                 else:
                     sf = 1.0
                 garray.gts[:, i, in_pgs_snps] = garray.gts[:, i, in_pgs_snps]-sf*geno_means
                 pgs_val[:, i] = ma.dot(garray.gts[:, i, in_pgs_snps], weights_compute)
-
         return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status, ped=garray.ped)
         
 def read_weights(weights, SNP='SNP', beta_col='b', A1='A1', A2='A2', sep=None):
@@ -197,9 +196,15 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
         # Get genotype matrix
         G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=verbose)
         if sib:
-            cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
+            if G.shape[1]==4:
+                cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
+            else:
+                cols = np.array(['proband','sibling','parental'])
         else:
-            cols = np.array(['proband', 'paternal', 'maternal'])
+            if G.shape[1]==3:
+                cols = np.array(['proband', 'paternal', 'maternal'])
+            else:
+                cols = np.array(['proband','parental'])
         if compute_controls:
             pgs_out = [pgs.compute(x,cols) for x in G[0:3]]
             if sib:
@@ -280,12 +285,8 @@ class pgarray(gtarray):
         # Check pgs columns
         if 'paternal' in self.sid:
             paternal_index = np.where(self.sid=='paternal')[0][0]
-        else:
-            raise(ValueError('No paternal PGS column found'))
         if 'maternal' in self.sid:
             maternal_index = np.where(self.sid=='maternal')[0][0]
-        else:
-            raise(ValueError('No maternal PGS column found'))
         # count fams
         fams = np.unique(self.fams, return_counts=True)
         # Mapping of sibships to pgs rows
@@ -322,8 +323,10 @@ class pgarray(gtarray):
         is_parent = np.logical_or(is_father,is_mother)
         # normalize
         pgs_fam[is_sib] = (pgs_fam[is_sib]-np.mean(pgs_fam[is_sib]))/np.std(pgs_fam[is_sib])
-        pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
-        pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
+        if np.sum(is_mother)>0:
+            pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
+        if np.sum(is_father)>0:
+            pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
         ### find correlation between maternal and paternal pgis
         print('Finding MLE for correlation between parents scores')
         ## Initialize with correlation from sibs and between parents
@@ -367,23 +370,26 @@ class pgarray(gtarray):
         r, r_se, fsizes = self.estimate_r()
         r_z = r/r_se
         print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4))+' S.E.='+str(round(r_se,4)))
-        if r_z>2:    
+        if r_z>1.5:    
             # Check pgs columns
-            if 'paternal' in self.sid:
+            if 'paternal' in self.sid and 'maternal' in self.sid:
                 paternal_index = np.where(self.sid=='paternal')[0][0]
-            else:
-                raise(ValueError('No paternal PGS column found'))
-            if 'maternal' in self.sid:
                 maternal_index = np.where(self.sid=='maternal')[0][0]
+                parental_index = None
+            elif 'parental' in self.sid:
+                parental_index = np.where(self.sid=='parental')[0][0]
             else:
-                raise(ValueError('No maternal PGS column found'))
+                raise(ValueError('No parental PGS values to adjust'))
             # Adjust imputed parental PGSs
             npar = np.sum(self.par_status==0,axis=1)
             print('Adjuting imputed PGSs for assortative mating')
             for i in range(self.gts.shape[0]):
                 # No parents genotyped
                 if npar[i]==0:
-                    self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
+                    if parental_index is None:
+                        self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
+                    else:
+                        self.gts[i,parental_index] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,parental_index] 
                 # One parent genotyped
                 if npar[i]==1:
                     # Father imputed

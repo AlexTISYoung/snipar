@@ -176,6 +176,10 @@ def main(args):
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
         pg = pgs.read_pgs(args.pgs)
+        if not args.parsum:
+            if 'parental' in pg.sid and 'paternal' not in pg.sid:
+                print('Using sum of paternal and maternal PGS as no paternal & maternal PGS values found')
+                args.parsum = True
     else:
         raise ValueError('Weights or PGS must be provided')
 
