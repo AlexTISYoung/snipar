@@ -47,32 +47,14 @@ The pedigree along with the IBD segments shared between siblings recorded in chr
 from the observed sibling and parental genotypes in chr_1.bed. 
 The imputed parental genotypes are output to a :ref:`HDF5 file <imputed_file>`, chr_1.hdf5. 
 
-Family based GWAS
------------------
-
-This is performed using the :ref:`gwas.py <gwas.py>` script. 
-To compute summary statistics for direct effects, non-transmitted coefficients (NTCs), and population effects for the SNPs in the .bed file, use this command:
-
-    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --threads 4``
-
-This takes the observed genotypes in chr_1.bed and the imputed parental genotypes in chr_1.hdf5 and uses
-them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed/observed) genotype, and the mother's
-(imputed/observed) genotype. This is done using a linear mixed model that models phenotypic correlations between siblings,
-where sibling relations are stored in the :ref:`output of the imputation script <imputed_file>`. 
-The 'family variance estimate' output is the  phenotypic variance explained by mean differences between sibships, 
-and the residual variance is the remaining phenotypic variance. 
-
 Polygenic score analyses
 ------------------------
 
-In addition to family based GWAS, *snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
+*snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 and for performing family based polygenic score analyses. 
-Here, we give some examples of how to use this script. The script computes a PGS
-from a :ref:`weights file <weights>`. 
-For the tutorial, we provide a weights file (direct_weights.txt) in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format
-where the weights are the true direct genetic effect of the SNP. 
+The script computes a PGS from a :ref:`weights file <weights>`. 
 
-To compute the PGS from the true direct genetic effects, use the following command:
+To compute the PGS using the true direct genetic effects as weights, use the following command:
 
     ``pgs.py direct --bed chr_@ --imp chr_@ --weights causal_effects.txt --beta_col direct``
     
