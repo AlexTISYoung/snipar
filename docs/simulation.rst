@@ -3,7 +3,7 @@
 Simulation Exercise
 ===================
 
-Exercise on simulating data using the simulate.py script and performing family-based GWAS and polygenic score analysis. 
+Exercise on simulating data using the simulate.py script and performing family-based polygenic score analysis. 
 
 Simulating data
 --------------------
