@@ -58,16 +58,27 @@ To compute the PGS using the true direct genetic effects as weights, use the fol
 
     ``pgs.py direct --bed chr_@ --imp chr_@ --weights causal_effects.txt --beta_col direct``
     
-It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. 
+It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. The pgs computation script
+automatically estimates the correlation between parents PGS values (also using full-sibling offspring PGS values to do this)
+and performs an adjustment for assortative mating when using the imputed parental genotypes to
+compute the PGS. 
 
 To estimate direct effect and average NTC of the PGS, use the following command:
 
     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
 
 This will output a population effect estimate (1 generation model) to direct.1.effects.txt, and 
-direct effect and average NTC estimates to (2 generation model) to direct.2.effects.txt.  
+direct effect and average NTC estimates to (2 generation model) to direct.2.effects.txt. The 
+sampling variance-covariance matrix of the estimates is output to direct.1.vcov.txt (for the 1 generation model) and
+direct.2.vcov.txt (for the 2 generation model).
 
-To compute the PGS from the true direct genetic effects+estimation error, use the following command:
+As we are using the true direct effects as weights, the PGS captures all of the heritability,
+and the direct and population effects should both be the same (1 in expectation), and the 
+average parental NTC should be zero (in expectation). To check this, read in the 
+effect estimate output files in *R* or look at them using a text viewer (e.g. less -S on a unix system).
+
+To compute the PGS from the true direct genetic effects+estimation error (such as would be obtained from a GWAS), 
+use the following command:
 
     ``pgs.py direct_v1 --bed chr_@ --imp chr_@ --weights causal_effects.txt --beta_col direct_v1``
     
@@ -78,8 +89,19 @@ To estimate direct effect and average NTC of the PGS, use the following command:
     ``pgs.py direct_v1 --pgs direct_v1.pgs.txt --phenofile phenotype.txt``
 
 This will output a population effect estimate (1 generation model) to direct_v1.1.effects.txt, and 
-direct effect and average NTC estimates to (2 generation model) to direct_v2.2.effects.txt.  
+direct effect and average NTC estimates to (2 generation model) to direct_v2.2.effects.txt. 
 
 Unlike when using the true direct genetic effects as weights, the direct effect of the PGS estimated
-from noisy weights will be smaller than the population effect. 
+from noisy weights (in direct_v1.1.effects.txt) will be smaller than the population effect (direct_v2.2.effects.txt).
+This is because the PGS does not capture all of the heritability due to estimation error in the weights. 
+The PGS has its population effect inflated (relative to its
+direct effect) by assortative mating, which induces a correlation of the PGS with the component of the heritability
+not captured by the PGS due to estimation error. This inflation is not captured by the direct effect of the PGS
+because chromosomes segregate independently during meiosis. (In this simulation, all causal SNPs segregate independently.) 
+Here, the ratio between direct and population effects of the PGS should be around 0.87. 
 
+One should also observe a statistically significant average parental NTC (in direct_v2.2.effects.txt) of the PGS from 
+the two-generation model despite the absence of parental indirect genetic effects in this simulation. Here,
+the ratio between the average NTC and the direct effect should be around 0.15. This demonstrates
+that statistically significant average NTC estimates cannot be interpreted as unbiased estimates of 
+parental indirect genetic effects, especially for phenotypes affected by assortative mating. 

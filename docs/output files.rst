@@ -211,9 +211,13 @@ PGS file
 The :ref:`pgs.py <pgs.py>` script can be used to compute polygenic scores for genotyped individuals
 along with the parental polygenic scores based on observed and/or imputed parental genotypes. 
 The :ref:`pgs.py <pgs.py>` script will output a PGS file, which is a white-space delimited text
-file with columns: FID (family ID), IID (individual ID), proband PGS, paternal PGS, maternal PGS. 
+file with columns: FID (family ID), IID (individual ID), FATHER_ID, MOTHER_ID, proband PGS, paternal PGS, maternal PGS. 
+(If the PGS has been computed from parental genotypes imputed from siblings alone, it will output the imputed parental PGS,
+ the sum of paternal and maternal PGS values, instead of the paternal and maternal PGS values separately.)
+
 Here, the family ID is the same as used internally by *snipar*, so that individuals who share a family
-ID are full-siblings. The proband PGS column gives the PGS value for the individual given by the IID in that 
+ID are full-siblings. The FATHER_ID and MOTHER_ID columns are set to NA when the parents are not genotyped. 
+The proband PGS column gives the PGS value for the individual given by the IID in that 
 row. The paternal and maternal PGS columns give the PGS values of the individual's father and mother respectively,
 and these values can be computed from either imputed or observed parental genotypes. 
 
@@ -226,25 +230,28 @@ PGS effects
 .. _pgs_effects:
 
 The :ref:`pgs.py <pgs.py>` script can be used to compute the direct and population effects of the PGS
-along with the non-transmitted coefficients (NTCs). When this is done, the script will write a file
-with suffix effects.txt. This file has three columns: the first gives the name of the column of the input
-PGS file (i.e. proband, paternal, maternal, population), the second gives the corresponding regression coefficient,
-and the third gives the standard error. For example, if your PGS file has columns proband, paternal, maternal,
-then the first row in the effects file contains the estimate of the direct effect 
-(regression coefficient on proband PGS when controlling for paternal and maternal PGS), the second
-row contains the estimate of the paternal NTC, the third row contains the estimate of the maternal NTC,
-and the final row contains an estimate of the population effect. 
+along with the non-transmitted coefficients (NTCs). By default, the script will fit both a one-generation
+model (regression of phenotype onto proband PGS alone, which estimates the population effect of the PGS) 
+and a two-generation model (regression of phenotype
+onto proband, paternal, and maternal PGS; or proband and combined parental PGS). 
+
+When this is done, the script will write a file
+with suffix 1.effects.txt for the results of one-generation analysis, and 2.effects.txt for the results of two-generation analysis. 
+The output includes the estimated intercept and covariate coefficients for the regression as well as the PGS 
+effect estimates. 
+
+This file has three columns: the first gives the name of the regression coefficient 
+(i.e. direct_effect, population_effect, etc.), the second gives the corresponding regression coefficient,
+and the third gives the standard error. For example, in the two-generation analysis, 
+if your PGS file has columns proband, paternal, maternal,
+then the effects file contains the estimate of the direct effect 
+(regression coefficient on proband PGS when controlling for paternal and maternal PGS), 
+the maternal NTC, and the paternal NTC. 
 
 PGS effects sampling covariance
 -------------------------------
 .. _pgs_vcov:
 
-The :ref:`pgs.py <pgs.py>` script can be used to compute the direct and population effects of the PGS
-along with the non-transmitted coefficients (NTCs). When this is done, the script will write a file
+The :ref:`pgs.py <pgs.py>` script will write a file
 with suffix vcov.txt in addition to the file with suffix effects.txt (described above). This file contains
-the sampling variance-covariance matrix of the estimated effects from fitting the 'full model', i.e. 
-from fitting proband and parental PGS jointly (along wih the sibling PGS if included); in other words,
-the sampling variance-covariance matrix of all the estimated effects except the population effect, which 
-is estimated in a separate regression. If (k+1) effects (including the population effect) are estimated
-and output in the :ref:`effects file <pgs_effects>`, then this file will be a k x k matrix giving the sampling
-variance-covariance matrix of the first k effects in  the :ref:`effects file <pgs_effects>` (excluding the population effect). 
+the sampling variance-covariance matrix of the regression coefficients. 
