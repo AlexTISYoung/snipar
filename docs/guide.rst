@@ -48,6 +48,16 @@ To install from source, clone the git repository (https://github.com/AlexTISYoun
 containing the *snipar* source code, at the shell type:
 
     pip install .
+
+Python version incompatibility
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+
+*snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
+To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
+	
+    conda create -n myenv python=3.9
+	conda activate myenv
+	pip install snipar
    
 Running tests
 ~~~~~~~~~~~~~
