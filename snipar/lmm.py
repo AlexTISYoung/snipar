@@ -737,7 +737,7 @@ class LinearMixedModel:
             out[i, :, :] = sps_mat.dot(dense_mat[i, :, :])
         return out
 
-    def fit_snps_eff(self, gts: np.ndarray, fam_labels: np.ndarray, ignore_na_fams: bool = False, ignore_na_rows: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def fit_snps_eff(self, gts: np.ndarray, fam_labels: np.ndarray, ignore_na_fams: bool = False, ignore_na_rows: bool = False, standard_gwas=False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Perform repeated OLS to estimate SNP effects and sampling variance-covariance.
 
         Args:
@@ -750,6 +750,9 @@ class LinearMixedModel:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
         """
+        if standard_gwas:
+            gts = gts[:, 0:1, :]
+            print('fitting standard gwas', gts.shape)
         n, k, l = gts.shape
         assert n == self.n
         if self.has_covar:
@@ -810,6 +813,7 @@ class LinearMixedModel:
                     alpha_cov[i,:,:] = np.linalg.inv(xtx)
         else:
             gts = gts.transpose(2, 0, 1)
+            # gts.transpose(2, 0, 1)[:, :, 0:1] #
             # Vinv_X: np.ndarray = self.sp_solve_dense3d_lu(self.V, gts)
             # XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
             # XT_Vinv_y: np.ndarray = np.einsum('...ij,i', gts, self.Vinv_y)
@@ -1422,6 +1426,15 @@ class LinearMixedModel:
             V_pat = self.V[pat, :][:, pat]
             V_mat = self.V[mat, :][:, mat]
             V_one = self.V[one, :][:, one]
+            V_both_one = self.V[both, :][:, one]
+            V_both_pat = self.V[both, :][:, pat]
+            V_both_mat = self.V[both, :][:, mat]
+            V_one_pat = self.V[one, :][:, pat]
+            V_one_mat = self.V[one, :][:, mat]
+            V_pat_mat = self.V[pat, :][:, mat]
+            if V_both_one.sum() == 0 and V_both_pat.sum() == 0 and V_both_mat.sum() == 0 and V_one_pat.sum() == 0 and V_one_mat.sum() == 0 and V_pat_mat.sum() == 0:
+                continue
+
             # print(np.sum(both), pat.sum(), mat.sum(), one.sum())
             for d in range(0, X_both.shape[1]):
                 X_both[:, d] = X_both[:, d] - np.mean(X_both[:, d], axis=0)
@@ -1429,42 +1442,61 @@ class LinearMixedModel:
                 X_mat[:, d] = X_mat[:, d] - np.mean(X_mat[:, d], axis=0)
                 X_one[:, d] = X_one[:, d] - np.mean(X_one[:, d], axis=0)
             
-            Vinv_X: np.ndarray = spsolve(V_both, X_both)
-            XT_Vinv_X: np.ndarray = X_both.T @ Vinv_X
-            XT_Vinv_y = Vinv_X.T @ y_both
-            alpha_both: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov_both: np.ndarray = np.linalg.inv(XT_Vinv_X)
+            Vinv_X_both: np.ndarray = spsolve(V_both, X_both)
+            XT_Vinv_X_both: np.ndarray = X_both.T @ Vinv_X_both
+            XT_Vinv_y_both = Vinv_X_both.T @ y_both
+            alpha_both: np.ndarray = solve(XT_Vinv_X_both, XT_Vinv_y_both)[0]
+            alpha_cov_both: np.ndarray = np.linalg.inv(XT_Vinv_X_both)[0,0]
 
-            Vinv_X: np.ndarray = spsolve(V_mat, X_mat)
-            XT_Vinv_X: np.ndarray = X_mat.T @ Vinv_X
-            XT_Vinv_y = Vinv_X.T @ y_mat
-            alpha_mat: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov_mat: np.ndarray = np.linalg.inv(XT_Vinv_X)
+            Vinv_X_one: np.ndarray = spsolve(V_one, X_one)
+            XT_Vinv_X_one: np.ndarray = X_one.T @ Vinv_X_one
+            XT_Vinv_y_one = Vinv_X_one.T @ y_one
+            alpha_one: np.ndarray = solve(XT_Vinv_X_one, XT_Vinv_y_one)[0]
+            alpha_cov_one: np.ndarray = np.linalg.inv(XT_Vinv_X_one)[0,0]
 
-            Vinv_X: np.ndarray = spsolve(V_pat, X_pat)
-            XT_Vinv_X: np.ndarray = X_pat.T @ Vinv_X
-            XT_Vinv_y = Vinv_X.T @ y_pat
-            alpha_pat: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov_pat: np.ndarray = np.linalg.inv(XT_Vinv_X)
+            Vinv_X_mat: np.ndarray = spsolve(V_mat, X_mat)
+            XT_Vinv_X_mat: np.ndarray = X_mat.T @ Vinv_X_mat
+            XT_Vinv_y_mat = Vinv_X_mat.T @ y_mat
+            alpha_mat: np.ndarray = solve(XT_Vinv_X_mat, XT_Vinv_y_mat)[0]
+            alpha_cov_mat: np.ndarray = np.linalg.inv(XT_Vinv_X_mat)[0,0]
 
-            Vinv_X: np.ndarray = spsolve(V_one, X_one)
-            XT_Vinv_X: np.ndarray = X_one.T @ Vinv_X
-            XT_Vinv_y = Vinv_X.T @ y_one
-            alpha_one: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov_one: np.ndarray = np.linalg.inv(XT_Vinv_X)
+            Vinv_X_pat: np.ndarray = spsolve(V_pat, X_pat)
+            XT_Vinv_X_pat: np.ndarray = X_pat.T @ Vinv_X_pat
+            XT_Vinv_y_pat = Vinv_X_pat.T @ y_pat
+            alpha_pat: np.ndarray = solve(XT_Vinv_X_pat, XT_Vinv_y_pat)[0]
+            alpha_cov_pat: np.ndarray = np.linalg.inv(XT_Vinv_X_pat)[0,0]
 
-            robust_var = (
-                alpha_cov_both[0, 0]**(-1) + alpha_cov_one[0, 0]**(-1) + \
-                alpha_cov_pat[0, 0]**(-1) + alpha_cov_mat[0, 0]**(-1)
-                )**(-1)
-            robust_alpha = robust_var * \
-                (
-                    alpha_cov_both[0,0]**(-1) * alpha_both[0] + alpha_cov_one[0,0]**(-1) * alpha_one[0] + \
-                    alpha_cov_pat[0,0]**(-1) * alpha_pat[0] + alpha_cov_mat[0,0]**(-1) * alpha_mat[0]
-                )
-            alpha[s,0] = robust_alpha
+            cov_both_one = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_one @ Vinv_X_one[:, 0] * alpha_cov_one
+            cov_both_pat = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_pat @ Vinv_X_pat[:, 0] * alpha_cov_pat
+            cov_both_mat = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
+
+            cov_one_mat = alpha_cov_one * Vinv_X_one[:, 0].T @ V_one_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
+            cov_one_pat = alpha_cov_one * Vinv_X_one[:, 0].T @ V_one_pat @ Vinv_X_pat[:, 0] * alpha_cov_pat
+            cov_pat_mat = alpha_cov_pat * Vinv_X_pat[:, 0].T @ V_pat_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
+
+            S = np.block(
+                [[alpha_cov_both, cov_both_one, cov_both_pat, cov_both_mat],
+                 [cov_both_one.T, alpha_cov_one, cov_one_pat, cov_one_mat],
+                 [cov_both_pat.T, cov_one_pat.T, alpha_cov_pat, cov_pat_mat],
+                 [cov_both_mat.T, cov_one_mat.T, cov_pat_mat.T, alpha_cov_mat]]
+            )
+            # robust_var = (
+            #     alpha_cov_both[0, 0]**(-1) + alpha_cov_one[0, 0]**(-1) + \
+            #     alpha_cov_pat[0, 0]**(-1) + alpha_cov_mat[0, 0]**(-1)
+            #     )**(-1)
+            #     # robust_var = (alpha_cov_both**(-1) + alpha_cov_one**(-1) + alpha_cov_pat**(-1) + alpha_cov_mat**(-1))**(-1)
+            # robust_alpha = robust_var * \
+            #     (
+            #         alpha_cov_both[0,0]**(-1) * alpha_both[0] + alpha_cov_one[0,0]**(-1) * alpha_one[0] + \
+            #         alpha_cov_pat[0,0]**(-1) * alpha_pat[0] + alpha_cov_mat[0,0]**(-1) * alpha_mat[0]
+            #     )
+            A = np.ones(4)
+            # alpha[s,0] = robust_alpha
+            robust_var = np.power(A @ solve(S, A), -1)
+            alpha[s,0] = robust_var * (A @ solve(S, np.array([alpha_both, alpha_one, alpha_pat, alpha_mat])))
             alpha_cov[s,0,0] = robust_var
             alpha_ses[s,0] = robust_var ** 0.5
+        print('end robust')
         return alpha, alpha_cov, alpha_ses
     
     def sib_diff_est(self, gts: np.ndarray, num_obs_par_al: np.ndarray, par_status: np.ndarray):

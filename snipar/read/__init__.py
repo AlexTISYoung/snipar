@@ -137,9 +137,12 @@ def get_ids_with_par(gts_f: str,
         # remove one individual from each pair of MZ twins
         # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
         rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
+        # pd.DataFrame({'id': rm_mz}).to_csv('../../output/fastgwa/rm_mz.txt', sep='\t', index=False, header=None)
+        # exit()
+        l = len(ids)
         if len(rm_mz) > 0:
             ids = np.setdiff1d(ids, rm_mz)
-            print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree.')
+            print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree. Removed {l - len(ids)} individuals.')
             
     if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
         gts_f_: Bed = Bed(gts_f, count_A1=True)

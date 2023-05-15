@@ -116,7 +116,7 @@ def compute_ses(alpha_cov):
         alpha_ses[i,:] = np.sqrt(np.diag(alpha_cov[i,:,:]))
     return alpha_ses
 
-def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, alpha, alpha_ses, alpha_cov, sigmas, freqs, robust=False):
+def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, alpha, alpha_ses, alpha_cov, sigmas, freqs, robust=False, standard_gwas=False):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.
     """
@@ -125,8 +125,8 @@ def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, a
     outbim = np.column_stack((chrom,snp_ids,pos,alleles))
     outfile['bim'] = encode_str_array(outbim)
     X_length = 1
-    outcols = ['direct']
-    if not robust or not sib_diff:
+    outcols = ['direct'] if not standard_gwas else ['population']
+    if not robust or not sib_diff or not standard_gwas:
         if sib:
             X_length += 1
             outcols.append('sib')
@@ -163,12 +163,12 @@ def outarray_effect(est, ses, freqs, vy):
     array_out[:,0] = np.round(array_out[:,0], 0)
     return array_out
 
-def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, alpha, alpha_cov, sigmas, freqs, robust=False):
+def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, alpha, alpha_cov, sigmas, freqs, robust=False, standard_gwas=False):
     outbim = np.column_stack((chrom, snp_ids, pos, alleles,np.round(freqs,3)))
     header = ['chromosome','SNP','pos','A1','A2','freq']
     # Which effects to estimate
-    effects = ['direct']
-    if robust or sib_diff:
+    effects = ['direct'] if not standard_gwas else ['population']
+    if robust or sib_diff or standard_gwas:
         i = 0
         vy = sum(sigmas)
         outstack = [outbim]
@@ -317,7 +317,7 @@ def _init_worker(y_, n_vararr_, varcomps_, covar_, covar_shape, **kwargs):
 
 def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
                   parsum=False, fit_sib=False, sib_diff=False, max_missing=5, min_maf=0.01, verbose=False, 
-                  print_sample_info=False, impute_unrel=False, unrelated_inds=None,
+                  print_sample_info=False, impute_unrel=False, unrelated_inds=None, standard_gwas=False,
                   ignore_na_fams=False, ignore_na_rows=False, robust=False, cond_gaussian=False,
                   add_jitter=False):
     y = np.frombuffer(_var_dict['y_'], dtype='float')
@@ -379,7 +379,8 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         logger.info('Imputing missing values with population frequencies')
     if not ignore_na_fams and not ignore_na_rows and not sib_diff and not fit_sib:
         # NAs = G.fill_NAs()
-        G = impute_missing(G)
+        # G = impute_missing(G)
+        G.fill_NAs()
     elif sib_diff or fit_sib:
         G.fill_NAs()
     
@@ -412,7 +413,7 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data, G.num_obs_par_al, G.par_status)
     else:
         if unrelated_inds is None or cond_gaussian:
-            alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows)
+            alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data, G.fams, ignore_na_fams=ignore_na_fams, ignore_na_rows=ignore_na_rows, standard_gwas=standard_gwas)
         else:
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff_meta(G.gts.data, G.fams, unrelated_inds=unrelated_inds)
 
@@ -423,7 +424,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                        ped, imp_fams, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
                        fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, unrelated_inds=None, max_missing=5, min_maf=0.01, batch_size=10000, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, ignore_na_fams=False, ignore_na_rows=False, robust=False, cond_gaussian=False,
-                       add_jitter=False):
+                       add_jitter=False, standard_gwas=False):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -476,7 +477,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     #     print('Using 1 batch')
     # else:
     #     print('Using '+str(batch_bounds.shape[0])+' batches')
-    if robust or sib_diff:
+    if robust or sib_diff or standard_gwas:
         alpha_dim = 1
         # if sib_diff: alpha_dim = 2
     else:
@@ -551,7 +552,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     process_batch_ = partial(process_batch, pheno_ids=y.ids, n_vararr=len(varcomp_lst),
                              bedfile=bedfile, bgenfile=bgenfile,
                              par_gts_f=par_gts_f, ped=ped, imp_fams=imp_fams,
-                             parsum=parsum, fit_sib=fit_sib, sib_diff=sib_diff,
+                             parsum=parsum, fit_sib=fit_sib, sib_diff=sib_diff, standard_gwas=standard_gwas,
                              max_missing=max_missing, min_maf=min_maf,
                              impute_unrel=impute_unrel,
                              unrelated_inds=unrelated_inds,
@@ -624,11 +625,11 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         else:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5', chrom=chrom_out)
         write_output(chrom, snp_ids, pos, alleles, hdf5_outfile, parsum, fit_sib, sib_diff, alpha, alpha_ses, alpha_cov,
-                     sigmas, freqs)
+                     sigmas, freqs, standard_gwas=standard_gwas)
     if not no_txt_out:
         if chrom_out==0:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz')
         else:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz', chrom=chrom_out)
         write_txt_output(chrom, snp_ids, pos, alleles, txt_outfile, parsum, fit_sib, sib_diff, alpha, alpha_cov,
-                     sigmas, freqs, robust=robust)
+                     sigmas, freqs, robust=robust, standard_gwas=standard_gwas)

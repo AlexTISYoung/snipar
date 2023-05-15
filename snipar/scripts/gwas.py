@@ -148,6 +148,10 @@ parser.add_argument('--robust',
                     action='store_true', default=False,
                     help='Whether to use the robust estimator')
 
+parser.add_argument('--standard_gwas',
+                    action='store_true', default=False,
+                    help='Whether to fit standard gwas, i.e., without parental genotypes.')
+
 parser.add_argument('--meta_analyze',
                     action='store_true', default=False,
                     help='Whether to run gwases on related and unrelated individuals separately and meta-analyze the results (only takes effect if --impute_unrel is included).')
@@ -192,6 +196,10 @@ def main(args):
             raise argparse.ArgumentTypeError('Need to input GRM.')
     if args.cond_gaussian and not args.impute_unrel:
         raise argparse.ArgumentTypeError('Need --impute_unrel if --cond_gaussian is supplied.')
+    if args.standard_gwas and (args.robust or args.sib_diff):
+        raise argparse.ArgumentTypeError('Cannot set --robust or --sib_diff if --standard_gwas is set.')
+    if args.robust and args.sib_diff:
+        raise argparse.ArgumentTypeError('Only one of --robust or --sib_diff.')
             
     # Set number of threads
     if args.threads is not None:
@@ -521,6 +529,7 @@ def main(args):
     else:
         varcomps = None
     if args.covar is None:
+        y.gts -= y.gts.mean()
         model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
     else:
         if args.fit_res:
@@ -534,7 +543,9 @@ def main(args):
             model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
     if not varcomps:
         logger.info(f'Optimizing variance components...')
+        start = time.time()
         model.scipy_optimize()
+        logger.info(f'Time for variance component estimation: {time.time() - start}s.')
     else:
         logger.info('varcomps supplied.')
     if args.vc_out:
@@ -577,7 +588,7 @@ def main(args):
         process_chromosome(chroms[i], y, varcomp_lst,
                            ped, imp_fams, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
-                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum,
+                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=args.standard_gwas,
                            impute_unrel=args.impute_unrel, unrelated_inds=unrelated_inds, cond_gaussian=args.cond_gaussian, robust=args.robust,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter,
