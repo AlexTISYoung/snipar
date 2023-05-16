@@ -92,7 +92,7 @@ This will output a population effect estimate (1 generation model) to direct_v1.
 direct effect and average NTC estimates to (2 generation model) to direct_v2.2.effects.txt. 
 
 Unlike when using the true direct genetic effects as weights, the direct effect of the PGS estimated
-from noisy weights (in direct_v1.1.effects.txt) will be smaller than the population effect (direct_v2.2.effects.txt).
+from noisy weights (in direct_v1.1.effects.txt) will be smaller than the population effect (direct_v1.2.effects.txt).
 This is because the PGS does not capture all of the heritability due to estimation error in the weights. 
 The PGS has its population effect inflated (relative to its
 direct effect) by assortative mating, which induces a correlation of the PGS with the component of the heritability
@@ -100,8 +100,8 @@ not captured by the PGS due to estimation error. This inflation is not captured 
 because chromosomes segregate independently during meiosis. (In this simulation, all causal SNPs segregate independently.) 
 Here, the ratio between direct and population effects of the PGS should be around 0.87. 
 
-One should also observe a statistically significant average parental NTC (in direct_v2.2.effects.txt) of the PGS from 
+One should also observe a statistically significant average parental NTC (in direct_v1.2.effects.txt) of the PGS from 
 the two-generation model despite the absence of parental indirect genetic effects in this simulation. Here,
 the ratio between the average NTC and the direct effect should be around 0.15. This demonstrates
-that statistically significant average NTC estimates cannot be interpreted as unbiased estimates of 
+that statistically significant average NTC estimates cannot be interpreted as demonstrating
 parental indirect genetic effects, especially for phenotypes affected by assortative mating. 
