@@ -240,7 +240,7 @@ The output includes the estimated intercept and covariate coefficients for the r
 effect estimates. 
 
 This file has three columns: the first gives the name of the regression coefficient 
-(i.e. direct_effect, population_effect, etc.), the second gives the corresponding regression coefficient,
+(i.e. proband, for proband PGS; parental, for parental PGS; etc.), the second gives the corresponding regression coefficient,
 and the third gives the standard error. For example, in the two-generation analysis, 
 if your PGS file has columns proband, paternal, maternal,
 then the effects file contains the estimate of the direct effect 

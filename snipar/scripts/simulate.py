@@ -1,4 +1,14 @@
 #!/usr/bin/env python
+"""Simulates genotype-phenotype data using forward simulation. Phenotypes can be affected 
+by direct genetic effects, indirect genetic effects (vertical transmission), and assortative mating.
+
+Args:
+@parser@
+
+Results:
+    genotype data in .bed format; full pedigree including phenotype and genetic components for all generations
+        
+"""
 import numpy as np
 import h5py, argparse
 from snipar.ibd import write_segs_from_matrix
@@ -30,7 +40,7 @@ parser.add_argument('--beta_vert',type=float,help='Vertical transmission coeffic
 parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
 parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
 parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
-
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

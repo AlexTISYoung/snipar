@@ -68,8 +68,12 @@ To estimate direct effect and average NTC of the PGS, use the following command:
     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
 
 This will output a population effect estimate (1 generation model) to direct.1.effects.txt, and 
-direct effect and average NTC estimates to (2 generation model) to direct.2.effects.txt. The 
-sampling variance-covariance matrix of the estimates is output to direct.1.vcov.txt (for the 1 generation model) and
+direct effect and average NTC estimates to (2 generation model) to direct.2.effects.txt. The
+population and direct effect estimates are the coefficients on the proband PGS in the 1 and 2
+generation models, so are indicated by the 'proband' row. The average NTC estimate is the
+coefficient on the parental PGS in the two-generation model. The first column gives the name
+of the covariate/PGS column, the second column gives the estimated regression coefficient,
+and the third column gives the standard error of the estimate. The sampling variance-covariance matrix of the estimates is output to direct.1.vcov.txt (for the 1 generation model) and
 direct.2.vcov.txt (for the 2 generation model).
 
 As we are using the true direct effects as weights, the PGS captures all of the heritability,

@@ -585,15 +585,15 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
     ## Fit model
     if ngen==1:
         print('Fitting 1 generation model (proband only)')
-        alpha, alpha_cols = make_and_fit_model(y, pg, ['population_effect'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     elif ngen==2 or ngen==3:
         if fit_sib:
             if 'sib' in pg.sid:
-                pg_cols = ['direct_effect','sib_indirect']
+                pg_cols = ['proband','sibling']
             else:
                 raise(ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)'))
         else:
-            pg_cols = ['direct_effect']
+            pg_cols = ['proband']
         if parsum:
             if 'maternal' in pg.sid and 'paternal' in pg.sid:
                 parcols = np.sort(np.array([np.where(pg.sid=='maternal')[0][0],np.where(pg.sid=='paternal')[0][0]]))
@@ -607,9 +607,9 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                 pass
             else:
                 raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
-            pg_cols.append('avg_parental_NTC')
+            pg_cols.append('parental')
         else:
-            pg_cols += ['paternal_NTC','maternal_NTC']
+            pg_cols += ['paternal','maternal']
         if ngen==2:
             print('Fitting 2 generation model (proband and observed/imputed parents)')
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
