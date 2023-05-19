@@ -63,6 +63,11 @@ To overcome this, create a Python3.9 environment using conda and install using p
 	conda activate myenv
 	pip install snipar
 
+# Apple ARM processor machines
+
+There can be difficulties install *snipar* on Apple ARM processor machines due to lack of available versions of scientific computing software made for these processors' architectures. A workaround for this is to use *snipar* in a docker (https://docs.docker.com/desktop/install/mac-install/) image. To create an appropriate docker image, use this command in the terminal:
+
+	docker run -it amd64/python:3.9.9-slim-buster /bin/bash
    
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
