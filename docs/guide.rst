@@ -56,7 +56,9 @@ Python version incompatibility
 To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
 	
     conda create -n myenv python=3.9
+
 	conda activate myenv
+    
 	pip install snipar
    
 Running tests
