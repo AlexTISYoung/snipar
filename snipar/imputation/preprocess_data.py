@@ -19,7 +19,7 @@ import logging
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
-from bgen_reader import open_bgen, read_bgen
+from snipar.utilities import open_bgen, read_bgen
 from snipar.config import nan_integer
 from tqdm import tqdm
 import statsmodels.api as sm
@@ -533,8 +533,8 @@ def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
             std = np.sqrt(np.var(unphased_pc_gts.flatten()/2)-np.var(fs.flatten()))
             fs[fs>1] = 1
             fs[fs<0] = 0            
-            log_likelihoods = np.sum(np.log(norm.pdf(unphased_pc_gts/2-fs, 0, std)), axis=0)
-            log_likelihood = np.mean(log_likelihoods)
+            log_likelihoods = np.sum(np.log(norm.pdf(unphased_pc_gts/2-fs, 0, std)), axis=0, dtype=np.float64)
+            log_likelihood = np.mean(log_likelihoods, dtype=np.float64)
             aic.append(2*(i-log_likelihood))
         logging.info("computing aics done")
         return np.argmin(aic)
@@ -758,7 +758,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
             logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
             phased_gts[phased_gts_greater1] = np.nan
     
-    standard_f = np.nanmean(unphased_gts,axis=0)/2.0
+    standard_f = np.nanmean(unphased_gts, axis=0, dtype=np.float64)/2.0
     practical_f = unphased_gts.copy()
     practical_f[:] = standard_f
 

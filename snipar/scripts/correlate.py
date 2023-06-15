@@ -1,13 +1,10 @@
 #!/usr/bin/env python
 """Infers correlations between direct effects and population effects, and between direct effects and average non-transmitted coefficients (NTCs).
-
 Minimally: the script requires summary statistics as output by snipar's gwas.py script, and
 either LD-scores (as output by snipar's ibd.py script or LDSC) or .bed files from
 which LD-scores can be computed
-
 Args:
 @parser@
-
 Results:
     correlations
         A text file containing the estimated correlations and their standard errors. 
@@ -19,7 +16,8 @@ from snipar.correlate import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.utilities import *
-from snipar.docgen import get_parser_doc
+from snipar.utilities import get_parser_doc
+
 parser = argparse.ArgumentParser()
 parser.add_argument('sumstats', type=str, help='Address of sumstats files in SNIPar sumstats.gz text format (without .sumstats.gz suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in chr_range (optional argument)')
 parser.add_argument('--chr_range',
@@ -35,9 +33,6 @@ parser.add_argument('--bed', type=str,
 parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.05)', default=0.05)
 parser.add_argument('--corr_filter',type=float,help='Filter out SNPs with outlying sampling correlations more than corr_filter SDs from mean (default 6)',default=6.0)
-parser.add_argument('--eff_Z_filter',type=float,help='Filter out SNPs with outlying effect Z scores more than eff_Z_filter SDs from mean (default None)',default=None)
-parser.add_argument('--filter_corr_paternal_maternal',action='store_true',help='Whether to filter out SNPs with outlying sampling correlations between paternal and maternal NTCs that are more than corr_filter SDs from mean (default False)', default=False)
-parser.add_argument('--reweight', action='store_true', default=False)
 parser.add_argument('--n_blocks',type=int,help='Number of blocks to use for block-jacknife variance estimate (default 200)',default=200)
 parser.add_argument('--save_delete',action='store_true',help='Save jacknife delete values',default=False)
 parser.add_argument('--ld_wind',type=float,help='The window, in cM, within which LD scores are computed (default 1cM)',default=1.0)
@@ -65,22 +60,19 @@ def main(args):
     # Find sumstats files
     sumstats_files, chroms = parse_obsfiles(args.sumstats, obsformat='sumstats.gz', chromosomes=args.chr_range)
     # Read sumstats
-    s = read_sumstats_files(sumstats_files, chroms, args.filter_corr_paternal_maternal)
+    s = read_sumstats_files(sumstats_files, chroms)
 
     # Filter
     print('Filtering on missing values')
     s.filter_NAs()
     print('Filtering out SNPs with MAF<'+str(args.min_maf))
     s.filter_maf(args.min_maf)
-    if args.eff_Z_filter is not None:
-        print(f'Filtering SNPs with direct_Z or population_Z > {args.eff_Z_filter} or < -{args.eff_Z_filter}')
-        s.filter_eff(args.eff_Z_filter)
     print('Filtering out SNPs with sampling correlations more than '+str(args.corr_filter)+' SDs from mean')
     s.filter_corrs(args.corr_filter)
 
     # Get LD scores
     if args.ldscores is not None:
-        ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz', chromosomes=chroms) #[x for x in range(1,23)])
+        ld_files, chroms = parse_obsfiles(args.ldscores, obsformat='l2.ldscore.gz', chromosomes=[x for x in range(1,23)])
         s.scores_from_ldsc(ld_files)
         s.filter_NAs()
     elif args.bed is not None:
@@ -90,18 +82,24 @@ def main(args):
 
     # Compute correlations 
     print('Using '+str(s.sid.shape[0])+' SNPs to compute correlations')
-    r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = s.cor_direct_pop(args.n_blocks, args.reweight)
-    print('Correlation between direct and population effects: '+str(round(r_dir_pop,4))+' (S.E. '+str(round(r_dir_pop_SE,4))+')')
-    r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks, args.reweight)
-    print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC,4))+' (S.E. '+str(round(r_dir_avg_NTC_SE,4))+')')
+    r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = s.cor_direct_pop(args.n_blocks)
+    print('Correlation between direct and population effects: '+str(round(r_dir_pop[0],4))+' (S.E. '+str(round(r_dir_pop_SE[0],4))+')')
+    print('Regression coefficient of population on direct effects: '+str(round(r_dir_pop[1],4))+' (S.E. '+str(round(r_dir_pop_SE[1],4))+')')
+    print('Proportion of variance in population effects uncorrelated with direct effects: '+str(round(r_dir_pop[2],4))+' (S.E. '+str(round(r_dir_pop_SE[2],4))+')')
+    r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks)
+    print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC[0],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[0],4))+')')
+    print('Regression coefficient of average NTCs on direct effects: '+str(round(r_dir_avg_NTC[1],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[1],4))+')')
+    print('Proportion of variance in average NTCs uncorrelated with direct effects: '+str(round(r_dir_avg_NTC[2],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[2],4))+')')
 
     outfile = str(args.out)+'_corrs.txt'
     print('Saving correlation estimates to '+outfile)
-    first_col = np.array(['r_direct_population','r_direct_avg_NTC']).reshape((2,1))
+    first_col = np.array(['r_direct_population','reg_population_direct','v_population_uncorr_direct','r_direct_avg_NTC','reg_avg_NTC_direct','v_avg_NTC_uncorr_direct']).reshape((6,1))
     header = np.array(['correlation','est','SE']).reshape((1,3))
-    cor_out = np.zeros((2,2))
-    cor_out[0,:] = np.array([r_dir_pop,r_dir_pop_SE])
-    cor_out[1,:] = np.array([r_dir_avg_NTC,r_dir_avg_NTC_SE])
+    cor_out = np.zeros((6,2))
+    cor_out[0:3,0] = r_dir_pop
+    cor_out[0:3,1] = r_dir_pop_SE
+    cor_out[3:6,0] = r_dir_avg_NTC
+    cor_out[3:6,1] = r_dir_avg_NTC_SE
     outarray = np.vstack((header,np.hstack((first_col,cor_out))))
     np.savetxt(outfile,outarray,fmt='%s')
 

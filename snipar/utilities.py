@@ -1,12 +1,12 @@
+from typing import Any, Dict, Optional, Union
+from pathlib import Path
 import numpy as np
 import pandas as pd
-from scipy import stats
+import bgen_reader
 from os import path
 import argparse
 import re
 from typing import Tuple
-from numpy.typing import ArrayLike
-
 
 def make_id_dict(x,col=0):
     """
@@ -141,6 +141,17 @@ class NumRangeAction(argparse.Action):
         result = result.astype(str).tolist()
         setattr(args, self.dest, result)
 
+def coord2linear(ind1: int, ind2: int) -> int:
+    row_ind, col_ind = max(ind1, ind2), min(ind1, ind2)
+    return int(row_ind * (row_ind + 1) / 2 + col_ind)
+
+
+def linear2coord(ind: int) -> Tuple[int, int]:
+    ind += 1
+    ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
+    ind2 = ind - (ind1 - 1) * ind1 / 2
+    return int(ind1 - 1), int(ind2 - 1)
+
 def get_parser_doc(parser):
     doc = ""
     for action in parser._actions:
@@ -165,22 +176,50 @@ def get_parser_doc(parser):
     return doc
 
 
-def coord2linear(ind1: int, ind2: int) -> int:
-    row_ind, col_ind = max(ind1, ind2), min(ind1, ind2)
-    return int(row_ind * (row_ind + 1) / 2 + col_ind)
+class _bgen:
+    """Simple wrapper class of bgen_reader.open_bgen that controls access to sample ids."""
+    def __init__(self, 
+                 filepath: Union[str, Path],
+                 samples_filepath: Optional[Union[str, Path]] = None,
+                 allow_complex: bool = False,
+                 verbose: bool = True,):
+        self._bgen = bgen_reader.open_bgen(filepath, allow_complex=allow_complex, verbose=verbose)
+        self._samples = self._read_sample(samples_filepath)
+        if self._bgen.samples.shape[0] != self._samples.shape[0]:
+            raise ValueError('sample file length and bgen file length do not match.')
+    
+    @property
+    def samples(self) -> np.ndarray:
+        return self._samples
+    
+    def __getattr__(self, name: str) -> Any:
+        """Access to attributes other than sample ids."""
+        return getattr(self._bgen, name)
+    
+    def _read_sample(self, samples_filepath: str) -> np.ndarray:
+        return pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy(dtype=str)
 
 
-def linear2coord(ind: int) -> Tuple[int, int]:
-    ind += 1
-    ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
-    ind2 = ind - (ind1 - 1) * ind1 / 2
-    return int(ind1 - 1), int(ind2 - 1)
+def open_bgen(filename: str, verbose: bool = False) -> bgen_reader.open_bgen:
+    """Wrapper of bgen_reader.open_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.open_bgen(filename, verbose=verbose)
+    if bgen.samples[0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = _bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+    return bgen
 
 
-def corr_test(arr1: ArrayLike, arr2: ArrayLike) -> Tuple[float, np.ndarray]:
-    # https://stackoverflow.com/questions/30390476/equivalent-of-rs-of-cor-test-in-python
-    corr = stats.pearsonr(arr1, arr2)
-    z = np.arctanh(corr[0])
-    sigma = 1/ ((len(arr1) - 3) ** 0.5)
-    cint = z + np.array([-1, 1]) * sigma * stats.norm.ppf((1+0.95)/2)
-    return corr[0], np.tanh(cint)
+def read_bgen(filename: str, verbose: bool = False) -> Dict:
+    """Wrapper of bgen_reader.read_bgen that checks if sample ids make sense."""
+    bgen = bgen_reader.read_bgen(filename, verbose=verbose)
+    if bgen['samples'][0] == 'sample_0':
+        print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
+        samples_filepath = filename[:-4] + 'sample'
+        if not path.exists(samples_filepath):
+            raise FileNotFoundError(f'{samples_filepath} does not exist.')
+        bgen = bgen_reader.read_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+        bgen['samples'] = pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy()
+    return bgen

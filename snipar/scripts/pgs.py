@@ -16,11 +16,9 @@ Results:
 import argparse
 import numpy as np
 import snipar.pgs as pgs
-from snipar.gtarray import gtarray
 import snipar.read as read
-import snipar.lmm as lmm
 from snipar.utilities import *
-from snipar.docgen import get_parser_doc
+from snipar.slmm import build_ibdrel_arr, build_sib_arr
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -37,28 +35,41 @@ parser.add_argument('--chr_range',
                     help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
 parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
-parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='sid')
-parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='ldpred_beta')
-parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='nt1')
-parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='nt2')
+parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='SNP')
+parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='b')
+parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='A1')
+parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='A2')
 parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
 parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
 parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
+parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
 parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
+parser.add_argument('--grandpar',action='store_true',default=False,help='Calculate imputed/observed grandparental PGS for individuals with both parents genotyped')
+parser.add_argument('--gparsum',action='store_true',default = False, help='Use the sum of maternal grandparents and the sum of paternal grandparents in the regression (useful when no grandparents genotyped)')
+parser.add_argument('--gen_models',
+                    type=parseNumRange,
+                    nargs='*',
+                    action=NumRangeAction,
+                    help='Which multi-generational models should be fit. Default fits 1 and 2 generation models. Specify a range by, for example, 1-3, where 3 fits a model with parental and grandparental scores', default='1-2')
+parser.add_argument('--h2f',type=str,help='Provide heritability estimate in form h2f,h2f_SE (e.g. 0.5,0.01) from MZ-DZ comparison, RDR, or sibling realized relatedness. If provided when also fitting 2 generation model, will adjust results for assortative mating assuming equilibrium.',default=None)
+parser.add_argument('--rk',type=str,help='Provide estimate of the correlation between parents PGIs in the form rk,rk_SE (e.g 0.1,0.01). If provided with h2f, will use for adjusting estimates for assortative mating.',default=None)
+parser.add_argument('--bpg',action='store_true', default=False, help='Restrict sample to those with both parents genotyped')    
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                     default=1)
+parser.add_argument('--ibdrel_path', type=str,
+                    help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+parser.add_argument('--sparse_thresh', type=float,
+                help='Threshold of GRM/IBD sparsity', default=0.05)
 parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
 parser.add_argument('--scale_pgs',action='store_true',help='Scale the PGS to have variance 1 among the phenotyped individuals',default=False)
 parser.add_argument('--compute_controls', action='store_true', default=False,
                     help='Compute PGS for control families (default False)')
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
-parser.add_argument('--ibdrel_path', type=str,
-                        help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
-parser.add_argument('--sparse_thres', type=float,
-                    help='Threshold of GRM/IBD sparsity', default=0.05)
+parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
+parser.add_argument('--force_am_adj',action='store_true',help='Force assortative mating adjustment even when estimated correlation is noisy/not significant',default=False)
+args=parser.parse_args()
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
-
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -72,18 +83,9 @@ def main(args):
             raise ValueError('Provide only one of --bedfiles and --bgenfiles')
         print('Computing PGS from weights file')
         ####### Read PGS #######
-        if args.sep is None:
-            weights = np.loadtxt(args.weights,dtype=str)
-        else:
-            weights = np.loadtxt(args.weights,dtype=args.sep)
-        colnames = weights[0,:]
-        weights = weights[1:weights.shape[0],:]
-        print('Read weights for '+str(weights.shape[0])+' variants')
-        beta = np.array(weights[:,np.where(colnames == args.beta_col)[0][0]],dtype=np.float64)
-        allele_indices = np.array([np.where(colnames==args.A1)[0][0],np.where(colnames==args.A2)[0][0]])
-        p = pgs.pgs(weights[:,np.where(colnames==args.SNP)[0][0]],
-                beta,
-                weights[:,allele_indices])
+        p = pgs.read_weights(args.weights, SNP=args.SNP, beta_col = args.beta_col, A1=args.A1, A2=args.A2, sep=args.sep)
+        # Remove zeros
+        p.remove_zeros()
 
         ###### Compute PGS ########
         # Find observed and imputed files
@@ -118,35 +120,66 @@ def main(args):
         else:
             ped = None
         print('Computing PGS')
+        if args.bed is not None:
+            print('Observed genotypes file: '+bedfiles[0])
+        if args.bgen is not None:
+            print('Observed genotypes file: '+bgenfiles[0])
+        if args.imp is not None:
+            print('Imputed genotypes file: '+pargts_list[0])
         pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
         for i in range(1,chroms.shape[0]):
+            if args.bed is not None:
+                print('Observed genotypes file: '+bedfiles[i])
+            if args.bgen is not None:
+                print('Observed genotypes file: '+bgenfiles[i])
+            if args.imp is not None:
+                print('Imputed genotypes file: '+pargts_list[i])
             if args.compute_controls:
                 pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
-                pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
+                if pg_i[0] is not None:
+                    if pg is None:
+                        pg = pg_i
+                    else:
+                        pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
             else:
-                pg = pg.add(pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls))
+                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+                if pg_i is not None:
+                    if pg is not None:
+                        pg = pg.add(pg_i)
+                    else:
+                        pg = pg_i
         print('PGS computed')
+        ####### Assortative mating adjustment #######
+        if not args.no_am_adj:
+            if args.compute_controls:
+                r_am = pg[0].am_adj()
+            else:
+                r_am = pg.am_adj()
+        else:
+            r_am = 0
+        ####### Compute grandparental PGSs #######
+        if args.grandpar:
+            if args.compute_controls:
+                pg[0].compute_grandpar(r_am)
+            else:
+                pg.compute_grandpar(r_am)
         ####### Write PGS to file ########
         if args.compute_controls:
-            pgs.write(pg[0], args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[1],args.out + '.pgs.control_paternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[2], args.out + '.pgs.control_maternal.txt', scale_PGS=args.scale_pgs)
-            pgs.write(pg[3],args.out + '.pgs.control_sibling.txt', scale_PGS=args.scale_pgs)
+            pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs)
+            pg[1].write(args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs)
+            pg[2].write(args.out + '.pgs.control_maternal.txt', scale=args.scale_pgs)
+            pg[3].write(args.out + '.pgs.control_sibling.txt', scale=args.scale_pgs)
         else:
-            pgs.write(pg, args.out + '.pgs.txt', scale_PGS=args.scale_pgs)
+            pg.write(args.out + '.pgs.txt', scale=args.scale_pgs)
     elif args.pgs is not None:
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
-        pgs_f = open(args.pgs,'r')
-        pgs_header = pgs_f.readline().split(' ')
-        pgs_header[len(pgs_header)-1] = pgs_header[len(pgs_header)-1].split('\n')[0]
-        ncols = len(pgs_header)
-        pgs_cols = tuple([x for x in range(2,ncols)])
-        pg = gtarray(np.loadtxt(args.pgs,usecols = pgs_cols, skiprows=1),
-                     np.loadtxt(args.pgs,usecols = 1, dtype=str, skiprows=1),
-                     sid=np.array(pgs_header[2:ncols]),
-                     fams=np.loadtxt(args.pgs,usecols = 0, dtype=str, skiprows=1))
+        pg = pgs.read_pgs(args.pgs)
+        if not args.parsum:
+            if 'parental' in pg.sid and 'paternal' not in pg.sid:
+                print('Using sum of paternal and maternal PGS as no paternal & maternal PGS values found')
+                args.parsum = True
     else:
         raise ValueError('Weights or PGS must be provided')
 
@@ -155,93 +188,49 @@ def main(args):
         # Read phenotype
         y = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
+        if args.covar is not None:
+            print('Reading covariates')
+            covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
+            # Match to pheno ids
+            covariates.filter_ids(y.ids)
+        else:
+            covariates = None
+        # Restrict sample to both parents genotyped
+        if args.bpg:
+            print('Restricting to individuals with both parents genotyped')
+            pg.filter_bpg()
         # Remove individuals without phenotype observations from PGS
+        # and match IDs
         pg.filter_ids(y.ids)
         y.filter_ids(pg.ids)
-        print('Final sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
-
-        if args.ibdrel_path is not None:
-            # ids, fam_labels = match_grm_ids(
-            #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
-            id_dict = make_id_dict(pg.ids)
-            grm_data, grm_row_ind, grm_col_ind = lmm.build_ibdrel_arr(
-                args.ibdrel_path, id_dict=id_dict, keep=pg.ids, thres=args.sparse_thres)
-        elif args.grm_path is not None or args.gcta_path is not None:
-            if args.grm_path is None:
-                lmm.run_gcta_grm(args.plink_path, args.gcta_path,
-                            args.hapmap_bed, args.outprefix, pg.ids)
-                grm_path = args.outprefix
-            else:
-                grm_path = args.grm_path
-            ids, fam_labels = lmm.match_grm_ids(
-                pg.ids, pg.fams, grm_path=grm_path, grm_source='gcta')
-            id_dict = make_id_dict(ids)
-            if args.grm_npz_path is not None:
-                grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr_from_npz(
-                    id_filepath=grm_path + '.grm.id', npz_path=args.grm_npz_path,
-                    ids=ids, id_dict=id_dict)
-            else:
-                grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr(
-                    grm_path, id_dict=id_dict, thres=args.sparse_thres)
-        if 'ids' in locals():
-            pg.filter_ids(ids)
-            y.filter_ids(pg.ids)
-        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(pg.fams)
-
-        if 'grm_data' in locals():
-            varcomp_lst = (
-                (grm_data, grm_row_ind, grm_col_ind),
-                (sib_data, sib_row_ind, sib_col_ind),
-            )
-        else:
-            varcomp_lst = (
-                (sib_data, sib_row_ind, sib_col_ind),
-            )
-        
-        # Parental sum
-        if args.parsum:
-            if 'maternal' in pg.sid and 'paternal' in pg.sid:
-                parcols = np.sort(np.array([np.where(pg.sid=='maternal')[0][0],np.where(pg.sid=='paternal')[0][0]]))
-                trans_matrix = np.identity(pg.gts.shape[1])
-                trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
-                trans_matrix = np.delete(trans_matrix,parcols[1],1)
-                pg.gts = pg.gts.dot(trans_matrix)
-                pg.sid = np.delete(pg.sid,parcols[1])
-                pg.sid[parcols[0]] = 'parental'
-            else:
-                raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
+        if covariates is not None:
+            covariates.filter_ids(pg.ids)
+        print('Sample size of individuals with complete phenotype and PGS observations: '+str(y.shape[0]))
         # Scale
         if args.scale_phen:
             y.scale()
         if args.scale_pgs:
             pg.scale()
-        # Estimate effects
-        print('Estimating direct effects and NTCs')
-        lmm_imp = lmm.LinearMixedModel(y.gts.data[:, 0], varcomp_arr_lst=varcomp_lst, covar_X=pg.gts.data, add_intercept=True)
-        # logger.info('Optimizing variance components...')
-        lmm_imp.scipy_optimize()
-        ZT_Vinv_Z_imp = lmm_imp.Z.T @ lmm_imp.Vinv_Z
-        alpha_imp = [np.linalg.solve(ZT_Vinv_Z_imp, lmm_imp.Z.T @ lmm_imp.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
-        # Estimate population effect
-        print('Estimating population effect')
-        lmm_proband = lmm.LinearMixedModel(y.gt.data[:, 0], varcomp_arr_lst=varcomp_lst, covar_X=pg.gts.data[:, 0], add_intercept=True)
-        # logger.info('Optimizing variance components...')
-        lmm_proband.scipy_optimize()
-        ZT_Vinv_Z_proband = lmm_proband.Z.T @ lmm_proband.Vinv_Z
-        alpha_proband = [np.linalg.solve(ZT_Vinv_Z_proband, lmm_proband.Z.T @ lmm_proband.Vinv_y), np.linalg.inv(ZT_Vinv_Z_proband)]
-        # Get print out for fixed mean effects
-        alpha_out = np.zeros((pg.sid.shape[0]+1, 2))
-        alpha_out[0:pg.sid.shape[0], 0] = alpha_imp[0][1:(1+pg.sid.shape[0])]
-        alpha_out[0:pg.sid.shape[0], 1] = np.sqrt(np.diag(alpha_imp[1])[1:(1+pg.sid.shape[0])])
-        alpha_out[pg.sid.shape[0],0] = alpha_proband[0][1]
-        alpha_out[pg.sid.shape[0],1] = np.sqrt(np.diag(alpha_proband[1])[1])
-        print('Saving estimates to '+args.out+ '.effects.txt')
-        outcols = np.hstack((pg.sid,np.array(['population']))).reshape((pg.sid.shape[0]+1,1))
-        np.savetxt(args.out + '.effects.txt',
-                   np.hstack((outcols, np.array(alpha_out, dtype='S'))),
-                   delimiter='\t', fmt='%s')
-        print('Saving sampling covariance matrix of estimates to ' + args.out + '.vcov.txt')
-        np.savetxt(args.out + '.vcov.txt', alpha_imp[1][1:(1+pg.sid.shape[0]),1:(1+pg.sid.shape[0])])
+        ## Estimate models
+        if '1' in args.gen_models:
+            print('Estimating population effect (1 generation model)')
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+        if '2' in args.gen_models:
+            print('Estimating direct effect and parental NTCs (2 generation model)')
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            if args.h2f is not None:
+                print('Adjusting two-generation model results and heritability estimate for assortative mating')
+                h2f, h2f_se = pgs.h2f_parse(args.h2f)
+                if args.rk is None:
+                    adj_estimates, adj_ses = pgs.am_adj_2gen(alpha_2[0], alpha_2[1], h2f, h2f_se, pg=pg, y_std=np.std(y.gts[:,0]), pg_std=np.std(pg.gts[:,np.where(pg.sid=='proband')[0][0]]))
+                else:
+                    rk, rk_se = pgs.h2f_parse(args.rk)
+                    adj_estimates, adj_ses = pgs.am_adj_2gen(alpha_2[0], alpha_2[1], h2f, h2f_se, rk=rk, rk_se=rk_se, y_std=np.std(y.gts[:,0]), pg_std=np.std(pg.gts[:,np.where(pg.sid=='proband')[0][0]]))
+                pgs.write_2gen_adj_ests(adj_estimates, adj_ses, outprefix=args.out)
+        if '3' in args.gen_models:
+            print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            
 if __name__ == "__main__":
     args=parser.parse_args()
-    main(args)
+    main(args)  

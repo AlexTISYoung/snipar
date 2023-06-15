@@ -7,7 +7,7 @@ from snipar.read.bed import read_sibs_from_bed
 from snipar.read.bgen import read_sibs_from_bgen
 from snipar.utilities import make_id_dict
 from snipar.utilities import outfile_name
-from bgen_reader import open_bgen
+from snipar.utilities import open_bgen
 
 ####### Transition Matrix ######
 @njit
@@ -282,9 +282,9 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
                 raise (ValueError('More than 1 chromosome in input bedfile'))
             else:
                 chrom = chrom[0]
-        print('Inferring IBD for chromosome ' + str(chrom))
         # Read sibling genotypes from bed file
         gts = read_sibs_from_bed(bedfile, sibpairs)
+        print('Inferring IBD for chromosome ' + str(chrom))
     elif bgenfile is not None:
         ## Read bed
         print('Reading genotypes from ' + bgenfile)
@@ -299,9 +299,9 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
                 chrom = chrom[0]
                 if chrom=='':
                     chrom = 0
-        print('Inferring IBD for chromosome ' + str(chrom))
         # Read sibling genotypes from bed file
         gts = read_sibs_from_bgen(bgenfile, sibpairs)
+        print('Inferring IBD for chromosome ' + str(chrom))
     # Calculate allele frequencies
     print('Calculating allele frequencies')
     gts.compute_freqs()
@@ -340,7 +340,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         # Check for NAs
         if np.var(map) == 0:
             print('Map information not found in bim file.')
-            print('Using default map (decode sex averaged map on Hg19 coordinates)')
+            print('Using default map (decode sex averaged map on GRCh38 coordinates)')
             gts.map = decode_map_from_pos(chrom, gts.pos)
             pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
             print('Found map positions for '+str(pc_mapped)+'% of SNPs')
@@ -376,7 +376,9 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     print('Read map')
     # Weights
     print('Computing LD weights')
-    ld = compute_ld_scores(np.array(gts.gts, dtype=np.float_), gts.map, max_dist=1)
+    ld_n = np.min([1000, gts.shape[1]])
+    ld_sample = np.random.randint(0, gts.shape[1], size=ld_n)
+    ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float_), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')

@@ -21,7 +21,7 @@ import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
-from snipar.docgen import get_parser_doc
+from snipar.utilities import get_parser_doc
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',
@@ -61,6 +61,7 @@ parser.add_argument('--max_error', type=float, help='Maximum per-SNP genotyping 
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
+parser.add_argument('--batches',type=int,help='Number of batches to split the data (by sibpair) into for IBD inference. Useful for large datasets.',default=1)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
@@ -130,7 +131,6 @@ def main(args):
         sibpairs = get_sibpairs_from_king(kinfile)
     else:
         raise(ValueError('Must provide either KING kinship file or pedigree'))
-
     if sibpairs.shape[0]==0:
         raise(ValueError('No sibling pairs found'))
     print('Found '+str(sibpairs.shape[0])+' full sibling pairs')
@@ -161,11 +161,21 @@ def main(args):
             error_probs_i = None
         else:
             error_probs_i = error_probs[i]
-        snipar.ibd.infer_ibd_chr(sibpairs, error_prob, error_probs_i, outprefix,
-                                bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
-                                min_length=min_length, mapfile=args.map,
-                                ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
-                                min_maf=min_maf, max_missing=max_missing, max_error=max_error)
+        if args.batches > 1:
+            sibpairs = np.array_split(sibpairs, args.batches)
+            for j in range(args.batches):
+                print('Inferring IBD on batch '+str(j+1)+' of '+str(args.batches))
+                snipar.ibd.infer_ibd_chr(sibpairs[j], error_prob, error_probs_i, outprefix+str(j+1),
+                                        bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
+                                        min_length=min_length, mapfile=args.map,
+                                        ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
+                                        min_maf=min_maf, max_missing=max_missing, max_error=max_error)
+        else:
+            snipar.ibd.infer_ibd_chr(sibpairs, error_prob, error_probs_i, outprefix,
+                                    bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
+                                    min_length=min_length, mapfile=args.map,
+                                    ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
+                                    min_maf=min_maf, max_missing=max_missing, max_error=max_error)
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)

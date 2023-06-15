@@ -63,4 +63,3 @@ def ldscores_from_bed(bedfile, chrom, ld_wind, ld_out = None):
                         ld_outarray))
         np.savetxt(ld_outfile, ld_outarray, fmt='%s')
     return ldscores, sid
-

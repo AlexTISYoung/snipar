@@ -31,8 +31,7 @@ import pandas as pd
 import os
 from multiprocessing import Pool
 from time import time
-from snipar.utilities import NumRangeAction, parseNumRange
-from snipar.docgen import get_parser_doc
+from snipar.utilities import NumRangeAction, parseNumRange, get_parser_doc
 random.seed(1567924)
 
 def run_imputation(data):
@@ -179,6 +178,19 @@ def run_imputation(data):
                     #TODO fix max estimator loggigng
                     new_val = np.array(hf[key])
                     hdf5_results[key] = np.vstack((hdf5_results[key], new_val))
+                if not pcs is None:
+                    for key in ["maf_x",
+                                "maf_TSS",
+                                "maf_RSS1",
+                                "maf_RSS2",
+                                "maf_R2_1",
+                                "maf_R2_2",
+                                "maf_larger1",
+                                "maf_less0",]:
+                        new_val = np.array(hf[key])
+                        hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
+                    new_val = np.array(hf["maf_coefs"])
+                    hdf5_results["maf_coefs"] = np.hstack((hdf5_results["maf_coefs"], new_val))
                 non_duplicates = np.array(hf["non_duplicates"])
                 non_duplicates = hdf5_results["non_duplicates"][-1] + non_duplicates + 1
                 hdf5_results["non_duplicates"] = np.hstack((hdf5_results["non_duplicates"], non_duplicates))
