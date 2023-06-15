@@ -107,6 +107,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     pos = pos[obs_sid_index]
     return chromosome, sid, pos, alleles, obs_sid_index
 
+
 def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, include_unrel=False, robust=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
@@ -123,18 +124,22 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     #     imp_fams = convert_str_array(par_gts_f['families'])
     # else:
     #     imp_fams = None
-    ### Find ids with observed/imputed parents and indices of those in observed/imputed data
-    ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
-                                                                                sib=sib or sib_diff, include_unrel=include_unrel, verbose=print_sample_info)
-    if np.sum(parcount>0)==0 and not parsum:
-        if verbose:
-            print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
-        parsum = True
-    elif 100 > np.sum(parcount>0) > 0 and not parsum:
-        if verbose:
-            print('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
+    if sib_diff:
+        # Find ids with sibs
+        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=verbose)
+    else:
+        # Find ids with observed/imputed parents and indices of those in observed/imputed data
+        ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
+                                                                                    sib=sib or sib_diff, include_unrel=include_unrel, verbose=print_sample_info) 
+        if np.sum(parcount>0)==0 and not parsum:
+            if verbose:
+                print('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
+            parsum = True
+        elif 100 > np.sum(parcount>0) > 0 and not parsum:
+            if verbose:
+                print('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
     ### Match observed and imputed SNPs ###
-    if par_gts_f is not None:
+    if par_gts_f is not None and not sib_diff:
         if verbose:
             print('Matching observed and imputed SNPs')
         chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids)
@@ -166,10 +171,14 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     if verbose:
         print('Reading observed genotypes')
     gts = gts_f[observed_indices, obs_sid_index].read().val
-    gts_ids = gts_f.iid[observed_indices,1]
-    gts_id_dict = make_id_dict(gts_ids)
+    gts_ids_reduced = gts_f.iid[observed_indices,1]
+    gts_id_dict = make_id_dict(gts_ids_reduced)
     # Find indices in reduced data
-    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
+    if sib_diff:
+        gt_indices, fam_labels = preprocess.find_gts(ids, ped, gts_id_dict)
+        par_status = None
+    else:
+        par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     if verbose:
         print('Constructing family based genotype matrix')
     ### Make genotype design matrix
@@ -180,18 +189,22 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
         else:
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
             G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
-        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=not sib_diff).gts
+        # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
+        gts_all = gts = gts_f[:, obs_sid_index].read().val
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts_all, gts_ids, remove_proband=True).gts
     elif sib_diff:
         G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
-        G[:,0,:] = gts[gt_indices[:,0],:]
-        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=not sib_diff).gts
+        G[:,0,:] = gts[gt_indices,:]
+        # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
+        gts_all = gts = gts_f[:, obs_sid_index].read().val
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts_all, gts_ids, remove_proband=False).gts
     else:
         G = preprocess.make_gts_matrix(gts, par_status, gt_indices, parsum=parsum, imp_gts=imp_gts)
     del gts
     if imp_gts is not None:
         del imp_gts
     if robust:
-        num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, G.shape[0])
+        num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, gt_indices, G.shape[0])
         return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 

@@ -34,13 +34,13 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'
 import h5py
 import snipar.read as read
 import numpy as np
-import snipar.lmm as lmm
+import snipar.slmm as slmm
 from snipar.utilities import *
 from snipar.gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
-from snipar.docgen import get_parser_doc
+from snipar.utilities import get_parser_doc
 from snipar.read import build_ped_from_par_gts
 
 import logging
@@ -128,14 +128,6 @@ parser.add_argument('--add_jitter',
                     action='store_true',
                     help='Whether to add jitter to diagonals of V.')
 
-parser.add_argument('--ignore_na_fams',
-                    action='store_true', default=False,
-                    help='Whether to ignore families with NA rows  in genotype design matrix or not.')
-
-parser.add_argument('--ignore_na_rows',
-                    action='store_true', default=False,
-                    help='Whether to ignore NA rows in genotype design matrix or not.')
-
 parser.add_argument('--impute_unrel',
                     action='store_true', default=False,
                     help='Whether to include unrelated individuals and impute their parental genotypes or not.')
@@ -165,9 +157,9 @@ parser.add_argument('--debug',
                     action='store_true', default=False,
                     help='Debug code in single process mode.')
 
-parser.add_argument('--loglevel',
-                    type=str, default='INFO',
-                    help='Case insensitive Logging level: INFO, DEBUG, ...')
+# parser.add_argument('--loglevel',
+#                     type=str, default='INFO',
+#                     help='Case insensitive Logging level: INFO, DEBUG, ...')
 
 
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
@@ -179,15 +171,14 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
-    loglevel = args.loglevel
-    # FORMAT = '%(process)d :: %(asctime)-15s :: %(levelname)s :: %(name)s :: %(funcName)s :: %(message)s'
-    FORMAT = '%(process)d :: %(asctime)-10s :: %(levelname)s :: %(message)s'
-    numeric_level = getattr(logging, loglevel.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise ValueError('Invalid log level: %s' % loglevel)
-    logging.basicConfig(
-        format=FORMAT, level=numeric_level)
-    logger = logging.getLogger(__name__)
+    # loglevel = args.loglevel
+    # FORMAT = '%(process)d :: %(asctime)-10s :: %(levelname)s :: %(message)s'
+    # numeric_level = getattr(logging, loglevel.upper(), None)
+    # if not isinstance(numeric_level, int):
+    #     raise ValueError('Invalid log level: %s' % loglevel)
+    # logging.basicConfig(
+    #     format=FORMAT, level=numeric_level)
+    # logger = logging.getLogger(__name__)
 
     if not args.sib_var and not args.grm_var:
         raise argparse.ArgumentTypeError('At least one of --sib_var and --grm_var.')
@@ -200,6 +191,8 @@ def main(args):
         raise argparse.ArgumentTypeError('Cannot set --robust or --sib_diff if --standard_gwas is set.')
     if args.robust and args.sib_diff:
         raise argparse.ArgumentTypeError('Only one of --robust or --sib_diff.')
+    if args.sib_diff and args.fit_sib:
+        raise argparse.ArgumentTypeError('Only fit sib effect for the sib-difference method: only one of --sib_diff and fit_sib can be supplied.')
             
     # Set number of threads
     if args.threads is not None:
@@ -207,10 +200,11 @@ def main(args):
     else:
         num_threads = numba_config.NUMBA_NUM_THREADS
     set_num_threads(num_threads)
-    print('Number of threads: '+str(num_threads))
+    print('Number of threads for numba: '+str(num_threads))
     print('Number of processes: '+str(args.cpus))
 
-    logger.info(f'Output will be written to {args.out}.')
+    # logger.info(f'Output will be written to {args.out}.')
+    print(f'Output will be written to {args.out}.')
 
     # Check arguments
     if args.bed is None and args.bgen is None:
@@ -223,6 +217,11 @@ def main(args):
     # Find observed and imputed files
     if args.imp is None:
         print('Warning: no imputed parental genotypes provided. Will analyse only individuals with both parents genotyped.')
+        args.impute_unrel = False
+        args.cond_gaussian = False
+        args.robust = False
+        args.sib_diff = False
+        default = True
         if args.bed is not None:
             bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -231,6 +230,7 @@ def main(args):
             bedfiles = [None for x in range(chroms.shape[0])]
         pargts_list = [None for x in range(chroms.shape[0])]
     else:
+        default = False
         if args.bed is not None:
             bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -258,28 +258,28 @@ def main(args):
 
     # Read pedigree
     if args.imp is None:
-        logger.info('Reading pedigree from '+str(args.pedigree))
+        # logger.info('Reading pedigree from '+str(args.pedigree))
+        print('Reading pedigree from '+str(args.pedigree))
         ped = np.loadtxt(args.pedigree,dtype=str)
         if ped.shape[1] < 4:
             raise(ValueError('Not enough columns in pedigree file'))
         elif ped.shape[1] > 4:
-            logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+            # logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+            print('WARNING: pedigree file has more than 4 columns. The first four columns only will be used')
         # Remove rows with missing parents
         sibpairs, ped = get_sibpairs_from_ped(ped)
         imp_fams = None
         if sibpairs is not None:
-            logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
+            # logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
+            print('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
         else:
-            logger.info('Found 0 sibling pairs')
+            # logger.info('Found 0 sibling pairs')
+            print('Found 0 sibling pairs')
     else:
         # Read pedigree
         ped, imp_fams = build_ped_from_par_gts(pargts_list[0])
-        print(ped[(ped[:, 4] == 'True')&(ped[:, 5] == 'True')].shape)
-    # import pandas as pd
-    # pd.DataFrame({'ID': ped[:,1]}).to_csv('../../output/robust_ids.txt', sep='\t', index=False)
-    # pd.DataFrame({'ID': ped[(ped[:,4] == 'False') & (ped[:,5] == 'False'),1]}).to_csv('../../output/sibdiff_ids.txt', sep='\t', index=False)
-    print('robust sample:', ped[:,1].shape)
-    print('sib-siff sample:', ped[(ped[:,4] == 'False') & (ped[:,5] == 'False'),1].shape)
+        if args.sib_diff:
+            imp_fams = None # imputation not used
 
     if args.impute_unrel and (args.meta_analyze or args.cond_gaussian):
         ids, fam_labels, unrelated_inds = read.get_ids_with_par(
@@ -296,10 +296,9 @@ def main(args):
         print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
         ped_indices = np.array([ped_dict[x] for x in y.ids])
         y.fams = ped[ped_indices,0]
-        # print(ped[ped_indices,0].shape); exit()
         ids = y.ids
         fam_labels = y.fams
-        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], pargts_list[0], 
+        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], ped, 
                                                  y.ids, return_info=False, ibdrel_path=args.ibdrel_path)
     else:
         unrelated_inds = None
@@ -308,201 +307,44 @@ def main(args):
             y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
             return_info=False
         )
-    # if not args.sib_diff:  
     y.filter_ids(ids)
     if args.sib_diff:
         ids = y.ids
         fam_labels = y.fams
     np.testing.assert_array_equal(ids, y.ids)
-    # np.testing.assert_array_equal(fam_labels, y.fams)
     if args.covar:
         if not args.sib_diff:
             covariates.filter_ids(ids)
             np.testing.assert_array_equal(ids, covariates.ids)
         else:
             covariates.filter_ids(y.ids)
-        # np.testing.assert_array_equal(fam_labels, covariates.fams)
-    # del ids, fam_labels
-
-    # if args.covar:
-    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=covariates, keep=args.keep, impute_unrel=args.impute_unrel)
-    # else:
-    #     ids, fam_labels = find_common_ind_ids(gts_list, pargts_list, y.ids, from_chr=args.from_chr, covar=None, keep=args.keep, impute_unrel=args.impute_unrel)
-
-    
-    # # Read pedigree
-    # if args.imp is None:
-    #     logger.info('Reading pedigree from '+str(args.pedigree))
-    #     ped = np.loadtxt(args.pedigree,dtype=str)
-    #     if ped.shape[1] < 4:
-    #         raise(ValueError('Not enough columns in pedigree file'))
-    #     elif ped.shape[1] > 4:
-    #         logger.warning('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
-    #     # Remove rows with missing parents
-    #     sibpairs, ped = get_sibpairs_from_ped(ped)
-    #     if sibpairs is not None:
-    #         logger.info('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
-    #     else:
-    #         logger.info('Found 0 sibling pairs')
-    # else:
-    #     # Read pedigree
-    #     par_gts_f = h5py.File(pargts_list[0],'r')
-    #     ped = convert_str_array(par_gts_f['pedigree'])
-    #     ped = ped[1:ped.shape[0]]
-    #     # Remove control fams
-    #     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    #     ped = ped[~controls, :]
-
-    ####### Fit null model ######
-    # # Match to pedigree
-    # ped_dict = make_id_dict(ped,1)
-    # y.filter_ids(ped[:,1])
-    # print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
-    # ped_indices = np.array([ped_dict[x] for x in y.ids])
-    # y.fams = ped[ped_indices,0]
-
-    # Fit variance components
-    # print('Fitting variance components')
-    # if args.covar is not None:
-    #     # Match covariates
-    #     covariates.filter_ids(y.ids)
-    #     # Fit null model
-    #     null_model, sigma2, tau, null_alpha, null_alpha_cov = lmm.fit_model(y.gts[:,0], covariates.gts, y.fams, add_intercept=True,
-    #                                                                         tau_init=args.tau_init)
-    #     # Adjust for covariates
-    #     y.gts[:,0] = y.gts[:,0]-(null_alpha[0]+covariates.gts.dot(null_alpha[1:null_alpha.shape[0]]))
-    # else:
-    #     # Fit null model
-    #     null_model, sigma2, tau = lmm.fit_model(y.gts[:,0], np.ones((y.shape[0], 1)), y.fams,
-    #                                             tau_init = args.tau_init, return_fixed = False)
-    #     y.gts[:,0] = y.gts[:,0]-np.mean(y.gts[:,0])
-    # print('Family variance estimate: '+str(round(sigma2/tau,4)))
-    # print('Residual variance estimate: ' + str(round(sigma2,4)))
-
-    # # Diagonalize y
-    # print('Transforming phenotype')
-    # L = null_model.sigma_inv_root(tau, sigma2)
-    # y.diagonalise(L)
 
 
     if args.ibdrel_path is not None:
-        # ids, fam_labels = match_grm_ids(
-        #     ids, fam_labels, grm_path=args.ibdrel_path, grm_source='ibdrel')
         id_dict = make_id_dict(ids)
-        grm_data, grm_row_ind, grm_col_ind = lmm.build_ibdrel_arr(
-            args.ibdrel_path, id_dict=id_dict, ignore_sib=args.zero_sib_entries, keep=ids, thres=args.sparse_thres)
+        grm_data, grm_row_ind, grm_col_ind = slmm.build_ibdrel_arr(
+            args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thres)
     elif args.grm_path is not None or args.gcta_path is not None:
         if args.grm_path is None:
-            lmm.run_gcta_grm(args.plink_path, args.gcta_path,
+            slmm.run_gcta_grm(args.plink_path, args.gcta_path,
                          args.hapmap_bed, args.outprefix, ids)
             grm_path = args.outprefix
         else:
             grm_path = args.grm_path
-        ids, fam_labels = lmm.match_grm_ids(
+        ids, fam_labels = slmm.match_grm_ids(
             ids, fam_labels, grm_path=grm_path, grm_source='gcta')
         id_dict = make_id_dict(ids)
         if args.grm_npz_path is not None:
-            grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr_from_npz(
+            grm_data, grm_row_ind, grm_col_ind = slmm.build_grm_arr_from_npz(
                 id_filepath=grm_path + '.grm.id', npz_path=args.grm_npz_path,
                 ids=ids, id_dict=id_dict)
         else:
-            grm_data, grm_row_ind, grm_col_ind = lmm.build_grm_arr(
+            grm_data, grm_row_ind, grm_col_ind = slmm.build_grm_arr(
                 grm_path, id_dict=id_dict, thres=args.sparse_thres)
 
     if args.sib_var:
-        sib_data, sib_row_ind, sib_col_ind = lmm.build_sib_arr(fam_labels)
-    ######删除
-    # np.savez('grm.npz', grm_data=grm_data, grm_row_ind=grm_row_ind, grm_col_ind=grm_col_ind,
-    #     sib_data=sib_data,sib_row_ind=sib_row_ind, sib_col_ind=sib_col_ind)
-    # np.savez('ids.npz', ids=ids)
-    '''
-    from scipy.sparse import csc_matrix, diags, tril
-    from scipy.sparse.linalg import eigs, splu, eigsh, norm
-    # from sksparse.cholmod import cholesky
-    import sys
-
-    # varcomps = [0.7731090909600168, 1e-05, 0.16952864357052766]
-    # grm = csc_matrix((grm_data, (grm_row_ind, grm_col_ind)), shape=(len(ids),len(ids)))
-    # grm = grm+ tril(grm, k=-1, format='csc').T
-    # w , v = eigsh(grm, k=20)
-    import pandas as pd
-    # df = pd.DataFrame(v, columns = [f'ibd_PC_{i}' for i in range(1, 21)])
-    # df['FID'] = ids.astype('int64')
-    # df['IID'] = ids.astype('int64')
-    # col = df.pop("IID")
-    # df.insert(0, col.name, col)
-    # col = df.pop("FID")
-    # df.insert(0, col.name, col)
-    # print(df.max())
-    # cov = pd.read_csv('/disk/genetics/ukb/alextisyoung/phenotypes/covariates.txt', sep=' ')
-    # df = df.merge(cov, on=['FID', 'IID'])
-    # print(df.head())
-    y = pd.read_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/UKB_EA_eid_changed_filtered.pheno', sep='\t')
-    df= pd.read_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen.txt', sep=' ')
-    df1 = df.merge(y, on=['FID', 'IID'])
-    df = df1[[i for i in df.columns]]
-    y = df1[[i for i in y.columns]]
-    print(y.head())
-    print(df.head())
-    print(df.shape, y.shape)
-    y.to_csv('UKB_EA_eid_changed_filtered_ibd_eigen.pheno', sep=' ', na_rep='NA', index=False)
-    df.to_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen_filtered.txt', sep=' ', na_rep='NA', index=False)
-    # df.to_csv('/disk/genetics/ukb/jguan/ukb_analysis/output/ibd_eigen.txt', sep=' ', index=False)
+        sib_data, sib_row_ind, sib_col_ind = slmm.build_sib_arr(fam_labels)
     
-    exit()
-    sibs = csc_matrix((sib_data, (sib_row_ind, sib_col_ind)),)# shape=(len(ids),len(ids)))
-    sibs = sibs+ tril(sibs, k=-1, format='csc').T
-    res = diags(np.ones(grm.shape[0]), format='csc')
-    V = varcomps[0] * grm + varcomps[1] * sibs + varcomps[2] * res
-    factor = cholesky(V)
-    L = factor.L()
-    p = factor.P()
-    p_row_inds = [i for i in range(V.shape[0])]
-    P = csc_matrix((np.ones(V.shape[0]), (p_row_inds, p)), shape=(V.shape[0], V.shape[0]))
-    L = P.T@L
-
-    # import code
-    # code.interact(local=locals())
-    # exit()
-    # print(grm_data[grm_data<1].max(), grm_data[grm_data<1].min())
-    # res = diags(np.ones(V.shape[0]), format='csc')
-    # sibs = csc_matrix((sib_data, (sib_row_ind, sib_col_ind)),)# shape=(len(ids),len(ids)))
-    # sibs = sibs+ tril(sibs, k=-1, format='csc').T
-    # V = sibs
-    # V = V + 0.5 * res
-    # print(V.diagonal)
-    # grm_data = [1, 0.5, 1]
-    # grm_row_ind = [0, 1,1]
-    # grm_col_ind = [0, 0,1]
-    # ids = [1,2]
-    # V = csc_matrix((grm_data, (grm_row_ind, grm_col_ind)), shape=(len(ids),len(ids)))
-    # V = V+ tril(V, k=-1, format='csc').T
-    # print(V[:10, :10].A)
-    # V[range(0, len(ids)), range(0, len(ids))] = 1.0001
-    from snipar.gtarray import gtarray
-    y = np.random.normal(0, 1, size=len(ids))
-    # n = V.shape[0]
-    # LU = splu(V,diag_pivot_thresh=0) # sparse LU decomposition
-  
-    # if ( LU.perm_r == np.arange(n) ).all() and ( LU.U.diagonal() > 0 ).all(): # check the matrix A is positive definite.
-    # L = LU.L.dot( diags(LU.U.diagonal()**0.5) )
-    # p_row_inds = [i for i in range(V.shape[0])]
-    # P = csc_matrix((np.ones(V.shape[0]), (p_row_inds,LU.perm_r)), shape=(V.shape[0], V.shape[0]))
-    # L = P.T@L
-    # else:
-    #     sys.exit('The matrix is not positive definite')
-
-    y = L @ y
-
-    y = gtarray(y, ids=np.array(ids))
-    del L, V, P
-    # print(np.abs((L@L.T-V).data).sum())
-    # import code
-    # code.interact(local=locals())
-    '''
-    #########
-    
-    # if 'grm_data' in locals() and args.sib_var:
     if args.grm_var and args.sib_var:
         varcomp_lst = (
             (grm_data, grm_row_ind, grm_col_ind),
@@ -530,28 +372,34 @@ def main(args):
         varcomps = None
     if args.covar is None:
         y.gts -= y.gts.mean()
-        model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
+        model = slmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
     else:
         if args.fit_res:
             covar_1 = np.hstack((np.ones((y.shape[0], 1), dtype=y.dtype), covariates.gts.data))
             alpha_covar = np.linalg.solve(covar_1.T.dot(covar_1), covar_1.T.dot(y.gts))
             y.gts = y.gts -  alpha_covar[0] - covariates.gts.dot(alpha_covar[1:])
-            logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y.gts)}')
+            # logger.info(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y.gts)}')
+            print(f'--fit_res specified. Phenotypes residualized. Variance of y: {np.var(y.gts)}')
             covariates = None
-            model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
+            model = slmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=args.add_jitter)
         else:
-            model = lmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
+            model = slmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=args.add_jitter)
     if not varcomps:
-        logger.info(f'Optimizing variance components...')
+        # logger.info(f'Optimizing variance components...')
+        print(f'Optimizing variance components...')
         start = time.time()
         model.scipy_optimize()
-        logger.info(f'Time for variance component estimation: {time.time() - start}s.')
+        # logger.info(f'Time for variance component estimation: {time.time() - start}s.')
+        print(f'Time for variance component estimation: {time.time() - start}s.')
     else:
-        logger.info('varcomps supplied.')
+        # logger.info('varcomps supplied.')
+        print('varcomps supplied.')
     if args.vc_out:
         np.savez(f'{args.vc_out}', varcomps=np.array(model.varcomps))
-        logger.info(f'varcomps saved to {args.vc_out}.npz.')
-    logger.info(f'Variance components: {list(i / y.gts.data.var() for i in model.varcomps)}')
+        # logger.info(f'varcomps saved to {args.vc_out}.npz.')
+        print(f'varcomps saved to {args.vc_out}.npz.')
+    # logger.info(f'Variance components: {list(i / y.gts.data.var() for i in model.varcomps)}')
+    print(f'Variance components: {list(i / y.gts.data.var() for i in model.varcomps)}')
     if args.vc_only:
         exit(0)
     sigmas = model.varcomps
@@ -593,7 +441,8 @@ def main(args):
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=args.add_jitter,
                            debug=args.debug)
-    logger.info(f'Time used: {time.time() - start}.')
+    # logger.info(f'Time used: {time.time() - start}.')
+    print(f'Time used: {time.time() - start}.')
 
 if __name__ == "__main__":
     args=parser.parse_args()
