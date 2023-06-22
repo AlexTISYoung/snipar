@@ -108,7 +108,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     return chromosome, sid, pos, alleles, obs_sid_index
 
 
-def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, include_unrel=False, robust=False, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, include_unrel=False, robust=False, trios_sibs=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -127,6 +127,8 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     if sib_diff:
         # Find ids with sibs
         ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=verbose)
+    elif trios_sibs:
+        ids, observed_indices, trios_indices, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(ped, gts_ids, ids=ids, verbose=verbose)
     else:
         # Find ids with observed/imputed parents and indices of those in observed/imputed data
         ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
@@ -170,13 +172,18 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     # Read observed genotypes
     if verbose:
         print('Reading observed genotypes')
-    gts = gts_f[observed_indices, obs_sid_index].read().val
+    # gts = gts_f[observed_indices, obs_sid_index].read().val
+    gts = gts_f[:, obs_sid_index].read().val
     gts_ids_reduced = gts_f.iid[observed_indices,1]
     gts_id_dict = make_id_dict(gts_ids_reduced)
     # Find indices in reduced data
     if sib_diff:
         gt_indices, fam_labels = preprocess.find_gts(ids, ped, gts_id_dict)
         par_status = None
+    elif trios_sibs:
+        # par_status, gt_indices = preprocess.find_trio_gts(ids, ped, gts_id_dict)
+        par_status, gt_indices, _ = preprocess.find_par_gts(ids[trios_indices], ped, gts_id_dict)
+        fam_labels = None
     else:
         par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     if verbose:
@@ -185,27 +192,45 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     if sib:
         if parsum:
             G = np.zeros((ids.shape[0], 3, gts.shape[1]), dtype=np.float32)
-            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         else:
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
-            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        gts_all = gts = gts_f[:, obs_sid_index].read().val
-        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts_all, gts_ids, remove_proband=True).gts
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     elif sib_diff:
         G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
-        G[:,0,:] = gts[gt_indices,:]
+        G[:,0,:] = gts[observed_indices][gt_indices,:]
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        gts_all = gts = gts_f[:, obs_sid_index].read().val
-        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts_all, gts_ids, remove_proband=False).gts
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=False).gts
+    elif trios_sibs:
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        if parsum:
+            G = np.zeros((ids.shape[0], 2, gts.shape[1]), dtype=np.float32)
+            G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
+        else:
+            G = np.zeros((ids.shape[0],3,gts.shape[1]), dtype=np.float32)
+        G[trios_indices, :, :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=None, parsum=parsum)
+        G[sibs_indices,0,:] = gts[observed_indices][sibs_indices,:]
+        G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
+        if not parsum:
+            G[sibs_indices,2,:] = G[sibs_indices,1,:]
     else:
-        G = preprocess.make_gts_matrix(gts, par_status, gt_indices, parsum=parsum, imp_gts=imp_gts)
+        # G = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+        G = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
     del gts
     if imp_gts is not None:
         del imp_gts
     if robust:
         num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, gt_indices, G.shape[0])
         return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
+    if trios_sibs:
+        G = gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
+        G.complete_trios_inds = trios_indices
+        G.sibs_inds = sibs_indices
+        return G
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
 
 

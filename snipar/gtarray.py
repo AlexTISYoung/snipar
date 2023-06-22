@@ -390,7 +390,7 @@ def _impute_unrel_pat_gts(gts: np.ndarray, freqs: np.ndarray, parsum: bool) -> n
 
 
 def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
-                                   grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool, true_par=None, par_ids=None) -> np.ndarray:
+                                   grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool) -> np.ndarray:
     freqs = G.freqs
     ids = G.ids
     id_dict = G.id_dict

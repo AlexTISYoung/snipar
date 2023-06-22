@@ -172,68 +172,6 @@ def match_grm_ids(ids: Ids,
     return orig_ids['ids'].to_numpy(), orig_ids['fam_labels'].to_numpy()
 
 
-def run_gcta_grm(plink_path: str,
-                 gcta_path: str,
-                 filename: str,
-                 output_path: str,
-                 keep: Optional[List[str]] = None) -> None:
-    """
-    Build GRM using GCTM.
-
-    Args:
-        gcta_path : str
-            path of gcta64 executable.
-        filename : str
-            prefix of bed files; if '#' is in it, create a file containing file names of 22 chromosomes.
-        output_path : str
-            prefix of output path.
-        keep : Optional[List]
-            if List, create a txt file with each row being containing one IID to keep.
-    """
-    # logger.info('Start running gcta grm...')
-    args = [
-        gcta_path,
-    ]
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        if keep is not None:
-            keep_file = f'{tmpdir}/keep.txt'
-            with open(keep_file, 'w') as f:
-                # f.write(f'#IID\n')
-                for k in keep:
-                    f.write(f'{str(k)}\t{str(k)}\n')
-
-        if '#' in filename:
-            args.append('--mbfile')
-            chr_file = f'{tmpdir}/chr.txt'
-            with open(chr_file, 'w') as f:
-                for i in range(1, 23):
-                    c = filename.replace('#', str(i))
-                    plink_args = [
-                        plink_path, '--bfile', c, '--rm-dup',
-                        'exclude-mismatch', '--make-bed', '--out',
-                        f'{tmpdir}/chr{str(i)}'
-                    ]
-                    if keep is not None:
-                        plink_args += ['--keep', keep_file]
-                    subprocess.run(plink_args)
-                    f.write(f'{tmpdir}/chr{str(i)}' + '\n')
-            args.append(chr_file)
-        else:
-            plink_args = [
-                plink_path, '--bfile', filename, '--rm-dup',
-                'exclude-mismatch', '--make-bed', '--out', f'{tmpdir}/chr'
-            ]
-            if keep is not None:
-                plink_args += ['--keep', keep_file]
-            subprocess.run(plink_args)
-            args += ['--bfile', f'{tmpdir}/chr']
-
-        args += ['--make-grm-gz', '--out', output_path]
-        subprocess.run(args)
-    # logger.info('Finished running gcta grm.')
-
-
 class GradHessComponents(NamedTuple):
     P_y: np.ndarray
     P_varcomp_mats: Tuple[np.ndarray, ...]
@@ -878,7 +816,7 @@ class LinearMixedModel:
             y = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
         else:
             X = gts.transpose(2, 0, 1)
-            y = self.y - self.y.mean()
+            # y = self.y - self.y.mean()
 
         alpha = np.full((l,1), fill_value=np.nan)
         alpha_ses = np.full((l,1), fill_value=np.nan)
@@ -922,6 +860,10 @@ class LinearMixedModel:
                 X_pat[:, d] = X_pat[:, d] - np.mean(X_pat[:, d], axis=0)
                 X_mat[:, d] = X_mat[:, d] - np.mean(X_mat[:, d], axis=0)
                 X_one[:, d] = X_one[:, d] - np.mean(X_one[:, d], axis=0)
+            y_both -= y_both.mean()
+            y_pat -= y_pat.mean()
+            y_mat -= y_mat.mean()
+            y_one -= y_one.mean()
             
             Vinv_X_both = spsolve(V_both, X_both)
             XT_Vinv_X_both = X_both.T @ Vinv_X_both
@@ -999,4 +941,106 @@ class LinearMixedModel:
             alpha_cov[:, 0, 0] = np.ndarray = np.linalg.inv(XT_Vinv_X)[:,0,0]
         alpha_ses[:, 0] = np.sqrt(
             alpha_cov)[:, 0, 0]
+        return alpha, alpha_cov, alpha_ses
+    
+    def trios_sibs_est(self, gts: np.ndarray,
+                       complete_trios_inds: np.ndarray,
+                       sibs_inds: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Perform default regression on trios and sib-pairs.
+
+        Args:
+            gts (np.ndarray): 3-d array of genetic data.
+
+        Returns:
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
+        """
+        n, k, l = gts.shape
+        assert n == self.n
+        if self.has_covar:
+            gts_ = gts.reshape((gts.shape[0], int(k * l)))
+            M_X = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
+            X = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
+            y = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
+        else:
+            X = gts.transpose(2, 0, 1)
+            # y = self.y - self.y.mean()
+
+        alpha = np.full((l,1), fill_value=np.nan)
+        alpha_ses = np.full((l,1), fill_value=np.nan)
+        alpha_cov = np.full((l,1,1), fill_value=np.nan)
+        ct = 0
+
+        X_trios = X[:, complete_trios_inds, :]
+        X_sibs = X[:, sibs_inds, :2]
+        y_trios = y[complete_trios_inds]
+        y_sibs = y[sibs_inds]
+        V_trios = self.V[complete_trios_inds, :][:, complete_trios_inds]
+        V_sibs = self.V[sibs_inds, :][:, sibs_inds]
+        V_trios_sibs = self.V[complete_trios_inds, :][:, sibs_inds]
+
+        X_trios -= X_trios.mean(axis=1, keepdims=True)
+        X_sibs -= X_sibs.mean(axis=1, keepdims=True)
+
+        y_trios -= y_trios.mean()
+        y_sibs -= y_sibs.mean()
+        
+        Vinv_X_trios = spsolve(V_trios, X_trios)
+        XT_Vinv_X_trios = X_trios.T @ Vinv_X_trios
+        XT_Vinv_y_trios = Vinv_X_trios.T @ y_trios
+        alpha_trios = solve(XT_Vinv_X_trios, XT_Vinv_y_trios)[0]
+        alpha_cov_trios = np.linalg.inv(XT_Vinv_X_trios)[0,0]
+
+        Vinv_X_sibs = spsolve(V_sibs, X_sibs)
+        XT_Vinv_X_sibs = X_sibs.T @ Vinv_X_sibs
+        XT_Vinv_y_sibs = Vinv_X_sibs.T @ y_sibs
+        alpha_sibs = solve(XT_Vinv_X_sibs, XT_Vinv_y_sibs)[0]
+        alpha_cov_sibs = np.linalg.inv(XT_Vinv_X_sibs)[0,0]
+
+        cov_trios_sibs = alpha_cov_trios * Vinv_X_trios[:, 0].T @ V_trios_sibs @ Vinv_X_sibs[:, 0] * alpha_cov_sibs
+
+        S = np.block(
+            [[alpha_cov_trios, cov_trios_sibs],
+             [cov_trios_sibs.T, alpha_cov_sibs]]
+        )
+
+        A = np.ones(2)
+        robust_var = np.power(A @ solve(S, A), -1)
+        alpha[:, 0] = robust_var * (A @ solve(S, np.array([alpha_trios, alpha_sibs])))
+        alpha_cov[:, 0, 0] = robust_var
+        alpha_ses[:, 0] = robust_var ** 0.5
+        return alpha, alpha_cov, alpha_ses
+
+
+
+
+        n, k, l = gts.shape
+        # logger.info('starting meta-analysis' + f' {(n,k,l)}')
+        S = np.zeros((l, k + 1, k + 1), dtype=gts.dtype)
+        alpha_hat = np.zeros((l, k + 1), dtype=gts.dtype)
+        if n != self.n:
+            raise ValueError(f'Size of genotype matrix does not match pheno: {n},{self.n}.')
+        if self.has_covar:
+            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_sibs = self._ols_FLW(gts[~complete_trios_inds, :2, :], self.y[~complete_trios_inds], self.Z[~complete_trios_inds, :], ~complete_trios_inds)
+            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_trios = self._ols_FLW(gts[complete_trios_inds, np.newaxis, 0, :], self.y[complete_trios_inds], self.Z[complete_trios_inds, :], complete_trios_inds)
+        else:
+            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_sibs = self._ols(gts[~complete_trios_inds, :2, :], self.y[~complete_trios_inds], ~complete_trios_inds)
+            # newaxis: keep dimension
+            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_trios = self._ols(gts[complete_trios_inds, np.newaxis, 0, :], self.y[complete_trios_inds], complete_trios_inds)
+        alpha_cross_cov: np.ndarray = np.einsum('...ij,...jk', alpha_cov_Vinv_X_sibs, self.sp_mul_dense3d(self.V[~complete_trios_inds, :][:, complete_trios_inds], alpha_cov_Vinv_X_trios.transpose(0, 2, 1)))
+        S[:, :k, k:] = alpha_cross_cov
+        S[:, k:, :k] = alpha_cross_cov.transpose(0, 2, 1)
+        if k == 2:
+            A = np.block([[np.eye(k)], [np.ones(2)]])
+        elif k == 3:
+            A = np.block([[np.eye(k)], [np.array([1, 0.5, 0.5])]])
+        else:
+            raise ValueError('Shape of gts is wrong.')
+        Sinv_A = np.zeros((l, S.shape[1], A.shape[1]), dtype=gts.dtype)
+        for ind in range(l):
+            Sinv_A[ind, :, :] = solve(S[ind, :, :], A)
+        alpha_cov = inv(A.T @ Sinv_A)
+        alpha = np.einsum('...ij,kj', alpha_cov, A)
+        alpha = np.einsum('...ij,...j', alpha, solve(S, alpha_hat))
+        alpha_ses = np.sqrt(
+            np.diagonal(alpha_cov, axis1=1, axis2=2))
         return alpha, alpha_cov, alpha_ses

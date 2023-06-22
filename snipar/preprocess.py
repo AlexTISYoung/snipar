@@ -33,7 +33,7 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, incl
     # Find which individuals can be used
     if not include_unrel:
         # logger.info('filtering out unrel inds.')
-        print('filtering out unrel inds.')
+        # print('filtering out unrel inds.')
         none_missing = np.min(gt_indices, axis=1)
         none_missing = none_missing >= 0
     else:
@@ -94,6 +94,54 @@ def get_indices_given_ped_sibs(ped, gts_ids, ids=None, verbose=True):
     observed_indices = np.sort(np.unique(gt_indices))
     # Return ids
     return ids, observed_indices
+
+def get_indices_given_ped_trios_sibs(ped, gts_ids, ids=None, verbose=True):
+    """
+    Used in get_gts_matrix_given_ped to get the ids of individuals with observed/imputed parental genotypes and, if sib=True, at least one genotyped sibling.
+    It returns those ids along with the indices of the relevant individuals and their first degree relatives in the observed genotypes (observed indices),
+    and the indices of the imputed parental genotypes for those individuals.
+    """
+    # Made dictionary for observed genotypes
+    gts_id_dict = make_id_dict(gts_ids)
+    # If IDs not provided, use all individuals with observed genotypes
+    if ids is None:
+        ids = gts_ids
+    ### Find parental status
+    if verbose:
+        print('Checking for observed/imputed parental genotypes')
+    par_status, gt_indices, fam_labels = find_par_gts(ids, ped, gts_id_dict)
+    # Find which individuals can be used
+    trios_indices = np.nonzero(np.min(gt_indices, axis=1) >= 0)[0]
+    possible_sibs_indices = np.logical_and(gt_indices[:, 0] > 0, np.sum(par_status, axis=1) < 0)
+    ids_with_sibs = find_individuals_with_sibs(ids[possible_sibs_indices], ped, gts_ids, return_ids_only=True)
+    sibs_indices = np.nonzero(np.isin(ids, ids_with_sibs))[0]
+    assert not any(np.isin(sibs_indices, trios_indices))
+    print(f'{trios_indices.shape[0]} individuals have complete parental genotypes.')
+    print(f'{sibs_indices.shape[0]} individuals have no complete parental genotypes, but have sib genotypes.')
+    if trios_indices.shape[0] == 0 and sibs_indices.shape[0] == 0:
+        raise ValueError(
+            'No individuals with phenotype observations, complete observed genotype observations, and (complete parental genotypes/at least one sib genotyped).')
+    elif trios_indices.shape[0] == 0:
+        print('No individuals with phenotype observations, complete observed genotype observations, and complete parental genotype; using sib-difference method instead.')
+    elif sibs_indices.shape[0] == 0:
+        print('No individuals with phenotype observations, complete observed genotype observations, and sib genotypes; perform complete trio analysis instead.')
+    # Take those that can be used
+    observed_indices = np.sort(np.hstack((trios_indices, sibs_indices)))
+    gt_indices = gt_indices[observed_indices, :]
+    par_status = par_status[observed_indices, :]
+    ids = ids[observed_indices]
+    parcount = np.sum(par_status==0,axis=1)
+    if verbose:
+        print(str(len(trios_indices)) + ' individuals with phenotype observations and complete observed/imputed genotype observations')
+        print(str(np.sum(parcount==0))+' individuals with imputed but no observed parental genotypes')
+        print(str(np.sum(parcount==1))+' individuals with one observed and one imputed parent')
+        print(str(np.sum(parcount==2))+' individuals with both parents observed')
+    # Find indices of individuals and their parents in observed genotypes
+    observed_indices = np.sort(np.unique(np.hstack((observed_indices,
+                                                    gt_indices[par_status[:, 0] == 0, 1],
+                                                    gt_indices[par_status[:, 1] == 0, 2]))))
+    # Return ids with imputed/observed parents
+    return ids, observed_indices, trios_indices, sibs_indices
 
 def find_par_gts(pheno_ids, ped, gts_id_dict, imp_fams=None):
     """
