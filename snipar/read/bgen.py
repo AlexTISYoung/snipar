@@ -166,7 +166,8 @@ def get_gts_matrix_given_ped(ped, bgenfile, par_gts_f=None ,snp_ids=None, ids=No
         # Check for allele flip
         nflip = np.sum(allele_flip)
         if nflip>0:
-            print('Flipping alleles of '+str(nflip)+' SNPs to match observed genotypes')
+            if verbose:
+                print('Flipping alleles of '+str(nflip)+' SNPs to match observed genotypes')
             imp_gts[:,allele_flip] = 2-imp_gts[:,allele_flip]
     else:
         chromosome, sid, pos, alleles, obs_sid_index = get_snps(gts_f, snp_ids=snp_ids)
