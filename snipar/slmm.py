@@ -1009,38 +1009,3 @@ class LinearMixedModel:
         alpha_cov[:, 0, 0] = robust_var
         alpha_ses[:, 0] = robust_var ** 0.5
         return alpha, alpha_cov, alpha_ses
-
-
-
-
-        n, k, l = gts.shape
-        # logger.info('starting meta-analysis' + f' {(n,k,l)}')
-        S = np.zeros((l, k + 1, k + 1), dtype=gts.dtype)
-        alpha_hat = np.zeros((l, k + 1), dtype=gts.dtype)
-        if n != self.n:
-            raise ValueError(f'Size of genotype matrix does not match pheno: {n},{self.n}.')
-        if self.has_covar:
-            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_sibs = self._ols_FLW(gts[~complete_trios_inds, :2, :], self.y[~complete_trios_inds], self.Z[~complete_trios_inds, :], ~complete_trios_inds)
-            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_trios = self._ols_FLW(gts[complete_trios_inds, np.newaxis, 0, :], self.y[complete_trios_inds], self.Z[complete_trios_inds, :], complete_trios_inds)
-        else:
-            alpha_hat[:, :k], S[:, :k, :k], alpha_cov_Vinv_X_sibs = self._ols(gts[~complete_trios_inds, :2, :], self.y[~complete_trios_inds], ~complete_trios_inds)
-            # newaxis: keep dimension
-            alpha_hat[:, k:], S[:, k:, k:], alpha_cov_Vinv_X_trios = self._ols(gts[complete_trios_inds, np.newaxis, 0, :], self.y[complete_trios_inds], complete_trios_inds)
-        alpha_cross_cov: np.ndarray = np.einsum('...ij,...jk', alpha_cov_Vinv_X_sibs, self.sp_mul_dense3d(self.V[~complete_trios_inds, :][:, complete_trios_inds], alpha_cov_Vinv_X_trios.transpose(0, 2, 1)))
-        S[:, :k, k:] = alpha_cross_cov
-        S[:, k:, :k] = alpha_cross_cov.transpose(0, 2, 1)
-        if k == 2:
-            A = np.block([[np.eye(k)], [np.ones(2)]])
-        elif k == 3:
-            A = np.block([[np.eye(k)], [np.array([1, 0.5, 0.5])]])
-        else:
-            raise ValueError('Shape of gts is wrong.')
-        Sinv_A = np.zeros((l, S.shape[1], A.shape[1]), dtype=gts.dtype)
-        for ind in range(l):
-            Sinv_A[ind, :, :] = solve(S[ind, :, :], A)
-        alpha_cov = inv(A.T @ Sinv_A)
-        alpha = np.einsum('...ij,kj', alpha_cov, A)
-        alpha = np.einsum('...ij,...j', alpha, solve(S, alpha_hat))
-        alpha_ses = np.sqrt(
-            np.diagonal(alpha_cov, axis1=1, axis2=2))
-        return alpha, alpha_cov, alpha_ses
