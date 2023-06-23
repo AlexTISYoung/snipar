@@ -16,6 +16,7 @@ from snipar.map import decode_map_from_pos
 from snipar.utilities import *
 from snipar.simulate import *
 from pysnptools.snpreader import SnpData,Bed
+from snipar.utilities import get_parser_doc
 
 parser = argparse.ArgumentParser()
 parser.add_argument('n_causal',type=int,help='Number of causal loci')

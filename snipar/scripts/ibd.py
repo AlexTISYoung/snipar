@@ -13,7 +13,7 @@ Results:
         For each chromosome, a gzipped text file containing the IBD segments for the siblings is output. 
         
 """
-import argparse, code
+import argparse
 from numba import set_num_threads
 from numba import config as numba_config
 import snipar.ibd

@@ -19,7 +19,7 @@ import snipar.pgs as pgs
 import snipar.read as read
 from snipar.utilities import *
 from snipar.slmm import build_ibdrel_arr, build_sib_arr
-
+from snipar.utilities import get_parser_doc
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
