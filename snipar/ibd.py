@@ -376,8 +376,8 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     print('Read map')
     # Weights
     print('Computing LD weights')
-    ld_n = np.min([1000, gts.shape[1]])
-    ld_sample = np.random.randint(0, gts.shape[1], size=ld_n)
+    ld_n = np.min([1000, gts.shape[0]])
+    ld_sample = np.random.randint(0, gts.shape[0], size=ld_n)
     ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float_), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
