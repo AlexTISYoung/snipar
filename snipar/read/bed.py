@@ -197,16 +197,16 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
             G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        # gts_all = gts = gts_f[:, obs_sid_index].read().val
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     elif sib_diff:
         G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
         G[:,0,:] = gts[observed_indices][gt_indices,:]
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        # gts_all = gts = gts_f[:, obs_sid_index].read().val
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=False).gts
     elif trios_sibs:
-        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        # gts_all = gts = gts_f[:, obs_sid_index].read().val
         if parsum:
             G = np.zeros((ids.shape[0], 2, gts.shape[1]), dtype=np.float32)
             G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts

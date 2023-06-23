@@ -45,98 +45,42 @@ from snipar.pedigree import get_sibpairs_from_ped
 from snipar.utilities import get_parser_doc, parseNumRange, NumRangeAction, parse_obsfiles, parse_filelist, make_id_dict
 
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
-parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
-parser.add_argument('--bed',
-                    type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--bgen', type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--bed', type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
 parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
-parser.add_argument('--chr_range',
-                    type=parseNumRange,
-                    nargs='*',
-                    action=NumRangeAction,
-                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
+parser.add_argument('--grm_path', type=str, help='Path to gcta grm gz file (without .gz prefix).', default=None)
+parser.add_argument('--ibdrel_path', type=str, help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+parser.add_argument('--sparse_thres', type=float, help='Threshold of GRM/IBD sparsity', default=0.05)
+parser.add_argument('--chr_range', type=parseNumRange, nargs='*', action=NumRangeAction, help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('--out', type=str, help="The summary statistics will output to this path, one file for each chromosome. If the path contains '@', the '@' will be replaced with the chromosome number. Otherwise, the summary statistics will be output to the given path with file names chr_1.sumstats.gz, chr_2.sumstats.gz, etc. for the text sumstats, and chr_1.sumstats.hdf5, etc. for the HDF5 sumstats",default='./')
+parser.add_argument('--impute_unrel', action='store_true', default=False, help='Whether to include unrelated individuals and impute their parental genotypes or not.')
+parser.add_argument('--robust', action='store_true', default=False, help='Whether to use the robust estimator')
+parser.add_argument('--sib_diff', action='store_true', default=False, help='Use sibling difference method')
+# parser.add_argument('--standard_gwas', action='store_true', default=False, help='Whether to fit standard gwas, i.e., without modelling parental genotypes.')
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--fit_res', action='store_true', default=False,help='Use residualized phenotypes.')
-parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
-                    default=1)
+parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)', default=1)
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
-# parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
 parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
 parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 parser.add_argument('--no_txt_out',action='store_true',help='Suppress text output of summary statistics',default=False)
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
+parser.add_argument('--no_grm_var', action='store_true', default=False, help='whether to exclude grm variance component.')
+parser.add_argument('--no_sib_var', action='store_true', default=False, help='whether to exclude sib variance component.')
+parser.add_argument('--vc_out', type=str, help='Prefix of output filename for variance component array (without .npy).')
+parser.add_argument('--vc_in', type=str, help='Prefix of input filename for variance component array (without .npy).')
+parser.add_argument('--vc_list', type=float, nargs='+', default=None, help='Pass in variance components as a list of floats.')
+parser.add_argument('--vc_only', action='store_true', help='Only perform variance component estimation.')
+parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysi (No header).')
+parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 
 
-
-parser.add_argument('--grm_path', type=str,
-                    help='Path to gcta grm gz file (without .gz prefix).', default=None)
-
-parser.add_argument('--ibdrel_path', type=str,
-                    help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
-
-parser.add_argument('--no_grm_var', action='store_true', default=False,
-                    help='whether to exclude grm variance component.')
-
-parser.add_argument('--no_sib_var', action='store_true', default=False,
-                    help='whether to exclude sib variance component.')
-
-parser.add_argument('--sparse_thres', type=float,
-                    help='Threshold of GRM/IBD sparsity', default=0.05)
-
-parser.add_argument('--cpus', type=int,
-                    help='Number of cpus to distribute batches across', default=1)
-
-parser.add_argument('--vc_out',
-                    type=str,
-                    help='Prefix of output filename for variance component array (without .npy).')
-
-parser.add_argument('--vc_in',
-                    type=str,
-                    help='Prefix of input filename for variance component array (without .npy).')
-
-parser.add_argument('--vc_list', 
-                    type=float,
-                    nargs='+',
-                    default=None,
-                    help='Pass in variance components as a list of floats.')
-
-parser.add_argument('--vc_only',
-                    action='store_true',
-                    help='Only perform variance component estimation.')
-
-parser.add_argument('--impute_unrel',
-                    action='store_true', default=False,
-                    help='Whether to include unrelated individuals and impute their parental genotypes or not.')
-
-parser.add_argument('--robust',
-                    action='store_true', default=False,
-                    help='Whether to use the robust estimator')
-
-parser.add_argument('--sib_diff',
-                    action='store_true', default=False,
-                    help='Use sibling difference method')
-
-parser.add_argument('--standard_gwas',
-                    action='store_true', default=False,
-                    help='Whether to fit standard gwas, i.e., without modelling parental genotypes.')
-
-parser.add_argument('--keep',
-                    default=None,
-                    type=str,
-                    help='Filename of IDs to be kept for analysi (No header).')
-
-parser.add_argument('--debug',
-                    action='store_true', default=False,
-                    help='Debug code in single process mode.')
-
-# parser.add_argument('--loglevel',
-#                     type=str, default='INFO',
-#                     help='Case insensitive Logging level: INFO, DEBUG, ...')
+# parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
+# parser.add_argument('--loglevel', type=str, default='INFO', help='Case insensitive Logging level: INFO, DEBUG, ...')
 
 
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
@@ -164,12 +108,14 @@ def main(args):
     if not args.no_grm_var:
         if args.ibdrel_path is None and args.grm_path is None:
             raise argparse.ArgumentTypeError('Need to input GRM.')
-    if args.standard_gwas and (args.robust or args.sib_diff):
-        raise argparse.ArgumentTypeError('Cannot set --robust or --sib_diff if --standard_gwas is set.')
-    if args.sib_diff and args.fit_sib:
-        raise argparse.ArgumentTypeError('Only fit sib effect for the sib-difference method: only one of --sib_diff and fit_sib can be supplied.')
+    # if args.standard_gwas and (args.robust or args.sib_diff):
+    #     raise argparse.ArgumentTypeError('Cannot set --robust or --sib_diff if --standard_gwas is set.')
+    if (args.robust or args.sib_diff) and args.fit_sib:
+        raise argparse.ArgumentTypeError('Cannot fit sib IGE while --robust or --sib_diff is supplied.')
+    if args.sib_diff and args.parsum:
+        raise argparse.ArgumentTypeError('--parsum is meaningless while --sib_diff is supplied.')
             
-    # Set number of threads
+    # Set number of threads for numba
     if args.threads is not None:
         num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
     else:
@@ -191,11 +137,11 @@ def main(args):
 
     # Find observed and imputed files
     if args.imp is None:
-        print('WARNING: no imputed parental genotypes provided. Will analyse only individuals with both parents genotyped or with at least one sib genotyped.')
         args.impute_unrel = False
         args.robust = False
-        args.sib_diff = False
-        trios_sibs = True
+        trios_sibs = True if not args.sib_diff else False
+        if trios_sibs:
+            print('WARNING: no imputed parental genotypes provided. Will analyse only individuals with both parents genotyped or with at least one sib genotyped.')
         if args.bed is not None:
             bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -391,7 +337,7 @@ def main(args):
         process_chromosome(chroms[i], y, varcomp_lst,
                            ped, imp_fams, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
-                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=args.standard_gwas,
+                           par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=False,
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
