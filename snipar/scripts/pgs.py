@@ -68,6 +68,7 @@ parser.add_argument('--compute_controls', action='store_true', default=False,
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
 parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
 parser.add_argument('--force_am_adj',action='store_true',help='Force assortative mating adjustment even when estimated correlation is noisy/not significant',default=False)
+parser.add_argument('--batch_size',type=int,help='Batch size for reading in SNPs (default 10000)',default=10000)
 args=parser.parse_args()
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
@@ -126,7 +127,7 @@ def main(args):
             print('Observed genotypes file: '+bgenfiles[0])
         if args.imp is not None:
             print('Imputed genotypes file: '+pargts_list[0])
-        pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+        pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
         for i in range(1,chroms.shape[0]):
             if args.bed is not None:
                 print('Observed genotypes file: '+bedfiles[i])
@@ -135,14 +136,14 @@ def main(args):
             if args.imp is not None:
                 print('Imputed genotypes file: '+pargts_list[i])
             if args.compute_controls:
-                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
                 if pg_i[0] is not None:
                     if pg is None:
                         pg = pg_i
                     else:
                         pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
             else:
-                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls)
+                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
                 if pg_i is not None:
                     if pg is not None:
                         pg = pg.add(pg_i)
@@ -233,4 +234,4 @@ def main(args):
             
 if __name__ == "__main__":
     args=parser.parse_args()
-    main(args)  
+    main(args)

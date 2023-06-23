@@ -157,7 +157,7 @@ def read_pgs(pgs_file):
     return pg
 
 
-def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True):
+def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
     Args:
@@ -187,14 +187,30 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
         snp_ids = bgen.ids
         if np.unique(snp_ids).shape[0] == 1:
             snp_ids = bgen.rsids
-    snp_set = set(snp_ids)
-    in_snp_set = np.array([x in snp_set for x in pgs.snp_ids])
+    pgs_snp_set = set(pgs.snp_ids)
+    in_snp_set = np.array([x in pgs_snp_set for x in snp_ids])
     if np.sum(in_snp_set)==0:
         print('No overlap between variants in weights file and observed genotypes')
         return None
     else:
-        # Get genotype matrix
-        G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, snp_ids=pgs.snp_ids, sib=sib, compute_controls=compute_controls, verbose=verbose)
+        ## Get genotype matrix
+        snps_in_pgs = snp_ids[in_snp_set]
+        # Get batch size
+        if batch_size is not None:
+            batch_size = min(batch_size, snps_in_pgs.shape[0])
+        else: 
+            batch_size = snps_in_pgs.shape[0]
+        # Set batch boundaries 
+        n_batches = int(np.ceil(snps_in_pgs.shape[0]/batch_size))
+        batch_boundaries = np.zeros((n_batches,2),dtype=int)
+        for i in range(n_batches-1):
+            batch_boundaries[i,:] = [i*batch_size,(i+1)*batch_size]
+        batch_boundaries[n_batches-1,:] = [(n_batches-1)*batch_size,snps_in_pgs.shape[0]]
+        ## Compute PGS, reading snps in batches
+        # First batch
+        G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, 
+                           snp_ids=snps_in_pgs[batch_boundaries[0,0]:batch_boundaries[0,1]], 
+                           sib=sib, compute_controls=compute_controls, verbose=verbose)
         if sib:
             if G.shape[1]==4:
                 cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
@@ -212,21 +228,26 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
             else:
                 o_cols = np.array(['proband','parental'])
             pgs_out.append(pgs.compute(G[3], o_cols))
-            return pgs_out
         else:
-            return pgs.compute(G,cols)
-
-#def write(pg,filename,scale_PGS = False):
-#    if scale_PGS:
-#        # Rescale by observed proband PGS
-#        pg.gts = pg.gts / np.std(pg.gts[:, 0])
-#    ####### Write PGS to file ########
-#    pg_out = np.column_stack((pg.fams,pg.ids,pg.gts))
-#    pg_header = np.column_stack((np.array(['FID','IID']).reshape(1,2),pg.sid.reshape(1,pg.sid.shape[0])))
-#    pg_out = np.row_stack((pg_header,pg_out))
-#    print('Writing PGS to ' + filename)
-#    np.savetxt(filename, pg_out, fmt='%s')
-#    return None
+            pgs_out = pgs.compute(G,cols)
+        # Remaining batches
+        for i in range(1,n_batches):
+            del G
+            G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, 
+                               snp_ids=snps_in_pgs[batch_boundaries[i,0]:batch_boundaries[i,1]], 
+                               sib=sib, compute_controls=compute_controls, verbose=False)
+            if compute_controls:
+                pgs_out_i = [pgs.compute(x,cols) for x in G[0:3]]
+                if sib:
+                    o_cols = np.array(['proband', 'sibling', 'parental'])
+                else:
+                    o_cols = np.array(['proband','parental'])
+                pgs_out_i.append(pgs.compute(G[3], o_cols))
+                pgs_out = [pgs_out[x].add(pgs_out_i[x]) for x in range(0, len(pgs_out))]
+            else:
+                pgs_out = pgs_out.add(pgs.compute(G,cols))
+        return pgs_out
+        
 
 class pgarray(gtarray):
 

@@ -151,75 +151,75 @@ def se_v_eta_delta(delta, se_delta, ab, se_ab, r_delta_ab, h2f, se_h2f, rk, se_r
     return delta_method(est_v_ed, np.array([delta, h2f, rk, ab]), v_x)
 
 # Simulate sample estimates
-# def simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
-#     # Simulate delta, alpha, beta
-#     delta_alpha_cov = [[delta_se**2, -alpha_se*delta_se/np.sqrt(2)], [-alpha_se*delta_se/np.sqrt(2),alpha_se**2]]
-#     delta_alpha = np.random.multivariate_normal([delta, alpha], delta_alpha_cov, n)
-#     A = np.array([[1,0],[0,1],[1,1]])
-#     delta_alpha = delta_alpha @ A.T
-#     delta_alpha_cov = A @ delta_alpha_cov @ A.T
-#     delta_alpha_ses = np.sqrt(np.diag(delta_alpha_cov))
-#     r_delta_alpha = -1/np.sqrt(2)
-#     r_delta_beta = delta_alpha_cov[0,2]/np.sqrt(delta_alpha_cov[0,0]*delta_alpha_cov[2,2])
-#     # Simulate h2f
-#     h2f = h2f+h2f_se*np.random.randn(n)
-#     # Simulate rk
-#     rk = rk+rk_se*np.random.randn(n)
-#     # Estimates
-#     k_ests = np.zeros(n)
-#     r_ests = np.zeros(n)
-#     h2eq_ests = np.zeros(n)
-#     rho_ests = np.zeros(n)
-#     alpha_from_rho_ests = np.zeros(n)
-#     alpha_from_alpha_ests = np.zeros(n)
-#     # Standard error estimates
-#     se_k_ests = np.zeros(n)
-#     se_r_ests = np.zeros(n)
-#     se_h2eq_ests = np.zeros(n)
-#     se_rho_ests = np.zeros(n)
-#     se_alpha_from_rho_ests = np.zeros(n)
-#     se_alpha_from_alpha_ests = np.zeros(n)
-#     for i in range(n):
-#         # Sample estimates
-#         k_ests[i] = estimate_k(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i])
-#         r_ests[i] = estimate_r(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
-#         h2eq_ests[i] = estimate_h2eq(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
-#         rho_ests[i] = estimate_rho(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
-#         alpha_from_rho_ests[i] = alpha_from_rho(delta_alpha[i,0], delta_se, delta_alpha[i,2], h2f[i], h2f_se, rk[i], return_all=False)
-#         alpha_from_alpha_ests[i] = alpha_from_alpha(delta_alpha[i,0], delta_se, delta_alpha[i,1], h2f[i], h2f_se, rk[i], return_all=False)
-#         # Standard error estimates      
-#         se_k_ests[i] = k_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
-#         se_r_ests[i] = r_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
-#         se_h2eq_ests[i] = h2eq_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
-#         se_rho_ests[i] = rho_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
-#         se_alpha_from_rho_ests[i] = se_alpha_from_rho(delta_alpha[i,0], delta_se, delta_alpha[i,2], delta_alpha_ses[2], r_delta_beta, h2f[i], h2f_se, rk[i], rk_se)
-#         se_alpha_from_alpha_ests[i] = se_alpha_from_alpha(delta_alpha[i,0], delta_se, delta_alpha[i,1], delta_alpha_ses[1], r_delta_alpha, h2f[i], h2f_se, rk[i], rk_se)
-#     return k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_rho_ests, se_alpha_from_rho_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests
+def simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
+    # Simulate delta, alpha, beta
+    delta_alpha_cov = [[delta_se**2, -alpha_se*delta_se/np.sqrt(2)], [-alpha_se*delta_se/np.sqrt(2),alpha_se**2]]
+    delta_alpha = np.random.multivariate_normal([delta, alpha], delta_alpha_cov, n)
+    A = np.array([[1,0],[0,1],[1,1]])
+    delta_alpha = delta_alpha @ A.T
+    delta_alpha_cov = A @ delta_alpha_cov @ A.T
+    delta_alpha_ses = np.sqrt(np.diag(delta_alpha_cov))
+    r_delta_alpha = -1/np.sqrt(2)
+    r_delta_beta = delta_alpha_cov[0,2]/np.sqrt(delta_alpha_cov[0,0]*delta_alpha_cov[2,2])
+    # Simulate h2f
+    h2f = h2f+h2f_se*np.random.randn(n)
+    # Simulate rk
+    rk = rk+rk_se*np.random.randn(n)
+    # Estimates
+    k_ests = np.zeros(n)
+    r_ests = np.zeros(n)
+    h2eq_ests = np.zeros(n)
+    rho_ests = np.zeros(n)
+    alpha_from_beta_ests = np.zeros(n)
+    alpha_from_alpha_ests = np.zeros(n)
+    # Standard error estimates
+    se_k_ests = np.zeros(n)
+    se_r_ests = np.zeros(n)
+    se_h2eq_ests = np.zeros(n)
+    se_rho_ests = np.zeros(n)
+    se_alpha_from_beta_ests = np.zeros(n)
+    se_alpha_from_alpha_ests = np.zeros(n)
+    for i in range(n):
+        # Sample estimates
+        k_ests[i] = estimate_k(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i])
+        r_ests[i] = estimate_r(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
+        h2eq_ests[i] = estimate_h2eq(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
+        rho_ests[i] = estimate_rho(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], return_all=False)
+        alpha_from_beta_ests[i] = alpha_from_beta(delta_alpha[i,0], delta_se, delta_alpha[i,2], h2f[i], h2f_se, rk[i], return_all=False)
+        alpha_from_alpha_ests[i] = alpha_from_alpha(delta_alpha[i,0], delta_se, delta_alpha[i,1], h2f[i], h2f_se, rk[i], return_all=False)
+        # Standard error estimates      
+        se_k_ests[i] = k_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
+        se_r_ests[i] = r_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
+        se_h2eq_ests[i] = h2eq_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
+        se_rho_ests[i] = rho_se(delta_alpha[i,0], delta_se, h2f[i], h2f_se, rk[i], rk_se)
+        se_alpha_from_beta_ests[i] = se_alpha_from_beta(delta_alpha[i,0], delta_se, delta_alpha[i,2], delta_alpha_ses[2], r_delta_beta, h2f[i], h2f_se, rk[i], rk_se)
+        se_alpha_from_alpha_ests[i] = se_alpha_from_alpha(delta_alpha[i,0], delta_se, delta_alpha[i,1], delta_alpha_ses[1], r_delta_alpha, h2f[i], h2f_se, rk[i], rk_se)
+    return k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_beta_ests, se_alpha_from_beta_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests
 
-# def se_check(ests,se_ests):
-#     return np.median(se_ests)/np.std(ests)
+def se_check(ests,se_ests):
+    return np.median(se_ests)/np.std(ests)
 
-# def check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
-#     # Simulate sample estimates
-#     k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_rho_ests, se_alpha_from_rho_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests = simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
-#     # Check standard error estimates
-#     return np.mean(k_ests), se_check(k_ests,se_k_ests), np.mean(r_ests), se_check(r_ests,se_r_ests), np.mean(h2eq_ests), se_check(h2eq_ests,se_h2eq_ests), np.mean(rho_ests), se_check(rho_ests,se_rho_ests), np.mean(alpha_from_rho_ests), se_check(alpha_from_rho_ests,se_alpha_from_rho_ests), np.mean(alpha_from_alpha_ests), se_check(alpha_from_alpha_ests,se_alpha_from_alpha_ests)
+def check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
+    # Simulate sample estimates
+    k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_beta_ests, se_alpha_from_beta_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests = simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
+    # Check standard error estimates
+    return np.mean(k_ests), se_check(k_ests,se_k_ests), np.mean(r_ests), se_check(r_ests,se_r_ests), np.mean(h2eq_ests), se_check(h2eq_ests,se_h2eq_ests), np.mean(rho_ests), se_check(rho_ests,se_rho_ests), np.mean(alpha_from_beta_ests), se_check(alpha_from_beta_ests,se_alpha_from_beta_ests), np.mean(alpha_from_alpha_ests), se_check(alpha_from_alpha_ests,se_alpha_from_alpha_ests)
     
-# def run_simulation_check(n, h2_eq, r_y, k, delta_se, alpha_se, rk_se, h2f_se):
-#     # Set parameters
-#     r_delta = r_y*h2_eq
-#     print('r_delta: '+str(round(r_delta,3)))
-#     h2f = (1-r_delta)*h2_eq
-#     print('h2f: '+str(round(h2f,3)))
-#     rho = 1-(1-k)*r_delta
-#     print('rho: '+str(round(rho,3)))
-#     rk = k*r_delta/rho
-#     print('rk: '+str(round(rk,3)))
-#     delta = np.sqrt(k*h2f/(1-rk))
-#     print('delta: '+str(round(delta,3)))
-#     beta = delta/rho
-#     print('beta: '+str(round(beta,3)))
-#     alpha = (beta-delta)/(1+rk)
-#     print('alpha: '+str(round(alpha,3)))
-#     # Run simulation
-#     return check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
+def run_simulation_check(n, h2_eq, r_y, k, delta_se, alpha_se, rk_se, h2f_se):
+    # Set parameters
+    r_delta = r_y*h2_eq
+    print('r_delta: '+str(round(r_delta,3)))
+    h2f = (1-r_delta)*h2_eq
+    print('h2f: '+str(round(h2f,3)))
+    rho = 1-(1-k)*r_delta
+    print('rho: '+str(round(rho,3)))
+    rk = k*r_delta/rho
+    print('rk: '+str(round(rk,3)))
+    delta = np.sqrt(k*h2f/(1-rk))
+    print('delta: '+str(round(delta,3)))
+    beta = delta/rho
+    print('beta: '+str(round(beta,3)))
+    alpha = (beta-delta)/(1+rk)
+    print('alpha: '+str(round(alpha,3)))
+    # Run simulation
+    return check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
