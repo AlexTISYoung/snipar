@@ -27,3 +27,8 @@ correlate.py
 ------------
 .. _correlate.py:
 .. automodule:: snipar.scripts.correlate
+
+simulate.py
+------------
+.. _simulate.py:
+.. automodule:: snipar.scripts.simulate

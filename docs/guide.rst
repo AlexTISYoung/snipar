@@ -9,12 +9,14 @@ Introduction
 *snipar* (single nucleotide imputation of parents) is a Python package for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing
 family based genome-wide association and polygenic score analyses using observed and/or imputed parental genotypes.
 
-*snipar* can use any genotyped samples who have at least one genotyped full-sibling or parent
+*snipar* can use any genotyped samples who have at least one genotyped full-sibling or parent.
+
+The imputation method and the family-based GWAS and polygenic score models are described in `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_.
 
 Installation
 ------------
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 Installing Using pip
 ~~~~~~~~~~~~~~~~~~~~
@@ -46,6 +48,18 @@ To install from source, clone the git repository (https://github.com/AlexTISYoun
 containing the *snipar* source code, at the shell type:
 
     pip install .
+
+Python version incompatibility
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+
+*snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
+To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
+	
+    conda create -n myenv python=3.9
+
+	conda activate myenv
+    
+	pip install snipar
    
 Running tests
 ~~~~~~~~~~~~~
@@ -160,7 +174,7 @@ When the script is run with '-chunks x', it will split the imputation into 'x' b
 Alternatively, you can do the imputation for only on a subset of SNPS by using -start and -end options.
 
 For each chromosome, imputed parental genotypes and other information about the imputation will be written to a file in HDF5 format.
-The contents of the HDF5 output, which a typical user does not need to interact with directly, are documented here: :ref:`here <imputed_file>`.
+The contents of the HDF5 output, which a typical user does not need to interact with directly, are documented :ref:`here <imputed_file>`.
 
 The expected proportion of variants that have been imputed from a sibling pair in IBD0 (i.e. the parental alleles are fully observed)
 can be computed from the pedigree. At the end of the imputation, the script will output the expected IBD0 proportion 
@@ -175,27 +189,42 @@ This script estimates direct effects, non-transmitted coefficients, and populati
 on the phenotype specified in the :ref:`phenotype file <phenotype>`. (If multiple phenotypes are present in the :ref:`phenotype file <phenotype>`,
 the phenotype to analyse can be specified using the '--phen_index' argument, where '--phen_index 1' corresponds to the first phenotype.)
 
-The script will use both :ref:`observed <observed genotypes>` and :ref:`imputed parental genotypes <imputed_file>` to estimate these effects. 
-Note that if no imputed parental genotypes are input, effects will be estimated using individuals with both parents genotyped only,
-provided that a :ref:`pedigree file <pedigree>` is also input. 
-(A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
-
 By default, for each variant, the script performs a regression of an individual's phenotype onto their genotype,
 their (imputed/observed) father's genotype, and their (imputed/observed) mother's genotype. This estimates
 the direct effect of the variant, and the paternal and maternal non-transmitted coefficients (NTCs). See
-Young et al. [ref] 2022 for more details. 
+`Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_ for more details. 
 
 If no parental genotypes are observed, then the imputed maternal & paternal genotypes become perfectly correlated.
 In this case, to overcome collinearity, gwas.py will perform a regression of an individual's phenotype onto their genotype,
 and the imputed sum of their parents' genotypes. This will estimate the direct effect of the SNP, and
-the average NTC. 
+the average NTC. One can include the '--parsum' argument to manually enable this option.
 
 If one wishes to model indirect genetic effects from siblings, one can use the '--fit_sib' option to add the genotype(s)
 of the individual's sibling(s) to the regression. 
 
-The gwas.py script first estimates a variance component model that models the phenotypic correlation between siblings, 
-then does a transformation that allows the SNP effects to be estimated by simple linear regression while
-accounting for correlations between siblings. 
+The gwas.py script first estimates a variance component model with two variance components, with one modelling the phenotypic correlation 
+between siblings and the other modelling correlation between individuals with genetic relatedness passing a chosen threshold 
+specified by the '--sparse_thres' argument (default is 0.05), and then does a transformation that allows the SNP effects to be 
+estimated by simple linear regression while accounting for correlations between samples. The second component requires input of 
+a relationship matrix, either from a GCTA GRM (`--grm_path`) or a IBD relatedness file estimated by KING (`--ibdrel_path``). One can
+choose to remove one of two components by providing the '--no_sib_var' or '--no_grm_var' argument.
+
+To incorporate genotyped and phenotyped individuals without observed or imputed parental genotypes into the analysis, one can choose to 
+use the unified estimator by supplying the '--impute_unrel' argument, which enables linear imputation of parental genotypes.
+If strong population structure (Fst greater than 0.01) is present and is of concern, one can use the sibling-difference
+method ('--sib_diff'), which analyzes individuals with at least one genotyped sibling by regressing phenotypes onto the proband genotypes
+and the average sib genotypes in the proband families, or the robust estimator ('--robust'), which performs separate family-based regressions
+for individuals categorized into different groups based on the status of their parental genotypes. Note that in the current version,
+the sibling-difference and the robust methods only produce direct effect estimates. See `Guan et al. 2022 <https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1>`_ 
+for more details. 
+
+The script will use both :ref:`observed <observed genotypes>` and :ref:`imputed parental genotypes <imputed_file>` for analyses.
+Note that if no imputed parental genotypes are input, effects will be estimated using individuals with both parents or at least one sibs genotyped only,
+provided that a :ref:`pedigree file <pedigree>` is also input. 
+(A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
+
+To deal with potential large genotype datasets, the script processes chromosome files sequentially, and allows parellel processing of each chromosome if '--cpus [NUM_CPUS]'
+is used. One can also provide the number of threads used by NumPy and Numba for each CPUs by providing '--threads [NUM_THREADS]'.
 
 The script outputs summary statistics in both gzipped :ref:`text format <sumstats_text>` and
 :ref:`HDF5 format <sumstats_hdf5>`.
@@ -203,7 +232,7 @@ The script outputs summary statistics in both gzipped :ref:`text format <sumstat
 Estimating correlations between effects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As part of Young et al. 2022 [ref], we estimated the genome-wide correlations between direct and population effects
+As part of `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_, we estimated the genome-wide correlations between direct and population effects
 and between direct effects and average non-transmitted coefficients (NTCs). The correlation between direct effects and population effects
 is a measure of how different direct effects and effects estimated by standard GWAS (population effects) are. 
 
@@ -212,7 +241,7 @@ It takes as input the :ref:`summary statistics <sumstats_text>` files output by 
 and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
 It applies a method-of-moments based estimator that 
 accouts for the known sampling variance-covariance of the effect estimates, and for the correlations
-between effect estimates of nearby SNPs due to LD. (See Young et al. 2022 [ref] for more details.)
+between effect estimates of nearby SNPs due to LD.
 
 Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
 heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
@@ -226,7 +255,7 @@ Family-based polygenic score analyses
 
 As in previous work (e.g. Kong et al. 2018: https://www.science.org/doi/abs/10.1126/science.aan6877), parental polygenic scores can be used as 'controls'
 to separate out the component of the association between phenotype and polygenic score (PGS) that is due to
-direct genetic effects. In Young et al. 2022 [ref], we showed how this can be done using parental PGSs
+direct genetic effects. In `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_, we showed how this can be done using parental PGSs
 computed from imputed parental genotypes. *snipar* provides a script, :ref:`pgs.py <pgs.py>`,
 that can be used for computing and analysing PGSs using observed/imputed parental genotypes. 
 
