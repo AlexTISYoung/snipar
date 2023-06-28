@@ -341,7 +341,7 @@ def main(args):
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
-                           debug=args.debug)
+                           debug=False)
     # logger.info(f'Time used: {time.time() - start}.')
     print(f'Time used: {time.time() - start}.')
 
