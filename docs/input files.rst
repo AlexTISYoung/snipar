@@ -87,7 +87,7 @@ genetic relationship file
 .. _grm:
 
 The genetic relationship file is used for variance component estimation in the :ref:`gwas.py <gwas.py>` script. It can be specified by a `GCTA GRM <https://yanglab.westlake.edu.cn/software/gcta/#MakingaGRM>`_ in the .gz format
-or by IBD proportion estimated by `KING <https://www.kingrelatedness.com/manual.shtml>`.
+or by IBD proportion estimated by `KING <https://www.kingrelatedness.com/manual.shtml>`_.
 
 weights file
 ------------
