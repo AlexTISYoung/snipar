@@ -228,7 +228,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
         num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, gt_indices, G.shape[0])
         return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
     if trios_sibs:
-        G = gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
+        G = gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
         G.complete_trios_inds = trios_indices
         G.sibs_inds = sibs_indices
         return G
