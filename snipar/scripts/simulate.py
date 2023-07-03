@@ -112,15 +112,14 @@ def main(args):
     # save offspring genotypes
     for i in range(len(new_haps)):
         print('Writing genotypes for chromosome '+str(chroms[i]))
-        bim_i = np.vstack((snp_ids[i], maps[i], positions[i], alleles[i][:,0],alleles[i][:,1])).T
-        snp_pos = np.hstack((np.array([str(chroms[i]) for x in range(bim_i.shape[0])]).reshape(bim_i.shape[0],1),bim_i[:,1:3]))
-        gts_chr = SnpData(iid=ped[last_gen,0:2],sid=snp_ids[i],pos=np.array(snp_pos,dtype=str),
+        bim_i = np.vstack((np.repeat(chroms[i],snp_ids[i].shape[0]),snp_ids[i], maps[i], positions[i], alleles[i][:,0],alleles[i][:,1])).T
+        gts_chr = SnpData(iid=ped[last_gen,0:2],sid=snp_ids[i],pos=bim_i[:,[0,2,3]],
                           val=np.sum(new_haps[i], axis=3, dtype=np.uint8).reshape((new_haps[i].shape[0]*2,new_haps[i].shape[2])))
         Bed.write(args.outprefix+'chr_'+str(chroms[i])+'.bed',gts_chr,count_A1=True,_require_float32_64=False)
         np.savetxt(args.outprefix+'chr_'+str(chroms[i])+'.bim',bim_i,fmt='%s')
         if args.save_par_gts:
             par_gen = [x.split('_')[0]==str(int(n_last)-1) for x in ped[:,0]]
-            par_gts_chr = SnpData(iid=ped[par_gen,0:2],sid=snp_ids[i],pos=np.array(snp_pos,dtype=str),
+            par_gts_chr = SnpData(iid=ped[par_gen,0:2],sid=snp_ids[i],pos=bim_i[:,[0,2,3]],
                           val=np.sum(haps[i], axis=3, dtype=np.uint8).reshape((haps[i].shape[0]*2,haps[i].shape[2])))
             Bed.write(args.outprefix+'chr_'+str(chroms[i])+'_par.bed',par_gts_chr,count_A1=True,_require_float32_64=False) 
             del par_gts_chr
