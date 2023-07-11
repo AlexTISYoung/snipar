@@ -125,23 +125,24 @@ Adjusting for assortative mating
 --------------------------------
 
 We now show how to adjust two-generation PGI results for assortative mating
-using the procedure outlined in Young et al. 2023. The estimation procedure is
-summarized in this diagram: 
+using the procedure outlined in 'Estimation of indirect genetic effects and heritability under assortative mating'. 
+The estimation procedure is summarized in this diagram: 
 
-.. image:: ../images/two_gen_estimation.png
-    :width: 600px
+.. image:: two_gen_estimation.png
+    :scale: 30 %
     :align: center
+    :alt: Two-generation estimation procedure accouting for assortative mating
 
-The estimation requires as inputs: an estimate of the correlation between parents' scores (:math:`r_k`);
+The estimation requires as inputs: an estimate of the correlation between parents' scores, :math:`r_k`;
 the regression coefficients from two-generation PGI analysis, (:math:`\delta_{\text{PGI}:k},\alpha_{\text{PGI}:k}`);
-and a heritability estimate, (:math:`h^2_f`) ,from MZ-DZ twin comparisons, `RDR <https://www.nature.com/articles/s41588-018-0178-9>`_, or sib-regression (:math:`h^2`).
+and a heritability estimate, :math:`h^2_f`,from MZ-DZ twin comparisons, `RDR <https://www.nature.com/articles/s41588-018-0178-9>`_, or sib-regression.
 
-The estimation procedure outputs estimates of: (:math:`k`), the fraction of heritability the PGI would explain in a random mating population;
-(:math:`r_\delta`), the correlation between parents' true direct genetic effect components; 
-(:math:`h^2_\text{eq}`), the equilibrium heritability, adjusting for the downward bias in heritability estimates from
+The estimation procedure outputs estimates of: :math:`k`, the fraction of heritability the PGI would explain in a random mating population;
+:math:`r_\delta`, the correlation between parents' true direct genetic effect components; 
+:math:`h^2_\text{eq}`, the equilibrium heritability, adjusting for the downward bias in heritability estimates from
 MZ-DZ comparisons, RDR, and sib-regression; 
-(:math:`\alpha_\delta`), the indirect genetic effect of true direct genetic effect PGI;
-(:math:`v_{\eta:\delta}`), the fraction of phenotypic variance contribued by the indirect genetic effect component
+:math:`\alpha_\delta`, the indirect genetic effect of true direct genetic effect PGI;
+and :math:`v_{\eta:\delta}`, the fraction of phenotypic variance contribued by the indirect genetic effect component
 that is correlated with the direct genetic effect component. 
 
 We can use *snipar* to compute the two-generation PGI estimates and the correlation between parents' scores, 
@@ -151,7 +152,7 @@ and we can input a heritability estimate into *pgs.py* script to complete the in
 To perform the estimation, we will combine the offspring and parental genotype files. 
 This enables us to estimate the correlation between parents' scores 
 using the observed parental genotypes. (This is better than using the sibling 
-genotypes because the estimate from observed parental genotypes is uncorrelated with the PGI direct effect estimate.)
+genotypes because the correlation estimate from observed parental genotypes is uncorrelated with the PGS regression coefficients.)
 
     ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
 
@@ -160,32 +161,32 @@ We now compute the noisy PGI using the observed offspring and parental genotypes
     ``pgs.py direct_v1_obs --bed chr_@_combined --weights causal_effects.txt --beta_col direct_v1 --pedigree pedigree.txt``
 
 To complete the inputs to two-generation PGI analysis, we need an estimate of heritability,
-as one would obtain from sib-regression, RDR, MZ-DZ twin comparisons. This estimate is 
-a downard biased estimate of the equilibrium heritability by a factor of (:math:`(1-r_\delta)`), where
-(:math:`r_\delta`) is the correlation between the parents' direct genetic effect components. 
+as one would obtain from sib-regression, RDR, or MZ-DZ twin comparisons. This estimate is 
+a downard biased estimate of the equilibrium heritability, :math:`h^2_\text{eq}`, by a factor of :math:`(1-r_\delta)`, where
+:math:`r_\delta` is the correlation between the parents' direct genetic effect components. 
 
 We can obtain this from the VCs.txt output of the simulation, which can be read into R/Python/etc as table. 
 Each row gives, for each generation, 
-the variance of the direct genetic effect component, the phenotypic variance, and The
-correlation between parents direct genetic effect components. The equilibrium heritability is
+the variance of the direct genetic effect component, the phenotypic variance, and the
+correlation between parents' direct genetic effect components. The equilibrium heritability is
 obtained by using the values in the last row: 
 dividing the variance of the direct genetic effect component (first column) by the phenotypic variance
 (second column). To then obtain the heritability as estimated by sib-regression, RDR, and MZ-DZ twin comparisons,
-we multiply the equilibrium heritability by (:math:`(1-r_\delta)`), where (:math:`r_\delta`) is obtained from the third column of 
-the last row. The equilibrium heritability should be around 0.59, and (:math:`r_\delta`) should be around 0.29, so the heritability as estimated
-by sib-regression, RDR, MZ-DZ twin comparisons should be around (:math:`(1-0.29) \times 0.59\approx 0.42`). 
+we multiply the equilibrium heritability by :math:`(1-r_\delta)`, where :math:`r_\delta` is obtained from the third column of 
+the last row. The equilibrium heritability should be around 0.59, and :math:`r_\delta` should be around 0.29, so the heritability as estimated
+by sib-regression, RDR, MZ-DZ twin comparisons should be around :math:`h^2_f \approx (1-0.29) \times 0.59=0.42`. 
 
-We can now adjust the two-generation PGI results for assortative mating using the following command, 
+We can now perform two-generation PGI analysis accounting for assortative mating using the following command, 
 with the h2f argument set to the number computed from your VCs.txt file as outlined above (here we use 0.42):
 
     ``pgs.py direct_v1_obs --pgs direct_v1_obs.pgs.txt --phenofile phenotype.txt --h2f 0.42,0``
 
 This script will take the input heritability estimate (0.42) and the standard error of the estimate (here 0 since we used the true value)
 to estimate the fraction of heritability the PGI would explain in a random mating population,
-(:math:`k`), which should be around 0.5; the correlation between parents' direct genetic effect components, (:math:`r_\delta`), 
-which should be around 0.29; the equilibrium heritability, (:math:`h^2_\text{eq}`) which should be around 0.59; 
-the ratio between direct and population effects that would be expected based on assortative mating alone, (:math:`rho_k`),
-which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, (:math:`alpha_delta`), which should not be
+:math:`k`, which should be around 0.5; the correlation between parents' direct genetic effect components, :math:`r_\delta`, 
+which should be around 0.29; the equilibrium heritability, :math:`h^2_\text{eq}`, which should be around 0.59; 
+the ratio between direct and population effects that would be expected based on assortative mating alone, :math:`\rho_k`,
+which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, :math:`\alpha_delta`, which should not be
 statistically significantly different from zero (with high probability) because there are no parental indirect genetic effects in this simulation; 
-and (:math:`v_{\eta:\delta}`), the contribution to the phenotypic variance from the indirect genetic effect component correlated with direct genetic effect component,
+and :math:`v_{\eta:\delta}`, the contribution to the phenotypic variance from the indirect genetic effect component correlated with direct genetic effect component,
 which should also not be statistically indistinguishable from zero (with high probability). These estimates are output to direct_v1_obs.am_adj_pars.txt. 
