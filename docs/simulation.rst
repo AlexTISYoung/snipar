@@ -186,7 +186,7 @@ to estimate the fraction of heritability the PGI would explain in a random matin
 :math:`k`, which should be around 0.5; the correlation between parents' direct genetic effect components, :math:`r_\delta`, 
 which should be around 0.29; the equilibrium heritability, :math:`h^2_\text{eq}`, which should be around 0.59; 
 the ratio between direct and population effects that would be expected based on assortative mating alone, :math:`\rho_k`,
-which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, :math:`\alpha_delta`, which should not be
+which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, :math:`\alpha_\delta`, which should not be
 statistically significantly different from zero (with high probability) because there are no parental indirect genetic effects in this simulation; 
 and :math:`v_{\eta:\delta}`, the contribution to the phenotypic variance from the indirect genetic effect component correlated with direct genetic effect component,
 which should also not be statistically indistinguishable from zero (with high probability). These estimates are output to direct_v1_obs.am_adj_pars.txt. 
