@@ -125,7 +125,7 @@ Adjusting for assortative mating
 --------------------------------
 
 We now show how to adjust two-generation PGI results for assortative mating
-using the procedure outlined in 'Estimation of indirect genetic effects and heritability under assortative mating'. 
+using the procedure outlined in `Estimation of indirect genetic effects and heritability under assortative mating <https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1.abstract>`_. 
 The estimation procedure is summarized in this diagram: 
 
 .. image:: two_gen_estimation.png

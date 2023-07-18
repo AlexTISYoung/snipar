@@ -27,3 +27,4 @@ old_simulations
 example_data
 master_env
 sim
+conda_env/

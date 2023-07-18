@@ -25,6 +25,8 @@ import snipar.read as read
 from snipar.utilities import *
 from snipar.slmm import build_ibdrel_arr, build_sib_arr
 from snipar.utilities import get_parser_doc
+from numba import set_num_threads
+from numba import config as numba_config
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
@@ -73,6 +75,7 @@ parser.add_argument('--compute_controls', action='store_true', default=False,
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
 parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
 parser.add_argument('--force_am_adj',action='store_true',help='Force assortative mating adjustment even when estimated correlation is noisy/not significant',default=False)
+parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
 parser.add_argument('--batch_size',type=int,help='Batch size for reading in SNPs (default 10000)',default=10000)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
@@ -81,6 +84,13 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    # Set number of threads
+    if args.threads is not None:
+        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+    else:
+        num_threads = numba_config.NUMBA_NUM_THREADS
+    set_num_threads(num_threads)
+    print('Number of threads: '+str(num_threads))
     if args.weights is not None:
         if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')
@@ -157,9 +167,9 @@ def main(args):
         ####### Assortative mating adjustment #######
         if not args.no_am_adj:
             if args.compute_controls:
-                r_am = pg[0].am_adj()
+                r_am, r_am_se = pg[0].am_adj()
             else:
-                r_am = pg.am_adj()
+                r_am, r_am_se = pg.am_adj()
         else:
             r_am = 0
         ####### Compute grandparental PGSs #######

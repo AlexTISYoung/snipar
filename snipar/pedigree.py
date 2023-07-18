@@ -11,12 +11,18 @@ def get_sibpairs_from_ped(ped):
     # Remove control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
     ped = ped[~controls,:]
-    # Find unique parent-pairs
     parent_pairs = np.array([ped[i,2]+ped[i,3] for i in range(ped.shape[0])])
+    # Find unique parent-pairs
     unique_pairs, sib_counts = np.unique(parent_pairs, return_counts=True)
+    fam_dict = dict()
+    for i in range(ped.shape[0]):
+        if parent_pairs[i] in fam_dict:
+            fam_dict[parent_pairs[i]] = np.append(fam_dict[parent_pairs[i]],i)
+        else:
+            fam_dict[parent_pairs[i]] = np.array([i])
     # Fill in sibships
     for i in range(unique_pairs.shape[0]):
-        ped[np.where(parent_pairs==unique_pairs[i])[0],0] = i 
+        ped[fam_dict[unique_pairs[i]],0] = i 
     # Parent pairs with more than one offspring
     sib_parent_pairs = unique_pairs[sib_counts>1]
     fam_sizes = np.array([x*(x-1)/2 for x in sib_counts[sib_counts>1]])
@@ -28,7 +34,7 @@ def get_sibpairs_from_ped(ped):
         sibpairs = np.zeros((npairs,2),dtype=ped.dtype)
         paircount = 0
         for ppair in sib_parent_pairs:
-            sib_indices = np.where(parent_pairs==ppair)[0]
+            sib_indices = fam_dict[ppair]
             for i in range(0,sib_indices.shape[0]-1):
                 for j in range(i+1,sib_indices.shape[0]):
                     sibpairs[paircount,:] = np.array([ped[sib_indices[i],1],ped[sib_indices[j],1]])
@@ -55,7 +61,7 @@ class Person:
         self.mid = mid
 
 
-def create_pedigree(king_address, agesex_address):
+def create_pedigree(king_address, agesex_address, same_parents_in_ped=True):
     """Creates pedigree table from agesex file and kinship file in KING format.
     
     Args:
@@ -173,20 +179,61 @@ def create_pedigree(king_address, agesex_address):
         data.append((p.fid, p.id, p.pid, p.mid))
 
     data = pd.DataFrame(data, columns = ['FID' , 'IID', 'FATHER_ID' , 'MOTHER_ID']).astype(str)
+    
+    # Check if parents are the same in ped for each sibship
+    if same_parents_in_ped:
+        fam_dict = dict()
+        for i in range(data.shape[0]):
+            if data.FID[i] in fam_dict:
+                fam_dict[data.FID[i]] = np.append(fam_dict[data.FID[i]],i)
+            else:
+                fam_dict[data.FID[i]] = np.array([i])
+        sibships, fam_sizes = np.unique(data.FID, return_counts=True)
+        sibships = sibships[fam_sizes>1]
+        inconsistent_fams = set()
+        for sibship in sibships:
+            sibship_ped = data.loc[fam_dict[sibship],:].values
+            parent_pairs = np.array([sibship_ped[i,2]+sibship_ped[i,3] for i in range(sibship_ped.shape[0])])
+            unique_pairs = np.unique(parent_pairs)
+            if unique_pairs.shape[0]>1:
+                inconsistent_fams.add(sibship)
+                data.loc[fam_dict[sibship],['FATHER_ID','MOTHER_ID']] = np.array([sibship+'___P',sibship+'___M'])
+        if len(inconsistent_fams)>0:
+            print('Warning: found '+str(len(inconsistent_fams))+' sibships with different parents when creating pedigree. Removing the parents from pedigree.')
+    
     return data
 
 def find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only = False):
     """
     Used in get_gts_matrix and get_fam_means to find the individuals in ids that have genotyped siblings.
     """
-    # Find genotyped sibships of size > 1
+    ## Find genotyped sibships of size > 1
     ped_dict = make_id_dict(ped, 1)
     ids_in_ped = np.array([x in ped_dict for x in gts_ids])
+    indices_in_ped = np.array([ped_dict[x] for x in gts_ids[ids_in_ped]])
     gts_fams = np.zeros((gts_ids.shape[0]),dtype=gts_ids.dtype)
-    gts_fams[ids_in_ped] = np.array([ped[ped_dict[x], 0] for x in gts_ids[ids_in_ped]])
-    fams, counts = np.unique(gts_fams[ids_in_ped], return_counts=True)
+    gts_fams[ids_in_ped] = ped[indices_in_ped,0]
+    ped_gts = ped[indices_in_ped, :]
+    fams, counts = np.unique(ped_gts[:,0], return_counts=True)
     sibships = set(fams[counts > 1])
-    # Find individuals with genotyped siblings
+    # Check if parents are the same in ped for each sibship
+    fam_dict = dict()
+    for i in range(ped_gts.shape[0]):
+        if ped_gts[i,0] in sibships:
+            if ped_gts[i,0] in fam_dict:
+                fam_dict[ped_gts[i,0]] = np.append(fam_dict[ped_gts[i,0]],i)
+            else:
+                fam_dict[ped_gts[i,0]] = np.array([i])
+    inconsistent_sibships = set()
+    for sibship in sibships:
+        sibship_ped = ped_gts[fam_dict[sibship],:]
+        parent_pairs = np.array([sibship_ped[i,2]+sibship_ped[i,3] for i in range(sibship_ped.shape[0])])
+        unique_pairs = np.unique(parent_pairs)
+        if unique_pairs.shape[0]>1:
+            inconsistent_sibships.add(sibship)
+    if len(inconsistent_sibships)>0:
+        sibships = sibships.difference(inconsistent_sibships)
+    ## Find individuals with genotyped siblings
     ids_in_ped = np.array([x in ped_dict for x in ids])
     ids = ids[ids_in_ped]
     ids_fams = np.array([ped[ped_dict[x], 0] for x in ids])

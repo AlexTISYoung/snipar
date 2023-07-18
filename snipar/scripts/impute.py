@@ -23,6 +23,7 @@ Results:
 import logging
 from snipar.imputation.preprocess_data import *
 from snipar.imputation.impute_from_sibs import *
+from snipar.pedigree import create_pedigree
 from snipar.utilities import parse_obsfiles
 import argparse
 import h5py
