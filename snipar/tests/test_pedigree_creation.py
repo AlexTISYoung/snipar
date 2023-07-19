@@ -1,7 +1,8 @@
 import unittest
 import subprocess
 import pandas as pd
-from snipar.imputation.preprocess_data import create_pedigree, add_control
+from snipar.imputation.preprocess_data import add_control
+from snipar.pedigree import create_pedigree
 import networkx as nx
 import os
 import numpy as np
