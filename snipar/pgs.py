@@ -616,7 +616,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
         alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     elif ngen==2 or ngen==3:
         if fit_sib:
-            if 'sib' in pg.sid:
+            if 'sibling' in pg.sid:
                 pg_cols = ['proband','sibling']
             else:
                 raise(ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)'))
