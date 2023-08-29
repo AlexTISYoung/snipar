@@ -45,7 +45,7 @@ for (i in 1:22){
 }
 
 p = p[!is.na(p$SNP),]
-write.table(p,'~/pgs/PGI_catalog/EVERSMOKE2_hg38.txt',quote=F,row.names=F)
+write.table(p,'~/pgs/PGI_catalog/bmi_hg38.txt',quote=F,row.names=F)
 
 ### EA SBayesR ###
 gmap = read.table('~/pgs/HM3_SNPs_ChrPosID_hg19tohg38.map',header=T)
@@ -64,7 +64,7 @@ for (i in 1:22){
     print(i)
 }
 p = p[!is.na(p$SNP),]
-write.table(p,'~/pgs/PGI_catalog/EA6_hg38.txt',quote=F,row.names=F)
+write.table(p,'~/pgs/PGI_catalog/height_hg38.txt',quote=F,row.names=F)
 
 ######## Compute #########
 pgs.py ~/pgs/EA6 --weights ~/pgs/PGI_catalog/EA6_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --grandpar
@@ -81,12 +81,26 @@ pgs.py ~/pgs/AFB2 --weights ~/pgs/PGI_catalog/AFB2_hg38.txt --bgen ~/haplotypes/
 pgs.py ~/pgs/AFB2_sib --weights ~/pgs/PGI_catalog/AFB2_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --fit_sib
 pgs.py ~/pgs/EVERSMOKE2 --weights ~/pgs/PGI_catalog/EVERSMOKE2_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --grandpar
 pgs.py ~/pgs/EVERSMOKE2_sib --weights ~/pgs/PGI_catalog/EVERSMOKE2_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --fit_sib
+pgs.py ~/pgs/NEBwomen2 --weights ~/pgs/PGI_catalog/NEBwomen2_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --grandpar
+pgs.py ~/pgs/height --weights ~/pgs/PGI_catalog/height_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --grandpar
+pgs.py ~/pgs/bmi --weights ~/pgs/PGI_catalog/bmi_hg38.txt --bgen ~/haplotypes/chr_@ --imp ~/haplotypes/imputed/chr_@ --beta_col beta --batch_size 1000 --grandpar
 
-for pgs in EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1
+for pgs in EA6 EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1
+for pgs in height bmi NEBwomen2
 do
 for i in {1..18}
 do
-pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --pgs ~/pgs/$pgs'.pgs.txt' --gen_models 1-3 --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
-pgs.py ~/pgs/$pgs/$i'_sib' --pheno ~/phenotypes/processed_traits.txt --pgs ~/pgs/$pgs'_sib.pgs.txt' --fit_sib --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
+pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced.txt --pgs ~/pgs/$pgs'.pgs.txt' --gen_models 1-3 --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
+#pgs.py ~/pgs/$pgs/$i'_sib' --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced.txt --pgs ~/pgs/$pgs'_sib.pgs.txt' --gen_models 2 --fit_sib --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
+done
+done
+
+#for pgs in EA6 EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 
+for pgs in EA6 height bmi NEBwomen2
+do
+for i in 7 9 10 
+do
+pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced_nosex.txt --pgs ~/pgs/$pgs'.pgs.txt' --gen_models 1-3 --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
+#pgs.py ~/pgs/$pgs/$i'_sib' --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced.txt --pgs ~/pgs/$pgs'_sib.pgs.txt' --gen_models 2 --fit_sib --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
 done
 done

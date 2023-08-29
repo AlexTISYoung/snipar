@@ -13,7 +13,7 @@ plink='/homes/nber/alextisyoung/plink'
 qctool='/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7'
 king='/homes/nber/alextisyoung/king'
 gcta64='/homes/nber/alextisyoung/gcta_1.93.2beta/gcta64'
-
+conda activate snipar_env
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
 for i in {1..22}
 do
@@ -77,8 +77,14 @@ $gpardir/gctb_2.03beta_Linux/gctb --sbayes R \
 ## Compute PGS
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_hm3 --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
+pgs.py $gpardir/pgs/EA4_hm3_sib --weights $gpardir/pgs/EA4_excl_UKBrel_STR_GS_2020_08_21_hm3.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --fit_sib
 # Estimated correlation between maternal and paternal PGSs: 0.1481
+for pgs in EA4_hm3
+do
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_hm3.pgs.txt --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king
+#pgs.py $gpardir/pgs/$pgs/$i --pgs $gpardir/pgs/$pgs'.pgs.txt' --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king
+pgs.py $gpardir/pgs/$pgs/$i'_sib' --pgs $gpardir/pgs/$pgs'_sib.pgs.txt' --phenofile $gpardir/processed_traits_noadj.txt --covar $gpardir/covariates.fam  --gen_models 2 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --fit_sib
 done
+done
+
