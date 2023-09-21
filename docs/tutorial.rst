@@ -94,7 +94,7 @@ To perform imputation from the phased .bgen file in example_data/, use the follo
 
     ``impute.py --ibd chr_@.ibd --bgen chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4``
 
-As with the ibd.py script, the impute_runner.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
+As with the ibd.py script, the impute.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
 Family based GWAS
 -----------------
