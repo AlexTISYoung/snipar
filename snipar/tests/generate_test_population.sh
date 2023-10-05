@@ -6,7 +6,7 @@ for i in {1..2}
 do
 python snipar/simulate/simulate_pop.py ${nsnps} 0.5 ${fams} $((fams/3)) $((fams/3)) 0.5 "outputs/tmp/t__t${i}" --chrom ${i}
 python -c "import pandas as pd
-from snipar.imputation.preprocess_data import create_pedigree
+from snipar.pedigree import create_pedigree
 print('********************')
 print('outputs/tmp/t__t${i}_fams.ped')
 print('********************')

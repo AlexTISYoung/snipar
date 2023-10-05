@@ -1,4 +1,3 @@
-
 hm3_dir=/finngen/library-red/finngen_R10/genotype_plink_1.0/data/
 pca_outlier=/finngen/library-red/finngen_R10/pca_1.0/data/finngen_R10_rejected.txt
 kin0='/finngen/library-red/finngen_R10/kinship_2.0/data/finngen_R10.kin0'

@@ -29,3 +29,12 @@ master_env
 sim
 conda_env/
 snipar/tests/tmp
+standarized.txt
+.gitignore
+.gitignore
+snipar_env.tar.gz
+two_gen_inf_check.csv
+two_gen_inf_check.py
+simulation_study.py
+.gitignore
+EA_corrs.txt
