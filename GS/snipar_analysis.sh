@@ -195,3 +195,8 @@ done
 
 # Logistic LMM
 Rscript logistic_lmm.R 
+
+for pgs in depression height bmi ever_smoke EA4_hm3
+do
+cp -r $gpardir/pgs/$pgs /disk/genetics/ukb/alextisyoung/snipar/GS/pgs
+done
