@@ -31,7 +31,6 @@ gs_EUR = gs_pops[gs_pops$pop=='EUR',1]
 raw_traits = raw_traits[raw_traits$id%in%gs_EUR,]
 
 ################# Process traits ################
-processed_traits = data.frame(IID=raw_traits$id)
 
 qt_transform = function(y,raw_traits,remove_upper=F,remove_lower=F,remove_neg=T){
   y = as.numeric(y)
@@ -104,7 +103,7 @@ convert_ever_smoked = function(y){
   if (y==4){return(0)}
   else {return(1)}
 }
-
+processed_traits = data.frame(IID=raw_traits$id)
 processed_traits$Glucose = qt_transform(raw_traits$Glucose,raw_traits,remove_upper=T,remove_lower=T)
 processed_traits$Non_HDL = qt_transform(raw_traits$Total_cholesterol-raw_traits$HDL_cholesterol,raw_traits,remove_upper=T,remove_lower=T)
 processed_traits$HDL = qt_transform(raw_traits$HDL_cholesterol,raw_traits,remove_upper=T,remove_lower=T)
@@ -139,6 +138,12 @@ processed_traits$EA_years = sapply(raw_traits$years,years_convert)
 processed_traits$EA_years_mid = sapply(raw_traits$years,years_convert_mid)
 processed_traits$EA_quals = sapply(raw_traits$qualification,quals_convert)
 processed_traits$EA_quals[is.na(processed_traits$EA_quals)] = processed_traits$EA_years[is.na(processed_traits$EA_quals)]
+processed_traits[raw_traits$age<30,c('EA_years','EA_years_mid','EA_quals')] = NA
+
+## Remove UKB overlap
+ukb = read.csv('GS_UKB_overlap.csv',header=T)
+processed_traits = processed_traits[!processed_traits$IID%in%ukb$volid,]
+processed_traits = processed_traits[!processed_traits$IID%in%ukb$volid,]
 
 # Match with geno ids
 fam = read.table('grandpar/haplotypes/bedfiles/autosome.fam')
@@ -146,15 +151,19 @@ fam$IID = sapply(fam[,2],function(x) strsplit(x,'_')[[1]][2])
 processed_traits$IID = fam[match(processed_traits$IID,fam$IID),2]
 processed_traits$FID = processed_traits$IID
 processed_traits = processed_traits[,c(dim(processed_traits)[2],1:(dim(processed_traits)[2]-1))]
-processed_traits[raw_traits$age<30,c('EA_years','EA_years_mid','EA_quals')] = NA
-# Write
-write.table(processed_traits,'grandpar/processed_traits_noadj.txt',quote=F,row.names=F)
+
+
+#### Write
+
+write.table(processed_traits,'grandpar/processed_traits_noadj_noukb.txt',quote=F,row.names=F)
 
 # Agesex
 agesex = data.frame(FID=processed_traits$FID,IID=processed_traits$IID,
                     age=raw_traits$age,
                     sex=sapply(raw_traits$sex,function(x) if (x==0){return('F')} else if (x==1){return('M')} else {return(NA)}))
 write.table(agesex,'grandpar/agesex.txt',quote=F,row.names=F)
+
+
 
 # Write correlation matrix
 write.csv(cor(processed_traits[,c('cog','vocab','EA_years','EA_years_mid','EA_quals')],use='pairwise.complete.obs'),'grandpar/EA_cog_vocab_corrs.csv',quote=F)

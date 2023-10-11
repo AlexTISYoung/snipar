@@ -1,0 +1,16 @@
+1 Glucose
+2 Non_HDL
+3 HDL
+4 height
+5 FEV1
+6 BMI
+7 ever.smoked
+8 cigarettes.per.day
+9 cog
+10 vocab
+11 SBP
+12 DBP
+13 neuroticism
+14 EA_years
+15 EA_years_mid
+16 EA_quals

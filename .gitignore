@@ -38,3 +38,4 @@ two_gen_inf_check.py
 simulation_study.py
 .gitignore
 EA_corrs.txt
+plot_data.csv
