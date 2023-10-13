@@ -1,0 +1,55 @@
+Starting job 17943871 on c2-24 at Fri Sep 1 10:15:25 CEST 2023
+
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:552: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:579: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:607: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+Reading PGS from PGC_UKB_depresssion.pgs.txt
+Fitting PGS for /cluster/projects/p805/snipar_pgs/data/pheno/five_ch_phenos_snipar.txt
+Number of non-missing phenotype observations: 31510
+Number of non-missing phenotype observations: 31510
+Restricting to individuals with both parents genotyped
+Sample size of individuals with complete phenotype and PGS observations: 18889
+Estimating population effect (1 generation model)
+Fitting 1 generation model (proband only)
+Sample size: 18889
+Variance components: [0.07351819040587153, 0.2629414482434052, 0.6633791017860551]
+Saving effect estimates to EA4_3gen_res/PGC_UKB_depresssion_5.1.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/PGC_UKB_depresssion_5.1.vcov.txt
+Estimating direct effect and parental NTCs (2 generation model)
+Fitting 2 generation model (proband and observed/imputed parents)
+Sample size: 18889
+Variance components: [0.07392413655001337, 0.2625862595127512, 0.6630020363937742]
+Saving effect estimates to EA4_3gen_res/PGC_UKB_depresssion_5.2.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/PGC_UKB_depresssion_5.2.vcov.txt
+Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)
+Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents
+Sample size: 18889
+Variance components: [0.07463392026278882, 0.26228011316291466, 0.662609708049271]
+Saving effect estimates to EA4_3gen_res/PGC_UKB_depresssion_5.3.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/PGC_UKB_depresssion_5.3.vcov.txt
+
+Task and CPU usage stats:
+JobID           JobName  AllocCPUS   NTasks     MinCPU MinCPUTask     AveCPU    Elapsed ExitCode 
+------------ ---------- ---------- -------- ---------- ---------- ---------- ---------- -------- 
+17943871     PGC_UKB_d+         15                                             01:56:08      0:0 
+17943871.ba+      batch         15        1   01:45:08          0   01:45:08   01:56:08      0:0 
+17943871.ex+     extern         15        1   00:00:00          0   00:00:00   01:56:08      0:0 
+
+Memory usage stats:
+JobID            MaxRSS MaxRSSTask     AveRSS MaxPages   MaxPagesTask   AvePages 
+------------ ---------- ---------- ---------- -------- -------------- ---------- 
+17943871                                                                         
+17943871.ba+ 405822948K          0 405822948K        0              0          0 
+17943871.ex+          0          0          0        0              0          0 
+
+Disk usage stats:
+JobID         MaxDiskRead MaxDiskReadTask    AveDiskRead MaxDiskWrite MaxDiskWriteTask   AveDiskWrite 
+------------ ------------ --------------- -------------- ------------ ---------------- -------------- 
+17943871                                                                                              
+17943871.ba+       11.40M               0         11.40M        0.00M                0          0.00M 
+17943871.ex+        0.00M               0          0.00M            0                0              0 
+
+Job 17943871 completed at Fri Sep 1 12:11:34 CEST 2023

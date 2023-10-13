@@ -1,0 +1,83 @@
+Starting job 17689741 on c1-12 at Tue Aug 15 23:41:27 CEST 2023
+
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:552: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:579: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:607: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+Reading PGS from height_yengo_2022.pgs.txt
+Fitting PGS for /cluster/projects/p805/snipar_pgs/data/pheno/five_ch_phenos_snipar.txt
+Number of non-missing phenotype observations: 68014
+Number of non-missing phenotype observations: 68014
+Sample size of individuals with complete phenotype and PGS observations: 64511
+Estimating population effect (1 generation model)
+Fitting 1 generation model (proband only)
+Sample size: 64511
+Variance components: [0.7657149498472328, 1e-05, 0.23345142476349734]
+Saving effect estimates to EA4_3gen_res/height_yengo_2022_1.1.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/height_yengo_2022_1.1.vcov.txt
+Estimating direct effect and parental NTCs (2 generation model)
+Fitting 2 generation model (proband and observed/imputed parents)
+Sample size: 64511
+Variance components: [0.7646599081675521, 1e-05, 0.2338706124637596]
+Saving effect estimates to EA4_3gen_res/height_yengo_2022_1.2.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/height_yengo_2022_1.2.vcov.txt
+Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)
+Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents
+Sample size: 64511
+Traceback (most recent call last):
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/bin/pgs.py", line 188, in <module>
+    alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)        
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py", line 607, in fit_pgs_model
+    alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py", line 626, in make_and_fit_model
+    varcomp_lst = make_grms(pg.fams[no_NA], ibdrel_path=ibdrel_path, id_dict=id_dict, keep=pg.ids[no_NA], sparse_thresh=sparse_thresh)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py", line 656, in make_grms
+    grm_data, grm_row_ind, grm_col_ind = slmm.build_ibdrel_arr(
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/slmm.py", line 79, in build_ibdrel_arr
+    king = pd.read_csv(ibdrel_path + '.seg',
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/io/parsers.py", line 688, in read_csv
+    return _read(filepath_or_buffer, kwds)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/io/parsers.py", line 460, in _read
+    data = parser.read(nrows)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/io/parsers.py", line 1213, in read
+    df = DataFrame(col_dict, columns=columns, index=index)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/frame.py", line 468, in __init__
+    mgr = init_dict(data, index, columns, dtype=dtype)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/construction.py", line 283, in init_dict
+    return arrays_to_mgr(arrays, data_names, index, columns, dtype=dtype)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/construction.py", line 93, in arrays_to_mgr
+    return create_block_manager_from_arrays(arrays, arr_names, axes)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/managers.py", line 1683, in create_block_manager_from_arrays
+    blocks = form_blocks(arrays, names, axes)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/managers.py", line 1772, in form_blocks
+    object_blocks = _simple_blockify(items_dict["ObjectBlock"], np.object_)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/managers.py", line 1817, in _simple_blockify
+    values, placement = _stack_arrays(tuples, dtype)
+  File "/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/pandas/core/internals/managers.py", line 1863, in _stack_arrays
+    stacked = np.empty(shape, dtype=dtype)
+numpy.core._exceptions._ArrayMemoryError: Unable to allocate 55.0 GiB for an array with shape (5, 1477110548) and data type object
+
+Task and CPU usage stats:
+JobID           JobName  AllocCPUS   NTasks     MinCPU MinCPUTask     AveCPU    Elapsed ExitCode 
+------------ ---------- ---------- -------- ---------- ---------- ---------- ---------- -------- 
+17689741     height_ye+         15                                             04:37:26      1:0 
+17689741.ba+      batch         15        1 1-12:29:24          0 1-12:29:24   04:37:26      1:0 
+17689741.ex+     extern         15        1   00:00:00          0   00:00:00   04:37:26      0:0 
+
+Memory usage stats:
+JobID            MaxRSS MaxRSSTask     AveRSS MaxPages   MaxPagesTask   AvePages 
+------------ ---------- ---------- ---------- -------- -------------- ---------- 
+17689741                                                                         
+17689741.ba+ 446453944K          0 446453944K        0              0          0 
+17689741.ex+          0          0          0        0              0          0 
+
+Disk usage stats:
+JobID         MaxDiskRead MaxDiskReadTask    AveDiskRead MaxDiskWrite MaxDiskWriteTask   AveDiskWrite 
+------------ ------------ --------------- -------------- ------------ ---------------- -------------- 
+17689741                                                                                              
+17689741.ba+       11.40M               0         11.40M        0.00M                0          0.00M 
+17689741.ex+        0.00M               0          0.00M            0                0              0 
+
+Job 17689741 completed at Wed Aug 16 04:18:52 CEST 2023

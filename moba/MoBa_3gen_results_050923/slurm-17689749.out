@@ -1,0 +1,54 @@
+Starting job 17689749 on c2-20 at Wed Aug 16 02:48:53 CEST 2023
+
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:552: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:579: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:607: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+Reading PGS from BMI_WOOD_UKB_2018.pgs.txt
+Fitting PGS for /cluster/projects/p805/snipar_pgs/data/pheno/five_ch_phenos_snipar.txt
+Number of non-missing phenotype observations: 31544
+Number of non-missing phenotype observations: 31544
+Sample size of individuals with complete phenotype and PGS observations: 29916
+Estimating population effect (1 generation model)
+Fitting 1 generation model (proband only)
+Sample size: 29916
+Variance components: [0.47994748550789834, 0.08175674869630249, 0.4403629805798304]
+Saving effect estimates to EA4_3gen_res/BMI_WOOD_UKB_2018_4.1.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/BMI_WOOD_UKB_2018_4.1.vcov.txt
+Estimating direct effect and parental NTCs (2 generation model)
+Fitting 2 generation model (proband and observed/imputed parents)
+Sample size: 29916
+Variance components: [0.4787928598568764, 0.08246152910059583, 0.4407203272129906]
+Saving effect estimates to EA4_3gen_res/BMI_WOOD_UKB_2018_4.2.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/BMI_WOOD_UKB_2018_4.2.vcov.txt
+Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)
+Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents
+Sample size: 29916
+Variance components: [0.478973375659263, 0.08246334593721702, 0.4406067057016753]
+Saving effect estimates to EA4_3gen_res/BMI_WOOD_UKB_2018_4.3.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/BMI_WOOD_UKB_2018_4.3.vcov.txt
+
+Task and CPU usage stats:
+JobID           JobName  AllocCPUS   NTasks     MinCPU MinCPUTask     AveCPU    Elapsed ExitCode 
+------------ ---------- ---------- -------- ---------- ---------- ---------- ---------- -------- 
+17689749     BMI_WOOD_+         15                                             01:43:00      0:0 
+17689749.ba+      batch         15        1   01:43:10          0   01:43:10   01:43:00      0:0 
+17689749.ex+     extern         15        1   00:00:00          0   00:00:00   01:43:00      0:0 
+
+Memory usage stats:
+JobID            MaxRSS MaxRSSTask     AveRSS MaxPages   MaxPagesTask   AvePages 
+------------ ---------- ---------- ---------- -------- -------------- ---------- 
+17689749                                                                         
+17689749.ba+ 405839176K          0 405839176K        0              0          0 
+17689749.ex+          0          0          0        0              0          0 
+
+Disk usage stats:
+JobID         MaxDiskRead MaxDiskReadTask    AveDiskRead MaxDiskWrite MaxDiskWriteTask   AveDiskWrite 
+------------ ------------ --------------- -------------- ------------ ---------------- -------------- 
+17689749                                                                                              
+17689749.ba+       11.40M               0         11.40M        0.00M                0          0.00M 
+17689749.ex+        0.00M               0          0.00M            0                0              0 
+
+Job 17689749 completed at Wed Aug 16 04:31:53 CEST 2023

@@ -1,0 +1,55 @@
+Starting job 17943852 on c1-15 at Thu Aug 31 22:22:00 CEST 2023
+
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:552: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:579: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+/cluster/projects/p805/software/anaconda3/envs/snipar_venv4/lib/python3.9/site-packages/snipar/pgs.py:607: DtypeWarning: Columns (0) have mixed types.Specify dtype option on import or set low_memory=False.
+  alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+Reading PGS from EA4.pgs.txt
+Fitting PGS for /cluster/projects/p805/snipar_pgs/data/pheno/five_ch_phenos_snipar.txt
+Number of non-missing phenotype observations: 68014
+Number of non-missing phenotype observations: 68014
+Restricting to individuals with both parents genotyped
+Sample size of individuals with complete phenotype and PGS observations: 39837
+Estimating population effect (1 generation model)
+Fitting 1 generation model (proband only)
+Sample size: 39837
+Variance components: [0.6885162689472143, 1e-05, 0.24339543214856277]
+Saving effect estimates to EA4_3gen_res/EA4_1.1.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/EA4_1.1.vcov.txt
+Estimating direct effect and parental NTCs (2 generation model)
+Fitting 2 generation model (proband and observed/imputed parents)
+Sample size: 39837
+Variance components: [0.680895705750807, 1e-05, 0.2458543681406339]
+Saving effect estimates to EA4_3gen_res/EA4_1.2.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/EA4_1.2.vcov.txt
+Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)
+Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents
+Sample size: 39837
+Variance components: [0.6802789677719847, 1e-05, 0.2463040050630159]
+Saving effect estimates to EA4_3gen_res/EA4_1.3.effects.txt
+Saving sampling variance-covariance matrix to EA4_3gen_res/EA4_1.3.vcov.txt
+
+Task and CPU usage stats:
+JobID           JobName  AllocCPUS   NTasks     MinCPU MinCPUTask     AveCPU    Elapsed ExitCode 
+------------ ---------- ---------- -------- ---------- ---------- ---------- ---------- -------- 
+17943852          EA4_1         15                                             02:38:56      0:0 
+17943852.ba+      batch         15        1   02:38:34          0   02:38:34   02:38:56      0:0 
+17943852.ex+     extern         15        1   00:00:00          0   00:00:00   02:38:56      0:0 
+
+Memory usage stats:
+JobID            MaxRSS MaxRSSTask     AveRSS MaxPages   MaxPagesTask   AvePages 
+------------ ---------- ---------- ---------- -------- -------------- ---------- 
+17943852                                                                         
+17943852.ba+ 465345112K          0 465345112K        0              0          0 
+17943852.ex+          0          0          0        0              0          0 
+
+Disk usage stats:
+JobID         MaxDiskRead MaxDiskReadTask    AveDiskRead MaxDiskWrite MaxDiskWriteTask   AveDiskWrite 
+------------ ------------ --------------- -------------- ------------ ---------------- -------------- 
+17943852                                                                                              
+17943852.ba+       11.40M               0         11.40M        0.00M                0          0.00M 
+17943852.ex+        0.00M               0          0.00M            0                0              0 
+
+Job 17943852 completed at Fri Sep 1 01:00:56 CEST 2023
