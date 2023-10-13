@@ -18,6 +18,8 @@ Compute polygenic scores for probands, siblings, and parents from SNP weights us
  
  Compute genome-wide correlations between different effects estimated by gwas.py (correlate.py). 
 
+ Simulate genotype and phenotypes under different scenarios: direct and indirect genetic effects, vertical transmission, assortative mating (simulate.py). 
+
 # Documentation
 
 Documentation: https://snipar.rtfd.io/
