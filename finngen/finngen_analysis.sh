@@ -103,3 +103,11 @@ pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenoty
 #pgs.py ~/pgs/$pgs/$i'_sib' --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced.txt --pgs ~/pgs/$pgs'_sib.pgs.txt' --gen_models 2 --fit_sib --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
 done
 done
+
+mkdir ~/pgs_out
+for pgs in EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 height bmi NEBwomen2
+do
+cp -r ~/pgs/$pgs ~/pgs_out/
+done
+tar -czvf ~/pgs_out.tar.gz ~/pgs_out/
+gsutil -m cp ~/pgs_out.tar.gz gs://fg-production-sandbox-6-red/alex_young/

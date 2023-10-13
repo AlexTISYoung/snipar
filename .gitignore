@@ -39,3 +39,4 @@ simulation_study.py
 .gitignore
 EA_corrs.txt
 plot_data.csv
+.DS_Store
