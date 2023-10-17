@@ -1,11 +1,28 @@
-setwd('~/Google Drive/grandparental/')
+setwd('~/snipar/meta')
 
 # Read gen models 1-3 function
-read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov){
+read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov,sign_flip=FALSE){
   ## Estimates to output 
   results = matrix(NA,nrow=11,ncol=2)
   dimnames(results)[[1]] = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
   dimnames(results)[[2]] = c('estimates','SE')
+  ## Check files exist
+  if (!file.exists(gen1_effects)){
+    print(paste(gen1_effects,'does not exist'))
+    return(results)
+  } else if (!file.exists(gen2_effects)){
+    print(paste(gen2_effects,'does not exist'))
+    return(results)
+  } else if (!file.exists(gen2_vcov)){
+    print(paste(gen2_vcov,'does not exist'))
+    return(results)
+  } else if (!file.exists(gen3_effects)){
+    print(paste(gen3_effects,'does not exist'))
+    return(results)
+  } else if (!file.exists(gen3_vcov)){
+    print(paste(gen3_vcov,'does not exist'))
+    return(results)
+  } else {
   ## Get population effect
   results_1gen = read.table(gen1_effects,row.names=1)
   results['population',1:2] = as.matrix(results_1gen['proband',])
@@ -55,7 +72,8 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3
   results[c('paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),1]=results_effects
   results[c('paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2]=sqrt(diag(results_vcov))
   # Return
-  return(results)
+  if (sign_flip){results[,1] = -results[,1]}
+  return(results)}
 }
 
 # Function for fixed effects meta-analysis
@@ -67,36 +85,57 @@ fe_meta = function(ests,ses){
 }
 
 # MoBa
-moba_dir = 'moba/'
-# Botnia
-botnia_dir = 'botnia/'
-botnia_traits = read.table('botnia/traits.txt',header=F)
-# GS 
-gs_dir = 'GS/'
-gs_traits = read.table('GS/trait_names.txt',header=F)
-# FSH
-fhs_csv = read.csv('FHS/GenMod123_effectsV2.csv')
-fhs_csv_vcov = read.csv('FHS/GenMod123_vcovV2.csv')
+moba_dir = '../moba/MoBa_3gen_results_050923'
+moba_traits = c('Achievement','Height','BMI','ADHD','Depression')
 
-phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba'),
-                        educational_attainment=c('EA',NA,'EA_quals',NA),
-                        math_reading_attainment_age_10=c(NA,NA,NA,'Edu'),
-                        blood_glucose=c('glucose','BG','Glucose',NA),
-                        HDL=c('HDL','HDL','HDL',NA),
-                        non_HDL=c('non_HDL','NoHDL','Non_HDL',NA),
-                        height_adult=c('height','HGT','height',NA),
-                        height_age_8=c(NA,NA,NA,'Ht'),
-                        BMI_adult=c('BMI','BMI','BMI',NA),
-                        BMI_age_8=c(NA,NA,NA,'Bmi'),
-                        DBP=c('DBP','DBP','DBP',NA),
-                        SBP=c('SBP','SBP','SBP',NA),
-                        FEV1=c(NA,'FEV1','FEV1',NA),
-                        ever_smoker=c(NA,'EVSMK','ever.smoked',NA),
-                        cigarettes_per_day=c(NA,'CPD.LT','cigarettes.per.day',NA),
-                        cognitive_ability=c(NA,NA,'cog',NA),
-                        vocabulary=c(NA,NA,'vocab',NA),
-                        neuroticism=c(NA,NA,'neuroticism',NA))
-                  
+# Finngen
+finngen_dir = '../finngen/pgs_out/'
+finngen_traits = c('height','NC','BMI','ever_smoker',
+                'depression','AAFB','AAFB_WOMEN',
+                'AAFB_MEN','NC_WOMEN','NC_MEN',
+                'ADHD','asthma','eczema','hypertension',
+                'alcohol_use_disorder','allergic_rhinitis',
+                'migraine','copd')
+# Botnia
+#botnia_dir = '../Botnia/'
+#botnia_traits = read.table('../Botnia/traits.txt',header=F)
+# GS 
+gs_dir = '../GS/pgs/'
+#gs_traits = read.table('GS/trait_names.txt',header=F)           
+gs_traits = c("Glucose","Non_HDL", "HDL","height","FEV1","BMI","ever.smoked",
+                "cigarettes.per.day","cog","vocab","SBP","DBP","neuroticism",
+                "EA_years","EA_years_mid","EA_quals")
+#gs_traits = cbind(1:length(gs_traits),gs_traits)
+# FSH
+fhs_csv = read.csv('../FHS/FHS_Update/fhs_GPall_effects.csv')
+fhs_csv_vcov = read.csv('../FHS/FHS_Update/fhs_GPall_vcov.csv')
+
+phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
+                        educational_attainment=c('EA',NA,'EA_quals', NA, NA),
+                        math_reading_attainment_age_10=c(NA,NA,NA,'Achievement',NA),
+                        blood_glucose=c('glucose','BG.All','Glucose',NA,NA),
+                        HDL=c('HDL','HDL','HDL',NA,NA),
+                        non_HDL=c('non_HDL','NonHDL','Non_HDL',NA,NA),
+                        height_adult=c('height','HGT','height',NA,'height'),
+                        height_age_8=c(NA,NA,NA,'Height',NA),
+                        BMI_adult=c('BMI','BMI','BMI',NA,'BMI'),
+                        BMI_age_8=c(NA,NA,NA,'BMI',NA),
+                        DBP=c('DBP','DBP','DBP',NA,NA),
+                        SBP=c('SBP','SBP','SBP',NA,NA),
+                        FEV1=c(NA,'FEV1','FEV1',NA,NA),
+                        ever_smoker=c(NA,'EVSMK','ever.smoked',NA,'ever_smoker'),
+                        cigarettes_per_day=c(NA,'CPD.Cur','cigarettes.per.day',NA,NA),
+                        cognitive_ability=c(NA,NA,'cog',NA,NA),
+                        vocabulary=c(NA,NA,'vocab',NA,NA),
+                        number_of_children_women=c(NA,'NEB',NA,NA,'NC_WOMEN'),
+                        number_of_children_men=c(NA,NA,NA,NA,'NC_MEN'),
+                        age_at_first_birth_women=c(NA,"AFB",NA,NA,'AAFB_WOMEN'),
+                        depression=c(NA,'MDD',NA,NA,'depression'),
+                        depressive_symptoms=c(NA,'CESD','neuroticism','Depression',NA),
+                        ADHD=c(NA,NA,NA,'ADHD','ADHD'),
+                        hypertension=c(NA,NA,NA,NA,'hypertension'),
+                        alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
+
 phenotypes = dimnames(phenotype_names)[[2]][-1] 
 
 # Record which phenotypes in which cohort
@@ -105,28 +144,40 @@ dimnames(in_cohort)[[2]] = in_cohort[1,]
 in_cohort = in_cohort[-1,]
 in_cohort = !is.na(in_cohort)
 
+pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
+                              ADHD=c(NA,"ADHD_Demontis",NA,'ADHD_Demontis_2023','ADHD1'),
+                              AAFB=c(NA,'AFB_Repo',NA,NA,'AFB2'),
+                              BMI=c('BMI','BMI_UKB','bmi','BMI_GIANT_2018','bmi'),
+                              depression=c(NA,'MDD_Howard','depression','PGC_UKB_depresssion','DEP1'),
+                              EA4= c('EA4','EA_Okbay','EA4_hm3','EA4','EA4'),
+                              ever_smoker= c('ever_smoker','EVSMK_UKB','ever_smoke',NA,'EVERSMOKE2'),
+                              externalizing = c(NA,NA,NA,NA,'externalizing'),
+                              height=c('height','HGT_UKB','height','height_yengo_2022','height'),
+                              number_of_children_women=c(NA,'NEB_UKB',NA,NA,'NEB2'))
+
+pgss = dimnames(pgs_names)[[2]][-1] 
+
 ## Meta-analysis results table
 # Effects
 effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC',
                   'paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
 
-meta_results = matrix(NA,nrow=length(phenotypes),ncol=1+length(effect_names)*3)
-meta_colnames = c('phenotype')
+meta_results = array(NA,dim=c(length(pgss),length(phenotypes),length(effect_names)*3))
+meta_colnames = c()
 for (j in 1:length(effect_names)){
   meta_colnames=c(meta_colnames,
                   c(effect_names[j],
                     paste(effect_names[j],'SE',sep='_'),
                     paste(effect_names[j],'log10P',sep='_')))
 }
-dimnames(meta_results)[[2]] = meta_colnames
-meta_results = data.frame(meta_results)
-meta_results$phenotype = phenotypes
+dimnames(meta_results)= list(pgs=pgss,phenotype=phenotypes,statistic=meta_colnames)
+
 
 ## Cohort specific results tables
-botnia_results = meta_results[in_cohort[,'botnia'],]
-fhs_results = meta_results[in_cohort[,'fhs'],]
-gs_results = meta_results[in_cohort[,'gs'],]
-moba_results = meta_results[in_cohort[,'moba'],]
+botnia_results = meta_results[,in_cohort[,'botnia'],]
+fhs_results = meta_results[,in_cohort[,'fhs'],]
+gs_results = meta_results[,in_cohort[,'gs'],]
+moba_results = meta_results[,in_cohort[,'moba'],]
 
 # Transformation matrix for FHS
 A_full = matrix(0,nrow=7,ncol=7)
@@ -136,115 +187,139 @@ A_full[5:7,4:7] = rbind(c(0.5,0.5,0,0),
                      c(0,0,0.5,0.5),
                      c(0.25,0.25,0.25,0.25))
 
-
-for (i in 1:length(phenotypes)){
-  # Get names for each cohort
-  cohort_names = phenotype_names[,i+1]
-  # Estimates
-  estimates = matrix(NA,nrow=11,ncol=4)
-  dimnames(estimates)[[1]] = effect_names
-  dimnames(estimates)[[2]] = phenotype_names[,1]
-  # Standard errors
-  estimate_ses = matrix(NA,nrow=11,ncol=4)
-  dimnames(estimate_ses) = dimnames(estimates)
-  ## Read results from each cohort and transform
-  # Botnia
-  if (!is.na(cohort_names[1])){
-    # Find trait index
-    trait_index = botnia_traits[match(cohort_names[1],botnia_traits[,2]),1]
-    # Read estimates and transform
-    botnia_estimates = read_gen_models(paste(botnia_dir,trait_index,'.1.effects.txt',sep=''),
-                                       paste(botnia_dir,trait_index,'.2.effects.txt',sep=''),
-                                       paste(botnia_dir,trait_index,'.2.vcov.txt',sep=''),
-                                       paste(botnia_dir,trait_index,'.3.effects.txt',sep=''),
-                                       paste(botnia_dir,trait_index,'.3.vcov.txt',sep=''))
-    # Store for meta-analysis
-    if (dimnames(phenotype_names)[[2]][i+1]!="educational_attainment"){
-    estimates[,1] = botnia_estimates[,1]
-    estimate_ses[,1] = botnia_estimates[,2]}
-    # Store in botnia results
-    botnia_results[match(phenotypes[i],botnia_results[,1]),effect_names] = botnia_estimates[,1]
-    botnia_results[match(phenotypes[i],botnia_results[,1]),paste(effect_names,'SE',sep='_')] = botnia_estimates[,2]
-  }
-  # FHS
-  if (!is.na(cohort_names[2])){
-    # Effects
-    fhs_effects = fhs_csv[fhs_csv$PHENO==cohort_names[2],]
-    fhs_vcov = fhs_csv_vcov[fhs_csv_vcov$PHENO==cohort_names[2],]
-    # Get population effect
-    estimates['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('BETA')])
-    estimate_ses['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('SE')])
-    # Get 2 generation effects
-    fhs_2gen = fhs_effects[fhs_effects$GEN_MOD==2,]
-    dimnames(fhs_2gen)[[1]] = fhs_2gen$VAR
-    fhs_2gen_vcov = fhs_vcov[fhs_vcov$GEN_MOD==2,]
-    dimnames(fhs_2gen_vcov)[[1]] = fhs_2gen_vcov$VAR
-    # Transform
-    A_ntc = matrix(0,nrow=3,ncol=2)
-    A_ntc[1:2,1:2] = diag(2)
-    A_ntc[3,] = c(0.5,0.5)
-    fhs_2gen_vcov = A_ntc%*%as.matrix(fhs_2gen_vcov[c('paternal','maternal'),c('paternal','maternal')])%*%t(A_ntc)
-    estimates[c('paternal_NTC','maternal_NTC','average_NTC'),2] = A_ntc%*%as.matrix(fhs_2gen[c('paternal','maternal'),'BETA'])
-    estimate_ses[c('paternal_NTC','maternal_NTC','average_NTC'),2] = sqrt(diag(fhs_2gen_vcov))
-    # Get 3 generation effects
-    fhs_effects = fhs_effects[fhs_effects$GEN_MOD==3,]
-    dimnames(fhs_effects)[[1]] = fhs_effects$VAR
-    fhs_effects=fhs_effects[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),'BETA']
-    # vcov
-    fhs_vcov = fhs_vcov[fhs_vcov$GEN_MOD==3,]
-    dimnames(fhs_vcov)[[1]] = fhs_vcov$VAR
-    fhs_vcov=fhs_vcov[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),
-                      c('proband','paternal','maternal','gpp','gpm','gmp','gmm')]
-    # Transform
-    fhs_effects = A_full%*%as.matrix(fhs_effects)
-    fhs_vcov = A_full%*%as.matrix(fhs_vcov)%*%t(A_full)
-    # Save
-    estimates[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = fhs_effects
-    estimate_ses[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = sqrt(diag(fhs_vcov))
-    # Store in fhs results
-    fhs_results[match(phenotypes[i],fhs_results[,1]),effect_names] = estimates[,2]
-    fhs_results[match(phenotypes[i],fhs_results[,1]),paste(effect_names,'SE',sep='_')] =  estimate_ses[,2] 
-  }
-  # GS
-  if (!is.na(cohort_names[3])){
-    # Find trait index
-    trait_index = gs_traits[match(cohort_names[3],gs_traits[,2]),1]
-    # Read estimates and transform
-    gs_estimates = read_gen_models(paste(gs_dir,trait_index,'.1.effects.txt',sep=''),
-                                       paste(gs_dir,trait_index,'.2.effects.txt',sep=''),
-                                       paste(gs_dir,trait_index,'.2.vcov.txt',sep=''),
-                                       paste(gs_dir,trait_index,'.3.effects.txt',sep=''),
-                                       paste(gs_dir,trait_index,'.3.vcov.txt',sep=''))
-    # Store for meta-analysis
-    estimates[,3] = gs_estimates[,1]
-    estimate_ses[,3] = gs_estimates[,2]
-    # Store in GS results
-    gs_results[match(phenotypes[i],gs_results[,1]),effect_names] = gs_estimates[,1]
-    gs_results[match(phenotypes[i],gs_results[,1]),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
-  }
-  # MoBa
-  if (!is.na(cohort_names[4])){
-    moba_estimates = read_gen_models(paste(moba_dir,'/EA4_3gen_',cohort_names[4],'.1.effects.txt',sep=''),
-                                   paste(moba_dir,'/EA4_3gen_',cohort_names[4],'.2.effects.txt',sep=''),
-                                   paste(moba_dir,'/EA4_3gen_',cohort_names[4],'.2.vcov.txt',sep=''),
-                                   paste(moba_dir,'/EA4_3gen_',cohort_names[4],'.3.effects.txt',sep=''),
-                                   paste(moba_dir,'/EA4_3gen_',cohort_names[4],'.3.vcov.txt',sep=''))
-    # Store for meta-analysis
-    estimates[,4] = moba_estimates[,1]
-    estimate_ses[,4] = moba_estimates[,2]
-    # Store in MoBa results
-    moba_results[match(phenotypes[i],moba_results[,1]),effect_names] = moba_estimates[,1]
-    moba_results[match(phenotypes[i],moba_results[,1]),paste(effect_names,'SE',sep='_')] = moba_estimates[,2]
-  }
-  # Meta-analysis
-  for (effect_j in effect_names){
-    meta_results[i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
+for (j in 1:length(pgss)){
+  pgs_names_j = pgs_names[,j+1]
+  print(paste('PGS',pgss[j]))
+  for (i in 1:length(phenotypes)){
+    print(phenotypes[i])
+    # Get PGS name for cohort
+    # Get names for each cohort
+    cohort_names = phenotype_names[,i+1]
+    # Estimates
+    estimates = matrix(NA,nrow=11,ncol=5)
+    dimnames(estimates)[[1]] = effect_names
+    dimnames(estimates)[[2]] = phenotype_names[,1]
+    # Standard errors
+    estimate_ses = matrix(NA,nrow=11,ncol=5)
+    dimnames(estimate_ses) = dimnames(estimates)
+    ## Read results from each cohort and transform
+    # # Botnia
+    # if (!is.na(cohort_names[1])){
+    #   # Find trait index
+    #   trait_index = botnia_traits[match(cohort_names[1],botnia_traits[,2]),1]
+    #   # Read estimates and transform
+    #   botnia_estimates = read_gen_models(paste(botnia_dir,trait_index,'.1.effects.txt',sep=''),
+    #                                     paste(botnia_dir,trait_index,'.2.effects.txt',sep=''),
+    #                                     paste(botnia_dir,trait_index,'.2.vcov.txt',sep=''),
+    #                                     paste(botnia_dir,trait_index,'.3.effects.txt',sep=''),
+    #                                     paste(botnia_dir,trait_index,'.3.vcov.txt',sep=''))
+    #   # Store for meta-analysis
+    #   if (dimnames(phenotype_names)[[2]][i+1]!="educational_attainment"){
+    #   estimates[,1] = botnia_estimates[,1]
+    #   estimate_ses[,1] = botnia_estimates[,2]}
+    #   # Store in botnia results
+    #   botnia_results[match(phenotypes[i],botnia_results[,1]),effect_names] = botnia_estimates[,1]
+    #   botnia_results[match(phenotypes[i],botnia_results[,1]),paste(effect_names,'SE',sep='_')] = botnia_estimates[,2]
+    # }
+    # FHS
+    if (!is.na(cohort_names[2]) & !is.na(pgs_names_j[2])){
+      # Effects
+      fhs_effects = fhs_csv[fhs_csv$PHENO==cohort_names[2] & fhs_csv$PGS==pgs_names_j[2],]
+      fhs_vcov = fhs_csv_vcov[fhs_csv_vcov$PHENO==cohort_names[2] & fhs_csv_vcov$PGS==pgs_names_j[2],]
+      # Get population effect
+      estimates['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('BETA')])
+      estimate_ses['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('SE')])
+      # Get 2 generation effects
+      fhs_2gen = fhs_effects[fhs_effects$GEN_MOD==2,]
+      dimnames(fhs_2gen)[[1]] = fhs_2gen$VAR
+      fhs_2gen_vcov = fhs_vcov[fhs_vcov$GEN_MOD==2,]
+      dimnames(fhs_2gen_vcov)[[1]] = fhs_2gen_vcov$VAR
+      # Transform
+      A_ntc = matrix(0,nrow=3,ncol=2)
+      A_ntc[1:2,1:2] = diag(2)
+      A_ntc[3,] = c(0.5,0.5)
+      fhs_2gen_vcov = A_ntc%*%as.matrix(fhs_2gen_vcov[c('paternal','maternal'),c('paternal','maternal')])%*%t(A_ntc)
+      estimates[c('paternal_NTC','maternal_NTC','average_NTC'),2] = A_ntc%*%as.matrix(fhs_2gen[c('paternal','maternal'),'BETA'])
+      estimate_ses[c('paternal_NTC','maternal_NTC','average_NTC'),2] = sqrt(diag(fhs_2gen_vcov))
+      # Get 3 generation effects
+      fhs_effects = fhs_effects[fhs_effects$GEN_MOD==3,]
+      dimnames(fhs_effects)[[1]] = fhs_effects$VAR
+      fhs_effects=fhs_effects[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),'BETA']
+      # vcov
+      fhs_vcov = fhs_vcov[fhs_vcov$GEN_MOD==3,]
+      dimnames(fhs_vcov)[[1]] = fhs_vcov$VAR
+      fhs_vcov=fhs_vcov[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),
+                        c('proband','paternal','maternal','gpp','gpm','gmp','gmm')]
+      # Transform
+      fhs_effects = A_full%*%as.matrix(fhs_effects)
+      fhs_vcov = A_full%*%as.matrix(fhs_vcov)%*%t(A_full)
+      # Save
+      estimates[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = fhs_effects
+      estimate_ses[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = sqrt(diag(fhs_vcov))
+      # Store in fhs results
+      #fhs_results[match(phenotypes[i],fhs_results[,1]),effect_names] = estimates[,2]
+      #fhs_results[match(phenotypes[i],fhs_results[,1]),paste(effect_names,'SE',sep='_')] =  estimate_ses[,2] 
+    }
+    # GS
+    if (!is.na(cohort_names[3]) & !is.na(pgs_names_j[3])){
+      # Find trait index
+      trait_index = match(cohort_names[3],gs_traits)
+      # Read estimates and transform
+      gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.1.effects.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.effects.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.vcov.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.effects.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.vcov.txt'))
+      # Store for meta-analysis
+      estimates[,3] = gs_estimates[,1]
+      estimate_ses[,3] = gs_estimates[,2]
+      # Store in GS results
+      #gs_results[match(phenotypes[i],gs_results[,1]),effect_names] = gs_estimates[,1]
+      #gs_results[match(phenotypes[i],gs_results[,1]),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
+    }
+    # MoBa
+    if (!is.na(cohort_names[4]) & !is.na(pgs_names_j[4])){
+      trait_index = match(cohort_names[4],moba_traits)
+      moba_estimates = read_gen_models(paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.1.effects.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.2.effects.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.2.vcov.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.effects.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.vcov.txt',sep=''))
+      # Store for meta-analysis
+      estimates[,4] = moba_estimates[,1]
+      estimate_ses[,4] = moba_estimates[,2]
+      # Store in MoBa results
+      #moba_results[match(phenotypes[i],moba_results[,1]),effect_names] = moba_estimates[,1]
+      #moba_results[match(phenotypes[i],moba_results[,1]),paste(effect_names,'SE',sep='_')] = moba_estimates[,2]
+    }
+    # Finngen
+    if (!is.na(cohort_names[5]) & !is.na(pgs_names_j[5])){
+      # Find trait index
+      trait_index = match(cohort_names[5],finngen_traits)
+      # Read estimates and transform
+      if (pgs_names_j[5]=='EA4'){sign_flip=TRUE} else {sign_flip=FALSE}
+      finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.1.effects.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.effects.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.vcov.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.effects.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.vcov.txt'),sign_flip=sign_flip)
+      # Store for meta-analysis
+      estimates[,5] = finngen_estimates[,1]
+      estimate_ses[,5] = finngen_estimates[,2]
+      # Store in GS results
+      #gs_results[match(phenotypes[i],gs_results[,1]),effect_names] = gs_estimates[,1]
+      #gs_results[match(phenotypes[i],gs_results[,1]),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
+    }
+    # Meta-analysis
+    for (effect_j in effect_names){
+      meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
+    }
   }
 }
 
 # Calculate P-values
 for (effect_name in effect_names){
-  meta_results[,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((meta_results[,effect_name]/meta_results[,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  meta_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((meta_results[,,effect_name]/meta_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
 }
 
 dimnames(meta_results)[[1]] = meta_results$phenotype
