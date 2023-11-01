@@ -1,7 +1,7 @@
 require(lme4)
-binary_outcomes = c('depression','ADHD','asthma',
-                    'eczema','hypertension','alcohol_use_disorder',
-                    'allergic_rhinitis','migraine','copd','ever_smoker')
+binary_outcomes = c('depression','ADHD',
+                    'hypertension','alcohol_use_disorder',
+                    ,'ever_smoker')
 
 
 phenotypes = read.table('~/phenotypes/processed_traits.txt',header=T)

@@ -128,15 +128,14 @@ phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                         cognitive_ability=c(NA,NA,'cog',NA,NA),
                         vocabulary=c(NA,NA,'vocab',NA,NA),
                         number_of_children_women=c(NA,'NEB',NA,NA,'NC_WOMEN'),
-                        number_of_children_men=c(NA,NA,NA,NA,'NC_MEN'),
-                        age_at_first_birth_women=c(NA,"AFB",NA,NA,'AAFB_WOMEN'),
                         depression=c(NA,'MDD',NA,NA,'depression'),
                         depressive_symptoms=c(NA,'CESD','neuroticism','Depression',NA),
                         ADHD=c(NA,NA,NA,'ADHD','ADHD'),
                         hypertension=c(NA,NA,NA,NA,'hypertension'),
                         alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
 
-phenotypes = dimnames(phenotype_names)[[2]][-1] 
+phenotypes = dimnames(phenotype_names)[[2]][-1]
+binary_phens = c('ADHD','ever_smoker','hypertension','alcohol_use_disorder','depression') 
 
 # Record which phenotypes in which cohort
 in_cohort = t(phenotype_names)
@@ -153,7 +152,7 @@ pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                               ever_smoker= c('ever_smoker','EVSMK_UKB','ever_smoke',NA,'EVERSMOKE2'),
                               externalizing = c(NA,NA,NA,NA,'externalizing'),
                               height=c('height','HGT_UKB','height','height_yengo_2022','height'),
-                              number_of_children_women=c(NA,'NEB_UKB',NA,NA,'NEB2'))
+                              number_of_children_women=c(NA,'NEB_UKB',NA,NA,'NEBwomen2'))
 
 pgss = dimnames(pgs_names)[[2]][-1] 
 

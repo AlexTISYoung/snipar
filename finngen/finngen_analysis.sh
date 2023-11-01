@@ -94,15 +94,15 @@ pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenoty
 done
 done
 
-#for pgs in EA6 EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 
-for pgs in EA6 height bmi NEBwomen2
+for pgs in EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 height bmi NEBwomen2
 do
-for i in 7 9 10 
+for i in 9
 do
-pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced_nosex.txt --pgs ~/pgs/$pgs'.pgs.txt' --gen_models 1-3 --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
+pgs.py ~/pgs/$pgs/$i --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced_nosex.txt --pgs ~/pgs/$pgs'.pgs.txt' --gen_models 1-3 --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king --gparsum
 #pgs.py ~/pgs/$pgs/$i'_sib' --pheno ~/phenotypes/processed_traits.txt --covar ~/phenotypes/covariates_reduced.txt --pgs ~/pgs/$pgs'_sib.pgs.txt' --gen_models 2 --fit_sib --scale_phen --scale_pgs --phen_index $i --ibdrel_path ~/king
 done
 done
+
 
 mkdir ~/pgs_out
 for pgs in EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 height bmi NEBwomen2
