@@ -504,7 +504,7 @@ class pgarray(gtarray):
                     gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
         ## Append to PGS matrix
         self.gts = np.hstack((self.gts,gpar))
-        self.sid = np.hstack((self.sid,np.array(['gpp','gpm','gmp','gmm'])))
+        self.sid = np.hstack((self.sid,np.array(['gpp','gmp','gpm','gmm'])))
         return bpg_ped
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
@@ -644,9 +644,9 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             if gparsum:
-                if 'gpp' in pg.sid and 'gpm' in pg.sid and 'gmp' in pg.sid and 'gmm' in pg.sid:
+                if 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
                     # Sum of paternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gpm']]))
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
@@ -654,7 +654,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gp'
                     # Sum of maternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gmp','gmm']]))
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
