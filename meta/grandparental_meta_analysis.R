@@ -1,10 +1,19 @@
 setwd('~/snipar/meta')
 
+# Approximate variance of ratio 
+var_ratio_approx = function(x,y,vx,vy,cxy){
+  x2 = x^2; y2 = y^2
+  return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
+}
+
 # Read gen models 1-3 function
-read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov,sign_flip=FALSE){
+read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov,sign_flip=FALSE,lme4=FALSE){
   ## Estimates to output 
-  results = matrix(NA,nrow=11,ncol=2)
-  dimnames(results)[[1]] = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
+  parameter_names = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
+  'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
+  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio')
+  results = matrix(NA,nrow=length(parameter_names),ncol=2)
+  dimnames(results)[[1]] = parameter_names
   dimnames(results)[[2]] = c('estimates','SE')
   ## Check files exist
   if (!file.exists(gen1_effects)){
@@ -24,53 +33,88 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3
     return(results)
   } else {
   ## Get population effect
-  results_1gen = read.table(gen1_effects,row.names=1)
-  results['population',1:2] = as.matrix(results_1gen['proband',])
+  if (lme4){
+    results_1gen = read.table(gen1_effects,skip=1,header=F,row.names=1)
+  } else {results_1gen = read.table(gen1_effects,row.names=1)}
+  results['population',1:2] = as.matrix(results_1gen['proband',1:2])
   ## Get non-transmitted coefficients
-  results_2gen = read.table(gen2_effects,row.names=1)
+  if (lme4){
+   results_2gen = read.table(gen2_effects,row.names=1,skip=1,header=F) 
+  } else {results_2gen = read.table(gen2_effects,row.names=1)}
   results_2gen = results_2gen[c('proband','paternal','maternal'),1:2]
   results_2gen_vcov = read.table(gen2_vcov,row.names=1)
   results_2gen_vcov = results_2gen_vcov[c('proband','paternal','maternal'),c('proband','paternal','maternal')]
   # Transform
-  A_ntc = matrix(0,nrow=4,ncol=3)
+  A_ntc = matrix(0,nrow=5,ncol=3)
   A_ntc[1:3,1:3] = diag(3)
   A_ntc[4,] = c(0,0.5,0.5)
+  A_ntc[5,] = c(0,-1,1)
   results_2gen_vcov = A_ntc%*%as.matrix(results_2gen_vcov)%*%t(A_ntc)
-  results[c('direct','paternal_NTC','maternal_NTC','average_NTC'),1] = A_ntc%*%as.matrix(results_2gen[,1])
-  results[c('direct','paternal_NTC','maternal_NTC','average_NTC'),2] = sqrt(diag(results_2gen_vcov))
+  gen2_effects = c('direct','paternal_NTC','maternal_NTC','average_NTC','maternal_minus_paternal')
+  dimnames(results_2gen_vcov)[[1]] = gen2_effects
+  dimnames(results_2gen_vcov)[[2]] = gen2_effects
+  results[gen2_effects,1] = A_ntc%*%as.matrix(results_2gen[,1])
+  results[gen2_effects,2] = sqrt(diag(results_2gen_vcov))
+  # Maternal minus paternal direct ratio
+  results['maternal_minus_paternal_direct_ratio',1] = results['maternal_minus_paternal',1]/results['direct_3',1]
+  results['maternal_minus_paternal_direct_ratio',2] = sqrt(var_ratio_approx(results['maternal_minus_paternal',1],results['direct',1],
+                                                        results['maternal_minus_paternal',2]^2,results['direct',2]^2,
+                                                        results_2gen_vcov['maternal_minus_paternal','direct']))
   ## Get 3 generation results
-  results_effects = read.table(gen3_effects,row.names=1)
+  if (lme4){
+    results_effects = read.table(gen3_effects,skip=1,header=F,row.names=1)
+  } else {
+    results_effects = read.table(gen3_effects,row.names=1)}
   results_vcov = read.table(gen3_vcov,row.names=1,header=T)
   if ('gp'%in%dimnames(results_effects)[[1]]){gparsum=TRUE} else if ('gpp'%in%dimnames(results_effects)[[1]]){gparsum=FALSE} else {stop()}
   if (gparsum){
-    results_effects = results_effects[c('paternal','maternal','gp','gm'),] 
-    results_vcov = results_vcov[c('paternal','maternal','gp','gm'),
-                                c('paternal','maternal','gp','gm')]
+    results_effects = results_effects[c('proband','paternal','maternal','gp','gm'),] 
+    results_vcov = results_vcov[c('proband','paternal','maternal','gp','gm'),
+                                c('proband','paternal','maternal','gp','gm')]
   } else{
-    results_effects = results_effects[c('paternal','maternal','gpp','gpm','gmp','gmm'),]
-    results_vcov = results_vcov[c('paternal','maternal','gpp','gpm','gmp','gmm'),
-                                c('paternal','maternal','gpp','gpm','gmp','gmm')]
+    results_effects = results_effects[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),1:2]
+    results_vcov = results_vcov[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),
+                                c('proband','paternal','maternal','gpp','gpm','gmp','gmm')]
   }
   # Transform and save
   if (!gparsum){
     # Transformation matrix for full model
-    A_3 = matrix(0,nrow=6,ncol=6)
-    A_3[1:2,1:2] = diag(2)
-    A_3[3,1:2] = c(0.5,0.5)
-    A_3[4:6,3:6] = rbind(c(0.5,0.5,0,0),
+    A_3 = matrix(0,nrow=7,ncol=7)
+    A_3[1:3,1:3] = diag(3)
+    A_3[4,2:3] = c(0.5,0.5)
+    A_3[5:7,4:7] = rbind(c(0.5,0.5,0,0),
                          c(0,0,0.5,0.5),
                          c(0.25,0.25,0.25,0.25))} else{
                            # Transformation matrix for grandparental sum model
-                           A_3 = matrix(0,nrow=6,ncol=4)
-                           A_3[1:2,1:2] = diag(2)
-                           A_3[3,1:2] = c(0.5,0.5)
-                           A_3[4,3] = 1
+                           A_3 = matrix(0,nrow=7,ncol=5)
+                           A_3[1:3,1:3] = diag(3)
+                           A_3[4,2:3] = c(0.5,0.5)
                            A_3[5,4] = 1
-                           A_3[6,3:4] = c(0.5,0.5)}
+                           A_3[6,5] = 1
+                           A_3[7,4:5] = c(0.5,0.5)}
   results_effects = A_3%*%as.matrix(results_effects[,1])
+  gen3_effects = c('direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
   results_vcov = A_3%*%as.matrix(results_vcov)%*%t(A_3)
-  results[c('paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),1]=results_effects
-  results[c('paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2]=sqrt(diag(results_vcov))
+  dimnames(results_vcov)[[1]] = gen3_effects
+  dimnames(results_vcov)[[2]] = gen3_effects
+  # Compute indirect to direct ratios
+  results[gen3_effects,1]=results_effects
+  results[c('direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2]=sqrt(diag(results_vcov))
+  # Parental direct ratio
+  results['parental_direct_ratio',1] = results['parental',1]/results['direct_3',1]
+  results['parental_direct_ratio',2] = sqrt(var_ratio_approx(results['parental',1],results['direct_3',1],
+                                                        results['parental',2]^2,results['direct_3',2]^2,
+                                                        results_vcov['parental','direct_3']))
+  # Paternal direct ratio
+  results['paternal_direct_ratio',1] = results['paternal',1]/results['direct_3',1]
+  results['paternal_direct_ratio',2] = sqrt(var_ratio_approx(results['paternal',1],results['direct_3',1],
+                                                        results['paternal',2]^2,results['direct_3',2]^2,
+                                                        results_vcov['paternal','direct_3']))
+  # Maternal direct ratio
+  results['maternal_direct_ratio',1] = results['maternal',1]/results['direct_3',1]
+  results['maternal_direct_ratio',2] = sqrt(var_ratio_approx(results['maternal',1],results['direct_3',1],
+                                                        results['maternal',2]^2,results['direct_3',2]^2,
+                                                        results_vcov['maternal','direct_3']))                               
   # Return
   if (sign_flip){results[,1] = -results[,1]}
   return(results)}
@@ -81,6 +125,14 @@ fe_meta = function(ests,ses){
   weights = 1/ses^2
   est = sum(weights*ests,na.rm=T)/sum(weights,na.rm=T)
   se = sqrt(1/sum(weights,na.rm=T))
+  return(c(est,se))
+}
+
+fe_meta_Z = function(ests,ses){
+  weights = 1/ses^2
+  ests = ests/ses
+  est = sum(weights*ests,na.rm=T)/sqrt(sum(weights^2,na.rm=T))
+  se = 1 
   return(c(est,se))
 }
 
@@ -96,9 +148,11 @@ finngen_traits = c('height','NC','BMI','ever_smoker',
                 'ADHD','asthma','eczema','hypertension',
                 'alcohol_use_disorder','allergic_rhinitis',
                 'migraine','copd')
+
 # Botnia
-#botnia_dir = '../Botnia/'
-#botnia_traits = read.table('../Botnia/traits.txt',header=F)
+botnia_dir = '../Botnia/results/'
+botnia_traits = read.table('../Botnia/results/traits.txt',header=F)
+botnia_traits=c('EA','glucose','HDL','non_HDL','height','BMI','DBP','SBP')
 # GS 
 gs_dir = '../GS/pgs/'
 #gs_traits = read.table('GS/trait_names.txt',header=F)           
@@ -107,31 +161,27 @@ gs_traits = c("Glucose","Non_HDL", "HDL","height","FEV1","BMI","ever.smoked",
                 "EA_years","EA_years_mid","EA_quals")
 #gs_traits = cbind(1:length(gs_traits),gs_traits)
 # FSH
-fhs_csv = read.csv('../FHS/FHS_Update/fhs_GPall_effects.csv')
-fhs_csv_vcov = read.csv('../FHS/FHS_Update/fhs_GPall_vcov.csv')
+fhs_dir = '../FHS/FHS_GPall_Mods/'
+fhs_binary_dir = '../FHS/FHS_Binary_Phenos/'
 
 phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
-                        educational_attainment=c('EA',NA,'EA_quals', NA, NA),
-                        math_reading_attainment_age_10=c(NA,NA,NA,'Achievement',NA),
+                        educational_attainment=c('EA',NA,'EA_quals', 'Achievement', NA),
                         blood_glucose=c('glucose','BG.All','Glucose',NA,NA),
                         HDL=c('HDL','HDL','HDL',NA,NA),
                         non_HDL=c('non_HDL','NonHDL','Non_HDL',NA,NA),
-                        height_adult=c('height','HGT','height',NA,'height'),
-                        height_age_8=c(NA,NA,NA,'Height',NA),
-                        BMI_adult=c('BMI','BMI','BMI',NA,'BMI'),
-                        BMI_age_8=c(NA,NA,NA,'BMI',NA),
+                        height=c(NA,'HGT','height','Height','height'),
+                        BMI=c(NA,'BMI','BMI','BMI','BMI'),
                         DBP=c('DBP','DBP','DBP',NA,NA),
-                        SBP=c('SBP','SBP','SBP',NA,NA),
+                        SBP=c('SBP','SBP','SBP',NA,'hypertension'),
                         FEV1=c(NA,'FEV1','FEV1',NA,NA),
                         ever_smoker=c(NA,'EVSMK','ever.smoked',NA,'ever_smoker'),
-                        cigarettes_per_day=c(NA,'CPD.Cur','cigarettes.per.day',NA,NA),
+                        cigarettes_per_day=c(NA,'CPD.Max','cigarettes.per.day',NA,NA),
                         cognitive_ability=c(NA,NA,'cog',NA,NA),
                         vocabulary=c(NA,NA,'vocab',NA,NA),
-                        number_of_children_women=c(NA,'NEB',NA,NA,'NC_WOMEN'),
-                        depression=c(NA,'MDD',NA,NA,'depression'),
-                        depressive_symptoms=c(NA,'CESD','neuroticism','Depression',NA),
+                        age_at_first_birth_women=c(NA,'AFB',NA,NA,'AAFB_WOMEN'),
+                        number_of_children_women=c(NA,'NEB',NA,NA,NA),
+                        depressive_symptoms=c(NA,'CESD','neuroticism','Depression','depression'),
                         ADHD=c(NA,NA,NA,'ADHD','ADHD'),
-                        hypertension=c(NA,NA,NA,NA,'hypertension'),
                         alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
 
 phenotypes = dimnames(phenotype_names)[[2]][-1]
@@ -144,22 +194,23 @@ in_cohort = in_cohort[-1,]
 in_cohort = !is.na(in_cohort)
 
 pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
-                              ADHD=c(NA,"ADHD_Demontis",NA,'ADHD_Demontis_2023','ADHD1'),
-                              AAFB=c(NA,'AFB_Repo',NA,NA,'AFB2'),
-                              BMI=c('BMI','BMI_UKB','bmi','BMI_GIANT_2018','bmi'),
-                              depression=c(NA,'MDD_Howard','depression','PGC_UKB_depresssion','DEP1'),
-                              EA4= c('EA4','EA_Okbay','EA4_hm3','EA4','EA4'),
-                              ever_smoker= c('ever_smoker','EVSMK_UKB','ever_smoke',NA,'EVERSMOKE2'),
+                              ADHD=c(NA,NA,NA,'ADHD_Demontis_2023','ADHD1'),
+                              AAFB=c(NA,'AFB_Repo_pgs',NA,NA,'AFB2'),
+                              BMI=c('BMI_UKB','BMI_UKB_pgs','bmi','BMI_GIANT_2018','bmi'),
+                              depression=c(NA,'MDD_pgs','depression','PGC_UKB_depresssion','DEP1'),
+                              EA4= c('EA4_2.8m','EA4_pgs','EA4_hm3','EA4','EA4'),
+                              ever_smoker= c(NA,'EVSMK_UKB_pgs','ever_smoke',NA,'EVERSMOKE2'),
                               externalizing = c(NA,NA,NA,NA,'externalizing'),
-                              height=c('height','HGT_UKB','height','height_yengo_2022','height'),
-                              number_of_children_women=c(NA,'NEB_UKB',NA,NA,'NEBwomen2'))
+                              height=c('height_UKB','HGT_UKB_pgs','height','height_yengo_2022','height'),
+                              number_of_children_women=c(NA,'NEB_Repo_pgs',NA,NA,'NEBwomen2'))
 
 pgss = dimnames(pgs_names)[[2]][-1] 
 
 ## Meta-analysis results table
 # Effects
-effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC',
-                  'paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
+effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','maternal_minus_paternal',
+                  'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
+                  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')
 
 meta_results = array(NA,dim=c(length(pgss),length(phenotypes),length(effect_names)*3))
 meta_colnames = c()
@@ -177,14 +228,7 @@ botnia_results = meta_results[,in_cohort[,'botnia'],]
 fhs_results = meta_results[,in_cohort[,'fhs'],]
 gs_results = meta_results[,in_cohort[,'gs'],]
 moba_results = meta_results[,in_cohort[,'moba'],]
-
-# Transformation matrix for FHS
-A_full = matrix(0,nrow=7,ncol=7)
-A_full[1:3,1:3] = diag(3)
-A_full[4,1:3] = c(0,0.5,0.5)
-A_full[5:7,4:7] = rbind(c(0.5,0.5,0,0),
-                     c(0,0,0.5,0.5),
-                     c(0.25,0.25,0.25,0.25))
+finngen_results = meta_results[,in_cohort[,'finngen'],]
 
 for (j in 1:length(pgss)){
   pgs_names_j = pgs_names[,j+1]
@@ -195,86 +239,75 @@ for (j in 1:length(pgss)){
     # Get names for each cohort
     cohort_names = phenotype_names[,i+1]
     # Estimates
-    estimates = matrix(NA,nrow=11,ncol=5)
+    estimates = matrix(NA,nrow=length(effect_names),ncol=5)
     dimnames(estimates)[[1]] = effect_names
     dimnames(estimates)[[2]] = phenotype_names[,1]
     # Standard errors
-    estimate_ses = matrix(NA,nrow=11,ncol=5)
+    estimate_ses = matrix(NA,nrow=length(effect_names),ncol=5)
     dimnames(estimate_ses) = dimnames(estimates)
     ## Read results from each cohort and transform
     # # Botnia
-    # if (!is.na(cohort_names[1])){
-    #   # Find trait index
-    #   trait_index = botnia_traits[match(cohort_names[1],botnia_traits[,2]),1]
-    #   # Read estimates and transform
-    #   botnia_estimates = read_gen_models(paste(botnia_dir,trait_index,'.1.effects.txt',sep=''),
-    #                                     paste(botnia_dir,trait_index,'.2.effects.txt',sep=''),
-    #                                     paste(botnia_dir,trait_index,'.2.vcov.txt',sep=''),
-    #                                     paste(botnia_dir,trait_index,'.3.effects.txt',sep=''),
-    #                                     paste(botnia_dir,trait_index,'.3.vcov.txt',sep=''))
-    #   # Store for meta-analysis
-    #   if (dimnames(phenotype_names)[[2]][i+1]!="educational_attainment"){
-    #   estimates[,1] = botnia_estimates[,1]
-    #   estimate_ses[,1] = botnia_estimates[,2]}
-    #   # Store in botnia results
-    #   botnia_results[match(phenotypes[i],botnia_results[,1]),effect_names] = botnia_estimates[,1]
-    #   botnia_results[match(phenotypes[i],botnia_results[,1]),paste(effect_names,'SE',sep='_')] = botnia_estimates[,2]
-    # }
+    if (!is.na(cohort_names[1]) & !is.na(pgs_names_j[1])){
+      # Find trait index
+      trait_index = trait_index = match(cohort_names[1],botnia_traits)
+      # Read estimates and transform
+      botnia_estimates = read_gen_models(paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.1.effects.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.2.effects.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.2.vcov.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.effects.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.vcov.txt',sep=''))
+      # Store for meta-analysis
+      estimates[,1] = botnia_estimates[,1]
+      estimate_ses[,1] = botnia_estimates[,2]
+      # Store in botnia results
+      botnia_results[j,match(phenotypes[i],dimnames(botnia_results)$phenotype),effect_names] = botnia_estimates[,1]
+      botnia_results[j,match(phenotypes[i],dimnames(botnia_results)$phenotype),paste(effect_names,'SE',sep='_')] = botnia_estimates[,2]
+    }
     # FHS
     if (!is.na(cohort_names[2]) & !is.na(pgs_names_j[2])){
-      # Effects
-      fhs_effects = fhs_csv[fhs_csv$PHENO==cohort_names[2] & fhs_csv$PGS==pgs_names_j[2],]
-      fhs_vcov = fhs_csv_vcov[fhs_csv_vcov$PHENO==cohort_names[2] & fhs_csv_vcov$PGS==pgs_names_j[2],]
-      # Get population effect
-      estimates['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('BETA')])
-      estimate_ses['population',2] = as.matrix(fhs_effects[fhs_effects$GEN_MOD==1 & fhs_effects$VAR=='proband',c('SE')])
-      # Get 2 generation effects
-      fhs_2gen = fhs_effects[fhs_effects$GEN_MOD==2,]
-      dimnames(fhs_2gen)[[1]] = fhs_2gen$VAR
-      fhs_2gen_vcov = fhs_vcov[fhs_vcov$GEN_MOD==2,]
-      dimnames(fhs_2gen_vcov)[[1]] = fhs_2gen_vcov$VAR
-      # Transform
-      A_ntc = matrix(0,nrow=3,ncol=2)
-      A_ntc[1:2,1:2] = diag(2)
-      A_ntc[3,] = c(0.5,0.5)
-      fhs_2gen_vcov = A_ntc%*%as.matrix(fhs_2gen_vcov[c('paternal','maternal'),c('paternal','maternal')])%*%t(A_ntc)
-      estimates[c('paternal_NTC','maternal_NTC','average_NTC'),2] = A_ntc%*%as.matrix(fhs_2gen[c('paternal','maternal'),'BETA'])
-      estimate_ses[c('paternal_NTC','maternal_NTC','average_NTC'),2] = sqrt(diag(fhs_2gen_vcov))
-      # Get 3 generation effects
-      fhs_effects = fhs_effects[fhs_effects$GEN_MOD==3,]
-      dimnames(fhs_effects)[[1]] = fhs_effects$VAR
-      fhs_effects=fhs_effects[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),'BETA']
-      # vcov
-      fhs_vcov = fhs_vcov[fhs_vcov$GEN_MOD==3,]
-      dimnames(fhs_vcov)[[1]] = fhs_vcov$VAR
-      fhs_vcov=fhs_vcov[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),
-                        c('proband','paternal','maternal','gpp','gpm','gmp','gmm')]
-      # Transform
-      fhs_effects = A_full%*%as.matrix(fhs_effects)
-      fhs_vcov = A_full%*%as.matrix(fhs_vcov)%*%t(A_full)
-      # Save
-      estimates[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = fhs_effects
-      estimate_ses[c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2] = sqrt(diag(fhs_vcov))
+      # Read estimates and transform
+      if (phenotypes[i]%in%binary_phens){
+        fhs_estimates = read_gen_models(paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.1.coefficients.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.2.coefficients.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.2.vcov.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.coefficients.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.vcov.txt',sep=''),lme4=TRUE)
+      } else {
+        fhs_estimates = read_gen_models(paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.1.effects.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.2.effects.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.2.vcov.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.effects.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.vcov.txt',sep=''))}
+      # Store for meta-analysis
+      estimates[,2] = fhs_estimates[,1]
+      estimate_ses[,2] = fhs_estimates[,2]
       # Store in fhs results
-      #fhs_results[match(phenotypes[i],fhs_results[,1]),effect_names] = estimates[,2]
-      #fhs_results[match(phenotypes[i],fhs_results[,1]),paste(effect_names,'SE',sep='_')] =  estimate_ses[,2] 
+      fhs_results[j,match(phenotypes[i],dimnames(fhs_results)$phenotype),effect_names] = fhs_estimates[,1]
+      fhs_results[j,match(phenotypes[i],dimnames(fhs_results)$phenotype),paste(effect_names,'SE',sep='_')] = fhs_estimates[,2]
     }
     # GS
     if (!is.na(cohort_names[3]) & !is.na(pgs_names_j[3])){
       # Find trait index
       trait_index = match(cohort_names[3],gs_traits)
       # Read estimates and transform
-      gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.1.effects.txt'),
+      if (phenotypes[i]%in%binary_phens){
+        gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.1.coefficients.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.2.coefficients.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.2.vcov.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.coefficients.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.vcov.txt'),lme4=TRUE)
+      } else {
+        gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.1.effects.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.effects.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.vcov.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.effects.txt'),
-                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.vcov.txt'))
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.vcov.txt'))}
       # Store for meta-analysis
       estimates[,3] = gs_estimates[,1]
       estimate_ses[,3] = gs_estimates[,2]
       # Store in GS results
-      #gs_results[match(phenotypes[i],gs_results[,1]),effect_names] = gs_estimates[,1]
-      #gs_results[match(phenotypes[i],gs_results[,1]),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
+      gs_results[j,match(phenotypes[i],dimnames(gs_results)$phenotype),effect_names] = gs_estimates[,1]
+      gs_results[j,match(phenotypes[i],dimnames(gs_results)$phenotype),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
     }
     # MoBa
     if (!is.na(cohort_names[4]) & !is.na(pgs_names_j[4])){
@@ -288,8 +321,8 @@ for (j in 1:length(pgss)){
       estimates[,4] = moba_estimates[,1]
       estimate_ses[,4] = moba_estimates[,2]
       # Store in MoBa results
-      #moba_results[match(phenotypes[i],moba_results[,1]),effect_names] = moba_estimates[,1]
-      #moba_results[match(phenotypes[i],moba_results[,1]),paste(effect_names,'SE',sep='_')] = moba_estimates[,2]
+      moba_results[j,match(phenotypes[i],dimnames(moba_results)$phenotype),effect_names] = moba_estimates[,1]
+      moba_results[j,match(phenotypes[i],dimnames(moba_results)$phenotype),paste(effect_names,'SE',sep='_')] = moba_estimates[,2]
     }
     # Finngen
     if (!is.na(cohort_names[5]) & !is.na(pgs_names_j[5])){
@@ -297,21 +330,32 @@ for (j in 1:length(pgss)){
       trait_index = match(cohort_names[5],finngen_traits)
       # Read estimates and transform
       if (pgs_names_j[5]=='EA4'){sign_flip=TRUE} else {sign_flip=FALSE}
-      finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.1.effects.txt'),
+      if (phenotypes[i]%in%binary_phens & !phenotypes[i]=='ADHD'){
+        finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.1.coefficients.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.2.coefficients.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.2.vcov.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.coefficients.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.vcov.txt'),sign_flip=sign_flip,lme4=TRUE)
+      } else {
+        finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.1.effects.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.effects.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.vcov.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.effects.txt'),
-                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.vcov.txt'),sign_flip=sign_flip)
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.vcov.txt'),sign_flip=sign_flip)}
       # Store for meta-analysis
       estimates[,5] = finngen_estimates[,1]
       estimate_ses[,5] = finngen_estimates[,2]
       # Store in GS results
-      #gs_results[match(phenotypes[i],gs_results[,1]),effect_names] = gs_estimates[,1]
-      #gs_results[match(phenotypes[i],gs_results[,1]),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
+      finngen_results[j,match(phenotypes[i],dimnames(finngen_results)$phenotype),effect_names] = finngen_estimates[,1]
+      finngen_results[j,match(phenotypes[i],dimnames(finngen_results)$phenotype),paste(effect_names,'SE',sep='_')] = finngen_estimates[,2]
     }
     # Meta-analysis
     for (effect_j in effect_names){
-      meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
+      if (effect_j%in%c('parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')){
+        meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
+      } else {
+        meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta_Z(estimates[effect_j,],estimate_ses[effect_j,])
+      }
     }
   }
 }
@@ -319,14 +363,56 @@ for (j in 1:length(pgss)){
 # Calculate P-values
 for (effect_name in effect_names){
   meta_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((meta_results[,,effect_name]/meta_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  botnia_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((botnia_results[,,effect_name]/botnia_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  fhs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((fhs_results[,,effect_name]/fhs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  gs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((gs_results[,,effect_name]/gs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  moba_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((moba_results[,,effect_name]/moba_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  finngen_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((finngen_results[,,effect_name]/finngen_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
 }
 
-dimnames(meta_results)[[1]] = meta_results$phenotype
+meta_results[is.infinite(meta_results)] = NA
 
-meta_results = data.frame(in_cohort[match(dimnames(meta_results)[[1]],dimnames(in_cohort)[[1]]),],
-                          meta_results[,-1])
+## Plot
+# EA plot
+require(ggplot2)
+ea_plot = rbind(cbind(phenotype='EA',cohort='GS',
+                value=gs_results['EA4','educational_attainment','parental'],
+                SE=gs_results['EA4','educational_attainment','parental_SE']),
+               cbind(phenotype='EA',cohort='Botnia',
+                value=botnia_results['EA4','educational_attainment','parental'],
+                SE=botnia_results['EA4','educational_attainment','parental_SE']),
+              cbind(phenotype='math_reading_achievement_age_10',cohort='MoBa',
+                value=moba_results['EA4','educational_attainment','parental'],
+                SE=moba_results['EA4','educational_attainment','parental_SE'])
+)
+ea_plot = data.frame(ea_plot)
+ea_plot$pgs = 'EA4'
+# AFB plot
+afb_plot = rbind(cbind(phenotype='AAFB (women)',cohort='FHS',
+                value=fhs_results['AAFB','age_at_first_birth_women','parental'],
+                SE=fhs_results['AAFB','age_at_first_birth_women','parental_SE']),
+               cbind(phenotype='AAFB (women)',cohort='Finngen',
+                value=finngen_results['AAFB','age_at_first_birth_women','parental'],
+                SE=finngen_results['AAFB','age_at_first_birth_women','parental_SE'])
+)
+afb_plot = data.frame(afb_plot)
+afb_plot$pgs = 'AAFB'
 
-write.csv(meta_results,'meta_results.csv',row.names=T)
+plot_df = rbind(ea_plot,afb_plot)
+plot_df$value=as.numeric(plot_df$value)
+plot_df$SE=as.numeric(plot_df$SE)
+plot_df$lower = plot_df$value+qnorm(0.025)*plot_df$SE
+plot_df$upper = plot_df$value-qnorm(0.025)*plot_df$SE
+
+gplot = ggplot(plot_df, aes(fill=phenotype, y=value, x=cohort)) +
+    geom_errorbar(aes(ymin = plot_df$lower, ymax = plot_df$upper))+
+    geom_point(position="dodge", stat="identity")+coord_flip()+theme_minimal() + theme(axis.line = element_line(color="black"),
+                          axis.ticks = element_line(color="black"),
+                          panel.border = element_blank(),
+                          axis.text.x = element_text(angle = 45, hjust=1))+
+                          geom_hline(yintercept=0,linetype='dashed',width=2)+facet_wrap(~pgs)
+
+
 
 # Write cohort specific results
 fhs_results = fhs_results[,-c(grep('log10P',dimnames(fhs_results)[[2]]))]
@@ -396,11 +482,7 @@ gpar_indirect_plot = ggplot(plot_ests[plot_ests$effect%in%indirect_effects & plo
 ggsave('gpar_indirect_plot_meta.pdf',plot=gpar_indirect_plot,width=7,height=5)
 
 
-#### Detailed MoBa results ####
-var_ratio_approx = function(x,y,vx,vy,cxy){
-  x2 = x^2; y2 = y^2
-  return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
-}
+
 edu_effects = read.table(paste(moba_dir,'/EA4_3gen_Edu.3.effects.txt',sep=''))
 edu_vcov = read.table(paste(moba_dir,'/EA4_3gen_Edu.3.vcov.txt',sep=''))
 edu_pop_effect = read.table(paste(moba_dir,'/EA4_3gen_Edu.1.effects.txt',sep=''),row.names=1)

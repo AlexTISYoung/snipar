@@ -3,7 +3,6 @@ binary_outcomes = c('depression','ADHD',
                     'hypertension','alcohol_use_disorder',
                     ,'ever_smoker')
 
-
 phenotypes = read.table('~/phenotypes/processed_traits.txt',header=T)
 covariates = read.table('~/phenotypes/covariates_reduced.txt',header=T)
 covariates = covariates[,c('FID','IID','age','sex','age_sex','PC_3','PC_4')]
@@ -51,7 +50,7 @@ for (pgs_name in pgs_names){
             glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
         } else if (g3@optinfo$message!='Normal exit from bobyqa' | !is.null(g3@optinfo$conv$lme4)){
             print('3 gen failed to converge')
-            glmm = glm(phenotype ~ covar+proband+paternal+maternal,data=p,family=binomial(link='logit'))
+            glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
         }
         write.table(summary(glmm)$coefficients,paste0('~/pgs/',pgs_name,'/',phenotype,'.3.coefficients.txt'),quote=F)
         write.table(as.matrix(vcov(glmm)),paste0('~/pgs/',pgs_name,'/',phenotype,'.3.vcov.txt'),quote=F)
