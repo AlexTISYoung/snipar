@@ -1,0 +1,8 @@
+1 EA
+2 glucose
+3 HDL
+4 non_HDL
+5 height
+6 BMI
+7 DBP
+8 SBP

@@ -16,7 +16,8 @@ plink2='/ludc/Tools/Software/Plink/v2.00a2.3LM/plink2'
 plink='/ludc/Tools/Software/Plink/v1.90p/plink'
 qctool='/ludc/Tools/Software/qctool/2.0.6/qctool'
 king=$gpardir'king/king'
-
+cd $gpardir
+source $gpardir/env/bin/activate
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
 # Read info files
 Rscript read_vcf_info.R
@@ -154,14 +155,41 @@ $plink \
 # Compute PGS
 Rscript sbayesr_to_snipar.R
 pgs.py $gpardir/pgs/EA4_2.8m --weights $gpardir/pgs/EA4_2.8m.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
-# Estimated correlation between maternal and paternal PGSs: 0.0732
+# Estimated correlation between maternal and paternal PGSs: 0.0735 S.E.=0.0156
+
+
+### Height PGS ###
+pgs.py $gpardir/pgs/height_UKB --weights $gpardir/pgs/height_UKB.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
+# Estimated correlation between maternal and paternal PGSs: 0.0782 S.E.=0.0155
+### BMI PGS ###
+pgs.py $gpardir/pgs/BMI_UKB --weights $gpardir/pgs/BMI_UKB.txt --bgen $hapdir/chr_@_haps --imp $gpardir/imputed/chr_@ --beta_col beta --grandpar
+# Estimated correlation between maternal and paternal PGSs: 0.0259 S.E.=0.0163
 
 ### Estimate grandparental PGS model ###
 mkdir $gpardir/pgs/results
+for pgs in EA4_2.8m #height_UKB BMI_UKB
+do
+mkdir $gpardir/pgs/results/$pgs
 for i in {1..8}
 do
-pgs.py $gpardir/pgs/results/$i --pgs $gpardir/pgs/EA4_2.8m.pgs.txt --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king
+pgs.py $gpardir/pgs/results/$pgs/$i --pgs $gpardir/pgs/$pgs'.pgs.txt' --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king
 done
+done
+
+# Fix failed jobs by not using GRM
+for pgs in EA4_2.8m height_UKB BMI_UKB
+do
+for i in 8 
+do
+pgs.py $gpardir/pgs/results/$pgs/$i --pgs $gpardir/pgs/$pgs'.pgs.txt' --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen
+done
+print $pgs
+done
+
+i=1
+pgs='BMI_UKB'
+pgs.py $gpardir/pgs/results/$pgs/$i --pgs $gpardir/pgs/$pgs'.pgs.txt' --phenofile $gpardir/phenotypes/processed_traits_noadj.txt --covar $gpardir/phenotypes/covariates.txt  --gen_models 3 --phen_index $i --scale_pgs --scale_phen
+
 
 ### Perform family based GWAS ###
 mkdir $gpardir/phenotypes/gwas
