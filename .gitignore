@@ -40,3 +40,4 @@ simulation_study.py
 EA_corrs.txt
 plot_data.csv
 .DS_Store
+meta/generate_repo_pgis.sh
