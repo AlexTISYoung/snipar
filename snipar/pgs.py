@@ -679,9 +679,11 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                 pg_cols_b = ['proband','paternal','maternal','gpp','gmp','gpm','gmm']
             # Paternal 3gen regression
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_p, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
-            write_estimates(outprefix+'.'+str(ngen)+'.paternal', alpha, alpha_cols)
+            if outprefix is not None:
+                write_estimates(outprefix+'.'+str(ngen)+'.paternal', alpha, alpha_cols)
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_m, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
-            write_estimates(outprefix+'.'+str(ngen)+'.maternal', alpha, alpha_cols)
+            if outprefix is not None:
+                write_estimates(outprefix+'.'+str(ngen)+'.maternal', alpha, alpha_cols)
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_b, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     # Save to file
     if outprefix is not None:
