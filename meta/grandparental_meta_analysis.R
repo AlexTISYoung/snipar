@@ -6,10 +6,17 @@ var_ratio_approx = function(x,y,vx,vy,cxy){
   return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
 }
 
+gen1_effects = '../finngen/pgs_out/AFB2/7.1.effects.txt'
+gen2_effects = '../finngen/pgs_out/AFB2/7.2.effects.txt'
+gen3_effects = '../finngen/pgs_out/AFB2/7.3.effects.txt'
+gen2_vcov = '../finngen/pgs_out/AFB2/7.2.vcov.txt' 
+gen3_vcov = '../finngen/pgs_out/AFB2/7.3.vcov.txt' 
+
 # Read gen models 1-3 function
 read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov,sign_flip=FALSE,lme4=FALSE){
   ## Estimates to output 
-  parameter_names = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
+  parameter_names = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
+  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
   'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
   'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio')
   results = matrix(NA,nrow=length(parameter_names),ncol=2)
@@ -55,8 +62,13 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3
   dimnames(results_2gen_vcov)[[2]] = gen2_effects
   results[gen2_effects,1] = A_ntc%*%as.matrix(results_2gen[,1])
   results[gen2_effects,2] = sqrt(diag(results_2gen_vcov))
+  # Average NTC direct ratio
+  results['average_NTC_direct_ratio',1] = results['average_NTC',1]/results['direct',1]
+  results['average_NTC_direct_ratio',2] = sqrt(var_ratio_approx(results['average_NTC',1],results['direct',1],
+                                                        results['average_NTC',2]^2,results['direct',2]^2,
+                                                        results_2gen_vcov['average_NTC','direct']))
   # Maternal minus paternal direct ratio
-  results['maternal_minus_paternal_direct_ratio',1] = results['maternal_minus_paternal',1]/results['direct_3',1]
+  results['maternal_minus_paternal_direct_ratio',1] = results['maternal_minus_paternal',1]/results['direct',1]
   results['maternal_minus_paternal_direct_ratio',2] = sqrt(var_ratio_approx(results['maternal_minus_paternal',1],results['direct',1],
                                                         results['maternal_minus_paternal',2]^2,results['direct',2]^2,
                                                         results_2gen_vcov['maternal_minus_paternal','direct']))
@@ -195,10 +207,10 @@ in_cohort = !is.na(in_cohort)
 
 pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                               ADHD=c(NA,NA,NA,'ADHD_Demontis_2023','ADHD1'),
-                              AAFB=c(NA,'AFB_Repo_pgs',NA,NA,'AFB2'),
+                              age_at_first_birth=c(NA,'AFB_Repo_pgs',NA,NA,'AFB2'),
                               BMI=c('BMI_UKB','BMI_UKB_pgs','bmi','BMI_GIANT_2018','bmi'),
                               depression=c(NA,'MDD_pgs','depression','PGC_UKB_depresssion','DEP1'),
-                              EA4= c('EA4_2.8m','EA4_pgs','EA4_hm3','EA4','EA4'),
+                              educational_attainment= c('EA4_2.8m','EA4_pgs','EA4_hm3','EA4','EA4'),
                               ever_smoker= c(NA,'EVSMK_UKB_pgs','ever_smoke',NA,'EVERSMOKE2'),
                               externalizing = c(NA,NA,NA,NA,'externalizing'),
                               height=c('height_UKB','HGT_UKB_pgs','height','height_yengo_2022','height'),
@@ -208,9 +220,10 @@ pgss = dimnames(pgs_names)[[2]][-1]
 
 ## Meta-analysis results table
 # Effects
-effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','maternal_minus_paternal',
+effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
+                  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
                   'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
-                  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')
+                  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio')
 
 meta_results = array(NA,dim=c(length(pgss),length(phenotypes),length(effect_names)*3))
 meta_colnames = c()
@@ -257,8 +270,8 @@ for (j in 1:length(pgss)){
                                         paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.effects.txt',sep=''),
                                         paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.vcov.txt',sep=''))
       # Store for meta-analysis
-      estimates[,1] = botnia_estimates[,1]
-      estimate_ses[,1] = botnia_estimates[,2]
+      estimates[effect_names,1] = botnia_estimates[effect_names,1]
+      estimate_ses[effect_names,1] = botnia_estimates[effect_names,2]
       # Store in botnia results
       botnia_results[j,match(phenotypes[i],dimnames(botnia_results)$phenotype),effect_names] = botnia_estimates[,1]
       botnia_results[j,match(phenotypes[i],dimnames(botnia_results)$phenotype),paste(effect_names,'SE',sep='_')] = botnia_estimates[,2]
@@ -279,8 +292,8 @@ for (j in 1:length(pgss)){
                                         paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.effects.txt',sep=''),
                                         paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.vcov.txt',sep=''))}
       # Store for meta-analysis
-      estimates[,2] = fhs_estimates[,1]
-      estimate_ses[,2] = fhs_estimates[,2]
+      estimates[effect_names,2] = fhs_estimates[effect_names,1]
+      estimate_ses[effect_names,2] = fhs_estimates[effect_names,2]
       # Store in fhs results
       fhs_results[j,match(phenotypes[i],dimnames(fhs_results)$phenotype),effect_names] = fhs_estimates[,1]
       fhs_results[j,match(phenotypes[i],dimnames(fhs_results)$phenotype),paste(effect_names,'SE',sep='_')] = fhs_estimates[,2]
@@ -303,8 +316,8 @@ for (j in 1:length(pgss)){
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.effects.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.vcov.txt'))}
       # Store for meta-analysis
-      estimates[,3] = gs_estimates[,1]
-      estimate_ses[,3] = gs_estimates[,2]
+      estimates[effect_names,3] = gs_estimates[effect_names,1]
+      estimate_ses[effect_names,3] = gs_estimates[effect_names,2]
       # Store in GS results
       gs_results[j,match(phenotypes[i],dimnames(gs_results)$phenotype),effect_names] = gs_estimates[,1]
       gs_results[j,match(phenotypes[i],dimnames(gs_results)$phenotype),paste(effect_names,'SE',sep='_')] = gs_estimates[,2]
@@ -318,8 +331,8 @@ for (j in 1:length(pgss)){
                                     paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.effects.txt',sep=''),
                                     paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.vcov.txt',sep=''))
       # Store for meta-analysis
-      estimates[,4] = moba_estimates[,1]
-      estimate_ses[,4] = moba_estimates[,2]
+      estimates[effect_names,4] = moba_estimates[effect_names,1]
+      estimate_ses[effect_names,4] = moba_estimates[effect_names,2]
       # Store in MoBa results
       moba_results[j,match(phenotypes[i],dimnames(moba_results)$phenotype),effect_names] = moba_estimates[,1]
       moba_results[j,match(phenotypes[i],dimnames(moba_results)$phenotype),paste(effect_names,'SE',sep='_')] = moba_estimates[,2]
@@ -343,15 +356,15 @@ for (j in 1:length(pgss)){
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.effects.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.vcov.txt'),sign_flip=sign_flip)}
       # Store for meta-analysis
-      estimates[,5] = finngen_estimates[,1]
-      estimate_ses[,5] = finngen_estimates[,2]
+      estimates[effect_names,5] = finngen_estimates[effect_names,1]
+      estimate_ses[effect_names,5] = finngen_estimates[effect_names,2]
       # Store in GS results
       finngen_results[j,match(phenotypes[i],dimnames(finngen_results)$phenotype),effect_names] = finngen_estimates[,1]
       finngen_results[j,match(phenotypes[i],dimnames(finngen_results)$phenotype),paste(effect_names,'SE',sep='_')] = finngen_estimates[,2]
     }
     # Meta-analysis
     for (effect_j in effect_names){
-      if (effect_j%in%c('parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')){
+      if (effect_j%in%c('average_NTC_direct_ratio','parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')){
         meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
       } else {
         meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta_Z(estimates[effect_j,],estimate_ses[effect_j,])
@@ -373,145 +386,91 @@ for (effect_name in effect_names){
 meta_results[is.infinite(meta_results)] = NA
 
 ## Plot
-# EA plot
+pgs_primary = data.frame(pgs=dimnames(meta_results)[[1]],
+              phenotype=c('ADHD','age_at_first_birth_women',
+              'BMI','depressive_symptoms','educational_attainment',
+              'ever_smoker','alcohol_use_disorder','height','number_of_children_women'),
+              average_NTC_direct_ratio=NA,average_NTC_direct_ratio_SE=NA,
+              average_NTC_log10P=NA,
+              parental_direct_ratio=NA,parental_direct_ratio_SE=NA,
+              parental_log10P=NA,paternal_log10P=NA,maternal_log10P=NA,
+              maternal_minus_paternal_direct_ratio=NA,
+              maternal_minus_paternal_direct_ratio_SE=NA,
+              maternal_minus_paternal_log10P=NA,
+              grandparental_log10P=NA)
+for (i in 1:dim(pgs_primary)[1]){
+  pgs_primary[i,'average_NTC_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio']
+  pgs_primary[i,'average_NTC_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio_SE']
+  pgs_primary[i,'average_NTC_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_log10P'] 
+  pgs_primary[i,'parental_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_direct_ratio']
+  pgs_primary[i,'parental_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_direct_ratio_SE']
+  pgs_primary[i,'parental_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_log10P']
+  pgs_primary[i,'paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal_log10P']
+  pgs_primary[i,'maternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_log10P']
+  pgs_primary[i,'maternal_minus_paternal_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio']
+  pgs_primary[i,'maternal_minus_paternal_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio_SE']
+  pgs_primary[i,'maternal_minus_paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_log10P']
+  pgs_primary[i,'grandparental_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandparental_log10P']
+}
+
+write.csv(pgs_primary,'~/Dropbox/grandparental/pgs_primary.csv',quote=F,row.names=F)
+
+pgs_primary$parental_lower = pgs_primary[,'parental_direct_ratio']+qnorm(0.025)*pgs_primary[,'parental_direct_ratio_SE']
+pgs_primary$parental_upper = pgs_primary[,'parental_direct_ratio']-qnorm(0.025)*pgs_primary[,'parental_direct_ratio_SE']
+pgs_primary$parental_upper = sapply(pgs_primary$parental_upper,function(x) if (x>2){return(1.999)} else {return(x)})
+pgs_primary$parental_lower = sapply(pgs_primary$parental_lower,function(x) if (x<(-2)){return(-1.999)} else {return(x)})
+pgs_primary$ntc_lower = pgs_primary[,'average_NTC_direct_ratio']+qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
+pgs_primary$ntc_upper = pgs_primary[,'average_NTC_direct_ratio']-qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
+
+pgs_primary$pgs = factor(pgs_primary$pgs,levels=pgs_primary[order(pgs_primary$parental_log10P),'pgs'])
+
+plot_gen = rbind(data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='average_NTC_direct_ratio',
+                            value=pgs_primary$average_NTC_direct_ratio,lower=pgs_primary$ntc_lower,upper=pgs_primary$ntc_upper),
+                 data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='parental_direct_ratio',
+                 value=pgs_primary$parental_direct_ratio,lower=pgs_primary$parental_lower,upper=pgs_primary$parental_upper))
+
 require(ggplot2)
-ea_plot = rbind(cbind(phenotype='EA',cohort='GS',
-                value=gs_results['EA4','educational_attainment','parental'],
-                SE=gs_results['EA4','educational_attainment','parental_SE']),
-               cbind(phenotype='EA',cohort='Botnia',
-                value=botnia_results['EA4','educational_attainment','parental'],
-                SE=botnia_results['EA4','educational_attainment','parental_SE']),
-              cbind(phenotype='math_reading_achievement_age_10',cohort='MoBa',
-                value=moba_results['EA4','educational_attainment','parental'],
-                SE=moba_results['EA4','educational_attainment','parental_SE'])
-)
-ea_plot = data.frame(ea_plot)
-ea_plot$pgs = 'EA4'
-# AFB plot
-afb_plot = rbind(cbind(phenotype='AAFB (women)',cohort='FHS',
-                value=fhs_results['AAFB','age_at_first_birth_women','parental'],
-                SE=fhs_results['AAFB','age_at_first_birth_women','parental_SE']),
-               cbind(phenotype='AAFB (women)',cohort='Finngen',
-                value=finngen_results['AAFB','age_at_first_birth_women','parental'],
-                SE=finngen_results['AAFB','age_at_first_birth_women','parental_SE'])
-)
-afb_plot = data.frame(afb_plot)
-afb_plot$pgs = 'AAFB'
-
-plot_df = rbind(ea_plot,afb_plot)
-plot_df$value=as.numeric(plot_df$value)
-plot_df$SE=as.numeric(plot_df$SE)
-plot_df$lower = plot_df$value+qnorm(0.025)*plot_df$SE
-plot_df$upper = plot_df$value-qnorm(0.025)*plot_df$SE
-
-gplot = ggplot(plot_df, aes(fill=phenotype, y=value, x=cohort)) +
-    geom_errorbar(aes(ymin = plot_df$lower, ymax = plot_df$upper))+
-    geom_point(position="dodge", stat="identity")+coord_flip()+theme_minimal() + theme(axis.line = element_line(color="black"),
+par_plot = ggplot(plot_gen, aes(y=value, x=pgs, fill=effect)) +
+    geom_errorbar(aes(ymin = plot_gen$lower, ymax = plot_gen$upper,color=effect),width=0.1,position=position_dodge(.5))+coord_flip()+
+    geom_point(position=position_dodge(.5),stat="identity",aes(color=effect))+theme_minimal() +theme(axis.line = element_line(color="black"),
                           axis.ticks = element_line(color="black"),
                           panel.border = element_blank(),
                           axis.text.x = element_text(angle = 45, hjust=1))+
-                          geom_hline(yintercept=0,linetype='dashed',width=2)+facet_wrap(~pgs)
+                          geom_hline(yintercept=0,linetype='dashed')+ylim(-2,2)+
+                          ylab('Ratio with direct genetic effect')+
+                          xlab('PGI')
+
+ggsave('~/Dropbox/grandparental/ratio_plot.pdf',plot=par_plot,width=7,height=5)
 
 
-
-# Write cohort specific results
-fhs_results = fhs_results[,-c(grep('log10P',dimnames(fhs_results)[[2]]))]
-write.csv(fhs_results,'fhs_results.csv',row.names=F)
-moba_results = moba_results[,-c(grep('log10P',dimnames(moba_results)[[2]]))]
-write.csv(moba_results,'moba_results.csv',row.names=F)
-gs_results = gs_results[,-c(grep('log10P',dimnames(gs_results)[[2]]))]
-write.csv(gs_results,'gs_results.csv',row.names=F)
-botnia_results = botnia_results[,-c(grep('log10P',dimnames(botnia_results)[[2]]))]
-write.csv(botnia_results,'botnia_results.csv',row.names=F)
-
-
-plot_ests = data.frame()
-plot_ses = data.frame()
-
-for (i in 1:length(phenotypes)){
-  plot_ests = rbind(plot_ests,data.frame(phenotype=rep(phenotypes[i],11),
-                                         effect=effect_names,
-                                         est=as.vector(t(meta_results[i,effect_names])),
-                                         ses=as.vector(t(meta_results[i,paste(effect_names,'SE',sep='_')]))))
-#  plot_ses = rbind(plot_ses,data.frame(phenotype=rep(phenotypes[i],11),
-#                                         effect=effect_names,
-#                                         est=as.vector(t(meta_results[i,paste(effect_names,'SE',sep='_')]))))
+qqplot_ci = function(pmatrix,outfile){
+  # QQ-plots
+  require("MASS") 
+  require("reshape2") 
+  require('qqplotr')
+  di <- "exp"
+  dp <- list(rate = log(10))
+  parqq=data.frame(pmatrix)
+  parqq$pgs=dimnames(pmatrix)[[1]]
+  parqq = melt(parqq)
+  dimnames(parqq)[[2]] = c('pgs','phenotype','value')
+  qqpar <- ggplot(data = parqq, mapping = aes(sample = value)) +
+  stat_qq_band(distribution = di, dparams = dp, identity=TRUE) +
+  stat_qq_line(distribution = di, dparams = dp, identity=TRUE) +
+  stat_qq_point(distribution = di, dparams = dp)+
+  labs(x = "Theoretical Quantiles", y = "Sample Quantiles")
+  ggsave(filename=outfile,plot=qqpar,width=5,height=5)
+  return(qqpar)
 }
 
-plot_ests$phenotype = factor(plot_ests$phenotype,
-                             levels=dimnames(meta_results)[[1]][order(meta_results$population^2)])
+qq_parental=qqplot_ci(meta_results[,,'parental_log10P'],
+'~/Dropbox/grandparental/parental_log10P_qqplot.pdf')
 
-plot_ests$effect = factor(plot_ests$effect,
-                          levels=rev(effect_names))
+qq_maternal_minus_paternal = qqplot_ci(meta_results[,,'maternal_minus_paternal_log10P'],
+'~/Dropbox/grandparental/maternal_minus_paternal_log10P_qqplot.pdf') 
 
-plot_ests$lower = plot_ests$est+qnorm(0.025)*plot_ests$ses
-plot_ests$upper = plot_ests$est-qnorm(0.025)*plot_ests$ses
+qq_avg_NTC = qqplot_ci(meta_results[,,'average_NTC_log10P'],
+'~/Dropbox/grandparental/average_NTC_qqplot.pdf')
 
-## Plot
-library(ggplot2)
-require(gridExtra)
-require(ggplot2)
-require(reshape2)
-require(ggrepel)
-pop_decomp_effects = c('population','direct','parental','grandparental')
-gpar_plot = ggplot(plot_ests[plot_ests$effect%in%pop_decomp_effects,],aes(x = est,y = phenotype,fill = effect)) +
-  geom_col(position = position_dodge(0.75),width=0.75)+
-  geom_errorbarh(aes(xmin = plot_ests$lower[plot_ests$effect%in%c(pop_decomp_effects)],
-                     xmax=plot_ests$upper[plot_ests$effect%in%c(pop_decomp_effects)]),position=position_dodge(0.75),width=0.15, size=0.25)+
-  theme_minimal() + theme(axis.line = element_line(color="black"),
-                          axis.ticks = element_line(color="black"),
-                          panel.border = element_blank(),
-                          axis.text.x = element_text(angle = 45, hjust=1))
-
-
-ggsave('gpar_pop_decomp.pdf',plot=gpar_plot,width=10,height=15)
-
-## Plot indirect only
-indirect_effects = c('paternal','maternal','parental','average_NTC','paternal_NTC','maternal_NTC')
-gpar_indirect_plot = ggplot(plot_ests[plot_ests$effect%in%indirect_effects & plot_ests$phenotype=='math_reading_attainment_age_10',],
-                            aes(x = phenotype,y = est,fill = effect)) +
-  geom_col(position = position_dodge(0.75),width=0.75)+
-  geom_errorbar(aes(ymin = plot_ests$lower[plot_ests$effect%in%indirect_effects & plot_ests$phenotype=='math_reading_attainment_age_10'],
-                     ymax=plot_ests$upper[plot_ests$effect%in%indirect_effects & plot_ests$phenotype=='math_reading_attainment_age_10']),position=position_dodge(0.75),width=0.15, size=0.25)+
-  theme_minimal() + theme(axis.line = element_line(color="black"),
-                          axis.ticks = element_line(color="black"),
-                          panel.border = element_blank(),
-                          axis.text.x = element_text(angle = 45, hjust=1))
-
-
-ggsave('gpar_indirect_plot_meta.pdf',plot=gpar_indirect_plot,width=7,height=5)
-
-
-
-edu_effects = read.table(paste(moba_dir,'/EA4_3gen_Edu.3.effects.txt',sep=''))
-edu_vcov = read.table(paste(moba_dir,'/EA4_3gen_Edu.3.vcov.txt',sep=''))
-edu_pop_effect = read.table(paste(moba_dir,'/EA4_3gen_Edu.1.effects.txt',sep=''),row.names=1)
-
-r=0.125
-
-A_3 = matrix(0,nrow=9,ncol=5)
-A_3[1:3,1:3] = diag(3)
-A_3[4,1:3] = c(0,0.5,0.5)
-A_3[5,4] = 1
-A_3[6,5] = 1
-A_3[7,4:5] = c(0.5,0.5)
-A_3[8,1:3] = c(0,-1,1)
-A_3[9,1:3] = c(1,(1+r)/2,(1+r)/2)
-
-# Transform
-edu_effects = A_3%*%as.matrix(edu_effects[-1,2])
-edu_vcov = A_3%*%as.matrix(edu_vcov[-1,-1])%*%t(A_3)
-edu_effects = cbind(edu_effects,sqrt(diag(edu_vcov)))
-
-dimnames(edu_effects)[[1]]=c('direct','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental','maternal_minus_paternal','population')
-dimnames(edu_effects)[[2]] = c('estimate','SE')
-dimnames(edu_vcov)[[1]]=dimnames(edu_effects)[[1]]
-dimnames(edu_vcov)[[2]]=dimnames(edu_effects)[[1]]
-
-indirect_direct_ratio = edu_effects['parental',1]/edu_effects['direct',1]
-indirect_direct_ratio_var = var_ratio_approx(edu_effects['parental',1],edu_effects['direct',1],
-                                             edu_effects['parental',2]^2,edu_effects['direct',2]^2,
-                                             edu_vcov['parental','direct'])
-
-print(c(indirect_direct_ratio,sqrt(indirect_direct_ratio_var)))
-
+qq_grandparental = qqplot_ci(meta_results[,,'grandparental_log10P'],
+'~/Dropbox/grandparental/grandparental_qqplot.pdf')
