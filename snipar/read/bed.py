@@ -142,7 +142,6 @@ def get_gts_matrix_given_ped(ped, bedfile, par_gts_f=None, snp_ids=None, ids=Non
         if verbose:
             print('Reading imputed parental genotypes')
         if (imp_indices.shape[0]*in_obs_sid.shape[0]) < (np.sum(in_obs_sid)*imp_fams.shape[0]):
-            print("imp_indices.shape is:", imp_indices.shape)
             imp_gts = np.array(par_gts_f['imputed_par_gts'][imp_indices.nonzero()[0], :])
             imp_gts = imp_gts[:,np.arange(in_obs_sid.shape[0])[in_obs_sid]]
         else:
