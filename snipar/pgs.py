@@ -9,7 +9,7 @@ import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
 import numdifftools as nd
 from snipar.pgs_am import *
-
+import code
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
@@ -647,25 +647,16 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
         elif ngen==3:
             print('Fitting 3 generation models')
             if gparsum:
-                if 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
-                    # Sum of paternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gp'
-                    # Sum of maternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gm'
-                elif 'gp' in pg.sid and 'gm' in pg.sid:
+                if 'gp' in pg.sid and 'gm' in pg.sid:
                     pass
+                elif 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
+                    # Sum of paternal grandparents
+                    gpcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
+                    gmcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
+                    gp = pg.gts[:,gpcols[0]]+pg.gts[:,gpcols[1]]
+                    gm = pg.gts[:,gmcols[0]]+pg.gts[:,gmcols[1]]
+                    pg.gts = np.hstack((pg.gts,gp.reshape((gp.shape[0],1)),gm.reshape((gm.shape[0],1))))
+                    pg.sid = np.hstack((pg.sid,np.array(['gp','gm'])))
                 else:
                     raise(ValueError('Grandparental PGSs not found so cannot sum (--gparsum option given)'))
             # Paternal 3 gen regression
