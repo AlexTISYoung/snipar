@@ -13,7 +13,7 @@ plink='/homes/nber/alextisyoung/plink'
 qctool='/disk/genetics/ukb/alextisyoung/qctool/build/release/qctool_v2.0.7'
 king='/homes/nber/alextisyoung/king'
 gcta64='/homes/nber/alextisyoung/gcta_1.93.2beta/gcta64'
-conda activate snipar_env
+#conda activate snipar_env
 cd $gpardir
 ### Filter VCF for phased haplotypes of SNPs with MAF>1%, Rsq>0.99, AvgCall>0.99, HWE<10^(-6), bi-alleleic
 for i in {1..22}
@@ -172,25 +172,25 @@ done
 # Depression: Estimated correlation between maternal and paternal PGSs: 0.035 S.E.=0.0112
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/depression/$i --pgs $gpardir/pgs/depression/PGC_UKB_depression.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 20
+pgs.py $gpardir/pgs/depression/$i --pgs $gpardir/pgs/PGC_UKB_depression.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 30
 done
 
 # Height: Estimated correlation between maternal and paternal PGSs: 0.0729 S.E.=0.0108
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/height/$i --pgs $gpardir/pgs/height/height_UKB.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 20
+pgs.py $gpardir/pgs/height/$i --pgs $gpardir/pgs/height_UKB.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 30
 done
 
 # BMI: Estimated correlation between maternal and paternal PGSs: 0.0488 S.E.=0.011
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/bmi/$i --pgs $gpardir/pgs/bmi/BMI_UKB.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 20
+pgs.py $gpardir/pgs/bmi/$i --pgs $gpardir/pgs/BMI_UKB.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 30
 done
 
 # Ever-smoke: Estimated correlation between maternal and paternal PGSs: 0.0395 S.E.=0.0111
 for i in {1..16}
 do
-pgs.py $gpardir/pgs/ever_smoke/$i --pgs $gpardir/pgs/ever_smoke/GSCAN_SmkInit_2022_GWAS_SUMMARY_STATS_EUR.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 1-3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 20
+pgs.py $gpardir/pgs/ever_smoke/$i --pgs $gpardir/pgs/GSCAN_SmkInit_2022_GWAS_SUMMARY_STATS_EUR.pgs.txt --phenofile $gpardir/processed_traits_noadj_noukb.txt --covar $gpardir/covariates.fam  --gen_models 3 --phen_index $i --scale_pgs --scale_phen --sparse_thres 0.05 --ibdrel_path $gpardir/king --threads 30
 done
 
 # Logistic LMM

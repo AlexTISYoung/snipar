@@ -44,16 +44,32 @@ for (pgs_name in pgs_names){
         write.table(summary(glmm)$coefficients,paste0('~/pgs/',pgs_name,'/',phenotype,'.2.coefficients.txt'),quote=F)
         write.table(as.matrix(vcov(glmm)),paste0('~/pgs/',pgs_name,'/',phenotype,'.2.vcov.txt'),quote=F)
         # 3 gen logistic linear mixed model fit
-        g3= try({glmm = glmer(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm+(1|FID),data=p,family=binomial(link='logit'),nAGQ=0,control=glmerControl(optimizer='bobyqa'))})
-        if (class(g3)=='try-error'){
+        # g3= try({glmm = glmer(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm+(1|FID),data=p,family=binomial(link='logit'),nAGQ=0,control=glmerControl(optimizer='bobyqa'))})
+        # if (class(g3)=='try-error'){
+        #     print('3 gen failed')
+        #     glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
+        # } else if (g3@optinfo$message!='Normal exit from bobyqa' | !is.null(g3@optinfo$conv$lme4)){
+        #     print('3 gen failed to converge')
+        #     glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
+        # }
+        # write.table(summary(glmm)$coefficients,paste0('~/pgs/',pgs_name,'/',phenotype,'.3.coefficients.txt'),quote=F)
+        # write.table(as.matrix(vcov(glmm)),paste0('~/pgs/',pgs_name,'/',phenotype,'.3.vcov.txt'),quote=F)
+        # 3 gen logistic linear mixed model fit: paternal
+        g3p= try({glmm = glmer(phenotype ~ covar+proband+paternal+gpp+gmp+(1|FID),data=p,family=binomial(link='logit'),nAGQ=0,glmerControl(optimizer="bobyqa"))})
+        if (class(g3p)=='try-error'){
             print('3 gen failed')
-            glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
-        } else if (g3@optinfo$message!='Normal exit from bobyqa' | !is.null(g3@optinfo$conv$lme4)){
-            print('3 gen failed to converge')
-            glmm = glm(phenotype ~ covar+proband+paternal+maternal+gpp+gpm+gmp+gmm,data=p,family=binomial(link='logit'))
+            glmm = glm(phenotype ~ covar+proband+paternal+gpp+gmp,data=p,family=binomial(link='logit'))
         }
-        write.table(summary(glmm)$coefficients,paste0('~/pgs/',pgs_name,'/',phenotype,'.3.coefficients.txt'),quote=F)
-        write.table(as.matrix(vcov(glmm)),paste0('~/pgs/',pgs_name,'/',phenotype,'.3.vcov.txt'),quote=F)
+        write.table(summary(glmm)$coefficients,paste0(outdirs[i],phenotype,'.3.paternal.coefficients.txt'),quote=F)
+        write.table(as.matrix(vcov(glmm)),paste0(outdirs[i],phenotype,'.3.paternal.vcov.txt'),quote=F)
+        # 3 gen logistic linear mixed model fit: paternal
+        g3m= try({glmm = glmer(phenotype ~ covar+proband+maternal+gmm+gpm+(1|FID),data=p,family=binomial(link='logit'),nAGQ=0,glmerControl(optimizer="bobyqa"))})
+        if (class(g3m)=='try-error'){
+            print('3 gen failed')
+            glmm = glm(phenotype ~ covar+proband+maternal+gmm+gpm,data=p,family=binomial(link='logit'))
+        }
+        write.table(summary(glmm)$coefficients,paste0(outdirs[i],phenotype,'.3.maternal.coefficients.txt'),quote=F)
+        write.table(as.matrix(vcov(glmm)),paste0(outdirs[i],phenotype,'.3.maternal.vcov.txt'),quote=F)
         if (sib){
             ## 2 generation analysis with sib ##
             p = pgs_sib
