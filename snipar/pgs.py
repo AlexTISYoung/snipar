@@ -9,7 +9,7 @@ import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
 import numdifftools as nd
 from snipar.pgs_am import *
-
+import code
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
@@ -398,7 +398,7 @@ class pgarray(gtarray):
         r, r_se, fsizes = self.estimate_r()
         r_z = r/r_se
         print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4))+' S.E.='+str(round(r_se,4)))
-        if r_z>1.5:    
+        if np.abs(r_z)>1.5:    
             # Check pgs columns
             if 'paternal' in self.sid and 'maternal' in self.sid:
                 paternal_index = np.where(self.sid=='paternal')[0][0]
@@ -473,39 +473,42 @@ class pgarray(gtarray):
         else:
             raise(ValueError('No maternal PGS column found'))
         # Find individuals with both parents genotyped
-        bpg = np.sum(self.par_status==0,axis=1)==2
-        n_bpg = np.sum(bpg)
-        print('Found '+str(n_bpg)+' individuals with both parents genotyped for which grandparental scores will be computed')
+        opg = np.sum(self.par_status==0,axis=1)>0
+        n_opg = np.sum(opg)
+        print('Found '+str(n_opg)+' individuals with at least one parent genotyped for which grandparental scores will be computed')
         ## Create grandparental PGS matrix
         gpar = np.zeros((self.gts.shape[0],4))
         gpar[:] = np.nan
-        if n_bpg>0:
+        if n_opg>0:
             # Find their parents' IDs
             ped_dict = make_id_dict(self.ped,1)
-            bpg_ped = self.ped[[ped_dict[x] for x in self.ids[bpg]],:]
+            opg_ped = self.ped[[ped_dict[x] for x in self.ids[opg]],:]
             # Find the mean of the mothers and fathers
-            parent_means = np.mean(self.gts[bpg,:],axis=0)[[paternal_index, maternal_index]]
+            parent_means = ma.mean(self.gts[opg,:],axis=0)[[paternal_index, maternal_index]]
             ## Fill
-            for i in range(bpg_ped.shape[0]):
-                i_index = self.id_dict[bpg_ped[i,1]]
+            for i in range(opg_ped.shape[0]):
+                i_index = self.id_dict[opg_ped[i,1]]
                 ## Paternal grandparental scores
-                # Find imputed grandparents
-                if bpg_ped[i,2] in self.id_dict:
-                    gpar[i_index, 0:2] = self.gts[self.id_dict[bpg_ped[i,2]],[paternal_index,maternal_index]]
-                else:
-                    # linear imputation from father if no imputed
-                    gpar[i_index, 0:2] = parent_means[0]+(1+r)*(self.gts[i_index, paternal_index]-parent_means[0])/2.0
+                # Do only if father genotyped
+                if self.par_status[i_index,0] == 0:
+                    # Find imputed grandparents
+                    if opg_ped[i,2] in self.id_dict:
+                        gpar[i_index, 0:2] = self.gts[self.id_dict[opg_ped[i,2]],[paternal_index,maternal_index]]
+                    else:
+                        # linear imputation from father if no imputed
+                        gpar[i_index, 0:2] = parent_means[0]+(1+r)*(self.gts[i_index, paternal_index]-parent_means[0])/2.0
                 ## Maternal grandparental scores
-                # Find imputed grandparents
-                if bpg_ped[i,3] in self.id_dict:
-                    gpar[i_index, 2:4] = self.gts[self.id_dict[bpg_ped[i,3]],[paternal_index,maternal_index]]
-                else:
-                    # linear imputation from mother if no imputed
-                    gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
+                if self.par_status[i_index,1] == 0:
+                    # Find imputed grandparents
+                    if opg_ped[i,3] in self.id_dict:
+                        gpar[i_index, 2:4] = self.gts[self.id_dict[opg_ped[i,3]],[paternal_index,maternal_index]]
+                    else:
+                        # linear imputation from mother if no imputed
+                        gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
         ## Append to PGS matrix
         self.gts = np.hstack((self.gts,gpar))
         self.sid = np.hstack((self.sid,np.array(['gpp','gmp','gpm','gmm'])))
-        return bpg_ped
+        return opg_ped
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
     rcoef = r/((2**n)*(1+r)-r)
@@ -642,33 +645,37 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
             print('Fitting 2 generation model (proband and observed/imputed parents)')
             alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
         elif ngen==3:
-            print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
+            print('Fitting 3 generation models')
             if gparsum:
-                if 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
-                    # Sum of paternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gp'
-                    # Sum of maternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gm'
-                elif 'gp' in pg.sid and 'gm' in pg.sid:
+                if 'gp' in pg.sid and 'gm' in pg.sid:
                     pass
+                elif 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
+                    # Sum of paternal grandparents
+                    gpcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
+                    gmcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
+                    gp = pg.gts[:,gpcols[0]]+pg.gts[:,gpcols[1]]
+                    gm = pg.gts[:,gmcols[0]]+pg.gts[:,gmcols[1]]
+                    pg.gts = np.hstack((pg.gts,gp.reshape((gp.shape[0],1)),gm.reshape((gm.shape[0],1))))
+                    pg.sid = np.hstack((pg.sid,np.array(['gp','gm'])))
                 else:
                     raise(ValueError('Grandparental PGSs not found so cannot sum (--gparsum option given)'))
-                pg_cols += ['gp','gm']
+            # Paternal 3 gen regression
+            if gparsum:
+                pg_cols_p = ['proband','paternal','gp']
+                pg_cols_m = ['proband','maternal','gm']
+                pg_cols_b = ['proband','paternal','maternal','gp','gm']
             else:
-                pg_cols += ['gpp','gmp','gpm','gmm']
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+                pg_cols_p = ['proband','paternal','gpp','gmp']
+                pg_cols_m = ['proband','maternal','gpm','gmm']
+                pg_cols_b = ['proband','paternal','maternal','gpp','gmp','gpm','gmm']
+            # Paternal 3gen regression
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_p, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+            if outprefix is not None:
+                write_estimates(outprefix+'.'+str(ngen)+'.paternal', alpha, alpha_cols)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_m, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+            if outprefix is not None:
+                write_estimates(outprefix+'.'+str(ngen)+'.maternal', alpha, alpha_cols)
+            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols_b, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     # Save to file
     if outprefix is not None:
         write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
