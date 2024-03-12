@@ -1,24 +1,23 @@
-setwd('~/snipar/meta')
-
 # Approximate variance of ratio 
 var_ratio_approx = function(x,y,vx,vy,cxy){
   x2 = x^2; y2 = y^2
   return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
 }
 
-gen1_effects = '../finngen/pgs_out/AFB2/7.1.effects.txt'
-gen2_effects = '../finngen/pgs_out/AFB2/7.2.effects.txt'
-gen3_effects = '../finngen/pgs_out/AFB2/7.3.effects.txt'
-gen2_vcov = '../finngen/pgs_out/AFB2/7.2.vcov.txt' 
-gen3_vcov = '../finngen/pgs_out/AFB2/7.3.vcov.txt' 
+# gen1_effects = '../GS/pgs/ever_smoke/ever.smoked.1.coefficients.txt'
+# gen2_effects = '../GS/pgs/ever_smoke/ever.smoked.2.coefficients.txt'
+# gen3_paternal = '../GS/pgs/ever_smoke/ever.smoked.3.paternal.coefficients.txt' 
+# gen3_maternal = '../GS/pgs/ever_smoke/ever.smoked.3.maternal.coefficients.txt' 
+# gen2_vcov = '../GS/pgs/ever_smoke/ever.smoked.2.vcov.txt'
+# gen3_paternal_vcov = '../GS/pgs/ever_smoke/ever.smoked.3.paternal.vcov.txt'  
+# gen3_maternal_vcov = '../GS/pgs/ever_smoke/ever.smoked.3.maternal.vcov.txt'  
 
 # Read gen models 1-3 function
-read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3_vcov,sign_flip=FALSE,lme4=FALSE){
+read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_paternal,gen3_paternal_vcov,gen3_maternal,gen3_maternal_vcov,sign_flip=FALSE,lme4=FALSE){
   ## Estimates to output 
   parameter_names = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
   'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
-  'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
-  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio')
+  'paternal','maternal','grandpaternal','grandmaternal')
   results = matrix(NA,nrow=length(parameter_names),ncol=2)
   dimnames(results)[[1]] = parameter_names
   dimnames(results)[[2]] = c('estimates','SE')
@@ -32,11 +31,11 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3
   } else if (!file.exists(gen2_vcov)){
     print(paste(gen2_vcov,'does not exist'))
     return(results)
-  } else if (!file.exists(gen3_effects)){
-    print(paste(gen3_effects,'does not exist'))
+  } else if (!file.exists(gen3_paternal)){
+    print(paste(gen3_paternal,'does not exist'))
     return(results)
-  } else if (!file.exists(gen3_vcov)){
-    print(paste(gen3_vcov,'does not exist'))
+  } else if (!file.exists(gen3_maternal)){
+    print(paste(gen3_maternal,'does not exist'))
     return(results)
   } else {
   ## Get population effect
@@ -73,60 +72,72 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_effects,gen3
                                                         results['maternal_minus_paternal',2]^2,results['direct',2]^2,
                                                         results_2gen_vcov['maternal_minus_paternal','direct']))
   ## Get 3 generation results
+  # paternal
   if (lme4){
-    results_effects = read.table(gen3_effects,skip=1,header=F,row.names=1)
+    results_effects = read.table(gen3_paternal,skip=1,header=F,row.names=1)
   } else {
-    results_effects = read.table(gen3_effects,row.names=1)}
-  results_vcov = read.table(gen3_vcov,row.names=1,header=T)
+    results_effects = read.table(gen3_paternal,row.names=1)}
+  results_vcov = read.table(gen3_paternal_vcov,row.names=1,header=T)
   if ('gp'%in%dimnames(results_effects)[[1]]){gparsum=TRUE} else if ('gpp'%in%dimnames(results_effects)[[1]]){gparsum=FALSE} else {stop()}
   if (gparsum){
-    results_effects = results_effects[c('proband','paternal','maternal','gp','gm'),] 
-    results_vcov = results_vcov[c('proband','paternal','maternal','gp','gm'),
-                                c('proband','paternal','maternal','gp','gm')]
+    results_effects = results_effects[c('proband','paternal','gp'),] 
+    results_vcov = results_vcov[c('proband','paternal','gp'),
+                                c('proband','paternal','gp')]
   } else{
-    results_effects = results_effects[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),1:2]
-    results_vcov = results_vcov[c('proband','paternal','maternal','gpp','gpm','gmp','gmm'),
-                                c('proband','paternal','maternal','gpp','gpm','gmp','gmm')]
+    results_effects = results_effects[c('proband','paternal','gpp','gmp'),1:2]
+    results_vcov = results_vcov[c('proband','paternal','gpp','gmp'),
+                                c('proband','paternal','gpp','gmp')]
   }
   # Transform and save
   if (!gparsum){
     # Transformation matrix for full model
-    A_3 = matrix(0,nrow=7,ncol=7)
-    A_3[1:3,1:3] = diag(3)
-    A_3[4,2:3] = c(0.5,0.5)
-    A_3[5:7,4:7] = rbind(c(0.5,0.5,0,0),
-                         c(0,0,0.5,0.5),
-                         c(0.25,0.25,0.25,0.25))} else{
+    A_3 = matrix(0,nrow=2,ncol=4)
+    A_3[1,2] = 1
+    A_3[2,] = c(0,0,0.5,0.5)} else{
                            # Transformation matrix for grandparental sum model
-                           A_3 = matrix(0,nrow=7,ncol=5)
-                           A_3[1:3,1:3] = diag(3)
-                           A_3[4,2:3] = c(0.5,0.5)
-                           A_3[5,4] = 1
-                           A_3[6,5] = 1
-                           A_3[7,4:5] = c(0.5,0.5)}
+                           A_3 = matrix(0,nrow=2,ncol=3)
+                           A_3[1:2,2:3]=diag(2)}
   results_effects = A_3%*%as.matrix(results_effects[,1])
-  gen3_effects = c('direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental')
+  gen3_effects = c('paternal','grandpaternal')
   results_vcov = A_3%*%as.matrix(results_vcov)%*%t(A_3)
   dimnames(results_vcov)[[1]] = gen3_effects
   dimnames(results_vcov)[[2]] = gen3_effects
   # Compute indirect to direct ratios
   results[gen3_effects,1]=results_effects
-  results[c('direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental'),2]=sqrt(diag(results_vcov))
-  # Parental direct ratio
-  results['parental_direct_ratio',1] = results['parental',1]/results['direct_3',1]
-  results['parental_direct_ratio',2] = sqrt(var_ratio_approx(results['parental',1],results['direct_3',1],
-                                                        results['parental',2]^2,results['direct_3',2]^2,
-                                                        results_vcov['parental','direct_3']))
-  # Paternal direct ratio
-  results['paternal_direct_ratio',1] = results['paternal',1]/results['direct_3',1]
-  results['paternal_direct_ratio',2] = sqrt(var_ratio_approx(results['paternal',1],results['direct_3',1],
-                                                        results['paternal',2]^2,results['direct_3',2]^2,
-                                                        results_vcov['paternal','direct_3']))
-  # Maternal direct ratio
-  results['maternal_direct_ratio',1] = results['maternal',1]/results['direct_3',1]
-  results['maternal_direct_ratio',2] = sqrt(var_ratio_approx(results['maternal',1],results['direct_3',1],
-                                                        results['maternal',2]^2,results['direct_3',2]^2,
-                                                        results_vcov['maternal','direct_3']))                               
+  results[gen3_effects,2]=sqrt(diag(results_vcov))           
+  # maternal
+  if (lme4){
+    results_effects = read.table(gen3_maternal,skip=1,header=F,row.names=1)
+  } else {
+    results_effects = read.table(gen3_maternal,row.names=1)}
+  results_vcov = read.table(gen3_maternal_vcov,row.names=1,header=T)
+  if ('gm'%in%dimnames(results_effects)[[1]]){gparsum=TRUE} else if ('gmm'%in%dimnames(results_effects)[[1]]){gparsum=FALSE} else {stop()}
+  if (gparsum){
+    results_effects = results_effects[c('proband','maternal','gm'),] 
+    results_vcov = results_vcov[c('proband','maternal','gm'),
+                                c('proband','maternal','gm')]
+  } else{
+    results_effects = results_effects[c('proband','maternal','gpm','gmm'),1:2]
+    results_vcov = results_vcov[c('proband','maternal','gpm','gmm'),
+                                c('proband','maternal','gpm','gmm')]
+  }
+  # Transform and save
+  if (!gparsum){
+    # Transformation matrix for full model
+    A_3 = matrix(0,nrow=2,ncol=4)
+    A_3[1,2] = 1
+    A_3[2,] = c(0,0,0.5,0.5)} else{
+                           # Transformation matrix for grandparental sum model
+                           A_3 = matrix(0,nrow=2,ncol=3)
+                           A_3[1:2,2:3]=diag(2)}
+  results_effects = A_3%*%as.matrix(results_effects[,1])
+  gen3_effects = c('maternal','grandmaternal')
+  results_vcov = A_3%*%as.matrix(results_vcov)%*%t(A_3)
+  dimnames(results_vcov)[[1]] = gen3_effects
+  dimnames(results_vcov)[[2]] = gen3_effects
+  # Compute indirect to direct ratios
+  results[gen3_effects,1]=results_effects
+  results[gen3_effects,2]=sqrt(diag(results_vcov))                   
   # Return
   if (sign_flip){results[,1] = -results[,1]}
   return(results)}
@@ -149,7 +160,7 @@ fe_meta_Z = function(ests,ses){
 }
 
 # MoBa
-moba_dir = '../moba/MoBa_3gen_results_050923'
+moba_dir = '../moba'
 moba_traits = c('Achievement','Height','BMI','ADHD','Depression')
 
 # Finngen
@@ -162,8 +173,8 @@ finngen_traits = c('height','NC','BMI','ever_smoker',
                 'migraine','copd')
 
 # Botnia
-botnia_dir = '../Botnia/results/'
-botnia_traits = read.table('../Botnia/results/traits.txt',header=F)
+botnia_dir = '../Botnia/pgs_results/'
+botnia_traits = read.table('../Botnia/pgs_results/traits.txt',header=F)
 botnia_traits=c('EA','glucose','HDL','non_HDL','height','BMI','DBP','SBP')
 # GS 
 gs_dir = '../GS/pgs/'
@@ -191,11 +202,12 @@ phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                         cognitive_ability=c(NA,NA,'cog',NA,NA),
                         vocabulary=c(NA,NA,'vocab',NA,NA),
                         age_at_first_birth_women=c(NA,'AFB',NA,NA,'AAFB_WOMEN'),
-                        number_of_children_women=c(NA,'NEB',NA,NA,NA),
+                        number_of_children_women=c(NA,'NEB',NA,NA,'NC_WOMEN'),
                         depressive_symptoms=c(NA,'CESD','neuroticism','Depression','depression'),
                         ADHD=c(NA,NA,NA,'ADHD','ADHD'),
                         alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
 
+phenotype_names[phenotype_names[,1]=='fhs',] = NA
 phenotypes = dimnames(phenotype_names)[[2]][-1]
 binary_phens = c('ADHD','ever_smoker','hypertension','alcohol_use_disorder','depression') 
 
@@ -208,11 +220,10 @@ in_cohort = !is.na(in_cohort)
 pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                               ADHD=c(NA,NA,NA,'ADHD_Demontis_2023','ADHD1'),
                               age_at_first_birth=c(NA,'AFB_Repo_pgs',NA,NA,'AFB2'),
-                              BMI=c('BMI_UKB','BMI_UKB_pgs','bmi','BMI_GIANT_2018','bmi'),
+                              BMI=c('BMI_UKB','BMI_UKB_pgs','bmi','BMI_UKB','bmi'),
                               depression=c(NA,'MDD_pgs','depression','PGC_UKB_depresssion','DEP1'),
-                              educational_attainment= c('EA4_2.8m','EA4_pgs','EA4_hm3','EA4','EA4'),
+                              educational_attainment= c('EA4_2.8m','EA4_pgs','EA4_hm3','EA4','EA6'),
                               ever_smoker= c(NA,'EVSMK_UKB_pgs','ever_smoke',NA,'EVERSMOKE2'),
-                              externalizing = c(NA,NA,NA,NA,'externalizing'),
                               height=c('height_UKB','HGT_UKB_pgs','height','height_yengo_2022','height'),
                               number_of_children_women=c(NA,'NEB_Repo_pgs',NA,NA,'NEBwomen2'))
 
@@ -222,8 +233,7 @@ pgss = dimnames(pgs_names)[[2]][-1]
 # Effects
 effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
                   'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
-                  'direct_3','paternal','maternal','parental','grandpaternal','grandmaternal','grandparental',
-                  'parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio')
+                  'paternal','maternal','grandpaternal','grandmaternal')
 
 meta_results = array(NA,dim=c(length(pgss),length(phenotypes),length(effect_names)*3))
 meta_colnames = c()
@@ -262,13 +272,15 @@ for (j in 1:length(pgss)){
     # # Botnia
     if (!is.na(cohort_names[1]) & !is.na(pgs_names_j[1])){
       # Find trait index
-      trait_index = trait_index = match(cohort_names[1],botnia_traits)
+      trait_index = match(cohort_names[1],botnia_traits)
       # Read estimates and transform
       botnia_estimates = read_gen_models(paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.1.effects.txt',sep=''),
                                         paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.2.effects.txt',sep=''),
                                         paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.2.vcov.txt',sep=''),
-                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.effects.txt',sep=''),
-                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.vcov.txt',sep=''))
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.paternal.effects.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.paternal.vcov.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.maternal.effects.txt',sep=''),
+                                        paste(botnia_dir,pgs_names_j[1],'/',trait_index,'.3.maternal.vcov.txt',sep=''))
       # Store for meta-analysis
       estimates[effect_names,1] = botnia_estimates[effect_names,1]
       estimate_ses[effect_names,1] = botnia_estimates[effect_names,2]
@@ -283,14 +295,18 @@ for (j in 1:length(pgss)){
         fhs_estimates = read_gen_models(paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.1.coefficients.txt',sep=''),
                                         paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.2.coefficients.txt',sep=''),
                                         paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.2.vcov.txt',sep=''),
-                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.coefficients.txt',sep=''),
-                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.vcov.txt',sep=''),lme4=TRUE)
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.paternal.coefficients.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.paternal.vcov.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.maternal.coefficients.txt',sep=''),
+                                        paste(fhs_binary_dir,pgs_names_j[2],'/',cohort_names[2],'.3.maternal.vcov.txt',sep=''),lme4=TRUE)
       } else {
         fhs_estimates = read_gen_models(paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.1.effects.txt',sep=''),
                                         paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.2.effects.txt',sep=''),
                                         paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.2.vcov.txt',sep=''),
-                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.effects.txt',sep=''),
-                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.vcov.txt',sep=''))}
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.paternal.effects.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.paternal.vcov.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.maternal.effects.txt',sep=''),
+                                        paste(fhs_dir,pgs_names_j[2],'/',cohort_names[2],'.3.maternal.vcov.txt',sep=''))}
       # Store for meta-analysis
       estimates[effect_names,2] = fhs_estimates[effect_names,1]
       estimate_ses[effect_names,2] = fhs_estimates[effect_names,2]
@@ -307,14 +323,19 @@ for (j in 1:length(pgss)){
         gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.1.coefficients.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.2.coefficients.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.2.vcov.txt'),
-                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.coefficients.txt'),
-                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.vcov.txt'),lme4=TRUE)
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.paternal.coefficients.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.paternal.vcov.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.maternal.coefficients.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',cohort_names[3],'.3.maternal.vcov.txt'),
+                                        lme4=TRUE)
       } else {
         gs_estimates = read_gen_models(paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.1.effects.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.effects.txt'),
                                         paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.2.vcov.txt'),
-                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.effects.txt'),
-                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.vcov.txt'))}
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.paternal.effects.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.paternal.vcov.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.maternal.effects.txt'),
+                                        paste0(gs_dir,pgs_names_j[3],'/',trait_index,'.3.maternal.vcov.txt'))}
       # Store for meta-analysis
       estimates[effect_names,3] = gs_estimates[effect_names,1]
       estimate_ses[effect_names,3] = gs_estimates[effect_names,2]
@@ -328,8 +349,10 @@ for (j in 1:length(pgss)){
       moba_estimates = read_gen_models(paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.1.effects.txt',sep=''),
                                     paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.2.effects.txt',sep=''),
                                     paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.2.vcov.txt',sep=''),
-                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.effects.txt',sep=''),
-                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.vcov.txt',sep=''))
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.paternal.effects.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.paternal.vcov.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.maternal.effects.txt',sep=''),
+                                    paste0(moba_dir,'/',pgs_names_j[4],'_',trait_index,'.3.maternal.vcov.txt',sep=''))
       # Store for meta-analysis
       estimates[effect_names,4] = moba_estimates[effect_names,1]
       estimate_ses[effect_names,4] = moba_estimates[effect_names,2]
@@ -342,19 +365,24 @@ for (j in 1:length(pgss)){
       # Find trait index
       trait_index = match(cohort_names[5],finngen_traits)
       # Read estimates and transform
-      if (pgs_names_j[5]=='EA4'){sign_flip=TRUE} else {sign_flip=FALSE}
+      #if (pgs_names_j[5]=='EA4'){sign_flip=TRUE} else {sign_flip=FALSE}
       if (phenotypes[i]%in%binary_phens & !phenotypes[i]=='ADHD'){
         finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.1.coefficients.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.2.coefficients.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.2.vcov.txt'),
-                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.coefficients.txt'),
-                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.vcov.txt'),sign_flip=sign_flip,lme4=TRUE)
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.paternal.coefficients.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.paternal.vcov.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.maternal.coefficients.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',cohort_names[5],'.3.maternal.vcov.txt'),
+                                        lme4=TRUE)
       } else {
         finngen_estimates = read_gen_models(paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.1.effects.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.effects.txt'),
                                         paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.2.vcov.txt'),
-                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.effects.txt'),
-                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.vcov.txt'),sign_flip=sign_flip)}
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.paternal.effects.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.paternal.vcov.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.maternal.effects.txt'),
+                                        paste0(finngen_dir,pgs_names_j[5],'/',trait_index,'.3.maternal.vcov.txt'))}
       # Store for meta-analysis
       estimates[effect_names,5] = finngen_estimates[effect_names,1]
       estimate_ses[effect_names,5] = finngen_estimates[effect_names,2]
@@ -364,7 +392,7 @@ for (j in 1:length(pgss)){
     }
     # Meta-analysis
     for (effect_j in effect_names){
-      if (effect_j%in%c('average_NTC_direct_ratio','parental_direct_ratio','paternal_direct_ratio','maternal_direct_ratio','maternal_minus_paternal_direct_ratio')){
+      if (effect_j%in%c('average_NTC_direct_ratio','maternal_minus_paternal_direct_ratio')){
         meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
       } else {
         meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta_Z(estimates[effect_j,],estimate_ses[effect_j,])
@@ -377,7 +405,7 @@ for (j in 1:length(pgss)){
 for (effect_name in effect_names){
   meta_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((meta_results[,,effect_name]/meta_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   botnia_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((botnia_results[,,effect_name]/botnia_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
-  fhs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((fhs_results[,,effect_name]/fhs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  #fhs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((fhs_results[,,effect_name]/fhs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   gs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((gs_results[,,effect_name]/gs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   moba_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((moba_results[,,effect_name]/moba_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   finngen_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((finngen_results[,,effect_name]/finngen_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
@@ -389,28 +417,25 @@ meta_results[is.infinite(meta_results)] = NA
 pgs_primary = data.frame(pgs=dimnames(meta_results)[[1]],
               phenotype=c('ADHD','age_at_first_birth_women',
               'BMI','depressive_symptoms','educational_attainment',
-              'ever_smoker','alcohol_use_disorder','height','number_of_children_women'),
+              'ever_smoker','height','number_of_children_women'),
               average_NTC_direct_ratio=NA,average_NTC_direct_ratio_SE=NA,
               average_NTC_log10P=NA,
-              parental_direct_ratio=NA,parental_direct_ratio_SE=NA,
-              parental_log10P=NA,paternal_log10P=NA,maternal_log10P=NA,
               maternal_minus_paternal_direct_ratio=NA,
               maternal_minus_paternal_direct_ratio_SE=NA,
               maternal_minus_paternal_log10P=NA,
-              grandparental_log10P=NA)
+              paternal_log10P=NA,maternal_log10P=NA,
+              grandpaternal_log10P=NA,grandmaternal_log10P=NA)
 for (i in 1:dim(pgs_primary)[1]){
   pgs_primary[i,'average_NTC_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio']
   pgs_primary[i,'average_NTC_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio_SE']
   pgs_primary[i,'average_NTC_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_log10P'] 
-  pgs_primary[i,'parental_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_direct_ratio']
-  pgs_primary[i,'parental_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_direct_ratio_SE']
-  pgs_primary[i,'parental_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'parental_log10P']
-  pgs_primary[i,'paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal_log10P']
-  pgs_primary[i,'maternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_log10P']
   pgs_primary[i,'maternal_minus_paternal_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio']
   pgs_primary[i,'maternal_minus_paternal_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio_SE']
   pgs_primary[i,'maternal_minus_paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_log10P']
-  pgs_primary[i,'grandparental_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandparental_log10P']
+  pgs_primary[i,'paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal_log10P']
+  pgs_primary[i,'maternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_log10P']
+  pgs_primary[i,'grandpaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandpaternal_log10P']
+  pgs_primary[i,'grandmaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandmaternal_log10P']
 }
 
 write.csv(pgs_primary,'~/Dropbox/grandparental/pgs_primary.csv',quote=F,row.names=F)
