@@ -184,7 +184,7 @@ gs_traits = c("Glucose","Non_HDL", "HDL","height","FEV1","BMI","ever.smoked",
                 "EA_years","EA_years_mid","EA_quals")
 #gs_traits = cbind(1:length(gs_traits),gs_traits)
 # FSH
-fhs_dir = '../FHS/FHS_GPall_Mods/'
+fhs_dir = '../FHS/FHS_Unipar_Results/'
 fhs_binary_dir = '../FHS/FHS_Binary_Phenos/'
 
 phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
@@ -207,7 +207,6 @@ phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                         ADHD=c(NA,NA,NA,'ADHD','ADHD'),
                         alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
 
-phenotype_names[phenotype_names[,1]=='fhs',] = NA
 phenotypes = dimnames(phenotype_names)[[2]][-1]
 binary_phens = c('ADHD','ever_smoker','hypertension','alcohol_use_disorder','depression') 
 
@@ -405,7 +404,7 @@ for (j in 1:length(pgss)){
 for (effect_name in effect_names){
   meta_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((meta_results[,,effect_name]/meta_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   botnia_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((botnia_results[,,effect_name]/botnia_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
-  #fhs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((fhs_results[,,effect_name]/fhs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
+  fhs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((fhs_results[,,effect_name]/fhs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   gs_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((gs_results[,,effect_name]/gs_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   moba_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((moba_results[,,effect_name]/moba_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
   finngen_results[,,paste(effect_name,'log10P',sep='_')] = -log10(exp(1))*pchisq((finngen_results[,,effect_name]/finngen_results[,,paste(effect_name,'SE',sep='_')])^2,1,lower.tail=F,log.p=T)
@@ -488,8 +487,11 @@ qqplot_ci = function(pmatrix,outfile){
   return(qqpar)
 }
 
-qq_parental=qqplot_ci(meta_results[,,'parental_log10P'],
-'~/Dropbox/grandparental/parental_log10P_qqplot.pdf')
+qq_paternal=qqplot_ci(meta_results[,,'paternal_log10P'],
+'~/Dropbox/grandparental/paternal_log10P_qqplot.pdf')
+
+qq_maternal=qqplot_ci(meta_results[,,'maternal_log10P'],
+'~/Dropbox/grandparental/maternal_log10P_qqplot.pdf')
 
 qq_maternal_minus_paternal = qqplot_ci(meta_results[,,'maternal_minus_paternal_log10P'],
 '~/Dropbox/grandparental/maternal_minus_paternal_log10P_qqplot.pdf') 
@@ -497,5 +499,8 @@ qq_maternal_minus_paternal = qqplot_ci(meta_results[,,'maternal_minus_paternal_l
 qq_avg_NTC = qqplot_ci(meta_results[,,'average_NTC_log10P'],
 '~/Dropbox/grandparental/average_NTC_qqplot.pdf')
 
-qq_grandparental = qqplot_ci(meta_results[,,'grandparental_log10P'],
-'~/Dropbox/grandparental/grandparental_qqplot.pdf')
+qq_grandparental = qqplot_ci(meta_results[,,'grandpaternal_log10P'],
+'~/Dropbox/grandparental/grandpaternal_qqplot.pdf')
+
+qq_grandparental = qqplot_ci(meta_results[,,'grandmaternal_log10P'],
+'~/Dropbox/grandparental/grandmaternal_qqplot.pdf')
