@@ -105,7 +105,7 @@ done
 
 
 mkdir ~/pgs_out
-for pgs in EA4 externalizing ADHD1 AFB2 EVERSMOKE2 DEP1 height bmi NEBwomen2
+for pgs in EA6 ADHD1 AFB2 EVERSMOKE2 DEP1 height bmi NEBwomen2
 do
 cp -r ~/pgs/$pgs ~/pgs_out/
 done
