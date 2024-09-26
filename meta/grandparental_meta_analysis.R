@@ -1,3 +1,4 @@
+setwd('meta')
 # Approximate variance of ratio 
 var_ratio_approx = function(x,y,vx,vy,cxy){
   x2 = x^2; y2 = y^2
@@ -185,7 +186,7 @@ gs_traits = c("Glucose","Non_HDL", "HDL","height","FEV1","BMI","ever.smoked",
 #gs_traits = cbind(1:length(gs_traits),gs_traits)
 # FSH
 fhs_dir = '../FHS/FHS_Unipar_Results/'
-fhs_binary_dir = '../FHS/FHS_Binary_Phenos/'
+fhs_binary_dir = '../FHS/FHS_Unipar_Results/'
 
 phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                         educational_attainment=c('EA',NA,'EA_quals', 'Achievement', NA),
@@ -205,7 +206,7 @@ phenotype_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
                         number_of_children_women=c(NA,'NEB',NA,NA,'NC_WOMEN'),
                         depressive_symptoms=c(NA,'CESD','neuroticism','Depression','depression'),
                         ADHD=c(NA,NA,NA,'ADHD','ADHD'),
-                        alcohol_use_disorder=c(NA,NA,NA,NA,'alcohol_use_disorder'))
+                        alcohol_use_disorder=c(NA,'AUD',NA,NA,'alcohol_use_disorder'))
 
 phenotypes = dimnames(phenotype_names)[[2]][-1]
 binary_phens = c('ADHD','ever_smoker','hypertension','alcohol_use_disorder','depression') 
@@ -422,8 +423,9 @@ pgs_primary = data.frame(pgs=dimnames(meta_results)[[1]],
               maternal_minus_paternal_direct_ratio=NA,
               maternal_minus_paternal_direct_ratio_SE=NA,
               maternal_minus_paternal_log10P=NA,
-              paternal_log10P=NA,maternal_log10P=NA,
-              grandpaternal_log10P=NA,grandmaternal_log10P=NA)
+              paternal_Z=NA,paternal_log10P=NA,maternal_Z=NA,maternal_log10P=NA,
+              grandpaternal_Z=NA,grandpaternal_log10P=NA,grandmaternal_Z=NA,grandmaternal_log10P=NA)
+
 for (i in 1:dim(pgs_primary)[1]){
   pgs_primary[i,'average_NTC_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio']
   pgs_primary[i,'average_NTC_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio_SE']
@@ -431,42 +433,45 @@ for (i in 1:dim(pgs_primary)[1]){
   pgs_primary[i,'maternal_minus_paternal_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio']
   pgs_primary[i,'maternal_minus_paternal_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio_SE']
   pgs_primary[i,'maternal_minus_paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_log10P']
+  pgs_primary[i,'paternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal']
   pgs_primary[i,'paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal_log10P']
+  pgs_primary[i,'maternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal']
   pgs_primary[i,'maternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_log10P']
+  pgs_primary[i,'grandpaternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandpaternal']
   pgs_primary[i,'grandpaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandpaternal_log10P']
+  pgs_primary[i,'grandmaternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandmaternal']
   pgs_primary[i,'grandmaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandmaternal_log10P']
 }
 
 write.csv(pgs_primary,'~/Dropbox/grandparental/pgs_primary.csv',quote=F,row.names=F)
 
-pgs_primary$parental_lower = pgs_primary[,'parental_direct_ratio']+qnorm(0.025)*pgs_primary[,'parental_direct_ratio_SE']
-pgs_primary$parental_upper = pgs_primary[,'parental_direct_ratio']-qnorm(0.025)*pgs_primary[,'parental_direct_ratio_SE']
-pgs_primary$parental_upper = sapply(pgs_primary$parental_upper,function(x) if (x>2){return(1.999)} else {return(x)})
-pgs_primary$parental_lower = sapply(pgs_primary$parental_lower,function(x) if (x<(-2)){return(-1.999)} else {return(x)})
 pgs_primary$ntc_lower = pgs_primary[,'average_NTC_direct_ratio']+qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
 pgs_primary$ntc_upper = pgs_primary[,'average_NTC_direct_ratio']-qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
+pgs_primary$patdiff_lower = pgs_primary[,'maternal_minus_paternal_direct_ratio']+qnorm(0.025)*pgs_primary[,'maternal_minus_paternal_direct_ratio_SE']
+pgs_primary$patdiff_upper = pgs_primary[,'maternal_minus_paternal_direct_ratio']-qnorm(0.025)*pgs_primary[,'maternal_minus_paternal_direct_ratio_SE']
 
-pgs_primary$pgs = factor(pgs_primary$pgs,levels=pgs_primary[order(pgs_primary$parental_log10P),'pgs'])
+
+pgs_primary$pgs = factor(pgs_primary$pgs,levels=pgs_primary[order(abs(pgs_primary$average_NTC_direct_ratio)),'pgs'])
 
 plot_gen = rbind(data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='average_NTC_direct_ratio',
                             value=pgs_primary$average_NTC_direct_ratio,lower=pgs_primary$ntc_lower,upper=pgs_primary$ntc_upper),
-                 data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='parental_direct_ratio',
-                 value=pgs_primary$parental_direct_ratio,lower=pgs_primary$parental_lower,upper=pgs_primary$parental_upper))
+                 data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='maternal_minus_paternal_direct_ratio',
+                 value=pgs_primary$maternal_minus_paternal_direct_ratio,lower=pgs_primary$patdiff_lower,upper=pgs_primary$patdiff_upper))
 
 require(ggplot2)
 par_plot = ggplot(plot_gen, aes(y=value, x=pgs, fill=effect)) +
-    geom_errorbar(aes(ymin = plot_gen$lower, ymax = plot_gen$upper,color=effect),width=0.1,position=position_dodge(.5))+coord_flip()+
+    geom_errorbar(aes(ymin = lower, ymax = upper,color=effect),width=0.1,position=position_dodge(.5))+coord_flip()+
     geom_point(position=position_dodge(.5),stat="identity",aes(color=effect))+theme_minimal() +theme(axis.line = element_line(color="black"),
                           axis.ticks = element_line(color="black"),
                           panel.border = element_blank(),
                           axis.text.x = element_text(angle = 45, hjust=1))+
-                          geom_hline(yintercept=0,linetype='dashed')+ylim(-2,2)+
+                          geom_hline(yintercept=0,linetype='dashed')+
                           ylab('Ratio with direct genetic effect')+
                           xlab('PGI')
 
 ggsave('~/Dropbox/grandparental/ratio_plot.pdf',plot=par_plot,width=7,height=5)
 
-
+############# QQ Plots ###############
 qqplot_ci = function(pmatrix,outfile){
   # QQ-plots
   require("MASS") 
