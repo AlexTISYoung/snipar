@@ -3,7 +3,7 @@ import numpy.ma as ma
 import h5py
 from numba import njit
 from snipar.utilities import make_id_dict, convert_str_array
-from snipar.slmm import SparseGRMRepr, Ids, IdDict
+from snipar.types import SparseGRMRepr, Ids, IdDict
 from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import spsolve
 import logging
@@ -42,7 +42,7 @@ class gtarray(object):
         G : :class:`snipar.gtarray`
 
     """
-    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None, num_obs_par_al=None, ped=None):
+    def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None, num_obs_par_al=None, ped=None, standard_f=None):
         if type(garray) == np.ndarray or type(garray) == np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
                 self.gts = ma.array(garray,mask=np.isnan(garray))
@@ -150,6 +150,14 @@ class gtarray(object):
                 raise ValueError('Incompatible par status array')
         else:
             self.num_obs_par_al = None
+        
+        if standard_f is not None:
+            if standard_f.shape[0] == self.sid.shape[0]:
+                    self.standard_f = standard_f
+            else:
+                raise ValueError('Size of standard_f does not match number of SNPs')
+        else:
+            self.standard_f = None
 
         self.mean_normalised = False
 
@@ -190,6 +198,8 @@ class gtarray(object):
             self.map = self.map[filter_pass]
         if self.error_probs is not None:
             self.error_probs = self.error_probs[filter_pass]
+        if self.standard_f is not None:
+            self.standard_f = self.standard_f[filter_pass]
 
     def filter_maf(self, min_maf = 0.01, verbose=False):
         """
@@ -212,6 +222,7 @@ class gtarray(object):
         if verbose:
             print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
         self.filter(missingness_pass)
+        return missingness_pass
 
     def compute_info(self):
         if self.freqs is None:

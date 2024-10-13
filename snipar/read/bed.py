@@ -83,7 +83,7 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None, start=0
     allele_flip = np.logical_and(alleles[:,0]==imp_alleles[:,1],alleles[:,1]==imp_alleles[:,0])
     return chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index
 
-def get_snps(gts_f,bim,snp_ids=None):
+def get_snps(gts_f,bim,snp_ids=None, match=False):
     # Match SNPs in bed and get SNP info
     if snp_ids is None:
         snp_ids = gts_f.sid
@@ -92,8 +92,9 @@ def get_snps(gts_f,bim,snp_ids=None):
     pos = np.loadtxt(bim, dtype=int, usecols=3)
     chromosome = np.loadtxt(bim, dtype=int, usecols=0)
     # Remove duplicate ids
-    unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
-    snp_ids = snp_ids[snp_indices[snp_counts == 1]]
+    if not match: # this will change the ordering of snps, which affects the robust estimator
+        unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
+        snp_ids = snp_ids[snp_indices[snp_counts == 1]]
     # Read and match SNP ids
     obs_sid = gts_f.sid
     obs_sid_dict = make_id_dict(obs_sid)
@@ -108,7 +109,7 @@ def get_snps(gts_f,bim,snp_ids=None):
     return chromosome, sid, pos, alleles, obs_sid_index
 
 
-def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, include_unrel=False, robust=False, trios_sibs=False, verbose=False, print_sample_info = False):
+def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None ,snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, start=0, end=None, include_unrel=False, robust=False, trios_sibs=False, match_snp_ids=False, verbose=False, print_sample_info = False):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
@@ -121,14 +122,14 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
         ids = gts_ids
     # Get families with imputed parental genotypes
     # if par_gts_f is not None:
-    #     imp_fams = convert_str_array(par_gts_f['families'])
+    #     imp_fams = convert_str_array(np.array(par_gts_f['families']))
     # else:
     #     imp_fams = None
     if sib_diff:
         # Find ids with sibs
-        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=verbose)
+        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=False)
     elif trios_sibs:
-        ids, observed_indices, trios_indices, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(ped, gts_ids, ids=ids, verbose=verbose)
+        ids, observed_indices, trios_indices, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(ped, gts_ids, ids=ids, verbose=False)
     else:
         # Find ids with observed/imputed parents and indices of those in observed/imputed data
         ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped, gts_ids, imp_fams=imp_fams, ids=ids, 
@@ -144,7 +145,10 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
     if par_gts_f is not None and not sib_diff:
         if verbose:
             print('Matching observed and imputed SNPs')
-        chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids)
+        # if robust:
+        #     chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index, standard_f = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end, return_f=True)
+        # else:
+        chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
         # Read imputed parental genotypes
         if verbose:
             print('Reading imputed parental genotypes')
@@ -168,7 +172,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
                 print('Flipping alleles of '+str(nflip)+' SNPs to match observed genotypes')
             imp_gts[:,allele_flip] = 2-imp_gts[:,allele_flip]
     else:
-        chromosome, sid, pos, alleles, obs_sid_index = get_snps(gts_f, bim, snp_ids=snp_ids)
+        chromosome, sid, pos, alleles, obs_sid_index = get_snps(gts_f, bim, snp_ids=snp_ids, match=match_snp_ids)
         imp_gts = None
     # Read observed genotypes
     if verbose:
@@ -183,8 +187,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
         par_status = None
     elif trios_sibs:
         # par_status, gt_indices = preprocess.find_trio_gts(ids, ped, gts_id_dict)
-        par_status, gt_indices, _ = preprocess.find_par_gts(ids[trios_indices], ped, gts_id_dict)
-        fam_labels = None
+        par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict)
     else:
         par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams=imp_fams)
     if verbose:
@@ -198,25 +201,29 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
             G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        # gts_all = gts = gts_f[:, obs_sid_index].read().val
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     elif sib_diff:
         G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
         G[:,0,:] = gts[observed_indices][gt_indices,:]
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
-        # gts_all = gts = gts_f[:, obs_sid_index].read().val
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=False).gts
     elif trios_sibs:
-        # gts_all = gts = gts_f[:, obs_sid_index].read().val
-        if parsum:
-            G = np.zeros((ids.shape[0], 2, gts.shape[1]), dtype=np.float32)
-            G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
-        else:
-            G = np.zeros((ids.shape[0],3,gts.shape[1]), dtype=np.float32)
-        G[trios_indices, :, :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=None, parsum=parsum)
-        G[sibs_indices,0,:] = gts[observed_indices][sibs_indices,:]
-        G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
-        if not parsum:
+        # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+        # if parsum:
+        #     G = np.zeros((ids.shape[0], 2, gts.shape[1]), dtype=np.float32)
+        #     if sibs_indices.shape[0] > 0:
+        #         G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
+        # else:
+        trios_indices = np.arange(0, trios_indices.shape[0]) # trios are in the upper rows of observed_indices based on construction 
+        sibs_indices = trios_indices.shape[0] + np.arange(0, sibs_indices.shape[0])
+        G = np.zeros((ids.shape[0],3,gts.shape[1]), dtype=np.float32)
+        G[:, :, :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=None, parsum=False)
+        if sibs_indices.shape[0] > 0:
+            G[sibs_indices,0,:] = gts[observed_indices][sibs_indices,:]
+            G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts, gts_ids, remove_proband=False).gts
+            # if not parsum:
             G[sibs_indices,2,:] = G[sibs_indices,1,:]
     else:
         # G = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
@@ -226,9 +233,9 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None, snp_ids=Non
         del imp_gts
     if robust:
         num_obs_par_al = preprocess.make_num_obs_par_al_matrix(num_obs_par_al, par_status, gt_indices, G.shape[0])
-        return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al)
+        return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, num_obs_par_al=num_obs_par_al) #, ped=ped, standard_f=standard_f)
     if trios_sibs:
-        G = gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
+        G = gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
         G.complete_trios_inds = trios_indices
         G.sibs_inds = sibs_indices
         return G

@@ -42,6 +42,7 @@ import snipar.read as read
 import snipar.slmm as slmm
 from snipar.gwas import process_chromosome
 from snipar.pedigree import get_sibpairs_from_ped
+from snipar.preprocess import remove_sibs
 from snipar.utilities import get_parser_doc, parseNumRange, NumRangeAction, parse_obsfiles, parse_filelist, make_id_dict
 
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
@@ -79,7 +80,7 @@ parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to b
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 
 
-# parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
+parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
 # parser.add_argument('--loglevel', type=str, default='INFO', help='Case insensitive Logging level: INFO, DEBUG, ...')
 
 
@@ -137,11 +138,12 @@ def main(args):
 
     # Find observed and imputed files
     if args.imp is None:
-        args.impute_unrel = False
-        args.robust = False
+        print("No imputation provided.")
+        if args.robust:
+            raise ValueError("The robust estimator requires imputed parental genotypes. If these are not available, remove the --robust flag and a meta analysis of trios and siblings, using genetic differences between siblings will be performed.")
         trios_sibs = True if not args.sib_diff else False
-        if trios_sibs:
-            print('WARNING: no imputed parental genotypes provided. Will analyse only individuals with both parents genotyped or with at least one sib genotyped.')
+        # if trios_sibs and not args.impute_unrel:
+        #     print('Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.')
         if args.bed is not None:
             bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -180,7 +182,7 @@ def main(args):
     if args.imp is None:
         # logger.info('Reading pedigree from '+str(args.pedigree))
         print('Reading pedigree from '+str(args.pedigree))
-        ped = np.loadtxt(args.pedigree,dtype=str)
+        ped = np.loadtxt(args.pedigree,dtype=str)[1:,]
         if ped.shape[1] < 4:
             raise(ValueError('Not enough columns in pedigree file'))
         elif ped.shape[1] > 4:
@@ -201,6 +203,18 @@ def main(args):
         if args.sib_diff:
             imp_fams = None # imputation not used
 
+    if args.robust:
+        print("== The robust estimator will be used.")
+    elif args.sib_diff:
+        print("== The sib-difference estimator will be used.")
+    elif trios_sibs:
+        if args.impute_unrel:
+            print("== The unified estimator will be used.")
+        else:
+            print("== Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.")
+    else:
+        print("== The Young estimator will be used.")
+    print("Check if the dataset is feasible for the selected estimator...")
     if args.sib_diff:
         # unrelated_inds = None
         ids = y.ids
@@ -214,6 +228,24 @@ def main(args):
         fam_labels = y.fams
         ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], ped, 
                                                  y.ids, return_info=False, ibdrel_path=args.ibdrel_path)
+    elif trios_sibs:
+        if args.impute_unrel:
+            ids = remove_sibs(
+                ped, bedfiles[0] if args.bed is not None else bgenfiles[0], y.ids
+            )
+
+            ids, fam_labels = read.get_ids_with_par(
+                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
+                ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
+                return_info=False
+            )
+            print(ids.shape)
+            
+            trios_sibs = False
+        else:
+            ids, fam_labels = read.get_ids_with_trios_sibs(
+                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, y.ids, ibdrel_path=args.ibdrel_path
+            )
     else:
         # unrelated_inds = None
         ids, fam_labels = read.get_ids_with_par(
@@ -290,6 +322,7 @@ def main(args):
     if not varcomps:
         # logger.info(f'Optimizing variance components...')
         print(f'Optimizing variance components...')
+        # print('Nonzero entries: ', model.V.nnz, 'Number of individuals: ', model.n, 'density: ', model.V.nnz / model.n / model.n)
         start = time.time()
         model.scipy_optimize()
         # logger.info(f'Time for variance component estimation: {time.time() - start}s.')
@@ -341,7 +374,7 @@ def main(args):
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
-                           debug=False)
+                           debug=args.debug)
     # logger.info(f'Time used: {time.time() - start}.')
     print(f'Time used: {time.time() - start}.')
 

@@ -270,11 +270,12 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
     if verbose:
         # logger.info('Filtering based on MAF')
         print('Filtering based on MAF')
-    G.filter_maf(min_maf)
+    maf_pass = G.filter_maf(min_maf)
+    # print(G.shape, 'after maf')
     if verbose:
         # logger.info('Filtering based on missingness')
         print('Filtering based on missingness')
-    G.filter_missingness(max_missing)
+    missing_pass = G.filter_missingness(max_missing)
     if verbose:
         # logger.info(str(G.shape[2])+' SNPs that pass filters')
         print(str(G.shape[2])+' SNPs that pass filters')
@@ -288,8 +289,34 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         # G.fill_NAs()
     elif sib_diff or fit_sib:
         G.fill_NAs()
-    if not robust:
+    if not robust and not trios_sibs:
         G.mean_normalise()
+    if robust:
+        G_sib = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=G.sid, 
+                                    ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=True,
+                                    include_unrel=False, robust=False, trios_sibs=False, match_snp_ids=True,
+                                    verbose=False, print_sample_info=False)
+        # G_rob = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=G.sid, 
+        #                             ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=False,
+        #                             include_unrel=False, robust=True, trios_sibs=False,
+        #                             verbose=False, print_sample_info=False)
+        # if G_sib.ids.shape[0] > pheno_ids.shape[0]:
+        #     G_sib.filter_ids(pheno_ids)
+        # # Check for empty fam labels
+        # no_fam = np.array([len(x) == 0 for x in G.fams])
+        # if np.sum(no_fam) > 0:
+        #     ValueError('No family label from pedigree for some individuals')
+        # G_sib.compute_freqs()
+        # G_sib.filter(maf_pass)
+        # print(G_sib.shape, 'after maf')
+        # np.testing.assert_array_equal(G_sib.sid, G.sid, err_msg='before missing')
+        # G_sib.filter(missing_pass)
+        # print(G_sib.shape, 'after missing')
+        # G_sib.fill_NAs()
+        # print(G_sib.shape, G.shape, missing_pass.shape)
+        # np.testing.assert_array_equal(G.sid, G_rob.sid, err_msg=f'rob and sib after missing')
+        np.testing.assert_array_equal(G_sib.sid, G.sid, err_msg=f'after missing')
+        # G_sib.mean_normalise()
     ### Fit models for SNPs ###
     if n_vararr + 1 == len(varcomps):
         model = slmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst,
@@ -298,15 +325,18 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
         model = slmm.LinearMixedModel(y, varcomp_arr_lst=varcomp_arr_lst[1:],
                             varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
     if robust:
-        alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
+        # alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
+        alpha, alpha_cov, alpha_ses = model.new_robust_est(G, G_sib)
     elif sib_diff:
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data)
-    elif trios_sibs:  
+    elif trios_sibs:
         if G.sibs_inds.shape[0] == 0:
+            G.mean_normalise()
             alpha, alpha_cov, alpha_ses = model.fit_snps_eff(G.gts.data)
             alpha, alpha_cov, alpha_ses = alpha[:, :1], alpha_cov[:, :1, :1], alpha_ses[:, :1]
         elif G.complete_trios_inds.shape[0] == 0:
-            alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data)
+            G.mean_normalise()
+            alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data[:, :2, :])
         else:
             alpha, alpha_cov, alpha_ses = model.trios_sibs_est(G.gts.data, G.complete_trios_inds, G.sibs_inds)
     else:
@@ -345,7 +375,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         # If chromosomse unknown, set to chromosome inferred from filename
         chrom[[len(x)==0 for x in chrom]] = chrom_out
     # Check for observed parents if not using parsum
-    if not parsum:
+    if not parsum and not sib_diff:
         par_status, gt_indices, fam_labels = find_par_gts(y.ids, ped, gts_id_dict)
         parcount = np.sum(par_status==0,axis=1)
         if np.sum(parcount>0)==0:
@@ -354,7 +384,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
             parsum = True
         elif 100 > np.sum(parcount>0) > 0:
             # logger.warning('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
-            print('WARNING: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
+            print('WARNING: less than 100 individuals with observed parental genotypes. If the total sample size is small, consider using the --parsum argument to prevent issues due to collinearity.')
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
     # Remove duplicates
@@ -453,8 +483,11 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     _init_worker_ = partial(_init_worker, **{k: v for k, v in varcomp_dict.items() if 'buffer' not in k})
     if debug:
         _init_worker_(y_, len(varcomp_lst), varcomps_, covar_, covar_shape,) # ped_, ped_shape)
+        # batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(np.array(['rs115317704']))
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[0]])
         exit('Debug finishsed.')
+    import time
+    start = time.time()
     with Pool(
         processes=cpus,
         initializer=_init_worker_,
@@ -469,7 +502,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         # Fill in fitted SNPs
         if len(batch_snps) == 0:
             # logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
-            print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
+            print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f' #snps:{len(batch_snps)}')
             continue
         batch_indices = np.array([snp_dict[x] for x in batch_snps])
         alpha[batch_indices, :] = batch_alpha
@@ -477,8 +510,8 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         alpha_ses[batch_indices, :] = batch_alpha_ses
         freqs[batch_indices] = batch_freqs
         # logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
-        print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
-
+        print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f' #snps:{len(batch_snps)}')
+    print('Time used for inference: ', time.time() - start, '.')
     if not no_hdf5_out:
         if chrom_out==0:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5')

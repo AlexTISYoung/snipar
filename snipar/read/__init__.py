@@ -26,7 +26,7 @@ def build_ped_from_par_gts(par_gts_f):
     controls = np.array([x[0] == '_' for x in ped[:, 0]])
     return ped[np.logical_not(controls), :], convert_str_array(np.array(par_gts_f_['families']))
 
-def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, sib_diff = False, compute_controls = False, include_unrel=False, robust=False, trios_sibs=False, verbose=False, print_sample_info=False):
+def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts_f=None, snp_ids = None, ids = None, parsum=False, sib = False, sib_diff = False, compute_controls = False, include_unrel=False, robust=False, trios_sibs=False, match_snp_ids=False, verbose=False, print_sample_info=False):
     """Reads observed and imputed genotypes and constructs a family based genotype matrix for the individuals with
     observed/imputed parental genotypes, and if sib=True, at least one genotyped sibling.
 
@@ -68,27 +68,32 @@ def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts
         ped, imp_fams = build_ped_from_par_gts(par_gts_f)
     # Control families
     controls = np.array([x[0]=='_' for x in ped[:,0]])
-    par_gts_f = h5py.File(par_gts_f, 'r')
+    if par_gts_f is not None:
+        par_gts_f = h5py.File(par_gts_f, 'r')
     # Compute genotype matrices
     if bedfile is not None:
         G = [bed.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], imp_fams, bedfile, par_gts_f=par_gts_f,
                                       snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                       parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                      match_snp_ids=match_snp_ids,
                                       verbose=verbose, print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(bed.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),], imp_fams, bedfile,
                                                 par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                                 parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                                match_snp_ids=match_snp_ids,
                                                 verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], imp_fams, bedfile, 
                                             par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                             parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                            match_snp_ids=match_snp_ids,
                                             verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bed.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], imp_fams, bedfile, 
                                             par_gts_f=par_gts_f, snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                             parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                            match_snp_ids=match_snp_ids,
                                             verbose=verbose, print_sample_info = print_sample_info))
             return G
         else:
@@ -97,21 +102,25 @@ def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts
         G = [bgen.get_gts_matrix_given_ped(ped[np.logical_not(controls),:], imp_fams, bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                                     parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                                    match_snp_ids=match_snp_ids,
                                                     verbose=verbose, print_sample_info = print_sample_info)]
         if compute_controls:
             G.append(bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3]=='_p_' for x in ped[:,0]]),],imp_fams, bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                                     parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                                    match_snp_ids=match_snp_ids,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_m_' for x in ped[:, 0]]),], imp_fams, bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                                     parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                                    match_snp_ids=match_snp_ids,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             G.append(
                 bgen.get_gts_matrix_given_ped(ped[np.array([x[0:3] == '_o_' for x in ped[:, 0]]),], imp_fams, bgenfile,
                                                     par_gts_f=par_gts_f,snp_ids=snp_ids, ids=ids, sib=sib, sib_diff=sib_diff,
                                                     parsum=parsum, include_unrel=include_unrel, robust=robust, trios_sibs=trios_sibs,
+                                                    match_snp_ids=match_snp_ids,
                                                     verbose=verbose, print_sample_info = print_sample_info))
             return G
         else:
@@ -152,7 +161,7 @@ def get_ids_with_par(gts_f: str,
                                                                              include_unrel=include_unrel)
         gts_ids = gts_f_.iid[observed_indices, 1]
     elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
-        gts_f_ = open_bgen(gts_f)
+        gts_f_ = open_bgen(gts_f, verbose=False)
         gts_ids = gts_f_.samples
         ids, observed_indices, imp_indices, parcount = preprocess.get_indices_given_ped(ped,
                                                                              gts_ids,
@@ -166,7 +175,8 @@ def get_ids_with_par(gts_f: str,
                          str(gts_f))
 
 
-    imp_fams = imp_fams[imp_indices]
+    if imp_fams is not None:
+        imp_fams = imp_fams[imp_indices]
     gts_id_dict = make_id_dict(gts_ids)
 
     # Find indices in reduced data
@@ -196,7 +206,6 @@ def get_ids_with_par(gts_f: str,
     one_missing_ids = [i for i in range(len(par_status)) if sum(par_status[i, :]) <= 0 and par_status[i, 0] * par_status[i, 1] < 0]
     if len(one_missing_ids) > 0:
         raise RuntimeError(f'{len(one_missing_ids)} individuals have one missing parent and one non-missing parent.')
-        exit(-1)
     
     if return_info:
         if include_unrel:
@@ -229,12 +238,12 @@ def get_ids_with_sibs(gts_f: str,
     if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
         gts_f_: Bed = Bed(gts_f, count_A1=True)
         gts_ids = gts_f_.iid[:, 1]
-        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=True)
+        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=False)
         gts_ids = gts_f_.iid[observed_indices, 1]
     elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
         gts_f_ = open_bgen(gts_f)
         gts_ids = gts_f_.samples
-        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=True)
+        ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=False)
         gts_ids = gts_ids[observed_indices]
     else:
         raise ValueError('Unknown filetype for observed genotypes file: ' +
@@ -249,9 +258,127 @@ def get_ids_with_sibs(gts_f: str,
     N = np.sum(none_missing)
     if N == 0:
         raise ValueError(
-            'No individuals with phenotype observations and ')
+            'No individuals with phenotype observations and genotypes.')
     # Take those that can be used
     # gt_indices = gt_indices[none_missing]
+    ids = ids[none_missing]
+
+    n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
+
+    fam_labels = fam_labels.astype('<U20')
+    fam_labels[fam_labels == ''] = np.array([f'_not_{i}_' for i in range(n_empty_fams)], dtype='<U20')
+
+    if return_info:
+        return ids, fam_labels, gt_indices
+    return ids, fam_labels
+
+def get_ids_with_trios_sibs(gts_f: str,
+                            ped: np.ndarray, 
+                            ids: np.ndarray = None,
+                            ibdrel_path: str = None,
+                            return_info: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    """Find ids with sibs and both parents, and their family labels.
+    """
+    if ibdrel_path is not None:
+        king = pd.read_csv(ibdrel_path + '.seg',
+                        sep='\t')[['ID1', 'ID2', 'InfType']]
+        king['ID1'] = king['ID1'].astype(str)
+        king['ID2'] = king['ID2'].astype(str)
+
+        # remove one individual from each pair of MZ twins
+        # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
+        rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
+        l = len(ids)
+        if len(rm_mz) > 0:
+            ids = np.setdiff1d(ids, rm_mz)
+            print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree. Removed {l - len(ids)} individuals.')
+
+    if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
+        gts_f_: Bed = Bed(gts_f, count_A1=True)
+        gts_ids = gts_f_.iid[:, 1]
+        ids, observed_indices, trios_indices, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(ped, gts_ids, ids=ids, verbose=False)
+        gts_ids = gts_f_.iid[observed_indices, 1]
+    elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
+        gts_f_ = open_bgen(gts_f)
+        gts_ids = gts_f_.samples
+        ids, observed_indices, trios_indices, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(ped, gts_ids, ids=ids, verbose=False)
+        gts_ids = gts_ids[observed_indices]
+    else:
+        raise ValueError('Unknown filetype for observed genotypes file: ' +
+                         str(gts_f))
+
+    gts_id_dict = make_id_dict(gts_ids)
+
+    # Find indices in reduced data
+    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict)
+    # Find which individuals can be used
+    none_missing = gt_indices[:, 0] >= 0
+    N = np.sum(none_missing)
+    if N == 0:
+        raise ValueError(
+            'No individuals with phenotype observations and genotypes.')
+    # Take those that can be used
+    gt_indices = gt_indices[none_missing]
+    ids = ids[none_missing]
+
+    n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
+
+    fam_labels = fam_labels.astype('<U20')
+    fam_labels[fam_labels == ''] = np.array([f'_not_{i}_' for i in range(n_empty_fams)], dtype='<U20')
+
+    if return_info:
+        return ids, fam_labels, gt_indices
+    return ids, fam_labels
+    
+def get_ids_with_trios(gts_f: str,
+                       ped: np.ndarray, 
+                       ids: np.ndarray = None,
+                       ibdrel_path: str = None,
+                       return_info: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+    """Remove ids with sibs only. Used for the unified estimator when only pedigree file is supplied.
+    """
+    if ibdrel_path is not None:
+        king = pd.read_csv(ibdrel_path + '.seg',
+                        sep='\t')[['ID1', 'ID2', 'InfType']]
+        king['ID1'] = king['ID1'].astype(str)
+        king['ID2'] = king['ID2'].astype(str)
+
+        # remove one individual from each pair of MZ twins
+        # rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: random.choice([row.ID1, row.ID2]), axis=1).to_numpy()
+        rm_mz = king[king['InfType'] == 'Dup/MZ'].apply(lambda row: row.ID1, axis=1).to_numpy()
+        l = len(ids)
+        if len(rm_mz) > 0:
+            ids = np.setdiff1d(ids, rm_mz)
+            print(f'WARNING: {len(rm_mz)} pairs of Duplicates or MZ twins in pedigree. Removed {l - len(ids)} individuals.')
+
+    if gts_f[(len(gts_f) - 4):len(gts_f)] == '.bed':
+        gts_f_: Bed = Bed(gts_f, count_A1=True)
+        gts_ids = gts_f_.iid[:, 1]
+        ids, observed_indices = preprocess.get_indices_given_ped_trios(ped, gts_ids, ids=ids, verbose=False)
+        gts_ids = gts_f_.iid[observed_indices, 1]
+    elif gts_f[(len(gts_f) - 5):len(gts_f)] == '.bgen':
+        gts_f_ = open_bgen(gts_f)
+        gts_ids = gts_f_.samples
+        ids, observed_indices = preprocess.get_indices_given_ped_trios(ped, gts_ids, ids=ids, verbose=False)
+        gts_ids = gts_ids[observed_indices]
+    else:
+        raise ValueError('Unknown filetype for observed genotypes file: ' +
+                         str(gts_f))
+
+    gts_id_dict = make_id_dict(gts_ids)
+
+    # Find indices in reduced data
+    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict)
+    # TODO: might suffice to only check if the first column == 0?
+    # Find which individuals can be used
+    none_missing = np.sum(gt_indices == -1, axis=1)
+    none_missing = none_missing == 0
+    N = sum(none_missing)
+    if N == 0:
+        raise ValueError(
+            'No individuals with phenotype observations, genotypes and complete parental genotypes.')
+    # Take those that can be used
+    gt_indices = gt_indices[none_missing]
     ids = ids[none_missing]
 
     n_empty_fams = sum([1 for i in fam_labels if len(i) == 0])
