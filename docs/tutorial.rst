@@ -27,7 +27,8 @@ pairwise correlations between the direct, paternal, and maternal effects are 0.5
 The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
 chance of having a genotyped sibling. The example data includes :ref:`observed genotype data <observed genotypes>` formatted in both PLINK .bed format (chr_1.bed) and phased genotype
-data in .bgen format (chr_1.bgen with associated sample file chr_1.sample).
+data in .bgen format (chr_1.bgen with associated sample file chr_1.sample). The folder also contains partial data—for example, chr_1_trios_sibs.bgen, which includes individuals with 
+complete parental genotypes as well as individuals without parents but with siblings. This allows users to apply various estimators to different types of data.
 
 Inferring IBD between siblings
 ------------------------------

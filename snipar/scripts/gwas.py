@@ -212,6 +212,8 @@ def main(args):
             print("== The unified estimator will be used.")
         else:
             print("== Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.")
+    elif args.impute_unrel:
+        print("== The unified estimator will be used.")
     else:
         print("== The Young estimator will be used.")
     print("Check if the dataset is feasible for the selected estimator...")
