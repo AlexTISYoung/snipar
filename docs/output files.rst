@@ -124,7 +124,7 @@ If using a model with proband and maternal and paternal genotypes, the sumstats 
     'direct_log10_P'
         The negative log10 P-value for a non-zero direct effect
 
-The following columns will not be included if '--fit_sib' or '--robust' is used:
+The following columns will not be included if '--fit_sib', '--fit_sib' or '--robust' is used:
 
     'paternal_N'
         The effective sample size for estimation of the paternal non-transmitted coefficient (NTC)
