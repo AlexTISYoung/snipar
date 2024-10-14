@@ -253,7 +253,7 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
     G = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=sib_diff,
                             include_unrel=impute_unrel, robust=robust, trios_sibs=trios_sibs,
-                            verbose=verbose, print_sample_info=print_sample_info)
+                            verbose=False, print_sample_info=print_sample_info)
     if G.ids.shape[0] > pheno_ids.shape[0]:
         G.filter_ids(pheno_ids)
     # Check for empty fam labels

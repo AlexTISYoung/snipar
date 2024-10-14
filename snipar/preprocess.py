@@ -85,7 +85,8 @@ def get_indices_given_ped_sibs(ped, gts_ids, ids=None, verbose=True):
     # ids = gts_ids
     # Find individuals with genotyped siblings
     ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
-    print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings.')
+    if verbose:
+        print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings.')
     gt_indices, fam_labels = find_gts(ids, ped, gts_id_dict)
     # Find which individuals can be used
     none_missing = gt_indices >= 0
