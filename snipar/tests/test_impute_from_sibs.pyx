@@ -59,7 +59,7 @@ class TestSibImpute(SniparTest):
         snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
-        cdef cpair[double, bint] t
+        cdef pair[double,pair[bool,float]] t
         parent_genotype_prob = np.array([(1-f)*(1-f), 2*f*(1-f), f*f])
         for i in range(3):
             for j in range(3):
