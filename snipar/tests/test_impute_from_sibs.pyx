@@ -59,7 +59,7 @@ class TestSibImpute(SniparTest):
         snp_ibd2 = np.ones((10,2)).astype("i")
         snp = 0
         f = 0.1
-        cdef pair[double,pair[bool,float]] t
+        cdef cpair[double, cpair[bint, float]] t
         parent_genotype_prob = np.array([(1-f)*(1-f), 2*f*(1-f), f*f])
         for i in range(3):
             for j in range(3):
@@ -68,7 +68,7 @@ class TestSibImpute(SniparTest):
                     bed[1, snp] = j
                     snp_ibd0[count] = [0, 1]
                     t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, count+1, 0, 0, False)
-                    result, is_backup = t.first, t.second
+                    result, is_backup = t.first, t.second.first
                     sibsum = bed[snp_ibd0[0,0], snp] + bed[snp_ibd0[0,1], snp]
                     expected = sibsum/2
                     error_message = f"problem with type0, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
@@ -82,7 +82,7 @@ class TestSibImpute(SniparTest):
                     bed[1, snp] = j
                     snp_ibd1[count] = [0, 1]
                     t = impute_snp_from_offsprings(snp, sib_indexes, 2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, count+1, 1, False)
-                    result, is_backup = t.first, t.second
+                    result, is_backup = t.first, t.second.first
                     sibsum = bed[snp_ibd1[0,0], snp] + bed[snp_ibd1[0,1], snp]
                     expected_results = [f, 1+f, 1+2*f, 2+f, 3+f]
                     expected = expected_results[int(sibsum)]/2
@@ -101,7 +101,7 @@ class TestSibImpute(SniparTest):
                     bed[1, snp] = j
                     snp_ibd2[count] = [0, 1]
                     t = impute_snp_from_offsprings(snp, sib_indexes,  2, snp_ibd0, snp_ibd1, snp_ibd2, f, parent_genotype_prob, None, bed, None, 0, 0, count+1, False)
-                    result, is_backup = t.first, t.second
+                    result, is_backup = t.first, t.second.first
                     sibsum = bed[snp_ibd2[0,0], snp] + bed[snp_ibd2[0,1], snp]
                     expected = sibsum/4+f
                     error_message = f"problem with type2, with sibs = {[i,j]}: result, expected = {(result, expected)}, is_backup={is_backup}"
