@@ -116,7 +116,7 @@ To use the .bgen file instead, use this command:
 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --threads 4``
 
-With imputation files supplied, *snipar* allows users to use different estimators for direct effect estimation by supplying different flags. Options are as follows:
+With imputation files supplied, *snipar* allows users to use different estimators for direct effect estimation by additionally supplying one of the following flags:
 
 - `--robust`: the robust estimator;
 - `--sib_diff`: the sib-difference estimator;
@@ -139,7 +139,10 @@ GWAS can also be performed without imputed parental genotypes. In this case, onl
 In order to do this, one must provide a pedigree to gwas.py, as in:
 
     ``gwas.py phenotype.txt --out trios_ --bgen chr_@ --pedigree pedigree.txt --no_grm_var --threads 4``
-However, in this case only `--robust` and `--impute_unrel` are allowed. If none of the two flags is given, `snipar` by default performs a meta-analysis on results from trio analysis and the sib-difference method.
+By default, `snipar`performs a meta-analysis on results from a trio analysis and the sib-difference analysis. Alternatively, users can supply the following two flags:
+
+- `--sib_diff`: individuals with sibling genotypes will be used, and those without will not be considered for the analysis;
+- `--impute_unrel`: individuals with both parents' genotypes and singletons will be used; individuals with sibling genotypes but no complete parental genotypes will be ignored.
 
 Correlations between effects
 ----------------------------
