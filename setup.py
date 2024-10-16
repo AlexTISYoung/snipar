@@ -51,7 +51,7 @@ setup(name='snipar',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
       install_requires=[
             'numpy==1.21.1',
-            'scipy==1.7.1',
+            'scipy==1.10.0',
             'bgen_reader==4.0.7',
             'pandas==1.1.4',
             'pysnptools==0.5.3',
