@@ -5,20 +5,17 @@ var_ratio_approx = function(x,y,vx,vy,cxy){
   return((x2/y2)*(vx/x2-2*cxy/(x*y)+vy/y2))
 }
 
-# gen1_effects = '../GS/pgs/ever_smoke/ever.smoked.1.coefficients.txt'
-# gen2_effects = '../GS/pgs/ever_smoke/ever.smoked.2.coefficients.txt'
-# gen3_paternal = '../GS/pgs/ever_smoke/ever.smoked.3.paternal.coefficients.txt' 
-# gen3_maternal = '../GS/pgs/ever_smoke/ever.smoked.3.maternal.coefficients.txt' 
-# gen2_vcov = '../GS/pgs/ever_smoke/ever.smoked.2.vcov.txt'
-# gen3_paternal_vcov = '../GS/pgs/ever_smoke/ever.smoked.3.paternal.vcov.txt'  
-# gen3_maternal_vcov = '../GS/pgs/ever_smoke/ever.smoked.3.maternal.vcov.txt'  
+# Effects
+effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
+                  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
+                  'paternal','maternal','grandpaternal','grandmaternal')
 
 # Read gen models 1-3 function
 read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_paternal,gen3_paternal_vcov,gen3_maternal,gen3_maternal_vcov,sign_flip=FALSE,lme4=FALSE){
   ## Estimates to output 
   parameter_names = c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
-  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
-  'paternal','maternal','grandpaternal','grandmaternal')
+                  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
+                  'paternal','maternal','grandpaternal','grandmaternal')
   results = matrix(NA,nrow=length(parameter_names),ncol=2)
   dimnames(results)[[1]] = parameter_names
   dimnames(results)[[2]] = c('estimates','SE')
@@ -138,7 +135,7 @@ read_gen_models = function(gen1_effects,gen2_effects,gen2_vcov,gen3_paternal,gen
   dimnames(results_vcov)[[2]] = gen3_effects
   # Compute indirect to direct ratios
   results[gen3_effects,1]=results_effects
-  results[gen3_effects,2]=sqrt(diag(results_vcov))                   
+  results[gen3_effects,2]=sqrt(diag(results_vcov))     
   # Return
   if (sign_flip){results[,1] = -results[,1]}
   return(results)}
@@ -230,11 +227,8 @@ pgs_names = data.frame(cohort=c('botnia','fhs','gs','moba','finngen'),
 pgss = dimnames(pgs_names)[[2]][-1] 
 
 ## Meta-analysis results table
-# Effects
-effect_names =  c('population','direct','paternal_NTC','maternal_NTC','average_NTC','average_NTC_direct_ratio',
-                  'maternal_minus_paternal','maternal_minus_paternal_direct_ratio',
-                  'paternal','maternal','grandpaternal','grandmaternal')
 
+# Results table
 meta_results = array(NA,dim=c(length(pgss),length(phenotypes),length(effect_names)*3))
 meta_colnames = c()
 for (j in 1:length(effect_names)){
@@ -392,11 +386,7 @@ for (j in 1:length(pgss)){
     }
     # Meta-analysis
     for (effect_j in effect_names){
-      if (effect_j%in%c('average_NTC_direct_ratio','maternal_minus_paternal_direct_ratio')){
         meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta(estimates[effect_j,],estimate_ses[effect_j,])
-      } else {
-        meta_results[j,i,c(effect_j,paste(effect_j,'SE',sep='_'))] = fe_meta_Z(estimates[effect_j,],estimate_ses[effect_j,])
-      }
     }
   }
 }
@@ -412,64 +402,115 @@ for (effect_name in effect_names){
 }
 
 meta_results[is.infinite(meta_results)] = NA
-
 ## Plot
-pgs_primary = data.frame(pgs=dimnames(meta_results)[[1]],
-              phenotype=c('ADHD','age_at_first_birth_women',
+primary_phenotypes = c('ADHD','age_at_first_birth_women',
               'BMI','depressive_symptoms','educational_attainment',
-              'ever_smoker','height','number_of_children_women'),
-              average_NTC_direct_ratio=NA,average_NTC_direct_ratio_SE=NA,
-              average_NTC_log10P=NA,
-              maternal_minus_paternal_direct_ratio=NA,
-              maternal_minus_paternal_direct_ratio_SE=NA,
-              maternal_minus_paternal_log10P=NA,
-              paternal_Z=NA,paternal_log10P=NA,maternal_Z=NA,maternal_log10P=NA,
-              grandpaternal_Z=NA,grandpaternal_log10P=NA,grandmaternal_Z=NA,grandmaternal_log10P=NA)
-
-for (i in 1:dim(pgs_primary)[1]){
-  pgs_primary[i,'average_NTC_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio']
-  pgs_primary[i,'average_NTC_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_direct_ratio_SE']
-  pgs_primary[i,'average_NTC_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'average_NTC_log10P'] 
-  pgs_primary[i,'maternal_minus_paternal_direct_ratio'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio']
-  pgs_primary[i,'maternal_minus_paternal_direct_ratio_SE'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_direct_ratio_SE']
-  pgs_primary[i,'maternal_minus_paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_minus_paternal_log10P']
-  pgs_primary[i,'paternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal']
-  pgs_primary[i,'paternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'paternal_log10P']
-  pgs_primary[i,'maternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal']
-  pgs_primary[i,'maternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'maternal_log10P']
-  pgs_primary[i,'grandpaternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandpaternal']
-  pgs_primary[i,'grandpaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandpaternal_log10P']
-  pgs_primary[i,'grandmaternal_Z'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandmaternal']
-  pgs_primary[i,'grandmaternal_log10P'] = meta_results[pgs_primary[i,'pgs'],pgs_primary[i,'phenotype'],'grandmaternal_log10P']
+              'ever_smoker','height','number_of_children_women')
+primary_pgs = c('ADHD','age_at_first_birth',
+              'BMI','depression','educational_attainment',
+              'ever_smoker','height','number_of_children_women')
+pgs_primary = data.frame(matrix(NA,nrow=length(primary_phenotypes),ncol=dim(meta_results)[3]))
+dimnames(pgs_primary)[[1]] = primary_phenotypes
+dimnames(pgs_primary)[[2]] = dimnames(meta_results)[[3]]
+for (i in 1:length(primary_phenotypes)){
+  pgs_primary[primary_phenotypes[i],] = meta_results[primary_pgs[i],primary_phenotypes[i],]
 }
 
+pgs_ea = meta_results['educational_attainment',,]
+
 write.csv(pgs_primary,'~/Dropbox/grandparental/pgs_primary.csv',quote=F,row.names=F)
+write.csv(pgs_ea,'~/Dropbox/grandparental/pgs_ea.csv',quote=F,row.names=F)
+save.image('meta_results.RData')
+## Significant results
+combined_results = rbind(data.frame(pgs=dimnames(pgs_primary)[[1]],phenotype=dimnames(pgs_primary)[[1]],pgs_primary),
+                          data.frame(pgs='educational_attainment',
+                                  phenotype=dimnames(pgs_ea[-match('educational_attainment',dimnames(pgs_ea)[[1]]),])[[1]],
+                                    pgs_ea[-match('educational_attainment',dimnames(pgs_ea)[[1]]),]))
+for (effect in effect_names){
+  combined_results = data.frame(combined_results,10^(-combined_results[,paste(effect,'log10P',sep='_')]))
+  dimnames(combined_results)[[2]][length(dimnames(combined_results)[[2]])] = paste(effect,'P',sep='_')
+  combined_results = data.frame(combined_results, p.adjust(combined_results[,paste(effect,'P',sep='_')],method='BH'))                             
+  dimnames(combined_results)[[2]][length(dimnames(combined_results)[[2]])] = paste(effect,'FDR',sep='_')
+}
+dimnames(combined_results)[[1]] = 1:dim(combined_results)[1]
+for (effect in effect_names){
+  printcols = c('pgs','phenotype',effect,paste(effect,'SE',sep='_'),paste(effect,'P',sep='_'),paste(effect,'FDR',sep='_'))
+  print(paste('Significant results for',effect))
+  print(combined_results[combined_results[,paste(effect,'log10P',sep='_')]>(-log10(0.05)),printcols])
+  print(paste('Significant results for',effect,'FDR<0.05'))
+  print(combined_results[combined_results[,paste(effect,'FDR',sep='_')]<0.05,printcols])
+}
 
-pgs_primary$ntc_lower = pgs_primary[,'average_NTC_direct_ratio']+qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
-pgs_primary$ntc_upper = pgs_primary[,'average_NTC_direct_ratio']-qnorm(0.025)*pgs_primary[,'average_NTC_direct_ratio_SE']
-pgs_primary$patdiff_lower = pgs_primary[,'maternal_minus_paternal_direct_ratio']+qnorm(0.025)*pgs_primary[,'maternal_minus_paternal_direct_ratio_SE']
-pgs_primary$patdiff_upper = pgs_primary[,'maternal_minus_paternal_direct_ratio']-qnorm(0.025)*pgs_primary[,'maternal_minus_paternal_direct_ratio_SE']
 
+make_effect_plot = function(plot_effects,pgs_primary,plotname,width=7,height=7,dodge=0.75,brewcols='Dark2',color_manual=NULL){
+  for (plot_effect in plot_effects){
+    pgs_primary = data.frame(pgs_primary,
+                  pgs_primary[,plot_effect]+qnorm(0.025)*pgs_primary[,paste(plot_effect,'SE',sep='_')],
+                  pgs_primary[,plot_effect]-qnorm(0.025)*pgs_primary[,paste(plot_effect,'SE',sep='_')])
+    colnames(pgs_primary)[(length(pgs_primary)-1):length(pgs_primary)] = c(paste(plot_effect,'lower',sep='_'),paste(plot_effect,'upper',sep='_'))
+  }
+  pgs_primary$pgs = factor(dimnames(pgs_primary)[[1]],levels=dimnames(pgs_primary)[[1]][order(abs(pgs_primary$population))])
 
-pgs_primary$pgs = factor(pgs_primary$pgs,levels=pgs_primary[order(abs(pgs_primary$average_NTC_direct_ratio)),'pgs'])
+  plot_gen = data.frame()
+  for (plot_effect in plot_effects){
+    plot_gen = rbind(plot_gen,data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$pgs,effect=plot_effect,
+                              value=pgs_primary[,plot_effect],lower=pgs_primary[,paste(plot_effect,'lower',sep='_')],
+                              upper=pgs_primary[,paste(plot_effect,'upper',sep='_')]))
+  }
+  plot_gen$effect = factor(plot_gen$effect,levels=plot_effects[length(plot_effects):1])
+  require(ggplot2)
+  par_plot = ggplot(plot_gen, aes(y=value, x=pgs, fill=effect))+
+      geom_errorbar(aes(ymin = lower, ymax = upper,color=effect),width=0.1,position=position_dodge(dodge))+coord_flip()+
+      geom_point(position=position_dodge(dodge),stat="identity",aes(color=effect,shape=effect))+theme_minimal() +theme(axis.line = element_line(color="black"),
+                            axis.ticks = element_line(color="black"),
+                            panel.border = element_blank(),
+                            axis.text.x = element_text(angle = 45, hjust=1))+
+                            geom_hline(yintercept=0,linetype='dashed')+
+                            ylab('standardized effect')+
+                            xlab('PGI')
+  if (!is.null(color_manual)){
+    par_plot = par_plot+scale_color_manual(values=color_manual)
+  } else {
+    par_plot = par_plot+scale_color_brewer(palette=brewcols)
+  }
 
-plot_gen = rbind(data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='average_NTC_direct_ratio',
-                            value=pgs_primary$average_NTC_direct_ratio,lower=pgs_primary$ntc_lower,upper=pgs_primary$ntc_upper),
-                 data.frame(pgs=pgs_primary$pgs,phenotype=pgs_primary$phenotype,effect='maternal_minus_paternal_direct_ratio',
-                 value=pgs_primary$maternal_minus_paternal_direct_ratio,lower=pgs_primary$patdiff_lower,upper=pgs_primary$patdiff_upper))
+  ggsave(plotname,plot=par_plot,width=width,height=height)
+  return(par_plot)
+}
 
-require(ggplot2)
-par_plot = ggplot(plot_gen, aes(y=value, x=pgs, fill=effect)) +
-    geom_errorbar(aes(ymin = lower, ymax = upper,color=effect),width=0.1,position=position_dodge(.5))+coord_flip()+
-    geom_point(position=position_dodge(.5),stat="identity",aes(color=effect))+theme_minimal() +theme(axis.line = element_line(color="black"),
-                          axis.ticks = element_line(color="black"),
-                          panel.border = element_blank(),
-                          axis.text.x = element_text(angle = 45, hjust=1))+
-                          geom_hline(yintercept=0,linetype='dashed')+
-                          ylab('Ratio with direct genetic effect')+
-                          xlab('PGI')
+# Indirect effects plot 
+plot_effects = c('paternal','maternal','maternal_minus_paternal')
+make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/indirect_effects_plot.pdf',width=7,height=7)
 
-ggsave('~/Dropbox/grandparental/ratio_plot.pdf',plot=par_plot,width=7,height=5)
+# Direct and indirect effects plot
+plot_effects = c('direct','paternal','maternal','maternal_minus_paternal')
+make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/direct_indirect_effects_plot.pdf',width=7,height=7)
+
+# EA indirect effects plot
+plot_effects = c('paternal','maternal','maternal_minus_paternal')
+make_effect_plot(plot_effects,pgs_ea,'~/Dropbox/grandparental/ea_indirect_effects_plot.pdf',width=7,height=7)
+
+# EA direct and indirect effects plot
+plot_effects = c('direct','paternal','maternal','maternal_minus_paternal')
+make_effect_plot(plot_effects,pgs_ea,'~/Dropbox/grandparental/ea_direct_indirect_effects_plot.pdf',width=7,height=7)
+
+# Direct pop plot
+plot_effects = c('population','direct','average_NTC')
+make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/direct_pop_plot.pdf',width=7,height=7)
+
+# EA direct pop plot
+plot_effects = c('population','direct','average_NTC')
+make_effect_plot(plot_effects,pgs_ea,'~/Dropbox/grandparental/ea_direct_pop_plot.pdf',width=7,height=7)
+
+# Three gen plot
+three_gen_cols = brewer.pal(n = 4,name = "Paired")[c(1, 3, 2, 4)]
+plot_effects = c('paternal','maternal','grandpaternal','grandmaternal')
+make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/three_gen_plot.pdf',width=7,height=9,dodge=0.75,color_manual=three_gen_cols)
+
+# EA Three gen plot
+require(RColorBrewer)
+plot_effects = c('paternal','maternal','grandpaternal','grandmaternal')
+make_effect_plot(plot_effects,pgs_ea,'~/Dropbox/grandparental/ea_three_gen_plot.pdf',width=7,height=9,dodge=0.75,color_manual=three_gen_cols)
 
 ############# QQ Plots ###############
 qqplot_ci = function(pmatrix,outfile){
