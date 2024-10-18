@@ -57,7 +57,7 @@ To overcome this, create a Python3.9 environment using conda and install using p
 	
     conda create -n myenv python=3.9
 	conda activate myenv
-	pip install snipar
+	pip install .
 
 # Apple ARM processor machines
 
@@ -152,10 +152,9 @@ it in the container. To install snipar, follow these steps:
 
 - Open the terminal in the VSCode window attached to "snipar_container" (or use
   the "Exec" tab in the Docker GUI).
-- Run the following commands:
+- After cloning the git repository and cding into the directory, run the following command:
   ```bash
-  pip install --upgrade pip
-  pip install snipar
+  pip install .
   ```
    
 # Running tests
