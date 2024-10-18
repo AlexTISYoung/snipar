@@ -124,38 +124,41 @@ The script will run the Young et al. estimator by default. You can let *snipar* 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 --robust --out chr_@_robust``
 
 If you want to increase statistical power by including singletons into the analysis, you can use the unified estimator by adding the :code:`--impute_unrel`
-flag (not compatible with the :code:`--robust` option)::
+flag (not compatible with the :code:`--robust` option)
 
     ``gwas.py phenotype.txt --bgen chr_@_trios_singletons --imp chr_@ --no_grm_var --cpus 1 --impute_unrel --out chr_@_unified``
 
-The `--impute_unrel` flag instructs *snipar* to linearly impute parental genotypes of singletons and include them into the analysis.
+The ``--impute_unrel`` flag instructs *snipar* to linearly impute parental genotypes of singletons and include them into the analysis.
 
 By default, the script outputs summary statistics in a :ref:`gzipped text file <sumstats_text>`: chr_1.sumstats.gz;
 In addition to the text summary statistics, :ref:`HDF5 format summary statistics <sumstats_hdf5>` are also output to chr_1.sumstats.hdf5.
-Alternatively, you can specify the output filename using the `--out` command: for example, with `--out chr_@_X`, the script will
-output the results to chr_1_X.sumstats.gz and chr_1_X.sumstats.hdf5; if '@' is not in the output suffix, e.g., `--out gwas`, the results will
+Alternatively, you can specify the output filename using the ``--out`` command: for example, with ``--out chr_@_X``, the script will
+output the results to chr_1_X.sumstats.gz and chr_1_X.sumstats.hdf5; if '@' is not in the output suffix, e.g., ``--out gwas``, the results will
 be stored in gwas_chr_1.sumstats.gz and gwas_chr_1.sumstats.hdf5.
 
-Now we have estimated SNP effects. To compare the Young et al.(or robust or unified) estimates to the true effects, run::
+Now we have estimated SNP effects. To compare the Young et al.(or robust or unified) estimates to the true effects, run
     
-    python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt
-    python estimate_sim_effects.py chr_1_robust.sumstats.hdf5 phenotype.effects.txt
-    python estimate_sim_effects.py chr_1_unified.sumstats.hdf5 phenotype.effects.txt
+    ``python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
+
+    ``python estimate_sim_effects.py chr_1_robust.sumstats.hdf5 phenotype.effects.txt``
+
+    ``python estimate_sim_effects.py chr_1_unified.sumstats.hdf5 phenotype.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
 The bias estimates for direct, paternal NTCs, maternal NTCs, and average NTCs should not be statistically significantly different from 
 zero (with high probability). Population effects (as estimated by standard GWAS) are biased estimates of direct effects for this simulated 
-phenotype because they also include indirect genetic effects. Note that for the robust estimator
+phenotype because they also include indirect genetic effects. Note that for the robust estimator, only bias estimates for direct effects
+are given.
 
 GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents or siblings available will be used. 
 In order to do this, one must provide a pedigree to gwas.py, as in:
     ``gwas.py phenotype.txt --out trios_sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --no_grm_var --cpus 1``
-With the above commend, the script will default to meta-analysing siblings and trios. Alternatively, users can supply one of the following two options (`--robust` is not applicable
+With the above commend, the script will default to meta-analysing siblings and trios. Alternatively, users can supply one of the following two options (``--robust`` is not applicable
 in the current version):
 
-- `--sib_diff`: individuals with sibling genotypes will be used, and those without will not be considered for the analysis;
-- `--impute_unrel`: individuals with both parents' genotypes and singletons will be used; individuals with sibling genotypes but no complete parental genotypes will be ignored.
+- ``--sib_diff``: individuals with sibling genotypes will be used, and those without will not be considered for the analysis;
+- ``--impute_unrel``: individuals with both parents' genotypes and singletons will be used; individuals with sibling genotypes but no complete parental genotypes will be ignored.
 
 For example:
 
