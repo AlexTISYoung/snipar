@@ -36,8 +36,8 @@ Inferring IBD between siblings
 The first step is to infer the identity-by-descent (IBD) segments shared between siblings.
 *snipar* contains a script, :ref:`ibd.py <ibd.py>`, that employs a Hidden Markov Model (HMM) to infer the IBD segments for the sibling pairs.
 The per-SNP genotyping error probability will be inferred from parent-offspring pairs when available;
-alternatively, a genotyping error probability can be provided using the --p_error option. By default, SNPs with
-genotyping error rates greater than 0.01 will be filtered out, but this threshold can be changed with the --max_error argument.
+alternatively, a genotyping error probability can be provided using the :code:`--p_error` option. By default, SNPs with
+genotyping error rates greater than 0.01 will be filtered out, but this threshold can be changed with the :code:`--max_error` argument.
 To infer the IBD segments from the genotype data in chr_1.bed,use the following command
 
     ``ibd.py --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 --ld_out``
@@ -45,16 +45,16 @@ To infer the IBD segments from the genotype data in chr_1.bed,use the following 
 This will output the IBD segments to a :ref:`gzipped text file <ibd_segments_file>` chr_1.ibd.segments.gz. 
 Genotype files split over multiple chromosomes can be specified
 using '@' as a numerical wildcard character: see :ref:`here <multichrom>`. 
-In this example, --bed chr_@ instructs ibd.py to search for .bed files
+In this example, :code:`--bed chr_@` instructs ibd.py to search for .bed files
 chr_1.bed, chr_2.bed, ..., chr_22.bed, where each bed file contains SNPs from the numbered chromosome. 
 In this case, only one bed file is in example_data/, chr_1.bed. 
 If bed files for multiple chromosomes are found, IBD will be inferred separately for each chromosome, with one
 output file per chromosome, with the chromosome number filling in the numerical wildcard in the --out argument. 
-Alternatively, you can specify the chromosomes that you want to analyse: for example, you can include `--chr_range 1-10`
-for chromosome 1-10, or `--chr_range 1 3 5-22` for chromosome 1, 3, and 5-22,.
+Alternatively, you can specify the chromosomes that you want to analyse: for example, you can include :code:`--chr_range 1-10`
+for chromosome 1-10, or :code:`--chr_range 1 3 5-22` for chromosome 1, 3, and 5-22.
 
-The *--king* argument requires the address of the :ref:`KING kinship file <kinship>`, 
-and the *--agesex* argument requires the address of the :ref:`agesex file <agesex>`.
+The :code:`--king` argument requires the address of the :ref:`KING kinship file <kinship>`, 
+and the :code:`--agesex` argument requires the address of the :ref:`agesex file <agesex>`.
 
 The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. 
 If the genetic map positions (in cM) are provided in .bim file, the script will use these. 
@@ -112,8 +112,8 @@ them to perform, for each SNP, a joint regression onto the proband's genotype, t
 (imputed/observed) genotype. This is done using a linear mixed model that only models phenotypic correlations between siblings,
 where sibling relations are stored in the :ref:`output of the imputation script <imputed_file>`. 
 The 'family variance estimate' output is the phenotypic variance explained by mean differences between sibships, 
-and the residual variance is the remaining phenotypic variance. For the purpose of this tutorial, we use the *--no_grm_var* argument, otherwise
-sample-wise phenotypic correlations will also be modeled. `--cpus` allows you to distribute computation across several processes to speed up analyses.
+and the residual variance is the remaining phenotypic variance. For the purpose of this tutorial, we use the :code:`--no_grm_var`` argument, otherwise
+sample-wise phenotypic correlations will also be modeled. :code:`--cpus` allows you to distribute computation across several processes to speed up analyses.
 
 To use the .bgen file instead, use this command:
 
@@ -123,12 +123,12 @@ The script will run the Young et al. estimator by default. You can let *snipar* 
 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 --robust --out chr_@_robust``
 
-If you want to increase statistical power by including singletons into the analysis, you can use the unified estimator by adding the `--impute_unrel`
-flag (not compatible with the `--robust` option):
+If you want to increase statistical power by including singletons into the analysis, you can use the unified estimator by adding the :code:`--impute_unrel`
+flag (not compatible with the :code:`--robust` option)::
 
     ``gwas.py phenotype.txt --bgen chr_@_trios_singletons --imp chr_@ --no_grm_var --cpus 1 --impute_unrel --out chr_@_unified``
 
-The `--impute_unrel` flag instructs *snipar* to linearly impute parental genotypes of singletons and includes them into the analysis.
+The `--impute_unrel` flag instructs *snipar* to linearly impute parental genotypes of singletons and include them into the analysis.
 
 By default, the script outputs summary statistics in a :ref:`gzipped text file <sumstats_text>`: chr_1.sumstats.gz;
 In addition to the text summary statistics, :ref:`HDF5 format summary statistics <sumstats_hdf5>` are also output to chr_1.sumstats.hdf5.
@@ -136,13 +136,11 @@ Alternatively, you can specify the output filename using the `--out` command: fo
 output the results to chr_1_X.sumstats.gz and chr_1_X.sumstats.hdf5; if '@' is not in the output suffix, e.g., `--out gwas`, the results will
 be stored in gwas_chr_1.sumstats.gz and gwas_chr_1.sumstats.hdf5.
 
-Now we have estimated SNP effects. To compare the Young et al.(or robust or unified) estimates to the true effects, run
-
-    ``python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
-
-    ``python estimate_sim_effects.py chr_1_robust.sumstats.hdf5 phenotype.effects.txt``
-
-    ``python estimate_sim_effects.py chr_1_unified.sumstats.hdf5 phenotype.effects.txt``
+Now we have estimated SNP effects. To compare the Young et al.(or robust or unified) estimates to the true effects, run::
+    
+    python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt
+    python estimate_sim_effects.py chr_1_robust.sumstats.hdf5 phenotype.effects.txt
+    python estimate_sim_effects.py chr_1_unified.sumstats.hdf5 phenotype.effects.txt
 
 This should print estimates of the bias of the effect estimates.
 
