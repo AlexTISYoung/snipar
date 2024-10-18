@@ -1,7 +1,6 @@
 import numpy as np
-from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
-from snipar.utilities import make_id_dict
+from snipar.utilities import make_id_dict, open_bgen
 from snipar.pedigree import find_individuals_with_sibs
 from snipar.gtarray import gtarray
 # import logging

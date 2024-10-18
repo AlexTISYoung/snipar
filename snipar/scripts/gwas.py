@@ -126,7 +126,12 @@ def main(args):
     print('Number of processes: '+str(args.cpus))
 
     # logger.info(f'Output will be written to {args.out}.')
-    print(f'Output will be written to {args.out}.')
+    if args.out == './':
+        print(f'Output will be written to chr_@')
+    elif '@' in args.out:
+        print(f'Output will be written to {args.out}')
+    else:
+        print(f'Output will be written to {args.out}_chr_@')
 
     # Check arguments
     if args.bed is None and args.bgen is None:
@@ -328,7 +333,7 @@ def main(args):
         start = time.time()
         model.scipy_optimize()
         # logger.info(f'Time for variance component estimation: {time.time() - start}s.')
-        print(f'Time for variance component estimation: {time.time() - start}s.')
+        print(f'Time for variance component estimation: {time.time() - start:.2f}s.')
     else:
         # logger.info('varcomps supplied.')
         print('varcomps supplied.')
@@ -378,7 +383,7 @@ def main(args):
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
                            debug=args.debug)
     # logger.info(f'Time used: {time.time() - start}.')
-    print(f'Time used: {time.time() - start}.')
+    print(f'Time used: {time.time() - start:.2f}s.')
 
 if __name__ == "__main__":
     args = parser.parse_args(extra_args)

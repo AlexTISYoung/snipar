@@ -12,7 +12,7 @@ Results:
 import argparse, h5py
 import snipar.read as read
 import numpy as np
-import snipar.lmm as lmm
+import snipar.slmm as slmm
 from snipar.utilities import *
 from snipar.gwas import *
 from numba import set_num_threads

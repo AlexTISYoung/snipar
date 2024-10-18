@@ -964,6 +964,7 @@ class LinearMixedModel:
             one = (num_obs_par_al[:, s] == 3) * ((par_status[:, 0] == 1) & (par_status[:, 1] == 1)) * notnan
             if both.sum() == 0 or one.sum() == 0 or pat.sum() == 0 or mat.sum() == 0:
                 ct += 1
+                # TODO: handle the case where one or more groups are missing
                 continue
             X_both = X[both, :, s]
             X_pat = X[pat, :, s]
@@ -994,10 +995,11 @@ class LinearMixedModel:
             V_one_pat = self.V[one, :][:, pat]
             V_one_mat = self.V[one, :][:, mat]
             V_pat_mat = self.V[pat, :][:, mat]
-            if V_both_one.sum() == 0 and V_both_pat.sum() == 0 and \
-                V_both_mat.sum() == 0 and V_one_pat.sum() == 0 and \
-                V_one_mat.sum() == 0 and V_pat_mat.sum() == 0:
-                continue
+            # if V_both_one.sum() == 0 and V_both_pat.sum() == 0 and \
+            #     V_both_mat.sum() == 0 and V_one_pat.sum() == 0 and \
+            #     V_one_mat.sum() == 0 and V_pat_mat.sum() == 0:
+            #     print(s)
+            #     continue
             
             if self.has_covar:
                 X_both -= self.Z[both] @ solve(self.Z[both].T @ self.Z[both], self.Z[both].T.dot(X_both))
@@ -1051,11 +1053,8 @@ class LinearMixedModel:
                 alpha_pat = solve(XT_Vinv_X_pat, XT_Vinv_y_pat)[0]
                 alpha_cov_pat = np.linalg.inv(XT_Vinv_X_pat)[0,0]
             except np.linalg.LinAlgError:
-                # print(G.sid[s], G_sib.sid[s])
-                # print(X_pat.shape, 'xxx')
+                print(s)
                 continue
-                # import sys, traceback, code
-                # code.interact(local=locals())
             
 
             cov_both_one = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_one @ Vinv_X_one[:, 0] * alpha_cov_one

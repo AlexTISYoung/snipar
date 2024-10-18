@@ -109,7 +109,7 @@ def outfile_name(outprefix,outsuffix,chrom=None):
         outprefix = outprefix[0]+str(chrom)+outprefix[1]
         return outprefix+outsuffix
     elif chrom is not None:
-        return outprefix+'chr_'+str(chrom)+outsuffix
+        return outprefix+'_chr_'+str(chrom)+outsuffix
     else:
         return outprefix+outsuffix
 
@@ -125,6 +125,7 @@ def parseNumRange(string):
         result = match_list.group(0)
     else:
         raise Exception(f"{string} is neither a range of the form x-y nor a list of integers of the form x y z")
+    print(result)
     return result
 
 class NumRangeAction(argparse.Action):

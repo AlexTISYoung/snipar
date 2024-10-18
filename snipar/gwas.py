@@ -1,7 +1,6 @@
 import h5py
 import numpy as np
 import pandas as pd
-from bgen_reader import open_bgen
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
 from math import log10
@@ -83,7 +82,7 @@ def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, a
     outfile['bim'] = encode_str_array(outbim)
     X_length = 1
     outcols = ['direct'] if not standard_gwas else ['population']
-    if not robust or not sib_diff or not standard_gwas or not trios_sibs:
+    if not robust and not sib_diff and not standard_gwas and not trios_sibs:
         if sib:
             X_length += 1
             outcols.append('sib')
@@ -511,14 +510,14 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         freqs[batch_indices] = batch_freqs
         # logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
         print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f' #snps:{len(batch_snps)}')
-    print('Time used for inference: ', time.time() - start, '.')
+    print('Time used for inference: ', f'{time.time() - start:.2f}s', '.')
     if not no_hdf5_out:
         if chrom_out==0:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5')
         else:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5', chrom=chrom_out)
         write_output(chrom, snp_ids, pos, alleles, hdf5_outfile, parsum, fit_sib, sib_diff, alpha, alpha_ses, alpha_cov,
-                     sigmas, freqs, standard_gwas=standard_gwas, trios_sibs=trios_sibs)
+                     sigmas, freqs, robust=robust, standard_gwas=standard_gwas, trios_sibs=trios_sibs)
     if not no_txt_out:
         if chrom_out==0:
             txt_outfile = outfile_name(outprefix, '.sumstats.gz')

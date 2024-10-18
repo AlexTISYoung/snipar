@@ -1,7 +1,6 @@
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.gtarray import gtarray
-from bgen_reader import open_bgen
 from snipar.utilities import *
 # import logging
 
