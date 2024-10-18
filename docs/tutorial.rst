@@ -58,7 +58,7 @@ and the :code:`--agesex` argument requires the address of the :ref:`agesex file 
 
 The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. 
 If the genetic map positions (in cM) are provided in .bim file, the script will use these. 
-Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
+Alternatively, the ``--map`` argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
 (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is 
 provided in genetic_map.txt. 
 
@@ -66,7 +66,7 @@ If no genetic map is provided, then the deCODE sex-averaged map on GRCh38 coordi
 which is distributed as part of *snipar*, will be used. 
 
 The algorithm computes LD scores of SNPs in order to account for correlations between SNPs. 
-The '--ld_out' argument writes the LD scores to file in the same format as LDSC (https://github.com/bulik/ldsc). 
+The ``--ld_out`` argument writes the LD scores to file in the same format as LDSC (https://github.com/bulik/ldsc). 
 
 The user can also input a phased .bgen file. For example, to infer IBD from chr_1.bgen using the genetic map in genetic_map.txt, use this command:
 
