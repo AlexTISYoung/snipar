@@ -28,7 +28,7 @@ Documentation: https://snipar.rtfd.io/
 
 It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
-And to work through the tutorial: https://snipar.rtfd.io/en/latest/tutorial.html
+And to work through the tutorial: https://github.com/AlexTISYoung/snipar/blob/fgwas_v2_paper_sumstats_merge/docs/tutorial.rst#id30
 
 # Installing Using pip
 
