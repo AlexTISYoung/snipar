@@ -148,7 +148,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None ,snp_ids=Non
         # if robust:
         #     chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index, standard_f = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end, return_f=True)
         # else:
-        chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=snp_ids, start=start, end=end)
+        chromosome, sid, pos, alleles, allele_flip, in_obs_sid, obs_sid_index = match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=snp_ids, start=start, end=end)
         # Read imputed parental genotypes
         if verbose:
             print('Reading imputed parental genotypes')

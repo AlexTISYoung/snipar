@@ -510,7 +510,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         freqs[batch_indices] = batch_freqs
         # logger.info('Done batch '+str(i+1)+' out of '+str(len(batches)) + f'#snps:{len(batch_snps)}')
         print('Done batch '+str(i+1)+' out of '+str(len(batches)) + f' #snps:{len(batch_snps)}')
-    print('Time used for inference: ', f'{time.time() - start:.2f}s', '.')
+    print('Time used for inference: ', f'{time.time() - start:.2f}s')
     if not no_hdf5_out:
         if chrom_out==0:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5')

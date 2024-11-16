@@ -125,7 +125,6 @@ def parseNumRange(string):
         result = match_list.group(0)
     else:
         raise Exception(f"{string} is neither a range of the form x-y nor a list of integers of the form x y z")
-    print(result)
     return result
 
 class NumRangeAction(argparse.Action):

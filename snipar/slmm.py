@@ -1179,7 +1179,7 @@ class LinearMixedModel:
         alpha_cov_sibs = np.linalg.inv(XT_Vinv_X_sibs)[:, 0, 0]
         # numpy cannot do the following einsum
         # print(np.einsum('ji,ik->jk', Vinv_X_trios[:, :, 0], V_trios_sibs))
-        for i in range(n):
+        for i in range(l):
             cov_trios_sibs = alpha_cov_trios[i] * Vinv_X_trios[i, :, 0].T @ V_trios_sibs @ Vinv_X_sibs[i, :, 0] * alpha_cov_sibs[i]
 
             S = np.block(

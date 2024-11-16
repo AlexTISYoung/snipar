@@ -112,7 +112,7 @@ them to perform, for each SNP, a joint regression onto the proband's genotype, t
 (imputed/observed) genotype. This is done using a linear mixed model that only models phenotypic correlations between siblings,
 where sibling relations are stored in the :ref:`output of the imputation script <imputed_file>`. 
 The 'family variance estimate' output is the phenotypic variance explained by mean differences between sibships, 
-and the residual variance is the remaining phenotypic variance. For the purpose of this tutorial, we use the :code:`--no_grm_var`` argument, otherwise
+and the residual variance is the remaining phenotypic variance. For the purpose of this tutorial, we use the :code:`--no_grm_var` argument, otherwise
 sample-wise phenotypic correlations will also be modeled. :code:`--cpus` allows you to distribute computation across several processes to speed up analyses.
 
 To use the .bgen file instead, use this command:
@@ -154,7 +154,7 @@ are given.
 GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents or siblings available will be used. 
 In order to do this, one must provide a pedigree to gwas.py, as in:
     ``gwas.py phenotype.txt --out trios_sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --no_grm_var --cpus 1``
-With the above commend, the script will default to meta-analysing siblings and trios. Alternatively, users can supply one of the following two options (``--robust`` is not applicable
+With the above command, the script will default to meta-analysing siblings and trios. Alternatively, users can supply one of the following two options (``--robust`` is not applicable
 in the current version):
 
 - ``--sib_diff``: individuals with sibling genotypes will be used, and those without will not be considered for the analysis;
@@ -170,7 +170,7 @@ Similarly, we can compare the estimates to the true direct genetic effects using
 
     ``python estimate_sim_effects.py sibs_chr_1.sumstats.hdf5 phenotype.effects.txt``
 
-    ``python estimate_sim_effects.py trios_sibs_chr_1.sumstats.hdf5 phenotype.effects.txt``
+    ``python estimate_sim_effects.py trios_sibs_singletons_chr_1.sumstats.hdf5 phenotype.effects.txt``
 
 Correlations between effects
 ----------------------------

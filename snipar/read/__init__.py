@@ -202,7 +202,7 @@ def get_ids_with_par(gts_f: str,
     if include_unrel:
         unrelated_inds = np.where(np.array([par_status[i, 0] == -1 and par_status[i, 1] == -1 for i in range(len(par_status))]))[0]
         # logger.info(f'{len(unrelated_inds)} individuals with both parents missing.')
-        print(f'{len(unrelated_inds)} individuals with both parents missing.')
+        print(f'{len(unrelated_inds)} samples without imputed or observed parental genotypes will be included through linear imputation.')
     one_missing_ids = [i for i in range(len(par_status)) if sum(par_status[i, :]) <= 0 and par_status[i, 0] * par_status[i, 1] < 0]
     if len(one_missing_ids) > 0:
         raise RuntimeError(f'{len(one_missing_ids)} individuals have one missing parent and one non-missing parent.')
@@ -268,6 +268,7 @@ def get_ids_with_sibs(gts_f: str,
     fam_labels = fam_labels.astype('<U20')
     fam_labels[fam_labels == ''] = np.array([f'_not_{i}_' for i in range(n_empty_fams)], dtype='<U20')
 
+    print(f'Using {len(ids)} samples for the sib-difference estimator')
     if return_info:
         return ids, fam_labels, gt_indices
     return ids, fam_labels

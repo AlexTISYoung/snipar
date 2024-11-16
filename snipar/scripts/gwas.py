@@ -246,7 +246,6 @@ def main(args):
                 ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
                 return_info=False
             )
-            print(ids.shape)
             
             trios_sibs = False
         else:
@@ -333,7 +332,7 @@ def main(args):
         start = time.time()
         model.scipy_optimize()
         # logger.info(f'Time for variance component estimation: {time.time() - start}s.')
-        print(f'Time for variance component estimation: {time.time() - start:.2f}s.')
+        print(f'Time used for variance component estimation: {time.time() - start:.2f}s')
     else:
         # logger.info('varcomps supplied.')
         print('varcomps supplied.')
@@ -383,7 +382,7 @@ def main(args):
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
                            debug=args.debug)
     # logger.info(f'Time used: {time.time() - start}.')
-    print(f'Time used: {time.time() - start:.2f}s.')
+    print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":
     args = parser.parse_args(extra_args)
