@@ -1,5 +1,3 @@
-import subprocess
-import tempfile
 import gzip
 # import logging
 from functools import lru_cache

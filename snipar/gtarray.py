@@ -6,9 +6,9 @@ from snipar.utilities import make_id_dict, convert_str_array
 from snipar.types import SparseGRMRepr, Ids, IdDict
 from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import spsolve
-import logging
+# import logging
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__)
 class gtarray(object):
     """Define a genotype or PGS array that stores individual IDs, family IDs, and SNP information.
 

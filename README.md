@@ -48,14 +48,16 @@ You can activate and use the environment using
 To install from source, clone the git repository, and in the directory
 containing the *snipar* source code, at the shell type:
 
-    pip install .
+  pip install .
+
+Note: installing *snipar* requires the package *bed_reader*, which in turn requires installing Rust. If error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
 
 # Python version incompatibility 
 
 *snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
 To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
 	
-    conda create -n myenv python=3.9
+  conda create -n myenv python=3.9
 	conda activate myenv
 	pip install .
 

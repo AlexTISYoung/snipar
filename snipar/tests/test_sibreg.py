@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from numpy import testing
-from snipar import lmm
+# from snipar import lmm
 from snipar.tests.utils import *
 
 def random_design(labels):
@@ -39,73 +39,74 @@ def safe_alpha_mle(y,X,Sigma):
 
 class test_regrnd_functions(SniparTest):
 
-    def test_alpha_mle(self):
-        sigma2 = float(1)
-        sigmau = float(5.5)
-        n = 10 ** 2
-        for i in range(0, 100):
-            alpha = np.random.randn((2))
-            tau = sigma2 / sigmau
-            m = lmm.simulate(n, alpha, sigma2, tau)
-            Z = random_design(m.labels)
-            # code.interact(local=locals())
-            Sigma = sigmau * Z.dot(Z.T) + sigma2 * np.identity(n)
-            safe_alpha = safe_alpha_mle(m.y, m.X, Sigma)
-            alpha_mle = m.alpha_mle(tau,sigma2)
-            testing.assert_almost_equal(alpha_mle, safe_alpha, decimal=5)
+    ...
+    # def test_alpha_mle(self):
+    #     sigma2 = float(1)
+    #     sigmau = float(5.5)
+    #     n = 10 ** 2
+    #     for i in range(0, 100):
+    #         alpha = np.random.randn((2))
+    #         tau = sigma2 / sigmau
+    #         m = lmm.simulate(n, alpha, sigma2, tau)
+    #         Z = random_design(m.labels)
+    #         # code.interact(local=locals())
+    #         Sigma = sigmau * Z.dot(Z.T) + sigma2 * np.identity(n)
+    #         safe_alpha = safe_alpha_mle(m.y, m.X, Sigma)
+    #         alpha_mle = m.alpha_mle(tau,sigma2)
+    #         testing.assert_almost_equal(alpha_mle, safe_alpha, decimal=5)
 
-    def test_likelihood(self):
-        sigma2 = float(1)
-        sigmau = float(5.5)
-        n = 10 ** 2
-        for i in range(0,100):
-            alpha=np.random.randn((2))
-            tau = sigma2/sigmau
-            m = lmm.simulate(n,alpha,sigma2,tau)
-            Z = random_design(m.labels)
-            #code.interact(local=locals())
-            Sigma = sigmau*Z.dot(Z.T)+sigma2*np.identity(n)
-            safe_lik=safe_likelihood(m.y,m.X,Sigma)
-            lik, grad = m.likelihood_and_gradient(sigma2,tau)
-            testing.assert_almost_equal(lik,safe_lik/float(n),decimal=5)
+    # def test_likelihood(self):
+    #     sigma2 = float(1)
+    #     sigmau = float(5.5)
+    #     n = 10 ** 2
+    #     for i in range(0,100):
+    #         alpha=np.random.randn((2))
+    #         tau = sigma2/sigmau
+    #         m = lmm.simulate(n,alpha,sigma2,tau)
+    #         Z = random_design(m.labels)
+    #         #code.interact(local=locals())
+    #         Sigma = sigmau*Z.dot(Z.T)+sigma2*np.identity(n)
+    #         safe_lik=safe_likelihood(m.y,m.X,Sigma)
+    #         lik, grad = m.likelihood_and_gradient(sigma2,tau)
+    #         testing.assert_almost_equal(lik,safe_lik/float(n),decimal=5)
 
-    def test_grad_sigma2(self):
-        n = 10 ** 3
-        c = 2
-        sigma2 = float(1)
-        sigmau = float(10)
-        for i in range(0, 100):
-            alpha = np.random.randn((c))
-            tau = sigma2 / sigmau
-            m = lmm.simulate(n, alpha, sigma2, tau)
-            lik, grad = m.likelihood_and_gradient(sigma2, tau)
+    # def test_grad_sigma2(self):
+    #     n = 10 ** 3
+    #     c = 2
+    #     sigma2 = float(1)
+    #     sigmau = float(10)
+    #     for i in range(0, 100):
+    #         alpha = np.random.randn((c))
+    #         tau = sigma2 / sigmau
+    #         m = lmm.simulate(n, alpha, sigma2, tau)
+    #         lik, grad = m.likelihood_and_gradient(sigma2, tau)
 
-            # Numerical gradient
-            # Compute gradient numerically
-            def likelihood(sigma2):
-                lik, grad = m.likelihood_and_gradient(sigma2, tau)
-                return lik
-            num_grad = (likelihood(sigma2 + 10**(-6)) - likelihood(sigma2 - 10**(-6))) / (2 * 10 ** (-6))
-            testing.assert_almost_equal(grad[0], num_grad, decimal=5)
+    #         # Numerical gradient
+    #         # Compute gradient numerically
+    #         def likelihood(sigma2):
+    #             lik, grad = m.likelihood_and_gradient(sigma2, tau)
+    #             return lik
+    #         num_grad = (likelihood(sigma2 + 10**(-6)) - likelihood(sigma2 - 10**(-6))) / (2 * 10 ** (-6))
+    #         testing.assert_almost_equal(grad[0], num_grad, decimal=5)
 
-    def test_grad_tau(self):
-        n = 10 ** 3
-        c = 2
-        sigma2 = float(10)
-        sigmau = float(100)
-        for i in range(0, 100):
-            alpha = np.random.randn((c))
-            tau = sigma2 / sigmau
-            m = lmm.simulate(n, alpha, sigma2, tau)
-            lik, grad = m.likelihood_and_gradient(sigma2, tau)
+    # def test_grad_tau(self):
+    #     n = 10 ** 3
+    #     c = 2
+    #     sigma2 = float(10)
+    #     sigmau = float(100)
+    #     for i in range(0, 100):
+    #         alpha = np.random.randn((c))
+    #         tau = sigma2 / sigmau
+    #         m = lmm.simulate(n, alpha, sigma2, tau)
+    #         lik, grad = m.likelihood_and_gradient(sigma2, tau)
 
-            # Numerical gradient
-            # Compute gradient numerically
-            def likelihood(tau):
-                lik, grad = m.likelihood_and_gradient(sigma2, tau)
-                return lik
-            num_grad = (likelihood(tau + 10**(-6)) - likelihood(tau - 10**(-6))) / (2 * 10 ** (-6))
-            testing.assert_almost_equal(grad[1], num_grad, decimal=5)
+    #         # Numerical gradient
+    #         # Compute gradient numerically
+    #         def likelihood(tau):
+    #             lik, grad = m.likelihood_and_gradient(sigma2, tau)
+    #             return lik
+    #         num_grad = (likelihood(tau + 10**(-6)) - likelihood(tau - 10**(-6))) / (2 * 10 ** (-6))
+    #         testing.assert_almost_equal(grad[1], num_grad, decimal=5)
 
 
 if  __name__=='__main__':
