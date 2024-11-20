@@ -17,17 +17,17 @@ def plot_confidence_interval_(x, mean, stdev, z=1.96, color='#2187bb', horizonta
 f = pd.read_csv('sp_non_sampling_var_ref_to_standardGWAS_at_Fst0.001.csv', sep='\t')
 
 
+plt.rcParams['axes.spines.right'] = False
+plt.rcParams['axes.spines.top'] = False
+
+
 plot_confidence_interval = partial(plot_confidence_interval_, horizontal_line_width=1)
 max_non_sampling_var = 1#f[(f['Fst'] == 0.1) & (f['method'] == 'standard')]['non_sampling_var'].values[0]
 for F in [0, 0.001, 0.01, 0.1]:
     plt.figure(figsize=(4,3))
-    # plt.figure()
     pop = (f[(f['Fst'] == F) & (f['method'] == 'sib diff')]['var']).values[0]
-    # print(pop)
-    # plt.ylim(bottom=-0.1, top=1.1)
     plt.ylim(bottom=-5, top=100)
     plt.xlim(right=14, left=0.1)
-    # color = iter(cm.rainbow(np.linspace(0, 1, 5)))
     color = iter(['b', 'g', 'r', 'orange', 'm'])
     y = f[(f['Fst'] == F) & (f['method'] == 'sib diff')]['non_sampling_var']/max_non_sampling_var
     x = pop/f[(f['Fst'] == F) & (f['method'] == 'sib diff')]['var']

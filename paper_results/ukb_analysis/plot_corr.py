@@ -48,6 +48,8 @@ sib_corr = sorted(sib_corr)
 types = ['o', 'v', 'h', '^', '<', 'x', '>', 's', '1', 'p', '*', 'd', 'P', 'X', 'D', 'H', '2', '+', '8']
 matplotlib.rcParams.update({'font.size': 15})
 plt.figure(figsize=(8,5))
+plt.rcParams['axes.spines.right'] = False
+plt.rcParams['axes.spines.top'] = False
 for n, (i,j, k) in enumerate(zip(sib_corr, gain_imp, gain_noimp)):
     if types[n] in ['x', '1', '2', '+', 2]:
         plt.scatter(i, j, s=200, marker=types[n], facecolors='darkgoldenrod')
@@ -113,6 +115,8 @@ sib_corr = sorted(sib_corr)
 
 
 plt.figure(figsize=(8,5))
+plt.rcParams['axes.spines.right'] = False
+plt.rcParams['axes.spines.top'] = False
 for n, (i,j) in enumerate(zip(sib_corr, gain)):
     if types[n] in ['x', '1', '2', '+', 2]:
         plt.scatter(i, j, s=200, marker=types[n], facecolors='mediumslateblue')

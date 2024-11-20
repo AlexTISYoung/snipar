@@ -24,8 +24,9 @@ ggplot(readfile, aes(x=factor(Fst), y=non_sampling_var, fill=method)) +
             geom_hline(yintercept=0, linetype="dashed", 
                 color = "black",size=0.2) +
             theme(text=element_text(size=15), legend.position=c(0.2, 0.8),legend.box.background = element_rect(colour = "black"),
-           panel.border = element_rect(colour = "black", fill=NA, size=0.8), legend.key = element_rect(fill = "white"),
-panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank())
+           panel.border = element_blank(), legend.key = element_rect(fill = "white"),
+panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+axis.line = element_line(colour = "black"))
 ggsave('paper_materials/admixture_failure_simulation/sp_non_sampling_vs_Fst.pdf', width = 10,height = 8)
 
 
@@ -52,7 +53,8 @@ ggplot(readfile, aes(x=factor(Fst), y=non_sampling_var, fill=method)) +
                 color = "black",size=0.2) +
             scale_y_continuous(breaks = c(1, 25, 75, 100)) +
             theme(text=element_text(size=15), legend.position=c(0.2, 0.8),legend.box.background = element_rect(colour = "black"),
-           panel.border = element_rect(colour = "black", fill=NA, size=0.8),legend.key = element_rect(fill = "white"),
-panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank())
+           panel.border = element_blank(), legend.key = element_rect(fill = "white"),
+panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+axis.line = element_line(colour = "black"))
 
 ggsave('paper_materials/admixture_failure_simulation/sp_Zvar_vs_Fst.pdf', width = 10,height = 8)
