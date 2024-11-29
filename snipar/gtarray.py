@@ -535,25 +535,28 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False, pe
         gtarray: gtarray object with imputed parental genotypes.
     """ 
     if sib:
-        logger.warning(
-            'No need to impute parental genotypes of unrelated individuals if sib effect is modelled.'
-        )
+        # logger.warning(
+        #     'No need to impute parental genotypes of unrelated individuals if sib effect is modelled.'
+        # )
+        # print('WARNING: No need to impute parental genotypes of unrelated individuals if sib effect is modelled.')
         return G
     if G.freqs is None:
         G.compute_freqs()
     if grm is not None and unrelated_inds is not None:
-        logger.info(
-            'Imputing parental geotypes using conditional gaussian.'
-        )
+        # logger.info(
+        #     'Imputing parental geotypes using conditional gaussian.'
+        # )
+        # print('Imputing parental geotypes using conditional gaussian')
         gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds)
     elif grm is None and unrelated_inds is None:
         gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)
     else:
         raise TypeError('One of grm and unrelated_inds is None.')
     G.gts = ma.array(gts, mask=np.isnan(gts))
-    logger.info(
-        'Done imputing parental geotypes of unrelated individuals.'
-    )
+    # logger.info(
+    #     'Done imputing parental geotypes of unrelated individuals.'
+    # )
+    # print('Done imputing parental geotypes of unrelated individuals.')
     return G
 
 
@@ -571,8 +574,9 @@ def impute_missing(G: gtarray) -> gtarray:
     gts = _impute_missing(G.gts.data, G.freqs)
     G.gts = ma.array(gts, mask=np.isnan(gts))
     assert G.gts.mask.sum() == 0
-    logger.info(
-        'Done imputing missing genotypes.'
-    )
+    # logger.info(
+    #     'Done imputing missing genotypes.'
+    # )
+    # print('Done imputing missing genotypes.')
     return G
     
