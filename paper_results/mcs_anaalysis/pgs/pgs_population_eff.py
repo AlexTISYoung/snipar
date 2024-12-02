@@ -3,7 +3,7 @@ import numpy as np
 from snipar.gtarray import gtarray
 import snipar.read as read
 from snipar.read.bed import get_snps
-import snipar.lmm as lmm
+import snipar.slmm as lmm
 from snipar.utilities import *
 from pysnptools.snpreader import Bed
 from bgen_reader import open_bgen
