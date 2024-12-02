@@ -36,13 +36,20 @@ And to work through the tutorial: https://github.com/AlexTISYoung/snipar/blob/fg
 
 # Virtual Environment
 
-You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done by using the following commands in your directory of choice:
+You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
+
+To use venv, use the following commands in your directory of choice:
     
     python -m venv path-to-where-you-want-the-virtual-environment-to-be
 
 You can activate and use the environment using
 
     source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
+
+Alternatively, we highly recommend using conda:
+	
+  conda create -n myenv python=3.9
+	conda activate myenv
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory
@@ -55,11 +62,7 @@ Note: installing *snipar* requires the package *bed_reader*, which in turn requi
 # Python version incompatibility 
 
 *snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
-To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
-	
-  conda create -n myenv python=3.9
-	conda activate myenv
-	pip install .
+To overcome this, see **Virtual Environment** above.
 
 # Apple ARM processor machines
 
