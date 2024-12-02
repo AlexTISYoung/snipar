@@ -12,7 +12,7 @@
 
 set -e
 # source /var/genetics/proj/within_family/snipar_venv/bin/activate
-source ~/snipar_release/bin/activate
+source ${snipar_env}/bin/activate
 source fpgipipeline_function_fgwas.sh
 
 # unified

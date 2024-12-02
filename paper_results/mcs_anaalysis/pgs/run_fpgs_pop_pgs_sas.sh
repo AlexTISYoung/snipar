@@ -11,7 +11,7 @@
 ## --------------------------------------------------------------------------------------------------------
 
 set -e
-source ~/snipar_release/bin/activate
+source ${snipar_env}/bin/activate
 source fpgipipeline_function_pop_pgs_sas.sh
 
 # unified

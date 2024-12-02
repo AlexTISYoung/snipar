@@ -4,9 +4,9 @@ import statsmodels.formula.api as sm
 import seaborn as sns
 
 
-f = '/disk/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/'
-eur = pd.read_csv(f+'filter_extract/eur_samples_mz_removed.txt', sep='\s+', header=None)
-sas = pd.read_csv(f+'filter_extract/sas_samples_mz_removed.txt', sep='\s+', header=None)
+f = 'mcs_data'
+eur = pd.read_csv(f+'eur_samples_mz_removed.txt', sep='\s+', header=None)
+sas = pd.read_csv(f+'sas_samples_mz_removed.txt', sep='\s+', header=None)
 def string(sample, phen_str): 
     return \
 f"""
@@ -38,8 +38,8 @@ exec(string('sas', 'height'))
 
 # Family PGS
 def main(method: str, phen_: str, ancestry: str, population=False):
-    f = f'/disk/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/'
-    f_scores = f'/disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/mcs/nofilter/{phen_}/{method}/{ancestry}/' #direct.pgs.txt'
+    f = f'mcs_data'
+    f_scores = f'/prs_analysis/mcs/{phen_}/{method}/{ancestry}/' #direct.pgs.txt'
 
     import pandas as pd
 
@@ -47,7 +47,7 @@ def main(method: str, phen_: str, ancestry: str, population=False):
         pgs = pd.read_csv(f_scores + 'population.pgs.txt', sep='\s+')
     # else: pgs = pd.read_csv(f_scores + 'direct/scoresout.sscore', sep='\s+')
     else: pgs = pd.read_csv(f_scores + 'direct.pgs.txt', sep='\s+')
-    phen = pd.read_csv(f'/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/phen/phenotypes_{ancestry}.txt', sep='\s+')[['FID', 'IID', phen_]].dropna()
+    phen = pd.read_csv(f'mcs_data/phen/phenotypes_{ancestry}.txt', sep='\s+')[['FID', 'IID', phen_]].dropna()
     # phen = pd.read_csv(f'/var/genetics/data/mcs/private/latest/raw/genotyped/NCDS_SFTP_1TB_1/imputed/phen/bmi_height_sweep7.txt', sep='\s+')[['FID', 'IID', phen_+'7']].dropna()
     query = f'IID not in @lis_{ancestry}_{phen_}'
     # phen = pd.read_csv(f + f'/phen/{phen}/pheno.pheno', sep='\s+', header=None)
@@ -118,15 +118,15 @@ with open('mcs_pgi_fam_reg_results_PCadjusted_new_robust.txt', 'w') as f:
 # Population PGS
 
 def main(method: str, phen_: str, ancestry: str, population=False):
-    f = f'/disk/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/'
-    f_scores = f'/disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/mcs/nofilter/{phen_}/{method}/{ancestry}/pop_pgs/' #direct.pgs.txt'
+    f = f'mcs_data'
+    f_scores = f'prs_analysis/mcs/nofilter/{phen_}/{method}/{ancestry}/pop_pgs/' #direct.pgs.txt'
 
     import pandas as pd
 
     if population and method == 'unified':
         pgs = pd.read_csv(f_scores + 'population.pgs.txt', sep='\s+')
     else: pgs = pd.read_csv(f_scores + 'direct.pgs.txt', sep='\s+')
-    phen = pd.read_csv(f'/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/phen/phenotypes_{ancestry}.txt', sep='\s+')[['FID', 'IID', phen_]].dropna()
+    phen = pd.read_csv(f'mcs_data/phen/phenotypes_{ancestry}.txt', sep='\s+')[['FID', 'IID', phen_]].dropna()
 
     query = f'IID not in @lis_{ancestry}_{phen_}'
     # phen = pd.read_csv(f + f'/phen/{phen}/pheno.pheno', sep='\s+', header=None)

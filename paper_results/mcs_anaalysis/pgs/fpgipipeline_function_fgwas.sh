@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
-source ~/snipar_release/bin/activate
+source ${snipar_env}/bin/activate
 function withinfam_pred(){
 
     WTFILE=$1
@@ -12,9 +12,9 @@ function withinfam_pred(){
     METHOD=$6
     ANCESTRY=$7
 
-    OUTPATH="/disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/mcs/nofilter/${PHENONAME}/${METHOD}/${ANCESTRY}"
-    RAWPATH="/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed"
-    COVAR="/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/phen/PCs.txt"
+    OUTPATH="prs_analysis/mcs/nofilter/${PHENONAME}/${METHOD}/${ANCESTRY}"
+    RAWPATH="mcs_data"
+    COVAR="mcs_data/phen/PCs.txt"
 
     echo $OUTPATH/${EFFECT}${OUTSUFFIX}
     echo $WTFILE
@@ -24,8 +24,8 @@ function withinfam_pred(){
     pheno_out="$RAWPATH/phen/${PHENONAME}/${ANCESTRY}"
 
 
-    bedfilepath="/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/bgen/tmp/chr@.dose"
-    impfilespath="/var/genetics/data/mcs/private/latest/raw/downloaded/NCDS_SFTP_1TB_1/imputed/imputed_parents/chr@"
+    bedfilepath="mcs_data/bgen/tmp/chr@.dose"
+    impfilespath="mcs_data/imputed_parents/chr@"
 
     ## get proband and parental pgis using snipar        
     pgs.py \
@@ -36,11 +36,11 @@ function withinfam_pred(){
         --SNP "sid" \
         --A1 "nt1" \
         --A2 "nt2" \
-        --weights /disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/prscs_weights/nofilter/${METHOD}/${PHENONAME}/${PHENONAME}_${EFFECT}_fpgs_formatted.txt \
+        --weights prs_analysis/prscs_weights/nofilter/${METHOD}/${PHENONAME}/${PHENONAME}_${EFFECT}_fpgs_formatted.txt \
         --scale_pgs | tee $OUTPATH/${EFFECT}${OUTSUFFIX}.log 
 
     scoresout="$OUTPATH/${EFFECT}${OUTSUFFIX}.pgs.txt"
-    fpgs_out="/disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/mcs/nofilter/fpgs/${PHENONAME}/${METHOD}/${ANCESTRY}"
+    fpgs_out="prs_analysis/mcs/nofilter/fpgs/${PHENONAME}/${METHOD}/${ANCESTRY}"
     mkdir -p $fpgs_out
 
     ## run fPGI regression
@@ -51,7 +51,7 @@ function withinfam_pred(){
         --covar $COVAR \
         --phenofile ${pheno_out}/pheno_withPCs.pheno \
         --scale_pgs \
-        --scale_phen | tee "/disk/genetics/ukb/jguan/ukb_analysis/output/prs_analysis/mcs/nofilter/fpgs/logs/${PHENONAME}_${EFFECT}${OUTSUFFIX}_PCadjusted_${ANCESTRY}_full.reg.log"
+        --scale_phen | tee "prs_analysis/mcs/nofilter/fpgs/logs/${PHENONAME}_${EFFECT}${OUTSUFFIX}_PCadjusted_${ANCESTRY}_full.reg.log"
 
 }
 
