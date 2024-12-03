@@ -1,10 +1,9 @@
 source ${snipar_env}/bin/activate
 
 set -e
-outdir=/disk/genetics/ukb/jguan/ukb_analysis/output/gwas/new_robust/with_grm
 
 for i in {1..10} {14..18}; do
-	name=$(head -n 1 /disk/genetics/ukb/jguan/ukb_analysis/output/processed_traits_noadj_allancestry.txt | awk -v var=$i '{ print $((2+var)) }')
+	name=$(head -n 1 ${PHEN_PATH}/processed_traits_noadj_allancestry.txt | awk -v var=$i '{ print $((2+var)) }')
 	echo $name $i
 	if [ ! -d "$outdir/$name" ] 
 	then

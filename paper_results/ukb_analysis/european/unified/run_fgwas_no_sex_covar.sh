@@ -6,7 +6,6 @@ set -e
 
 for i in 11 12 13 18; do
 	name=$(head -n 1 ${PHEN_PATH}/processed_traits_noadj.txt | awk -v var=$i '{ print $((2+var)) }')
-	echo $name $i
 	if [ ! -d "$outdir/$name" ] 
 	then
 		mkdir $outdir/$name
