@@ -166,3 +166,6 @@ it in the container. To install snipar, follow these steps:
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 
     python -m unittest snipar.tests
+
+# Code for reproducing results
+See paper_results/ for code to reproduce results in https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1 
