@@ -325,7 +325,7 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
                             varcomps=varcomps, covar_X=covar, add_intercept=True, add_jitter=add_jitter)
     if robust:
         # alpha, alpha_cov, alpha_ses = model.robust_est(G.gts.data, G.num_obs_par_al, G.par_status)
-        alpha, alpha_cov, alpha_ses = model.new_robust_est(G, G_sib)
+        alpha, alpha_cov, alpha_ses = model.robust_est(G, G_sib)
     elif sib_diff:
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data)
     elif trios_sibs:
