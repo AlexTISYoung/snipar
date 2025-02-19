@@ -15,36 +15,33 @@ Results:
 import argparse
 import os
 import time
+import sys
 
 # import logging
 
 ######### Command line arguments #########
-parser=argparse.ArgumentParser()
-parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=None)
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=1)
 args, extra_args = parser.parse_known_args()
-num_threads = args.threads if args.threads is not None else 1
-# export OMP_NUM_THREADS=...
-os.environ['OMP_NUM_THREADS'] = str(num_threads)
-# export OPENBLAS_NUM_THREADS=...
-os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-# export MKL_NUM_THREADS=...
-os.environ['MKL_NUM_THREADS'] = str(num_threads)
-# export VECLIB_MAXIMUM_THREADS=...
-os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
-# export NUMEXPR_NUM_THREADS=...
-os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
-print('Number of threads for numpy: '+str(num_threads))
+if '--help' not in sys.argv and '-h' not in sys.argv:
+    num_threads = args.threads
+    print('Number of threads for numpy: '+str(num_threads))
+    # export OMP_NUM_THREADS=...
+    os.environ['OMP_NUM_THREADS'] = str(num_threads)
+    # export OPENBLAS_NUM_THREADS=...
+    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    # export MKL_NUM_THREADS=...
+    os.environ['MKL_NUM_THREADS'] = str(num_threads)
+    # export VECLIB_MAXIMUM_THREADS=...
+    os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
+    # export NUMEXPR_NUM_THREADS=...
+    os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
 
 import numpy as np
-from numba import set_num_threads
-from numba import config as numba_config
-import snipar.read as read
-import snipar.slmm as slmm
-from snipar.gwas import process_chromosome
-from snipar.pedigree import get_sibpairs_from_ped
-from snipar.preprocess import remove_sibs
-from snipar.utilities import get_parser_doc, parseNumRange, NumRangeAction, parse_obsfiles, parse_filelist, make_id_dict
+from snipar.utilities import parseNumRange, NumRangeAction
 
+parser = argparse.ArgumentParser(add_help=True)
+parser.add_argument('--threads',type=int,help='Number of threads to use for IBD inference. Uses all available by default.',default=1)
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
 parser.add_argument('--bgen', type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
 parser.add_argument('--bed', type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
@@ -57,7 +54,6 @@ parser.add_argument('--out', type=str, help="The summary statistics will output 
 parser.add_argument('--impute_unrel', action='store_true', default=False, help='Whether to include unrelated individuals and impute their parental genotypes or not.')
 parser.add_argument('--robust', action='store_true', default=False, help='Whether to use the robust estimator')
 parser.add_argument('--sib_diff', action='store_true', default=False, help='Use sibling difference method')
-# parser.add_argument('--standard_gwas', action='store_true', default=False, help='Whether to fit standard gwas, i.e., without modelling parental genotypes.')
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
@@ -80,9 +76,18 @@ parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to b
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 
 
-parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
-# parser.add_argument('--loglevel', type=str, default='INFO', help='Case insensitive Logging level: INFO, DEBUG, ...')
+# parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
 
+extra_args = parser.parse_args()
+
+from numba import set_num_threads
+from numba import config as numba_config
+import snipar.read as read
+import snipar.slmm as slmm
+from snipar.gwas import process_chromosome
+from snipar.pedigree import get_sibpairs_from_ped
+from snipar.preprocess import remove_sibs
+from snipar.utilities import get_parser_doc, parse_obsfiles, parse_filelist, make_id_dict
 
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
@@ -380,7 +385,7 @@ def main(args):
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=args.no_txt_out, cpus=args.cpus, add_jitter=False,
-                           debug=args.debug)
+                           debug=False)
     # logger.info(f'Time used: {time.time() - start}.')
     print(f'Time used: {time.time() - start:.2f}s')
 
