@@ -78,7 +78,7 @@ parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batch
 
 # parser.add_argument('--debug', action='store_true', default=False, help='Debug code in single process mode.')
 
-extra_args = parser.parse_args()
+# extra_args = parser.parse_args()
 
 from numba import set_num_threads
 from numba import config as numba_config
@@ -390,5 +390,5 @@ def main(args):
     print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":
-    args = parser.parse_args(extra_args)
+    args = parser.parse_args()
     main(args)
