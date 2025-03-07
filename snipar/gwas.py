@@ -159,6 +159,8 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
     if sib:
         corrs.append('r_direct_sib')
     if not parsum:
+        corrs.append('r_direct_paternal')
+        corrs.append('r_direct_maternal')
         corrs.append('r_paternal_maternal')
     ncor = len(corrs)
     alpha_corr_out = np.zeros((alpha.shape[0],ncor))
@@ -170,11 +172,19 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
         # Direct to population
         alpha_corr_out[i,1] = alpha_cov_i[0,population_index]/(alpha_ses_out[i,0]*alpha_ses_out[i,population_index])
         # Direct to sib
+        corr_count = 2
         if sib:
             alpha_corr_out[i,2] = alpha_cov_i[0,1]/(alpha_ses_out[i,0]*alpha_ses_out[i,1])
-        # Paternal to maternal
+            corr_count += 1
+        # Parental correlations
         if not parsum:
-            alpha_corr_out[i,ncor-1] = alpha_cov_i[paternal_index,maternal_index]/(alpha_ses_out[i,maternal_index]*alpha_ses_out[i,paternal_index])
+            # Direct to paternal correlation
+            alpha_corr_out[i,corr_count] = alpha_cov_i[0,paternal_index]/(alpha_ses_out[i,0]*alpha_ses_out[i,paternal_index])
+            # Direct to maternal correlation
+            alpha_corr_out[i,corr_count+1] = alpha_cov_i[0,maternal_index]/(alpha_ses_out[i,0]*alpha_ses_out[i,maternal_index])
+            # Paternal to maternal correlation
+            alpha_corr_out[i,corr_count+2] = alpha_cov_i[paternal_index,maternal_index]/(alpha_ses_out[i,maternal_index]*alpha_ses_out[i,paternal_index])
+            
     # Create output array
     vy = sum(sigmas)
     outstack = [outbim]

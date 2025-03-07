@@ -31,7 +31,8 @@ import pandas as pd
 import os
 from multiprocessing import Pool
 from time import time
-from snipar.utilities import NumRangeAction, parseNumRange, get_parser_doc
+from snipar.utilities import get_parser_doc
+from snipar.numrange import parseNumRange, NumRangeAction
 random.seed(1567924)
 
 def run_imputation(data):

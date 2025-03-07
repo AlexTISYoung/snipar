@@ -21,8 +21,7 @@ import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
-from snipar.utilities import get_parser_doc
-
+from snipar.numrange import parseNumRange, NumRangeAction
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',
                     type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')

@@ -105,7 +105,7 @@ Family based GWAS
 This is performed using the :ref:`gwas.py <gwas.py>` script. 
 To compute summary statistics for direct effects, non-transmitted coefficients (NTCs), and population effects for the SNPs in the .bed file, use this command:
 
-    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --no_grm_var --chr_range 1 --cpus 1``
+    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --no_grm_var --chr_range 1 --cpus 1 --out chr_@_young``
 
 This takes the observed genotypes in chr_1.bed and the imputed parental genotypes in chr_1.hdf5 and uses
 them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed/observed) genotype, and the mother's
@@ -117,9 +117,9 @@ sample-wise phenotypic correlations will also be modeled. :code:`--cpus` allows 
 
 To use the .bgen file instead, use this command:
 
-    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1``
+    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 chr_@_young``
 
-The script will run the Young et al. estimator by default. You can let *snipar* use the robust estimator with the following command:
+The script will run the Young et al. estimator by default. You can tell *snipar* to use the robust estimator with the following command:
 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 --robust --out chr_@_robust``
 

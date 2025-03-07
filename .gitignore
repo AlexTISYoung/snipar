@@ -22,3 +22,4 @@ outputs/**
 **.mmm
 **.metafile
 docs/source/**
+example_data/*
