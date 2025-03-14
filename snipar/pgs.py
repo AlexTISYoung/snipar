@@ -9,7 +9,6 @@ import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
 import numdifftools as nd
 from snipar.pgs_am import *
-
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
@@ -85,7 +84,6 @@ class pgs(object):
                 snp_indices[i] = self.snp_dict[matched_snps[i]]
             weights_compute = self.weights[snp_indices]
             alleles = self.alleles[snp_indices,:]
-
             # Match alleles and adjust weights
             a_match = np.logical_and(alleles[:,0] == matched_alleles[:, 0], alleles[:,1] == matched_alleles[:, 1])
             a_reverse = np.logical_and(alleles[:,0] == matched_alleles[:, 1], alleles[:,1] == matched_alleles[:, 0])
@@ -155,7 +153,6 @@ def read_pgs(pgs_file):
                     par_status = par_status,
                     ped=ped)
     return pg
-
 
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
@@ -302,7 +299,7 @@ class pgarray(gtarray):
             bpg_ids = self.ids[np.sum(self.par_status==0, axis=1)==2]
             self.filter_ids(bpg_ids)
 
-    def estimate_r(self, return_se=True):
+    def estimate_r(self, return_se=True, parents_only=False):
         # Check pgs columns
         if 'paternal' in self.sid:
             paternal_index = np.where(self.sid=='paternal')[0][0]
@@ -348,6 +345,8 @@ class pgarray(gtarray):
             pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
         if np.sum(is_father)>0:
             pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
+        # fam size dict
+        fsizes = dict(zip(list(fams[0]),list(fams[1])))
         ### find correlation between maternal and paternal pgis
         print('Finding MLE for correlation between parents scores')
         ## Initialize with correlation from sibs and between parents
@@ -358,33 +357,38 @@ class pgarray(gtarray):
             r_bpg = np.corrcoef(self.gts[bpg,1],self.gts[bpg,2])[0,1]
         else:
             r_bpg = 0
-        # Correlation from sibs
-        sib_2 = np.sum(is_sib,axis=1)>1
-        n_sib_2 = np.sum(sib_2)
-        if n_sib_2>0:
-            r_sib = 2*np.corrcoef(pgs_fam[sib_2,0],pgs_fam[sib_2,1])[0,1]-1
+        if parents_only:
+            if n_bpg>0:
+                r_se = (1-r_bpg**2)/np.sqrt(n_bpg-1)
+                return r_bpg, r_se, fsizes
+            else:
+                return np.nan, np.nan, fsizes
         else:
-            r_sib = 0
-        # Initialize at weighted average
-        r_init = n_bpg*r_bpg+n_sib_2*r_sib
-        r_init = r_init/(n_bpg+n_sib_2)
-        # Find MLE
-        optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
-                                args=(pgs_fam, is_sib, is_parent),
-                                approx_grad=True,
-                                bounds=[(-0.999,0.999)])
-        if optimized[2]['warnflag']==0:
-            r=optimized[0][0]
-            hess = nd.Hessian(pgs_cor_lik)
-            hess = float(hess([r], pgs_fam, is_sib, is_parent))
-            r_se = np.sqrt(2/hess)
-        else:
-            print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
-            r=r_init
-            r_se = (1-r**2)/np.sqrt(n_bpg+n_sib_2-1)
-        # fam size dict
-        fsizes = dict(zip(list(fams[0]),list(fams[1])))
-        return r, r_se, fsizes
+            # Correlation from sibs
+            sib_2 = np.sum(is_sib,axis=1)>1
+            n_sib_2 = np.sum(sib_2)
+            if n_sib_2>0:
+                r_sib = 2*np.corrcoef(pgs_fam[sib_2,0],pgs_fam[sib_2,1])[0,1]-1
+            else:
+                r_sib = 0
+            # Initialize at weighted average
+            r_init = n_bpg*r_bpg+n_sib_2*r_sib
+            r_init = r_init/(n_bpg+n_sib_2)
+            # Find MLE
+            optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
+                                    args=(pgs_fam, is_sib, is_parent),
+                                    approx_grad=True,
+                                    bounds=[(-0.999,0.999)])
+            if optimized[2]['warnflag']==0:
+                r=optimized[0][0]
+                hess = nd.Hessian(pgs_cor_lik)
+                hess = float(hess([r], pgs_fam, is_sib, is_parent))
+                r_se = np.sqrt(2/hess)
+            else:
+                print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
+                r=r_init
+                r_se = (1-r**2)/np.sqrt(n_bpg+n_sib_2-1)
+            return r, r_se, fsizes
     
     def am_adj(self):
         print('Estimating correlation between maternal and paternal PGSs assuming equilibrium')
@@ -497,7 +501,7 @@ class pgarray(gtarray):
                     gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
         ## Append to PGS matrix
         self.gts = np.hstack((self.gts,gpar))
-        self.sid = np.hstack((self.sid,np.array(['gpp','gpm','gmp','gmm'])))
+        self.sid = np.hstack((self.sid,np.array(['gpp','gmp','gpm','gmm'])))
         return bpg_ped
         
 def opg_am_adj(pgi_imp, pgi_obs, r, n):
@@ -609,7 +613,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
         alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
     elif ngen==2 or ngen==3:
         if fit_sib:
-            if 'sib' in pg.sid:
+            if 'sibling' in pg.sid:
                 pg_cols = ['proband','sibling']
             else:
                 raise(ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)'))
@@ -637,9 +641,9 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             if gparsum:
-                if 'gpp' in pg.sid and 'gpm' in pg.sid and 'gmp' in pg.sid and 'gmm' in pg.sid:
+                if 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
                     # Sum of paternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gpm']]))
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
@@ -647,7 +651,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                     pg.sid = np.delete(pg.sid,gparcols[1])
                     pg.sid[gparcols[0]] = 'gp'
                     # Sum of maternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gmp','gmm']]))
+                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
                     trans_matrix = np.identity(pg.gts.shape[1])
                     trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
                     trans_matrix = np.delete(trans_matrix,gparcols[1],1)
@@ -814,11 +818,11 @@ def am_adj_2gen(estimates, estimate_cols, h2f, h2f_se, rk=None, rk_se=None, pg=N
     else:
         raise(ValueError('Need parental NTC estimate(s) for adjustment')) 
     # Adjust for non-normalized pgs/phenotype
-    estimate = estimate/(y_std*pg_std)
-    estimate_cov = estimate_cov/((y_std*pg_std)**2)
+    estimate = estimate*pg_std/y_std
+    estimate_cov = estimate_cov*((pg_std/y_std)**2)
     ##### Estimate correlation between parents' PGIs ######
     if rk is None:
-        rk, rk_se, fam_sizes = pg.estimate_r()
+        rk, rk_se, fam_sizes = pg.estimate_r(parents_only=True)
     ##### Estimate equilibrium quantities ######
     print('Computing equilibrium adjusted quantities')
     adj_estimates, adj_ses = am_adj_2gen_calc(estimate[0,0], np.sqrt(estimate_cov[0,0]), 

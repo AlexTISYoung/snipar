@@ -1,7 +1,7 @@
 import unittest
 import subprocess
 import pandas as pd
-from sibreg.bin.preprocess_data import create_pedigree, add_control
+from snipar.pedigree import create_pedigree
 import networkx as nx
 
 
@@ -34,7 +34,7 @@ def create_graph_from_pedigree(pedigree):
 
 
 import pandas as pd
-from sibreg.bin.preprocess_data import create_pedigree, add_control
+from snipar.pedigree import create_pedigree
 import numpy as np
 import networkx as nx
 #2017_P 2358_P

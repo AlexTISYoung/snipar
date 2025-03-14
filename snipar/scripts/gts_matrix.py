@@ -12,13 +12,13 @@ Results:
 import argparse, h5py
 import snipar.read as read
 import numpy as np
-import snipar.slmm as slmm
 from snipar.utilities import *
 from snipar.gwas import *
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
 from snipar.numrange import parseNumRange, NumRangeAction
+
 def write_genoarray(G, outfile, parsum, sib, ped=None):
     """
     Write fitted SNP effects and other parameters to output HDF5 file.

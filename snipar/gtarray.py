@@ -299,7 +299,6 @@ class gtarray(object):
         self.has_NAs = False
         return NAs
 
-
     def add(self,garray):
         """
         Adds another gtarray of the same dimension to this array and returns the sum. It matches IDs before summing.

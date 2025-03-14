@@ -22,4 +22,9 @@ outputs/**
 **.mmm
 **.metafile
 docs/source/**
+example_data
+sim
+Icon
+**/.DS_Store
 example_data/*
+snipar/tests/tmp/*

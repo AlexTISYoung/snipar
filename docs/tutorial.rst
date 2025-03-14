@@ -3,8 +3,14 @@
 Tutorial
 ========
 
-Tutorial on inferring IBD between siblings, imputing missing parental genotypes, and performing family based GWAS and polygenic score analyses. 
+Tutorial on inferring IBD between siblings, imputing missing parental genotypes, and performing family-based GWAS and polygenic score analyses. 
 Before working through the tutorial, please first install the package and read the :ref:`guide <guide>`. 
+
+**family-based GWAS can be performed without imputed parental genotypes**
+
+**snipar will meta-analyse siblings and trios by default when imputed parental genotypes are not provided**
+
+**this tutorial guides through the entire workflow but gives examples of analyses without imputed genotypes**
 
 Test data
 --------------------
@@ -55,9 +61,10 @@ for chromosome 1-10, or :code:`--chr_range 1 3 5-22` for chromosome 1, 3, and 5-
 
 The :code:`--king` argument requires the address of the :ref:`KING kinship file <kinship>`, 
 and the :code:`--agesex` argument requires the address of the :ref:`agesex file <agesex>`.
+Age and sex information is needed to determine which is the mother/father in a parent-offspring relation.
 
 The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. 
-If the genetic map positions (in cM) are provided in .bim file, the script will use these. 
+If the genetic map positions (in cM) are provided in the .bim file, the script will use these. 
 Alternatively, the ``--map`` argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
 (https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats) an example of which is 
 provided in genetic_map.txt. 
@@ -99,36 +106,42 @@ To perform imputation from the phased .bgen file in example_data/, use the follo
 
 As with the ibd.py script, the impute_runner.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
-Family based GWAS
------------------
+Family-based GWAS with imputed parental genotypes
+-------------------------------------------------
 
-This is performed using the :ref:`gwas.py <gwas.py>` script. 
-To compute summary statistics for direct effects, non-transmitted coefficients (NTCs), and population effects for the SNPs in the .bed file, use this command:
+This is performed using the :ref:`gwas.py <gwas.py>` script, which implements different family-based GWAS designs.
 
-    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --no_grm_var --chr_range 1 --cpus 1 --out chr_@_young``
+The default design with imputed parental genotypes is described in Young et al. (2022) (https://www.nature.com/articles/s41588-022-01085-0).
+This regresses the proband's phenotype jointly onto the proband's genotype, the father's imputed or observed genotype, and the mother's imputed or observed  genotype.
+The regression produces variant level summary statistics on the direct genetic effect of the proband's genotype, the non-transmitted coefficient (NTC) for the father's genotype, and the NTC for the mother's genotype.
+To use this design, supply the imputed parenta genotypes (above) to the gwas.py scrict. For example:
 
-This takes the observed genotypes in chr_1.bed and the imputed parental genotypes in chr_1.hdf5 and uses
-them to perform, for each SNP, a joint regression onto the proband's genotype, the father's (imputed/observed) genotype, and the mother's
-(imputed/observed) genotype. This is done using a linear mixed model that only models phenotypic correlations between siblings,
+    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --chr_range 1 --cpus 1 --out chr_@_young``
+
+This regression is done using a linear mixed model that models phenotypic correlations between siblings,
 where sibling relations are stored in the :ref:`output of the imputation script <imputed_file>`. 
-The 'family variance estimate' output is the phenotypic variance explained by mean differences between sibships, 
-and the residual variance is the remaining phenotypic variance. For the purpose of this tutorial, we use the :code:`--no_grm_var` argument, otherwise
-sample-wise phenotypic correlations will also be modeled. :code:`--cpus` allows you to distribute computation across several processes to speed up analyses.
+The 'sibling variance component' output is the phenotypic variance explained by mean differences between sibships. 
+:code:`--cpus` allows you to distribute computation across several processes to speed up analyses.
 
 To use the .bgen file instead, use this command:
 
-    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 chr_@_young``
+    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --cpus 1 --out chr_@_young``
 
-The script will run the Young et al. estimator by default. You can tell *snipar* to use the robust estimator with the following command:
+The gwas.py script enables the use of different regression designs described in Guan et al. (https://www.nature.com/articles/s41588-025-02118-0).
+For the homogeneous ancestry samples typically used in GWAS, you can increase statistical power for estimation of direct genetic effects by inclusion
+of individuals without genotyped first-degree relatives (i.e., singletons) in the analysis. This also produces estimates of population effects (as estimated by standard GWAS)
+that are almost identical to performing a standard GWAS in a linear mixed model framework. This is why we called this approach the 'unified estimator' in Guan et al. 
+We give an example command here: 
 
-    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --no_grm_var --cpus 1 --robust --out chr_@_robust``
-
-If you want to increase statistical power by including singletons into the analysis, you can use the unified estimator by adding the :code:`--impute_unrel`
-flag (not compatible with the :code:`--robust` option)
-
-    ``gwas.py phenotype.txt --bgen chr_@_trios_singletons --imp chr_@ --no_grm_var --cpus 1 --impute_unrel --out chr_@_unified``
+    ``gwas.py phenotype.txt --bgen chr_@_trios_singletons --imp chr_@ --cpus 1 --impute_unrel --out chr_@_unified``
 
 The ``--impute_unrel`` flag instructs *snipar* to linearly impute parental genotypes of singletons and include them into the analysis.
+
+Approaches relying on imputed parental genotypes can be biased in strongly structured (Fst>0.01) and/or admixed samples. 
+In Guan et al., we develop a 'robust' estimator that maximises power in such samples without introducing bias. 
+Here's an example command invoking the robust estimator: 
+
+    ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --cpus 1 --robust --out chr_@_robust``
 
 By default, the script outputs summary statistics in a :ref:`gzipped text file <sumstats_text>`: chr_1.sumstats.gz;
 In addition to the text summary statistics, :ref:`HDF5 format summary statistics <sumstats_hdf5>` are also output to chr_1.sumstats.hdf5.
@@ -136,57 +149,50 @@ Alternatively, you can specify the output filename using the ``--out`` command: 
 output the results to chr_1_X.sumstats.gz and chr_1_X.sumstats.hdf5; if '@' is not in the output suffix, e.g., ``--out gwas``, the results will
 be stored in gwas_chr_1.sumstats.gz and gwas_chr_1.sumstats.hdf5.
 
-Now we have estimated SNP effects. To compare the Young et al.(or robust or unified) estimates to the true effects, run
+Now we have estimated SNP effects. To compare the Young et al. (or robust or unified) estimates to the true effects, run
     
-    ``python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt``
-
-    ``python estimate_sim_effects.py chr_1_robust.sumstats.hdf5 phenotype.effects.txt``
-
-    ``python estimate_sim_effects.py chr_1_unified.sumstats.hdf5 phenotype.effects.txt``
+    ``python estimate_sim_effects.py chr_1_young.sumstats.hdf5 phenotype.effects.txt``
 
 This should print estimates of the bias of the effect estimates.
 
 The bias estimates for direct, paternal NTCs, maternal NTCs, and average NTCs should not be statistically significantly different from 
 zero (with high probability). Population effects (as estimated by standard GWAS) are biased estimates of direct effects for this simulated 
-phenotype because they also include indirect genetic effects. Note that for the robust estimator, only bias estimates for direct effects
-are given.
+phenotype because they also include indirect genetic effects and other confounding factors not modelled here. 
 
-GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents or siblings available will be used. 
+Family-based GWAS without imputed parental genotypes
+----------------------------------------------------
+
+Family-based GWAS can also be performed without imputed parental genotypes. In this case, only probands with genotypes for both parents and/or siblings available will be used.
 In order to do this, one must provide a pedigree to gwas.py, as in:
-    ``gwas.py phenotype.txt --out trios_sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --no_grm_var --cpus 1``
-With the above command, the script will default to meta-analysing siblings and trios. Alternatively, users can supply one of the following two options (``--robust`` is not applicable
-in the current version):
 
-- ``--sib_diff``: individuals with sibling genotypes will be used, and those without will not be considered for the analysis;
-- ``--impute_unrel``: individuals with both parents' genotypes and singletons will be used; individuals with sibling genotypes but no complete parental genotypes will be ignored.
+    ``gwas.py phenotype.txt --out trios_sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --cpus 1``
+
+With the above command, the script will default to meta-analysing samples with both parents genotyped (trios) and samples with siblings but without both parents genotyped. 
+Alternatively, users can supply one of the following two options (``--robust`` is not applicable since it requires information derived from the imputation procedure):
+
+- ``--sib_diff``: individuals with sibling genotypes will be used in a 'sib-GWAS' design using genetic differences between siblings, and those without will not be considered for the analysis;
+- ``--impute_unrel``: individuals with both parents' genotypes and singletons will be used; individuals with sibling genotypes but incomplete parental genotypes will be ignored.
 
 For example:
 
-    ``gwas.py phenotype.txt --out sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --no_grm_var --cpus 1 --sib_diff``
+    ``gwas.py phenotype.txt --out sibs --bgen chr_@_trios_sibs --pedigree pedigree.txt --cpus 1 --sib_diff``
 
-    ``gwas.py phenotype.txt --out trios_sibs_singletons --bgen chr_@_trios_sibs_singletons --pedigree pedigree.txt --no_grm_var --cpus 1 --impute_unrel``
-
-Similarly, we can compare the estimates to the true direct genetic effects using the following commands:
-
-    ``python estimate_sim_effects.py sibs_chr_1.sumstats.hdf5 phenotype.effects.txt``
-
-    ``python estimate_sim_effects.py trios_sibs_singletons_chr_1.sumstats.hdf5 phenotype.effects.txt``
+    ``gwas.py phenotype.txt --out trios_sibs_singletons --bgen chr_@_trios_sibs_singletons --pedigree pedigree.txt --cpus 1 --impute_unrel``
 
 Correlations between effects
 ----------------------------
 
 *snipar* provides a script (:ref:`correlate.py <correlate.py>`) to compute correlations between direct and population effects and between direct effects and average NTCs. 
-To compute these correlations from the effects estimated in this tutorial (output by gwas.py to chr_1.sumstats.gz) 
+To compute these correlations from the effects estimated in this tutorial (output by gwas.py to chr_1_young.sumstats.gz) 
 using the LD scores computed by ibd.py (and output to chr_1.l2.ldscore.gz), use the following command: 
 
-    ``correlate.py chr_@ effect --ldscores chr_@``
+    ``correlate.py chr_@_young effect --ldscores chr_@``
 
 This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
 and their standard errors, estimated by block-jacknife, are output to effect_corrs.txt. 
 
 The method is similar to LDSC, but correlates the marginal effects (not joint-fit effects adjusted for population stratification, as LDSC attempts to use), 
-adjusting for the known sampling variance-covariance matrix of the effects. 
-The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
+adjusting for the known sampling variance-covariance matrix of the effects. The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
 computed from .bed files by providing them through the --bed argument to :ref:`correlate.py <correlate.py>`. 
 
 Polygenic score analyses

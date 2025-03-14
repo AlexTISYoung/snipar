@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit, prange
 from snipar.utilities import *
 from snipar.map import decode_map_from_pos
+from bgen_reader import open_bgen
 
 ### Read haplotypes from bgen
 def haps_from_bgen(bgenfiles,chr_range):
@@ -469,7 +470,7 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
                 delta_p, delta_m, Y_p, Y_m = compute_phenotype(haps, causal, a, 1 - h2)
                 delta_p, delta_m, Y_p, Y_m = delta_p[father_indices], delta_m[mother_indices], Y_p[father_indices], Y_m[mother_indices]
             else:
-                delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[father_indices]
+                delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[mother_indices]
             # Compute phenotypes
             print('Computing phenotypes')
             if np.abs(beta_vert) > 0 and a_count>0:
@@ -540,7 +541,7 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
             delta_p, delta_m, Y_p, Y_m = compute_phenotype(haps, causal, a, 1 - h2)
             delta_p, delta_m, Y_p, Y_m = delta_p[father_indices], delta_m[mother_indices], Y_p[father_indices], Y_m[mother_indices]
         else:
-            delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[father_indices]
+            delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[mother_indices]
         # Compute phenotypes
         print('Computing phenotypes')
         if np.abs(beta_vert) > 0 and a_count>0:

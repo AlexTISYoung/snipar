@@ -239,7 +239,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bedfile, par_gts_f=None ,snp_ids=Non
         G.complete_trios_inds = trios_indices
         G.sibs_inds = sibs_indices
         return G
-    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
 
 
 def read_sibs_from_bed(bedfile,sibpairs):

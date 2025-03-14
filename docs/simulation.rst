@@ -15,9 +15,18 @@ To simulate data, please first create a directory to store the data:
 
     ``mkdir sim``
 
-Now, we are going to simulate data for 3000 families genotyped at 1000 independent SNPs. We are going to simulate 20 generations of assortative mating with parental phenotype correlation 0.5. 
+Now, we are going to simulate data for 3000 families, each with two full-siblings, genotyped at 1000 independent SNPs. 
+We simulate a phenotype affected by direct genetic effects and assortative mating. 
+We are going to simulate 20 generations of assortative mating with parental phenotype correlation 0.5, reaching an approximate equilibrium. 
+The command for this is:
 
-    ``simulate.py 1000 0.5 sim/ --nfam 3000 --impute --n_am 20 --r_par 0.5``
+    ``simulate.py 1000 0.5 sim/ --nfam 3000 --impute --n_am 20 --r_par 0.5 --save_par_gts``
+
+where the first argument gives the number of causal SNPs, the second argument gives the 
+random mating heritability, the third gives the output directory, --nfam gives the number of families, --impute 
+tells the script to impute missing parental genotypes, --n_am gives the number of generations of assortative mating,
+the parental phenotype correlation is given by --r_par, and --save_par_gts tells the script to output the 
+genotypes of the parents of the final generation in addition to the genotypes of the final generation.
 
 Please change your working directory to sim/:
 
@@ -81,12 +90,14 @@ and the direct and population effects should both be the same (1 in expectation)
 average parental NTC should be zero (in expectation). To check this, read in the 
 effect estimate output files in *R* or look at them using a text viewer (e.g. less -S on a unix system).
 
-To compute the PGS from the true direct genetic effects+estimation error (such as would be obtained from a GWAS), 
+To compute the PGS from the true direct genetic effects+estimation error (such as would be obtained from a family-based GWAS), 
 use the following command:
 
     ``pgs.py direct_v1 --bed chr_@ --imp chr_@ --weights causal_effects.txt --beta_col direct_v1``
     
-It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct_v1.pgs.txt. 
+It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct_v1.pgs.txt. (Notice also that the inferred
+correlation between parents' PGSs is lower than when using the true direct genetic effects as weights due to
+estimation error in the weights.)
 
 To estimate direct effect and average NTC of the PGS, use the following command:
 
@@ -100,12 +111,82 @@ from noisy weights (in direct_v1.1.effects.txt) will be smaller than the populat
 This is because the PGS does not capture all of the heritability due to estimation error in the weights. 
 The PGS has its population effect inflated (relative to its
 direct effect) by assortative mating, which induces a correlation of the PGS with the component of the heritability
-not captured by the PGS due to estimation error. This inflation is not captured by the direct effect of the PGS
-because chromosomes segregate independently during meiosis. (In this simulation, all causal SNPs segregate independently.) 
-Here, the ratio between direct and population effects of the PGS should be around 0.87. 
+not directly captured by the PGS due to estimation error. This inflation is not captured by the direct effect of the PGS
+because of the within-family variation used to estimate the direct effect is due to the random segregation of genetic material during meiosis.
+Here, the ratio between direct and population effects of the PGS should be around 0.86. 
 
 One should also observe a statistically significant average parental NTC (in direct_v1.2.effects.txt) of the PGS from 
 the two-generation model despite the absence of parental indirect genetic effects in this simulation. Here,
 the ratio between the average NTC and the direct effect should be around 0.15. This demonstrates
 that statistically significant average NTC estimates cannot be interpreted as demonstrating
 parental indirect genetic effects, especially for phenotypes affected by assortative mating. 
+
+Adjusting for assortative mating
+--------------------------------
+
+We now show how to adjust two-generation PGI results for assortative mating
+using the procedure outlined in `Estimation of indirect genetic effects and heritability under assortative mating <https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1.abstract>`_. 
+The estimation procedure is summarized in this diagram: 
+
+.. image:: two_gen_estimation.png
+    :scale: 30 %
+    :align: center
+    :alt: Two-generation estimation procedure accouting for assortative mating
+
+The estimation requires as inputs: an estimate of the correlation between parents' scores, :math:`r_k`;
+the regression coefficients from two-generation PGI analysis, (:math:`\delta_{\text{PGI}:k},\alpha_{\text{PGI}:k}`);
+and a heritability estimate, :math:`h^2_f`,from MZ-DZ twin comparisons, `RDR <https://www.nature.com/articles/s41588-018-0178-9>`_, or sib-regression.
+
+The estimation procedure outputs estimates of: :math:`k`, the fraction of heritability the PGI would explain in a random mating population;
+:math:`r_\delta`, the correlation between parents' true direct genetic effect components; 
+:math:`h^2_\text{eq}`, the equilibrium heritability, adjusting for the downward bias in heritability estimates from
+MZ-DZ comparisons, RDR, and sib-regression; 
+:math:`\alpha_\delta`, the indirect genetic effect of true direct genetic effect PGI;
+and :math:`v_{\eta:\delta}`, the fraction of phenotypic variance contribued by the indirect genetic effect component
+that is correlated with the direct genetic effect component. 
+
+We can use *snipar* to compute the two-generation PGI estimates and the correlation between parents' scores, 
+and we can input a heritability estimate into *pgs.py* script to complete the inputs, so that
+*snipar* will perform the two-generation analysis adjusting for assortative mating. 
+
+To perform the estimation, we will combine the offspring and parental genotype files. 
+This enables us to estimate the correlation between parents' scores 
+using the observed parental genotypes. (This is better than using the sibling 
+genotypes because the correlation estimate from observed parental genotypes is uncorrelated with the PGS regression coefficients.)
+
+    ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
+
+We now compute the noisy PGI using the observed offspring and parental genotypes:
+
+    ``pgs.py direct_v1_obs --bed chr_@_combined --weights causal_effects.txt --beta_col direct_v1 --pedigree pedigree.txt``
+
+To complete the inputs to two-generation PGI analysis, we need an estimate of heritability,
+as one would obtain from sib-regression, RDR, or MZ-DZ twin comparisons. This estimate is 
+a downard biased estimate of the equilibrium heritability, :math:`h^2_\text{eq}`, by a factor of :math:`(1-r_\delta)`, where
+:math:`r_\delta` is the correlation between the parents' direct genetic effect components. 
+
+We can obtain this from the VCs.txt output of the simulation, which can be read into R/Python/etc as table. 
+Each row gives, for each generation, 
+the variance of the direct genetic effect component, the phenotypic variance, and the
+correlation between parents' direct genetic effect components. The equilibrium heritability is
+obtained by using the values in the last row: 
+dividing the variance of the direct genetic effect component (first column) by the phenotypic variance
+(second column). To then obtain the heritability as estimated by sib-regression, RDR, and MZ-DZ twin comparisons,
+we multiply the equilibrium heritability by :math:`(1-r_\delta)`, where :math:`r_\delta` is obtained from the third column of 
+the last row. The equilibrium heritability should be around 0.59, and :math:`r_\delta` should be around 0.29, so the heritability as estimated
+by sib-regression, RDR, MZ-DZ twin comparisons should be around :math:`h^2_f \approx (1-0.29) \times 0.59=0.42`. 
+
+We can now perform two-generation PGI analysis accounting for assortative mating using the following command, 
+with the h2f argument set to the number computed from your VCs.txt file as outlined above (here we use 0.42):
+
+    ``pgs.py direct_v1_obs --pgs direct_v1_obs.pgs.txt --phenofile phenotype.txt --h2f 0.42,0``
+
+This script will take the input heritability estimate (0.42) and the standard error of the estimate (here 0 since we used the true value)
+to estimate the fraction of heritability the PGI would explain in a random mating population,
+:math:`k`, which should be around 0.5; the correlation between parents' direct genetic effect components, :math:`r_\delta`, 
+which should be around 0.29; the equilibrium heritability, :math:`h^2_\text{eq}`, which should be around 0.59; 
+the ratio between direct and population effects that would be expected based on assortative mating alone, :math:`\rho_k`,
+which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, :math:`\alpha_\delta`, which should not be
+statistically significantly different from zero (with high probability) because there are no parental indirect genetic effects in this simulation; 
+and :math:`v_{\eta:\delta}`, the contribution to the phenotypic variance from the indirect genetic effect component correlated with direct genetic effect component,
+which should also not be statistically indistinguishable from zero (with high probability). These estimates are output to direct_v1_obs.am_adj_pars.txt. 

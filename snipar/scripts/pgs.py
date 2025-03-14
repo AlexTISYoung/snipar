@@ -8,7 +8,12 @@ Args:
 @parser@
 
 Results:
+    PGS file
+        Output when inputting observed and imputed genotype files and a weights file. 
+        A file with PGS values for each individual and their parents, with suffix .pgs.txt.
+        Also includes sibling PGS if --fit_sib is specified, and grandparental PGS if --grandpar is specified.
     PGS effect estimates
+        Output when inputting a phenotype file.
         A file with suffix effects.txt containing estimates of the PGS effects and their standard errors,
         and a file with suffix vcov.txt containing the sampling variance-covariance matrix of the effect estimates
         
@@ -18,8 +23,9 @@ import numpy as np
 import snipar.pgs as pgs
 import snipar.read as read
 from snipar.utilities import *
-from snipar.slmm import build_ibdrel_arr, build_sib_arr
 from snipar.numrange import parseNumRange, NumRangeAction
+from numba import set_num_threads
+from numba import config as numba_config
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
@@ -68,8 +74,8 @@ parser.add_argument('--compute_controls', action='store_true', default=False,
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
 parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
 parser.add_argument('--force_am_adj',action='store_true',help='Force assortative mating adjustment even when estimated correlation is noisy/not significant',default=False)
+parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
 parser.add_argument('--batch_size',type=int,help='Batch size for reading in SNPs (default 10000)',default=10000)
-args=parser.parse_args()
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
@@ -77,6 +83,13 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    # Set number of threads
+    if args.threads is not None:
+        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+    else:
+        num_threads = numba_config.NUMBA_NUM_THREADS
+    set_num_threads(num_threads)
+    print('Number of threads: '+str(num_threads))
     if args.weights is not None:
         if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')
@@ -153,9 +166,9 @@ def main(args):
         ####### Assortative mating adjustment #######
         if not args.no_am_adj:
             if args.compute_controls:
-                r_am = pg[0].am_adj()
+                r_am, r_am_se = pg[0].am_adj()
             else:
-                r_am = pg.am_adj()
+                r_am, r_am_se = pg.am_adj()
         else:
             r_am = 0
         ####### Compute grandparental PGSs #######
@@ -176,6 +189,11 @@ def main(args):
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
+        pg = pgs.read_pgs(args.pgs)
+        if not args.parsum:
+            if 'parental' in pg.sid and 'paternal' not in pg.sid:
+                print('Using sum of paternal and maternal PGS as no paternal & maternal PGS values found')
+                args.parsum = True
         pg = pgs.read_pgs(args.pgs)
         if not args.parsum:
             if 'parental' in pg.sid and 'paternal' not in pg.sid:
@@ -231,7 +249,7 @@ def main(args):
         if '3' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
             alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
-            
+    return None
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)

@@ -2,11 +2,6 @@ import snipar.preprocess as preprocess
 import numpy as np
 from snipar.gtarray import gtarray
 from snipar.utilities import *
-# import logging
-
-
-# logger = logging.getLogger(__name__)
-
 
 def match_observed_and_imputed_snps(gts_f, par_gts_f, snp_ids=None, start=0, end=None): #, return_f=False):
     """
@@ -267,7 +262,7 @@ def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=No
         G.complete_trios_inds = trios_indices
         G.sibs_inds = sibs_indices
         return G
-    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status)
+    return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
 
 def read_sibs_from_bgen(bgenfile,sibpairs):
     bgen = open_bgen(bgenfile, verbose=True)
