@@ -20,25 +20,39 @@ class MyExt(Extension):
     def include_dirs(self, dirs):
         self.__include_dirs = dirs
 
-install_requires = [
-            'numpy==1.21.1',
-            'scipy==1.7.1',
-            'bgen_reader==4.0.7',
-            'pandas==1.1.4',
-            'pysnptools==0.5.3',
-            'networkx==2.5',
-            'h5py==3.6.0',
-            'pooch==1.5.1',
-            'numba==0.55.0',
-            'gitpython==3.1.24',
-            'scikit-learn==1.0.2',
-            'statsmodels==0.13.2',
-            'numdifftools>=0.9.39'
-            ]
-
-# Only include pysnptools if we're not building on Read the Docs
-if os.environ.get("READTHEDOCS") != "True":
-    install_requires.append('pysnptools==0.5.3')
+# Define the install requirements conditionally
+if os.environ.get("READTHEDOCS", "").lower() == "true":
+    # When building on Read the Docs, exclude pysnptools to avoid Rust dependency issues
+    install_requires = [
+        'numpy==1.21.1',
+        'scipy==1.7.1',
+        'bgen_reader==4.0.7',
+        'pandas==1.1.4',
+        'networkx==2.5',
+        'h5py==3.6.0',
+        'pooch==1.5.1',
+        'numba==0.55.0',
+        'gitpython==3.1.24',
+        'scikit-learn==1.0.2',
+        'statsmodels==0.13.2',
+        'numdifftools>=0.9.39'
+    ]
+else:
+    install_requires = [
+        'numpy==1.21.1',
+        'scipy==1.7.1',
+        'bgen_reader==4.0.7',
+        'pandas==1.1.4',
+        'pysnptools==0.5.3',
+        'networkx==2.5',
+        'h5py==3.6.0',
+        'pooch==1.5.1',
+        'numba==0.55.0',
+        'gitpython==3.1.24',
+        'scikit-learn==1.0.2',
+        'statsmodels==0.13.2',
+        'numdifftools>=0.9.39'
+    ]
 
 setup(name='snipar',
       version='0.0.20',
