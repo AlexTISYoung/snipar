@@ -5,7 +5,12 @@ family based genome-wide association and polygenic score analyses using observed
 
 The imputation method and the family-based GWAS and polygenic score models are described in [Young et al. 2022](https://www.nature.com/articles/s41588-022-01085-0).
 
-THe robust estimator, unified estimator and sib-difference estimator are described in [Guan et al. 2022](https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1).
+We developed additional family-GWAS designs in [Guan et al. 2022](https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1). These are now implemented in the gwas.py script. The unified estimator increases power for estimation of direct genetic effects in the homogeneous samples typically used in standard GWAS while giving estimates of 'population effects' comparable to those derived from standard GWAS using linear mixed models. The robust estimator maximises power in strongly structured and/or admixed samples without introducing bias. 
+
+**family-based GWAS can be performed without imputed parental genotypes using the gwas.py script**
+
+**snipar will meta-analyse siblings and trios by default when imputed parental genotypes are not provided**
+
 
 # Main features:
 
