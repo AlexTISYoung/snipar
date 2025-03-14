@@ -1,9 +1,11 @@
 from setuptools import setup, find_packages, Extension
 from setuptools import dist
 from pathlib import Path
+import os
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / "README.md").read_text()
+
 class MyExt(Extension):
     def __init__(self, *args, **kwargs):
         self.__include_dirs = ["."]
@@ -17,6 +19,26 @@ class MyExt(Extension):
     @include_dirs.setter
     def include_dirs(self, dirs):
         self.__include_dirs = dirs
+
+install_requires = [
+            'numpy==1.21.1',
+            'scipy==1.7.1',
+            'bgen_reader==4.0.7',
+            'pandas==1.1.4',
+            'pysnptools==0.5.3',
+            'networkx==2.5',
+            'h5py==3.6.0',
+            'pooch==1.5.1',
+            'numba==0.55.0',
+            'gitpython==3.1.24',
+            'scikit-learn==1.0.2',
+            'statsmodels==0.13.2',
+            'numdifftools>=0.9.39'
+            ]
+
+# Only include pysnptools if we're not building on Read the Docs
+if os.environ.get("READTHEDOCS") != "True":
+    install_requires.append('pysnptools==0.5.3')
 
 setup(name='snipar',
       version='0.0.20',
@@ -49,21 +71,7 @@ setup(name='snipar',
       python_requires='>=3.7',
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
-      install_requires=[
-            'numpy==1.21.1',
-            'scipy==1.7.1',
-            'bgen_reader==4.0.7',
-            'pandas==1.1.4',
-            'pysnptools==0.5.3',
-            'networkx==2.5',
-            'h5py==3.6.0',
-            'pooch==1.5.1',
-            'numba==0.55.0',
-            'gitpython==3.1.24',
-            'scikit-learn==1.0.2',
-            'statsmodels==0.13.2',
-            'numdifftools>=0.9.39'
-            ],
+      install_requires=install_requires,
       test_suite="snipar/tests",
       zip_safe=False,
       ext_modules=[
