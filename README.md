@@ -5,7 +5,7 @@ family based genome-wide association and polygenic score analyses using observed
 
 The imputation method and the family-based GWAS and polygenic score models are described in [Young et al. 2022](https://www.nature.com/articles/s41588-022-01085-0).
 
-We developed additional family-GWAS designs in [Guan et al. 2022](https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1). These are now implemented in the gwas.py script. The unified estimator increases power for estimation of direct genetic effects in the homogeneous samples typically used in standard GWAS while giving estimates of 'population effects' comparable to those derived from standard GWAS using linear mixed models. The robust estimator maximises power in strongly structured and/or admixed samples without introducing bias. 
+We developed additional family-GWAS designs in [Guan et al. 2022](https://www.nature.com/articles/s41588-025-02118-0). These are now implemented in the gwas.py script. The unified estimator increases power for estimation of direct genetic effects in the homogeneous samples typically used in standard GWAS while giving estimates of 'population effects' comparable to those derived from standard GWAS using linear mixed models. The robust estimator maximises power in strongly structured and/or admixed samples without introducing bias. 
 
 **family-based GWAS can be performed without imputed parental genotypes using the gwas.py script**
 
@@ -33,7 +33,7 @@ Documentation: https://snipar.rtfd.io/
 
 It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
-And to work through the tutorial: https://github.com/AlexTISYoung/snipar/blob/fgwas_v2_paper_sumstats_merge/docs/tutorial.rst#id30
+And to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
 
 # Installing Using pip
 
@@ -171,9 +171,3 @@ it in the container. To install snipar, follow these steps:
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 
     python -m unittest snipar.tests
-
-# Code for reproducing results
-See paper_results/ for code to reproduce results in https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1 
-
-# How to cite
-DOI: 10.5281/zenodo.14270274
