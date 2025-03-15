@@ -37,7 +37,15 @@ And to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutori
 
 # Installing Using pip
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX (although not currently available for Mac through pip). We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+
+The easiest way to install is using pip:
+
+    pip install snipar
+
+Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
+
+    pip install --upgrade pip
 
 # Virtual Environment
 
