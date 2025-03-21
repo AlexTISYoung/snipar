@@ -1,11 +1,20 @@
 # snipar
 
-*snipar* (single nucleotide imputation of parents) is a Python package for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing
-family based genome-wide association and polygenic score analyses using observed and/or imputed parental genotypes. 
+*snipar* (single nucleotide imputation of parents) is a Python package for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and performing family based genome-wide association and polygenic score analyses.
 
-The imputation method and the family-based GWAS and polygenic score models are described in [Young et al. 2022](https://www.nature.com/articles/s41588-022-01085-0).
+The methodology implemented in *snipar* is described in the following publications: 
 
-We developed additional family-GWAS designs in [Guan et al. 2025](https://www.nature.com/articles/s41588-025-02118-0). These are now implemented in the gwas.py script. The unified estimator increases power for estimation of direct genetic effects in the homogeneous samples typically used in standard GWAS while giving estimates of 'population effects' comparable to those derived from standard GWAS using linear mixed models. The robust estimator maximises power in strongly structured and/or admixed samples without introducing bias. 
+[![Young2022](https://img.shields.io/badge/Young-Nature%20Genetics%202022-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-022-01085-0)  
+**Family-based genome-wide association study designs for increased power and robustness**
+*[Alexander Strudwick Young](https://alextisyoung.github.io/), SM Nehzati, ..., Augustine Kong*
+[🔗 Full Text](https://www.nature.com/articles/s41588-022-01085-0)
+
+[![Guan2025](https://img.shields.io/badge/Guan-Nature%20Genetics%202025-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-025-02118-0)  
+**Family-based genome-wide association study designs for increased power and robustness**
+*Junming Guan, T Tan, SM Nehzati, M Bennett, P Turley, DJ Benjamin, [Alexander Strudwick Young](https://alextisyoung.github.io/)*
+[🔗 Full Text](https://www.nature.com/articles/s41588-025-02118-0)
+
+The method for imputation of missing parental genotypes is described in [![Young2022](https://img.shields.io/badge/Young-Nature%20Genetics%202022-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-022-01085-0). We developed additional family-GWAS designs in [![Guan2025](https://img.shields.io/badge/Guan-Nature%20Genetics%202025-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-025-02118-0), which are implemented in the gwas.py script. The unified estimator increases power for estimation of direct genetic effects in the homogeneous samples typically used in standard GWAS while giving estimates of 'population effects' comparable to those derived from standard GWAS using linear mixed models. The robust estimator maximises power in strongly structured and/or admixed samples without introducing bias. 
 
 **family-based GWAS can be performed without imputed parental genotypes using the gwas.py script**
 
