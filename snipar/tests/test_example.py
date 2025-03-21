@@ -11,10 +11,10 @@ class TestExample(SniparTest):
         commands2 = [            
             "ibd.py --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 --ld_out",#TODO add option of supressing logging in snipar
             "impute.py --ibd chr_@.ibd --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 -silent_progress",
-            "gwas.py phenotype.txt --bed chr_@ --imp chr_@ --threads 4",
+            "gwas.py phenotype.txt --bed chr_@ --imp chr_@ --threads 4 --out chr_@",
             "python estimate_sim_effects.py chr_1.sumstats.hdf5 phenotype.effects.txt",
             "correlate.py chr_@ effect --ldscores chr_@",
-            "pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt",
+            "pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt --A1 nt1 --A2 nt2 --beta_col ldpred_beta --SNP sid",
         ]
         stdout = subprocess.DEVNULL
         if self.log:

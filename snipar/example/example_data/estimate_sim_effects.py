@@ -25,7 +25,7 @@ if ests.shape[1] == 3:
         breg[i,1] = 1/np.var(b[:,i])
         breg[i,0] = np.cov(b[:,i],ests[:,i])[0,1]*breg[i,1]
         sigma2 = np.var(ests[:,i]-breg[i,0]*b[:,i])
-        breg[i,1] = np.sqrt(sigma2*breg[i,1]/np.float(b.shape[0]))
+        breg[i,1] = np.sqrt(sigma2*breg[i,1]/float(b.shape[0]))
 
     breg[3,0] = np.cov(avg_parental[:,0],(b[:,1]+b[:,2])/2.0)[0,1]/np.var((b[:,1]+b[:,2])/2.0)
     sigma2 = np.var(avg_parental[:,0]-breg[3,0]*(b[:,1]+b[:,2])/2.0)
@@ -40,7 +40,7 @@ else:
     breg[i,1] = 1/np.var(b[:,i])
     breg[i,0] = np.cov(b[:,i],ests[:,i])[0,1]*breg[i,1]
     sigma2 = np.var(ests[:,i]-breg[i,0]*b[:,i])
-    breg[i,1] = np.sqrt(sigma2*breg[i,1]/np.float(b.shape[0]))
+    breg[i,1] = np.sqrt(sigma2*breg[i,1]/float(b.shape[0]))
 
 
 
