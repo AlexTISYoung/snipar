@@ -23,7 +23,7 @@
 This illustrats an end-to-end workflow in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS and PGS analyses can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information:
 
 <p align="center">
-  <img src="docs/snipar_flowchart.png" width="350" alt="snipar flowchart">
+  <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
 </p>
 
 # Publications
@@ -53,6 +53,8 @@ Shows *snipar* applied to generate family-GWAS summary statistics from 17 differ
 Describes additional family-GWAS designs: the *unified estimator*, which increases power for estimating direct genetic effects in homogeneous samples (typical for GWAS) by including all samples through linear imputation; and the *robust estimator*, which maximizes power in strongly structured or admixed samples without introducing bias. The linear mixed model used in *snipar* family-GWAS and PGS analyses is described here.
 *Junming Guan, T Tan, SM Nehzati, M Bennett, P Turley, DJ Benjamin, [Alexander Strudwick Young](https://alextisyoung.github.io/).*
 [🔗 Full Text](https://www.nature.com/articles/s41588-025-02118-0)
+
+**Please cite at least one of these publications if you use snipar in your work!**
 
 # Main features:
 
