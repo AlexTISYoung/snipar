@@ -20,7 +20,7 @@
 - **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating of different strengths. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html)
 - **Estimate correlations between effects**: Family-GWAS summary statistics include genome-wide estimates of direct genetic effects (DGEs) — the within-family estimate of the effect of the allele — population effects — as estimated by standard GWAS — and non-transmitted coefficients (NTCs), the coefficients on parents' genotypes. The *correlate.py* scipt enables efficient estimation of genome-wide correlations between these different classes of effects accounting for sampling errors. See [Tutorial: correlations between effects](https://snipar.readthedocs.io/en/latest/tutorial.html#correlations-between-effects)
 
-This illustrats an end-to-end workflow in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS and PGS analyses can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information:
+This illustrats an end-to-end workflow for performing family-GWAS in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information:
 
 <p align="center">
   <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
@@ -55,21 +55,6 @@ Describes additional family-GWAS designs: the *unified estimator*, which increas
 [🔗 Full Text](https://www.nature.com/articles/s41588-025-02118-0)
 
 **Please cite at least one of these publications if you use snipar in your work!**
-
-# Main features:
-
-Infer identity-by-descent segments shared between siblings (ibd.py). 
-
-Impute missing parental genotypes given the observed genotypes in a nuclear family (impute.py).
-
-Perform family based GWAS using various estimators (gwas.py). 
-
-Compute polygenic scores for probands, siblings, and parents from SNP weights using observed/imputed parental genotypes, and perform family
- based analysis of polygenic scores (pgs.py script). 
- 
- Compute genome-wide correlations between different effects estimated by gwas.py (correlate.py). 
-
- Simulate genotype and phenotypes under different scenarios: direct and indirect genetic effects, vertical transmission, assortative mating (simulate.py). 
 
 # Documentation
 
