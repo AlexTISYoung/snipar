@@ -6,8 +6,8 @@
 
 ![Python Versions](https://img.shields.io/badge/Python-3.7--3.9-blue?style=flat-square&labelColor=3776AB&color=FFD43B&logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
-[![Documentation](https://img.shields.io/badge/docs-online-8A2BE2.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/index.html)
-[![Guide](https://img.shields.io/badge/docs-red.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/guide.html)
+[![Documentation](https://img.shields.io/badge/docs-8A2BE2.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/index.html)
+[![Guide](https://img.shields.io/badge/guide-red.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/guide.html)
 [![Tutorial](https://img.shields.io/badge/tutorial-20B2AA.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/tutorial.html)
 
 
@@ -17,8 +17,14 @@
 - **family-PGS analyses**: Compute and analyze polygenic scores (PGS) for a set of individuals along with their siblings and parents, using both observed and imputed parental genotypes. *snipar* can estimate the direct effect (within-family) effect of a polygenic score: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses). It can adjust for the impact of assortative mating on estimates of indirect genetic effects (effects of alleles in parents on offspring mediated through the environment) from family-based PGS analysis: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses).
 - **Imputation of missing parental genotypes**: For samples with at least one genotyped sibling and/or parent, but without both parents' genotypes available, *snipar* can impute missing parental genotypes according to Mendelian laws (Mendelian Imputation) and use these to increase power for family-GWAS and PGS analyses. See [Tutorial: imputing-missing-parental-genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#imputing-missing-parental-genotypes)
 - **Identity-by-descent (IBD) segments shared by siblings**: *snipar* implements a hidden markov model (HMM) to accurately infer identity-by-descent segments shared between siblings. The output of this is needed for imputation of missing parental genotypes from siblings. See [Tutorial: inferring IBD between siblings](https://snipar.readthedocs.io/en/latest/tutorial.html#inferring-ibd-between-siblings)
-- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that simulation multiple generations of a population undergoing random and/or assortative mating of different strengths. The phenotype on which assortment occurs can be simulated to include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations with options to output imputed parental genotypes. See [Simulation Exercse](https://snipar.readthedocs.io/en/latest/simulation.html)
-- **Estimate correlations between effects**: Family-GWAS summary statistics include genome-wide estimates of direct genetic effects (DGEs) — the within-family estimate of the effect of the allele — population effects — as estimated by standard GWAS — and non-transmitted coefficients (NTCs), the coefficients on parents' genotypes. The *correlate.py* scipt enables computation of genome-wide correlations between these different classes of effects accounting for sampling errors. See [Tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#correlations-between-effects)
+- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating of different strengths. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html)
+- **Estimate correlations between effects**: Family-GWAS summary statistics include genome-wide estimates of direct genetic effects (DGEs) — the within-family estimate of the effect of the allele — population effects — as estimated by standard GWAS — and non-transmitted coefficients (NTCs), the coefficients on parents' genotypes. The *correlate.py* scipt enables efficient estimation of genome-wide correlations between these different classes of effects accounting for sampling errors. See [Tutorial: correlations between effects](https://snipar.readthedocs.io/en/latest/tutorial.html#correlations-between-effects)
+
+This illustrats an end-to-end workflow in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS and PGS analyses can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information:
+
+<p align="center">
+  <img src="docs/snipar_flowchart.png" width="350" alt="snipar flowchart">
+</p>
 
 # Publications
 
@@ -31,19 +37,19 @@ Describes the method for imputation of missing parental genotypes and family-bas
 [🔗 Full Text](https://www.nature.com/articles/s41588-022-01085-0)
 
 [![Young2023](https://img.shields.io/badge/Young-bioRxiv%202023-3498DB.svg?style=flat-square)](https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1)  
-**Estimation of indirect genetic effects and heritability under assortative mating**  
-**[Alexander Strudwick Young](https://alextisyoung.github.io/)*  
+**Estimation of indirect genetic effects and heritability under assortative mating.**  
+**[Alexander Strudwick Young](https://alextisyoung.github.io/).*  
 Describes family-PGS analysis with adjustment for the impact of assortative mating on estimates of indirect genetic effects. 
 [🔗 Full Text](https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1)
 
 [![Tan2024](https://img.shields.io/badge/Tan-medRxiv%202024-9B59B6.svg?style=flat-square)](https://doi.org/10.1101/2024.10.01.24314703)  
-**Family-GWAS reveals effects of environment and mating on genetic associations**  
-*T Tan, H Jayashankar, J Guan, SM Nehzati, M Mir, M Bennett, E Agerbo, ..., *[Alexander Strudwick Young](https://alextisyoung.github.io/)*
+**Family-GWAS reveals effects of environment and mating on genetic associations.**  
+*T Tan, H Jayashankar, J Guan, SM Nehzati, M Mir, M Bennett, E Agerbo, ..., *[Alexander Strudwick Young](https://alextisyoung.github.io/).*
 Shows *snipar* applied to generate family-GWAS summary statistics from 17 different cohorts that are meta-analyzed. Describes the methodology for estimating genome-wide correlations between the different classes of effects estimated by family-GWAS. 
 [🔗 Full Text](https://doi.org/10.1101/2024.10.01.24314703)
 
 [![Guan2025](https://img.shields.io/badge/Guan-Nature%20Genetics%202025-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-025-02118-0)  
-**Family-based genome-wide association study designs for increased power and robustness**
+**Family-based genome-wide association study designs for increased power and robustness.**
 Describes additional family-GWAS designs: the *unified estimator*, which increases power for estimating direct genetic effects in homogeneous samples (typical for GWAS) by including all samples through linear imputation; and the *robust estimator*, which maximizes power in strongly structured or admixed samples without introducing bias. The linear mixed model used in *snipar* family-GWAS and PGS analyses is described here.
 *Junming Guan, T Tan, SM Nehzati, M Bennett, P Turley, DJ Benjamin, [Alexander Strudwick Young](https://alextisyoung.github.io/).*
 [🔗 Full Text](https://www.nature.com/articles/s41588-025-02118-0)
