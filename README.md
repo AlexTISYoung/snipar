@@ -28,33 +28,33 @@ This illustrats an end-to-end workflow for performing family-GWAS in *snipar* al
 
 # Publications
 
+**Please cite at least one of these publications if you use snipar in your work!**
+
 The methodologies implemented in *snipar* are described in the following publications: 
 
-[![Young2022](https://img.shields.io/badge/Young-Nature%20Genetics%202022-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-022-01085-0)  
-**Mendelian imputation of parental genotypes improves estimates of direct genetic effects.**
-*[Alexander Strudwick Young](https://alextisyoung.github.io/), SM Nehzati, ..., Augustine Kong.*
-Describes the method for imputation of missing parental genotypes and family-based GWAS with imputed parental genotypes.
+[![Young2022](https://img.shields.io/badge/Young-Nature%20Genetics%202022-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-022-01085-0) .   
+**Mendelian imputation of parental genotypes improves estimates of direct genetic effects.** . 
+[Alexander Strudwick Young](https://alextisyoung.github.io/), SM Nehzati, ..., Augustine Kong.  
+Describes the method for imputation of missing parental genotypes and family-based GWAS with imputed parental genotypes.  
 [🔗 Full Text](https://www.nature.com/articles/s41588-022-01085-0)
 
-[![Young2023](https://img.shields.io/badge/Young-bioRxiv%202023-3498DB.svg?style=flat-square)](https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1)  
-**Estimation of indirect genetic effects and heritability under assortative mating.**  
-**[Alexander Strudwick Young](https://alextisyoung.github.io/).*  
-Describes family-PGS analysis with adjustment for the impact of assortative mating on estimates of indirect genetic effects. 
+[![Young2023](https://img.shields.io/badge/Young-bioRxiv%202023-3498DB.svg?style=flat-square)](https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1) .   
+**Estimation of indirect genetic effects and heritability under assortative mating.** .   
+[Alexander Strudwick Young](https://alextisyoung.github.io/).  
+Describes family-PGS analysis with adjustment for the impact of assortative mating on estimates of indirect genetic effects.  
 [🔗 Full Text](https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1)
 
-[![Tan2024](https://img.shields.io/badge/Tan-medRxiv%202024-9B59B6.svg?style=flat-square)](https://doi.org/10.1101/2024.10.01.24314703)  
-**Family-GWAS reveals effects of environment and mating on genetic associations.**  
-*T Tan, H Jayashankar, J Guan, SM Nehzati, M Mir, M Bennett, E Agerbo, ..., *[Alexander Strudwick Young](https://alextisyoung.github.io/).*
-Shows *snipar* applied to generate family-GWAS summary statistics from 17 different cohorts that are meta-analyzed. Describes the methodology for estimating genome-wide correlations between the different classes of effects estimated by family-GWAS. 
+[![Tan2024](https://img.shields.io/badge/Tan-medRxiv%202024-9B59B6.svg?style=flat-square)](https://doi.org/10.1101/2024.10.01.24314703) .   
+**Family-GWAS reveals effects of environment and mating on genetic associations.** .   
+Tammy Tan, H Jayashankar, J Guan, SM Nehzati, M Mir, M Bennett, E Agerbo, ..., [Alexander Strudwick Young](https://alextisyoung.github.io/).  
+Shows *snipar* applied to generate family-GWAS summary statistics from 17 different cohorts that are meta-analyzed. Describes the methodology for estimating genome-wide correlations between the different classes of effects estimated by family-GWAS.   
 [🔗 Full Text](https://doi.org/10.1101/2024.10.01.24314703)
 
-[![Guan2025](https://img.shields.io/badge/Guan-Nature%20Genetics%202025-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-025-02118-0)  
-**Family-based genome-wide association study designs for increased power and robustness.**
-Describes additional family-GWAS designs: the *unified estimator*, which increases power for estimating direct genetic effects in homogeneous samples (typical for GWAS) by including all samples through linear imputation; and the *robust estimator*, which maximizes power in strongly structured or admixed samples without introducing bias. The linear mixed model used in *snipar* family-GWAS and PGS analyses is described here.
-*Junming Guan, T Tan, SM Nehzati, M Bennett, P Turley, DJ Benjamin, [Alexander Strudwick Young](https://alextisyoung.github.io/).*
+[![Guan2025](https://img.shields.io/badge/Guan-Nature%20Genetics%202025-blue.svg?style=flat-square)](https://www.nature.com/articles/s41588-025-02118-0) .   
+**Family-based genome-wide association study designs for increased power and robustness.** . 
+Describes additional family-GWAS designs: the *unified estimator*, which increases power for estimating direct genetic effects in homogeneous samples (typical for GWAS) by including all samples through linear imputation; and the *robust estimator*, which maximizes power in strongly structured or admixed samples without introducing bias. The linear mixed model used in *snipar* family-GWAS and PGS analyses is described here.  
+Junming Guan, T Tan, SM Nehzati, M Bennett, P Turley, DJ Benjamin, [Alexander Strudwick Young](https://alextisyoung.github.io/).  
 [🔗 Full Text](https://www.nature.com/articles/s41588-025-02118-0)
-
-**Please cite at least one of these publications if you use snipar in your work!**
 
 # Documentation
 
