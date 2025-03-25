@@ -104,7 +104,8 @@ def main(args):
     np.savetxt(args.outprefix+'pedigree.txt',ped,fmt='%s')
     #np.savetxt(args.outprefix+'sibs.fam',ped[last_gen,:],fmt='%s')
     phen_out = ped[last_gen,:]
-    np.savetxt(args.outprefix+'phenotype.txt',phen_out[:,[0,1,5]],fmt='%s')
+    phen_out = np.vstack((np.array(['FID','IID','phenotype']).reshape((1,3)),phen_out[:,[0,1,5]]))
+    np.savetxt(args.outprefix+'phenotype.txt',phen_out,fmt='%s')
     ## Save to HDF5 file
     print('Saving genotypes')
     # save offspring genotypes

@@ -32,17 +32,58 @@ Please change your working directory to sim/:
 
     ``cd sim``
 
-In this directory, the file phenotype.txt is a :ref:`phenotype file <phenotype>` containing the simulated phenotype. 
+The genotype data (chr_1.bed) has been simulated so that there are 3000 independent families, each with two siblings genotyped.
 
-The genotype data (chr_1.bed) has been simulated so that there are 3000 independent families, each with two siblings genotyped. 
+The pedigree file (pedigree.txt) contains the pedigree for all simulated generations. The pedigree has columns:
+FID, IID, Father_ID, MOTHER_ID, SEX, PHENO, FATHER_PHENO, MOTHER_PHENO, DIRECT, FATHER_DIRECT, MOTHER_DIRECT. 
+The FID and IID columns are the family and individual IDs, respectively. The Father_ID and MOTHER_ID columns are the IDs of the parents of the individual.
+The FATHER_PHENO and MOTHER_PHENO columns are the phenotype values of the parents, and the DIRECT, FATHER_DIRECT, and MOTHER_DIRECT columns are the direct genetic effect components of the individual, father, and mother, respectively.
+The FIDs follow the format ``generation_family``, and the IIDs follow the format ``generation_family_individual``.
+So if you look at the end of pedigree.txt (e.g. using ``tail pedigree.txt``), you should see
+the FID of the last line as ``20_2999``, and the IID of the last line as ``20_2999_1``.
+
+To enable analysis of the final generation phenotypes alone, we have placed the phenotype values for the final generation in a separate file (phenotype.txt). 
+
+Family-based GWAS without imputed parental genotypes
+----------------------------------------------------
+
+To perform a family-based GWAS, we use the :ref:`gwas.py <gwas.py>` script. 
+To perform a family-based GWAS without imputed parental genotypes, use the following command:
+
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --out chr_@_sibdiff ``
+
+The first argument is the phenotype file. As we are not inputting an imputed parental genotype file,
+we must specify the pedigree information from the pedigree file using the ``--pedigree pedigree.txt`` argument. 
+The genotype data in .bed format is specified by ``--bed chr_@`` argument.
+The ``@`` symbol is a placeholder for the chromosome number, so the script will read the genotype data from ``chr_1.bed``. 
+The output file is specified by ``--out chr_@_sibdiff``. The script will output summary statistics to a gzipped text file: ``chr_1_sibdiff.sumstats.gz``.
+The ``--cpus`` argument can be used to specify the number of processes to use to parallelize the GWAS. 
+
+Since the genotype data of the final generation contains 3000 sibling pairs, the script will perform sib-GWAS 
+using genetic differences between siblings to estimate direct genetic effects (see `Guan et al. <https://www.nature.com/articles/s41588-025-02118-0>`_).
+The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_sibdiff.sumstats.gz.
+
+We can combine the final two generations' genotype data into one .bed file using this command:
+
+    ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
+
+If we run the GWAS script on the combined genotype data, we can estimate the direct genetic effects using the full-sibling offspring and parental genotypes 
+in a trio design:
+
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@_combined --out chr_@_trio``
+
+The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_trio.sumstats.gz.
+If you read the summary statistics file (e.g. into R or using ``zless -S``) you can see that the effective sample size for 
+direct genetic effects is substantially larger from the trio design than the sib-differences design. 
+Note that both designs use the same number of phenotype observations in a generalized least-squares regression, but the trio design uses more information from the parents.
+In this simulation, the effective sample size from the trio design should be about 45% larger than for the sib-differences design.
 
 Inferring IBD between siblings
 ------------------------------
 
-The first step is to infer the identity-by-descent (IBD) segments shared between siblings. 
+The first step in the imputation of missing parental genotypes from siblings is to infer the identity-by-descent (IBD) segments shared between siblings. 
 However, for the purpose of this simulation exercise (where SNPs are independent, so IBD inference doesn't work)
 we have provided the true IBD states in the file chr_1.segments.gz.
-
 
 Imputing missing parental genotypes
 -----------------------------------

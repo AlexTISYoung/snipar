@@ -61,6 +61,7 @@ parser.add_argument('--gen_models',
 parser.add_argument('--h2f',type=str,help='Provide heritability estimate in form h2f,h2f_SE (e.g. 0.5,0.01) from MZ-DZ comparison, RDR, or sibling realized relatedness. If provided when also fitting 2 generation model, will adjust results for assortative mating assuming equilibrium.',default=None)
 parser.add_argument('--rk',type=str,help='Provide estimate of the correlation between parents PGIs in the form rk,rk_SE (e.g 0.1,0.01). If provided with h2f, will use for adjusting estimates for assortative mating.',default=None)
 parser.add_argument('--bpg',action='store_true', default=False, help='Restrict sample to those with both parents genotyped')    
+parser.add_argument('--phen',type=str,help='Name of the phenotype to be analysed — case sensitive. Default uses first phenotype in file.', default=None)
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                     default=1)
 parser.add_argument('--ibdrel_path', type=str,
@@ -205,7 +206,7 @@ def main(args):
     if args.phenofile is not None:
         print('Fitting PGS for '+str(args.phenofile))
         # Read phenotype
-        y = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+        y = read.phenotype.read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
         if args.covar is not None:
             print('Reading covariates')

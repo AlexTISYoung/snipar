@@ -32,8 +32,8 @@ parser.add_argument('--robust', action='store_true', default=False, help='Use th
 parser.add_argument('--sib_diff', action='store_true', default=False, help='Use the sibling difference method')
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
-parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)', default=1)
 parser.add_argument('--phen',type=str,help='Name of the phenotype to be analysed — case sensitive. Default uses first phenotype in file.', default=None)
+parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)', default=1)
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
 parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
@@ -156,7 +156,7 @@ def main(args):
         raise(ValueError('No input genotype files found'))
     # Read phenotype and covariates
     ######### Read Phenotype ########
-    y = read.phenotype.read_phenotype(args.phenofile, missing_char=args.missing_char, phen_index=args.phen_index)
+    y = read.phenotype.read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
     ######## Read covariates ########
     if args.covar is not None:
         print('Reading covariates')

@@ -20,14 +20,14 @@
 - **family-PGS analyses**: Compute and analyze polygenic scores (PGS) for a set of individuals along with their siblings and parents, using both observed and imputed parental genotypes. *snipar* can estimate the direct effect (within-family) effect of a polygenic score: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses). It can adjust for the impact of assortative mating on estimates of indirect genetic effects (effects of alleles in parents on offspring mediated through the environment) from family-based PGS analysis: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses).
 - **Imputation of missing parental genotypes**: For samples with at least one genotyped sibling and/or parent, but without both parents' genotypes available, *snipar* can impute missing parental genotypes according to Mendelian laws (Mendelian Imputation) and use these to increase power for family-GWAS and PGS analyses. See [Tutorial: imputing-missing-parental-genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#imputing-missing-parental-genotypes)
 - **Identity-by-descent (IBD) segments shared by siblings**: *snipar* implements a hidden markov model (HMM) to accurately infer identity-by-descent segments shared between siblings. The output of this is needed for imputation of missing parental genotypes from siblings. See [Tutorial: inferring IBD between siblings](https://snipar.readthedocs.io/en/latest/tutorial.html#inferring-ibd-between-siblings)
-- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating of different strengths. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html)
+- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html)
 - **Estimate correlations between effects**: Family-GWAS summary statistics include genome-wide estimates of direct genetic effects (DGEs) — the within-family estimate of the effect of the allele — population effects — as estimated by standard GWAS — and non-transmitted coefficients (NTCs), the coefficients on parents' genotypes. The *correlate.py* scipt enables efficient estimation of genome-wide correlations between these different classes of effects accounting for sampling errors. See [Tutorial: correlations between effects](https://snipar.readthedocs.io/en/latest/tutorial.html#correlations-between-effects)
-
-This illustrates an end-to-end workflow for performing family-GWAS in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information:
 
 <p align="center">
   <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
 </p>
+
+The above illustrates an end-to-end workflow for performing family-GWAS in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information. Also: imputation for parent-offspring pairs can proceed without IBD inference. 
 
 # Publications
 
@@ -72,37 +72,44 @@ And to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutori
 *snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX (although not currently available for Mac through pip). We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 The easiest way to install is using pip:
-
-    pip install snipar
+  ```
+  pip install snipar
+  ```
 
 Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
-
+  ```
     pip install --upgrade pip
+  ```
+
+Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
 
 # Virtual Environment
 
 You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
 
 To use venv, use the following commands in your directory of choice:
-    
+    ```
     python -m venv path-to-where-you-want-the-virtual-environment-to-be
+    ```
 
 You can activate and use the environment using
-
+  ```
     source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
+  ```
 
-Alternatively, we highly recommend using conda:
-	
+Alternatively, we recommend using conda:
+	```
   conda create -n myenv python=3.9
 	conda activate myenv
+  ```
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory
 containing the *snipar* source code, at the shell type:
-
+  ```
   pip install .
-
-Note: installing *snipar* requires the package *bed_reader*, which in turn requires installing Rust. If error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
+  ```
+Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
 
 # Python version incompatibility 
 

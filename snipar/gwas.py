@@ -387,7 +387,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     if not parsum and not sib_diff:
         par_status, gt_indices, fam_labels = find_par_gts(y.ids, ped, gts_id_dict)
         parcount = np.sum(par_status==0,axis=1)
-        if np.sum(parcount>0)==0:
+        if np.sum(parcount>0)==0 and not trios_sibs:
             # logger.warning('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
             print('WARNING: no individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
             parsum = True
