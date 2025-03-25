@@ -50,7 +50,7 @@ Family-based GWAS without imputed parental genotypes
 To perform a family-based GWAS, we use the :ref:`gwas.py <gwas.py>` script. 
 To perform a family-based GWAS without imputed parental genotypes, use the following command:
 
-    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --out chr_@_sibdiff ``
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --out chr_@_sibdiff``
 
 The first argument is the phenotype file. As we are not inputting an imputed parental genotype file,
 we must specify the pedigree information from the pedigree file using the ``--pedigree pedigree.txt`` argument. 
