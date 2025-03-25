@@ -10,6 +10,7 @@
 [![Documentation](https://img.shields.io/badge/docs-8A2BE2.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/index.html)
 [![Guide](https://img.shields.io/badge/guide-red.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/guide.html)
 [![Tutorial](https://img.shields.io/badge/tutorial-20B2AA.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/tutorial.html)
+[![Exercise](https://img.shields.io/badge/sim-exercise-20B2AA.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/simulation.html))
 [![Publication](https://img.shields.io/badge/Published-Nature%20Genetics-26af64.svg?colorB=26af64&style=popout)](https://www.nature.com/articles/s41588-025-02118-0)
 <a href="https://twitter.com/intent/follow?screen_name=alextisyoung"> <img src="https://img.shields.io/twitter/follow/alextisyoung.svg?style=social" alt="follow on Twitter"></a>
 
@@ -65,7 +66,7 @@ Documentation: https://snipar.rtfd.io/
 
 It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
-And to work through the tutorial: https://snipar.readthedocs.io/en/latest/tutorial.html
+And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html)
 
 # Installing Using pip
 
