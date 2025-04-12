@@ -308,6 +308,11 @@ def get_ids_with_trios_sibs(gts_f: str,
         raise ValueError('Unknown filetype for observed genotypes file: ' +
                          str(gts_f))
 
+    if sibs_indices.shape[0] == 0:
+        trios_only = True # used to decide dimension of output
+    else:
+        trios_only = False
+
     gts_id_dict = make_id_dict(gts_ids)
 
     # Find indices in reduced data
@@ -329,7 +334,7 @@ def get_ids_with_trios_sibs(gts_f: str,
 
     if return_info:
         return ids, fam_labels, gt_indices
-    return ids, fam_labels
+    return ids, fam_labels, trios_only
     
 def get_ids_with_trios(gts_f: str,
                        ped: np.ndarray, 
