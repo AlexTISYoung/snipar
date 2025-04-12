@@ -98,10 +98,12 @@ def main(args):
     print('Saving variance components to '+args.outprefix+'VCs.txt')
     np.savetxt(args.outprefix+'VCs.txt',V,fmt='%s')
     ### Save pedigree and fam files
-    print('Writing pedigree and fam files')
+    print('Writing pedigree and last generation relatedness and phenotype files')
     n_last = ped[ped.shape[0]-1,0].split('_')[0]
     last_gen = [x.split('_')[0]==n_last for x in ped[:,0]]
     np.savetxt(args.outprefix+'pedigree.txt',ped,fmt='%s')
+    rel = find_sibs_and_cousins(ped)
+    np.savetxt(args.outprefix+'last_gen_rel.seg',rel,fmt='%s',delimiter='\t')
     #np.savetxt(args.outprefix+'sibs.fam',ped[last_gen,:],fmt='%s')
     phen_out = ped[last_gen,:]
     phen_out = np.vstack((np.array(['FID','IID','phenotype']).reshape((1,3)),phen_out[:,[0,1,5]]))

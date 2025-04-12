@@ -630,3 +630,32 @@ def impute_all_fams_phased(haps,freqs,ibd):
         for j in range(haps.shape[2]):
             imp[i,j] = impute_from_sibs_phased(haps[i,0,j,:],haps[i,1,j,:],ibd[i,j,:],freqs[j])
     return imp
+
+def find_sibs_and_cousins(ped):
+    # Get last two generations
+    n_last = ped[ped.shape[0]-1,0].split('_')[0]
+    last_gen = ped[[x.split('_')[0]==n_last for x in ped[:,0]],:]
+    parent_gen = ped[[x.split('_')[0]==str(int(n_last)-1) for x in ped[:,0]],:]
+    # Fill in sibling relatedness
+    sibs = np.zeros((int(last_gen.shape[0]/2),4),dtype=ped.dtype)
+    sibs[:,0] = last_gen[0::2,1]
+    sibs[:,1] = last_gen[1::2,1]
+    sibs[:,2] = 0.5
+    sibs[:,3] = 'FS'
+    # Fill in cousin relatedness
+    cousins = np.zeros((int(2*last_gen.shape[0]),4),dtype=ped.dtype)
+    parent_gen_fam_dict = make_id_dict(parent_gen)
+    ccount = 0
+    for i in range(0,parent_gen.shape[0],2):
+        father_offspring = last_gen[last_gen[:,2]==parent_gen[i,1],1]
+        mother_offspring = last_gen[last_gen[:,3]==parent_gen[i+1,1],1]
+        for j in range(0,2):
+            for k in range(0,2):
+                cousins[ccount,:] = [father_offspring[j], mother_offspring[k], 0.125,
+                                    '3rd']
+                ccount += 1
+    # Remove inbred 'cousins'
+    cousins = cousins[cousins[:,0] != cousins[:,1],:]
+    # Create relatedness file format output
+    rel = np.vstack((np.array(['ID1', 'ID2', 'PropIBD', 'InfType']),sibs,cousins))
+    return rel 

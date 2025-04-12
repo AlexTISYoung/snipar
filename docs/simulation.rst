@@ -44,13 +44,17 @@ the FID of the last line as ``20_2999``, and the IID of the last line as ``20_29
 
 To enable analysis of the final generation phenotypes alone, we have placed the phenotype values for the final generation in a separate file (phenotype.txt). 
 
+We have also included a file (last_gen_rel.seg) that records the sibling and cousin relationships in the final generation to give an example of how a sparse genetic relatedness matrix (GRM)
+can be provided to the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>` scripts. This file has a row for each pairwise relationship with (minimally) columns
+giving IID1, IID2, PropIBD, InfType. This is the same format as output by KING IBD relationship inference using the ``--ibdseg`` argument. 
+
 Family-based GWAS without imputed parental genotypes
 ----------------------------------------------------
 
 To perform a family-based GWAS, we use the :ref:`gwas.py <gwas.py>` script. 
 To perform a family-based GWAS without imputed parental genotypes, use the following command:
 
-    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --out chr_@_sibdiff``
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --ibdrel_path last_gen_rel --out chr_@_sibdiff``
 
 The first argument is the phenotype file. As we are not inputting an imputed parental genotype file,
 we must specify the pedigree information from the pedigree file using the ``--pedigree pedigree.txt`` argument. 
@@ -70,7 +74,7 @@ We can combine the final two generations' genotype data into one .bed file using
 If we run the GWAS script on the combined genotype data, we can estimate the direct genetic effects using the full-sibling offspring and parental genotypes 
 in a trio design:
 
-    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@_combined --out chr_@_trio``
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@_combined --ibdrel_path last_gen_rel --out chr_@_trio``
 
 The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_trio.sumstats.gz.
 If you read the summary statistics file (e.g. into R or using ``zless -S``) you can see that the effective sample size for 
