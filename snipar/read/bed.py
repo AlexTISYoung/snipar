@@ -3,7 +3,6 @@ import numpy as np
 from pysnptools.snpreader import Bed
 from snipar.gtarray import gtarray
 from snipar.utilities import *
-
 def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None, start=0, end=None):
     """
     Used in get_gts_matrix_given_ped to match observed and imputed SNPs and return SNP information on shared SNPs.
@@ -70,7 +69,11 @@ def match_observed_and_imputed_snps(gts_f, par_gts_f, bim, snp_ids=None, start=0
         allele_mismatch = np.logical_not(np.logical_or(allele_match,allele_flip))
         n_mismatch = np.sum(allele_mismatch)
         if n_mismatch == alleles.shape[0]:
-            raise(ValueError('Np alleles match between observed and imputed genotypes'))
+            print('Observed alleles')
+            print(alleles)
+            print('Imputed alleles')
+            print(imp_alleles)
+            raise(ValueError('No alleles match between observed and imputed genotypes'))
         elif n_mismatch > 0:
             print('Removing '+str(n_mismatch)+' SNPs with mismatched alleles between imputed and observed')
             chromosome = chromosome[~allele_mismatch]

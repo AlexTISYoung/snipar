@@ -138,7 +138,7 @@ def main(args):
                 hf['imputed_par_gts'] = phased_imp
                 del phased_imp
                 hf['bim_values'] = encode_str_array(bim_i)
-                hf['bim_columns'] = encode_str_array(np.array(['rsid','map','position','allele1','allele2']))
+                hf['bim_columns'] = encode_str_array(np.array(['chrom','rsid','map','position','allele1','allele2']))
                 hf['pedigree'] = encode_str_array(imp_ped)
                 hf['families'] = encode_str_array(imp_ped[0::2,0])
                 hf.close()
@@ -150,7 +150,7 @@ def main(args):
                 hf['imputed_par_gts'] = imp
                 del imp
                 hf['bim_values'] = encode_str_array(bim_i)
-                hf['bim_columns'] = encode_str_array(np.array(['rsid','map','position','allele1','allele2']))
+                hf['bim_columns'] = encode_str_array(np.array(['chrom','rsid','map','position','allele1','allele2']))
                 hf['pedigree'] = encode_str_array(imp_ped)
                 hf['families'] = encode_str_array(imp_ped[0::2,0])
                 hf.close()
