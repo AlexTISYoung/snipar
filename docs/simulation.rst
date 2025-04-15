@@ -101,6 +101,67 @@ The pedigree along with the IBD segments shared between siblings recorded in chr
 from the observed sibling and parental genotypes in chr_1.bed. 
 The imputed parental genotypes are output to a :ref:`HDF5 file <imputed_file>`, chr_1.hdf5. 
 
+Family-based GWAS with imputed parental genotypes
+-------------------------------------------------
+
+To perform a family-based GWAS with the parental genotypes imputed using the above command, use the following command:
+
+    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --ibdrel_path last_gen_rel --out chr_@_imp``
+
+The output file is specified by ``--out chr_@_sibdiff``. The script will output summary statistics to a gzipped text file: ``chr_1_imp.sumstats.gz``.
+Since the genotype data of the final generation contains 3000 sibling pairs, the script will perform family-GWAS 
+using parental genotypes imputed from the siblings (see `Guan et al. <https://www.nature.com/articles/s41588-025-02118-0>`_).
+The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_imp.sumstats.gz.
+
+However, the imputation we performed above does not use phase information, which results in improved power, especially 
+for imputation from parent-offspring pairs (not simulated here). The simulation script output parental genotypes
+imputed from phased data, so we can use instead for family-GWAS using the following command
+
+    ``gwas.py phenotype.txt --bed chr_@ --imp phased_impute_chr_@ --ibdrel_path last_gen_rel --out chr_@_phased``
+
+The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_trio.sumstats.gz.
+If you read the summary statistics file (e.g. into R or using ``zless -S``) you can see that the effective sample size for 
+direct genetic effects is substantially larger from the trio design than the sib-differences design. 
+Note that both designs use the same number of phenotype observations in a generalized least-squares regression, but the trio design uses more information from the parents.
+In this simulation, the effective sample size from the trio design should be about 45% larger than for the sib-differences design.
+
+Increasing power for family-GWAS by including singletons
+--------------------------------------------------------
+
+We now demonstrate the power increase from including singletons in the family-GWAS
+by demonstrating the unified estimator introduced by `Guan et al. <https://www.nature.com/articles/s41588-025-02118-0>`_. 
+To demonstrate this, we first remove one sibling from each family in the final generation using the following command:
+
+    ``plink --bfile chr_1 --remove <(head -n $(( $(wc -l < chr_1.fam) / 2 )) chr_1.fam | awk 'NR % 2 == 0 {print $1, $2}') --make-bed --out chr_1_singletons``
+
+This produced a new .bed file (chr_1_singletons.bed) with one sibling removed from each family for half of the families. 
+We now perform the imputation of missing parental genotypes using this reduced dataset:
+
+    ``impute.py --ibd chr_@ --bed chr_@_singletons --pedigree pedigree.txt --out chr_@_singletons --threads 4``
+
+This means we have imputed parental genotypes for half of the families, where we have two siblings observed. 
+Plus we have singletons for the other half of the families, where we have one sibling observed, and no imputed parental genotypes. 
+We can now perform family-GWAS including the singletons using the following command:
+
+    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --ibdrel_path last_gen_rel --impute_unrel --out chr_@_unified``
+
+The output should say 
+
+    ``3000 individuals with imputed but no observed parental genotypes.``
+    ``1500 samples without imputed or observed parental genotypes will be included through linear imputation.``
+
+This shows we are using the 1500 samples without any imputed or observed parental genotypes (singletons) through linear imputation.
+The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_unified.sumstats.gz.
+
+We can compare this to performing family-GWAS without including the 1500 singletons:
+
+    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --ibdrel_path last_gen_rel --out chr_@_no_singletons``
+
+The median effective N for direct genetic effects should be about 18% higher from the analysis including singletons 
+(chr_1_unified.sumstats.gz) than from the analysis excluding singletons (chr_1_no_singletons.sumstats.gz).
+The increase in effective sample size can reach up to 50% as the singleton sample size grows relative to the 
+sample with observed parental genotypes or parental genotypes imputed from siblings and/or single parents. 
+
 Polygenic score analyses
 ------------------------
 
