@@ -135,6 +135,7 @@ def main(args):
         if args.robust:
             raise ValueError("The robust estimator requires imputed parental genotypes. If these are not available, remove the --robust flag and a meta analysis of trios and siblings will be performed.")
         trios_sibs = True if not args.sib_diff else False
+        trios_only = False
         # if trios_sibs and not args.impute_unrel:
         #     print('Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.')
         if args.bed is not None:
@@ -146,6 +147,7 @@ def main(args):
         pargts_list = [None for x in range(chroms.shape[0])]
     else:
         trios_sibs = False
+        trios_only = False
         if args.bed is not None:
             bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -235,7 +237,7 @@ def main(args):
             trios_sibs = False
         else:
             # Find individuals with genotyped siblings and/or both parents genotyped
-            ids, fam_labels = read.get_ids_with_trios_sibs(
+            ids, fam_labels, trios_only = read.get_ids_with_trios_sibs(
                 bedfiles[0] if args.bed is not None else bgenfiles[0], ped, y.ids, ibdrel_path=args.ibdrel_path
             )
     else:
@@ -359,7 +361,7 @@ def main(args):
                            ped, imp_fams, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=False,
-                           impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
+                           impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs, trios_only=trios_only,
                            max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=args.cpus, add_jitter=False,
                            debug=False)
