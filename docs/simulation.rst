@@ -44,9 +44,15 @@ the FID of the last line as ``20_2999``, and the IID of the last line as ``20_29
 
 To enable analysis of the final generation phenotypes alone, we have placed the phenotype values for the final generation in a separate file (phenotype.txt). 
 
-We have also included a file (last_gen_rel.seg) that records the sibling and cousin relationships in the final generation to give an example of how a sparse genetic relatedness matrix (GRM)
-can be provided to the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>` scripts. This file has a row for each pairwise relationship with (minimally) columns
-giving IID1, IID2, PropIBD, InfType. This is the same format as output by KING IBD relationship inference using the ``--ibdseg`` argument. 
+We have also included a file (last_gen_rel.seg) that records the sibling and cousin relationships in the final generation to give an example of how a sparse genetic relatedness matrix, a :ref:`GRM <GRM>`,
+can be provided to the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>` scripts. This tab or white space delimited text file has a row for each pairwise relationship with (minimally) columns
+giving ID1, ID2, and a column named 'PropIBD' or 'relatedness' giving the relatedness coefficient. 
+This is designed to work with the output of the `KING <https://www.kingrelatedness.com/manual.shtml>`_ IBD segment inference with the --ibdseg argument.
+But other ways of computing relatedness coefficient can be used, such as from a pedigree. 
+
+A GRM is not required to run family-GWAS or PGS analyses. By default, a linear mixed model that accounts for correlations 
+between siblings will be used. By providing a GRM, correlations between other relatives can be modelled, 
+leading to increased power and more accurate standard errors when other relative types are present in the analysis sample. 
 
 Family-based GWAS without imputed parental genotypes
 ----------------------------------------------------
@@ -54,7 +60,7 @@ Family-based GWAS without imputed parental genotypes
 To perform a family-based GWAS, we use the :ref:`gwas.py <gwas.py>` script. 
 To perform a family-based GWAS without imputed parental genotypes, use the following command:
 
-    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --ibdrel_path last_gen_rel --out chr_@_sibdiff``
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@ --grm last_gen_rel.seg --out chr_@_sibdiff``
 
 The first argument is the phenotype file. As we are not inputting an imputed parental genotype file,
 we must specify the pedigree information from the pedigree file using the ``--pedigree pedigree.txt`` argument. 
@@ -74,7 +80,7 @@ We can combine the final two generations' genotype data into one .bed file using
 If we run the GWAS script on the combined genotype data, we can estimate the direct genetic effects using the full-sibling offspring and parental genotypes 
 in a trio design:
 
-    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@_combined --ibdrel_path last_gen_rel --out chr_@_trio``
+    ``gwas.py phenotype.txt --pedigree pedigree.txt --bed chr_@_combined --grm last_gen_rel.seg --out chr_@_trio``
 
 The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_trio.sumstats.gz.
 If you read the summary statistics file (e.g. into R or using ``zless -S``) you can see that the effective sample size for 
@@ -82,11 +88,17 @@ direct genetic effects is substantially larger from the trio design than the sib
 Note that both designs use the same number of phenotype observations in a generalized least-squares regression, but the trio design uses more information from the parents.
 In this simulation, the effective sample size from the trio design should be about 45% larger than for the sib-differences design.
 
+By default, the gwas.py script will perform a meta-analysis of samples with genotyped siblings but without both parents genotyped —
+using the sib-difference estimator — and samples with both parents genotyped — using the trio design — when
+imputed parental genotypes are not provided. This should achieve something close to optimal power for family-GWAS
+without imputed parental genotypes. However, improved power can be achieved by using designs that take advantage of
+imputed parental genotypes. 
+
 Inferring IBD between siblings
 ------------------------------
 
-The first step in the imputation of missing parental genotypes from siblings is to infer the identity-by-descent (IBD) segments shared between siblings. 
-However, for the purpose of this simulation exercise (where SNPs are independent, so IBD inference doesn't work)
+The first step in the imputation of missing parental genotypes from siblings is to infer the identity-by-descent (IBD) segments shared between siblings.
+This is done using the :ref:`ibd.py <ibd.py>` script. However, for the purpose of this simulation exercise (where SNPs are independent, so IBD inference doesn't work)
 we have provided the true IBD states in the file chr_1.segments.gz.
 
 Imputing missing parental genotypes
@@ -106,7 +118,7 @@ Family-based GWAS with imputed parental genotypes
 
 To perform a family-based GWAS with the parental genotypes imputed using the above command, use the following command:
 
-    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --ibdrel_path last_gen_rel --out chr_@_imp``
+    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --grm last_gen_rel.seg --out chr_@_imp``
 
 The output file is specified by ``--out chr_@_sibdiff``. The script will output summary statistics to a gzipped text file: ``chr_1_imp.sumstats.gz``.
 Since the genotype data of the final generation contains 3000 sibling pairs, the script will perform family-GWAS 
@@ -117,7 +129,7 @@ However, the imputation we performed above does not use phase information, which
 for imputation from parent-offspring pairs (not simulated here). The simulation script output parental genotypes
 imputed from phased data, so we can use instead for family-GWAS using the following command
 
-    ``gwas.py phenotype.txt --bed chr_@ --imp phased_impute_chr_@ --ibdrel_path last_gen_rel --out chr_@_phased``
+    ``gwas.py phenotype.txt --bed chr_@ --imp phased_impute_chr_@ --grm last_gen_rel.seg --out chr_@_phased``
 
 The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_trio.sumstats.gz.
 If you read the summary statistics file (e.g. into R or using ``zless -S``) you can see that the effective sample size for 
@@ -143,7 +155,7 @@ This means we have imputed parental genotypes for half of the families, where we
 Plus we have singletons for the other half of the families, where we have one sibling observed, and no imputed parental genotypes. 
 We can now perform family-GWAS including the singletons using the following command:
 
-    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --ibdrel_path last_gen_rel --impute_unrel --out chr_@_unified``
+    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --grm last_gen_rel.seg --impute_unrel --out chr_@_unified``
 
 The output should say 
 
@@ -155,7 +167,7 @@ The summary statistics are output to a gzipped text :ref:`sumstats file <sumstat
 
 We can compare this to performing family-GWAS without including the 1500 singletons:
 
-    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --ibdrel_path last_gen_rel --out chr_@_no_singletons``
+    ``gwas.py phenotype.txt --bed chr_@_singletons --imp chr_@_singletons --grm last_gen_rel.seg --out chr_@_no_singletons``
 
 The median effective N for direct genetic effects should be about 18% higher from the analysis including singletons 
 (chr_1_unified.sumstats.gz) than from the analysis excluding singletons (chr_1_no_singletons.sumstats.gz).

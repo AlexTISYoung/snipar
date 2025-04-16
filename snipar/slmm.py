@@ -67,9 +67,22 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
     Returns:
         SparseGRMRepr: sparse GRM representation.
     """
-    # logger.info(f'Reading {ibdrel_path}.seg...')
-    king = pd.read_csv(ibdrel_path + '.seg',
-                       sep='\t')[['ID1', 'ID2', 'PropIBD', 'InfType']]
+    # Determine delimiter and read header
+    with open(ibdrel_path, 'r') as file:
+        first_line = file.readline()
+        delimiter = '\t' if '\t' in first_line else ' '  
+        header = first_line.split(delimiter)
+        header[-1] = header[-1].strip()  # Remove newline character
+    if not 'ID1' in header and 'ID2' in header:
+        raise ValueError('GRM should have ID1 and ID2 columns.')
+    if 'PropIBD' in header:
+        relcol = 'PropIBD'
+    elif 'relatedness' in header:
+        relcol = 'relatedness'
+    else:
+        raise ValueError('GRM should have PropIBD or relatedness column.')
+    king = pd.read_csv(ibdrel_path,
+                       sep=delimiter)[['ID1', 'ID2',relcol]]
     king['ID1'] = king['ID1'].astype(str)
     king['ID2'] = king['ID2'].astype(str)
 
@@ -86,7 +99,7 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
         id1 = row.ID1
         id2 = row.ID2
         if row.PropIBD > 0.8:
-            raise ValueError(f'Impossible ibd relatedness {row.PropIBD} for pair ({id1}, {id2}).')
+            raise ValueError(f'Impossible ibd relatedness {row.PropIBD} for pair ({id1}, {id2}). MZ pairs should be removed.')
         ind1, ind2 = id_dict[id1], id_dict[id2]
         ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
         # data[row.Index] = 0. if ignore_sib and row.InfType == 'FS' else row.PropIBD # if row.PropIBD > thres else 0.
@@ -154,7 +167,7 @@ def match_grm_ids(ids: Ids,
         grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\s+', names=[
                               '_', 'ids_'], dtype={'_': str, 'ids_': str})[['ids_']]
     elif grm_source == 'ibdrel':
-        grm_ids = pd.read_csv(grm_path + '.seg',
+        grm_ids = pd.read_csv(grm_path,
                               sep='\t')[['ID1', 'ID2']]
         id1 = grm_ids['ID1'].to_numpy(dtype=str)
         id2 = grm_ids['ID2'].to_numpy(dtype=str)

@@ -64,8 +64,7 @@ parser.add_argument('--bpg',action='store_true', default=False, help='Restrict s
 parser.add_argument('--phen',type=str,help='Name of the phenotype to be analysed — case sensitive. Default uses first phenotype in file.', default=None)
 parser.add_argument('--phen_index',type=int,help='If the phenotype file contains multiple phenotypes, which phenotype should be analysed (default 1, first)',
                     default=1)
-parser.add_argument('--ibdrel_path', type=str,
-                    help='Path to KING IBD segment inference output (without .seg prefix).', default=None)
+parser.add_argument('--grm', type=str, help='Path to GRM file giving pairwise relatednsss information. Designed to work with KING IBD segment inference output (.seg file).', default=None)
 parser.add_argument('--sparse_thresh', type=float,
                 help='Threshold of GRM/IBD sparsity', default=0.05)
 parser.add_argument('--scale_phen',action='store_true',help='Scale the phenotype to have variance 1',default=False)
@@ -234,10 +233,10 @@ def main(args):
         ## Estimate models
         if '1' in args.gen_models:
             print('Estimating population effect (1 generation model)')
-            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
         if '2' in args.gen_models:
             print('Estimating direct effect and parental NTCs (2 generation model)')
-            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
             if args.h2f is not None:
                 print('Adjusting two-generation model results and heritability estimate for assortative mating')
                 h2f, h2f_se = pgs.h2f_parse(args.h2f)
@@ -249,7 +248,7 @@ def main(args):
                 pgs.write_2gen_adj_ests(adj_estimates, adj_ses, outprefix=args.out)
         if '3' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
-            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.ibdrel_path, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
     return None
 if __name__ == "__main__":
     args=parser.parse_args()

@@ -82,12 +82,19 @@ covariate file
 The covariate file has the same format as the phenotype file (above). It is a white-space delimited text file with a header. It has columns (in order) for
 family-ID, individual-ID, and covariate values for the different covariates. (Note, covariates must be numerical). 
 
-genetic relationship file
--------------------------
+genetic relationship (GRM) file
+-------------------------------
 .. _grm:
 
-The genetic relationship file is used for variance component estimation in the :ref:`gwas.py <gwas.py>` script. It can be specified by a `GCTA GRM <https://yanglab.westlake.edu.cn/software/gcta/#MakingaGRM>`_ in the .gz format
-or by IBD proportion estimated by `KING <https://www.kingrelatedness.com/manual.shtml>`_.
+The genetic relationship file is used for modeling correlations between relatives in the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <gwas.py>` script. 
+The GRM file can be specified using the --grm option. This file should be a white space or tab delimited text file where 
+each row specifies a pairwise relationship. Minimally, it should have columns ID1 and ID2, giving the IDs of the pair, and 
+a column named 'PropIBD' or 'relatedness' giving the relatedness coefficient between the pair. 
+This is designed to work with the output of the `KING <https://www.kingrelatedness.com/manual.shtml>`_ IBD segment inference with the --ibdseg argument.
+But other ways of computing relatedness coefficient can be used, such as from a pedigree. 
+Alternatively, one can be specify a `GCTA GRM <https://yanglab.westlake.edu.cn/software/gcta/#MakingaGRM>`_ in the .gz format. 
+This can be very slow for large samples since it requires loading all pairs but only pairs related above the 
+set threshold (default 0.05) are used to compute a sparse GRM. 
 
 weights file
 ------------

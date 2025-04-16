@@ -138,7 +138,7 @@ def get_ids_with_par(gts_f: str,
     """Find ids with observed/imputed parents and family labels.
     """
     if ibdrel_path is not None:
-        king = pd.read_csv(ibdrel_path + '.seg',
+        king = pd.read_csv(ibdrel_path,
                         sep='\t')[['ID1', 'ID2', 'InfType']]
         king['ID1'] = king['ID1'].astype(str)
         king['ID2'] = king['ID2'].astype(str)
@@ -222,7 +222,7 @@ def get_ids_with_sibs(gts_f: str,
     """Find ids with sibs and family labels.
     """
     if ibdrel_path is not None:
-        king = pd.read_csv(ibdrel_path + '.seg',
+        king = pd.read_csv(ibdrel_path,
                         sep='\t')[['ID1', 'ID2', 'InfType']]
         king['ID1'] = king['ID1'].astype(str)
         king['ID2'] = king['ID2'].astype(str)
@@ -281,7 +281,7 @@ def get_ids_with_trios_sibs(gts_f: str,
     """Find ids with sibs and both parents, and their family labels.
     """
     if ibdrel_path is not None:
-        king = pd.read_csv(ibdrel_path + '.seg',
+        king = pd.read_csv(ibdrel_path,
                         sep='\t')[['ID1', 'ID2', 'InfType']]
         king['ID1'] = king['ID1'].astype(str)
         king['ID2'] = king['ID2'].astype(str)
@@ -344,7 +344,7 @@ def get_ids_with_trios(gts_f: str,
     """Remove ids with sibs only. Used for the unified estimator when only pedigree file is supplied.
     """
     if ibdrel_path is not None:
-        king = pd.read_csv(ibdrel_path + '.seg',
+        king = pd.read_csv(ibdrel_path,
                         sep='\t')[['ID1', 'ID2', 'InfType']]
         king['ID1'] = king['ID1'].astype(str)
         king['ID2'] = king['ID2'].astype(str)

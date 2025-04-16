@@ -24,8 +24,8 @@ parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must b
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--chr_range', type=parseNumRange, nargs='*', action=NumRangeAction, help='Chromosomes to analyse. Should be a series of ranges with x-y format (e.g. 1-22) or integers.', default=None)
 parser.add_argument('--out', type=str, help="The summary statistics will output to this path, one file for each chromosome. If the path contains '@', the '@' will be replaced with the chromosome number. Otherwise, the summary statistics will be output to the given path with file names chr_1.sumstats.gz, chr_2.sumstats.gz, etc. for the text sumstats, and chr_1.sumstats.hdf5, etc. for the HDF5 sumstats",default='./')
-parser.add_argument('--grm_path', type=str, help='Path to GCTA grm.gz file (without .gz suffix).', default=None)
-parser.add_argument('--ibdrel_path', type=str, help='Path to KING IBD segment inference output (without .seg suffix).', default=None)
+parser.add_argument('--grm', type=str, help='Path to GRM file giving pairwise relatednsss information. Designed to work with KING IBD segment inference output (.seg file).', default=None)
+parser.add_argument('--grmgz', type=str, help='Path to GRM in GCTA grm.gz format (without .grm.gz suffix). Assumes .grm.id file with same root path also available.', default=None)
 parser.add_argument('--sparse_thresh', type=float, help='Threshold of GRM sparsity — elements below this value are set to zero', default=0.05)
 parser.add_argument('--impute_unrel', action='store_true', default=False, help='Whether to include unrelated individuals and impute their parental genotypes lineary or not. See Unified estimator in Guan et al.')
 parser.add_argument('--robust', action='store_true', default=False, help='Use the robust estimator')
@@ -82,21 +82,21 @@ def main(args):
     if (args.sib_diff or args.robust) and args.parsum:
         raise argparse.ArgumentTypeError('--parsum is ignored with --sib_diff and --robust estimator.')
     # Check if GRM provided
-    if args.ibdrel_path is None and args.grm_path is None:
+    if args.grm is None and args.grmgz is None:
         print('No GRM provided.')
         args.no_grm_var = True
     else:
         args.no_grm_var = False
-        if args.ibdrel_path:
-            if os.path.exists(args.ibdrel_path+'.seg'):
-                print('Using IBDrel file: '+args.ibdrel_path+'.seg for GRM variance component')
+        if args.grm:
+            if os.path.exists(args.grm):
+                print('Using pairwise relationships from: '+args.grm+' for GRM variance component')
             else:
-                raise argparse.ArgumentTypeError('IBDrel file for GRM not found.')
-        elif args.grm_path:
-            if os.path.exists(args.grm_path+'.grm.gz'):
-                print('Using GCTA GRM file: '+args.grm_path+'.grm.gz for GRM variance component')
+                raise argparse.ArgumentTypeError('GRM not found.')
+        elif args.grmgz:
+            if os.path.exists(args.grmgz+'.grm.gz'):
+                print('Using: '+args.grmgz+' for GRM variance component')
             else:
-                raise argparse.ArgumentTypeError('GCTA GRM file not found.')
+                raise argparse.ArgumentTypeError('GRM file not found.')
     # Check if fitting sibling variance component
     if args.no_sib_var:
         if args.no_grm_var:
@@ -221,7 +221,7 @@ def main(args):
         ids = y.ids
         fam_labels = y.fams
         ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], ped, 
-                                                 y.ids, return_info=False, ibdrel_path=args.ibdrel_path)
+                                                 y.ids, return_info=False, ibdrel_path=args.grm)
     elif trios_sibs:
         if args.impute_unrel:
             # Remove siblings
@@ -231,20 +231,20 @@ def main(args):
             # Find trios
             ids, fam_labels = read.get_ids_with_par(
                 bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
-                ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
+                ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.grm,
                 return_info=False
             )
             trios_sibs = False
         else:
             # Find individuals with genotyped siblings and/or both parents genotyped
             ids, fam_labels, trios_only = read.get_ids_with_trios_sibs(
-                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, y.ids, ibdrel_path=args.ibdrel_path
+                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, y.ids, ibdrel_path=args.grm
             )
     else:
         # Find individuals with observed and/or imputed parental genotypes
         ids, fam_labels = read.get_ids_with_par(
             bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
-            y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.ibdrel_path,
+            y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.grm,
             return_info=False
         )
     #### Filter phenotype to valid IDs ###
@@ -260,16 +260,16 @@ def main(args):
         else:
             covariates.filter_ids(y.ids)
     # Read GRM if provided 
-    if args.ibdrel_path is not None:
+    if args.grm is not None:
         id_dict = make_id_dict(ids)
         grm_data, grm_row_ind, grm_col_ind = slmm.build_ibdrel_arr(
-            args.ibdrel_path, id_dict=id_dict, keep=ids, thres=args.sparse_thresh)
-    elif args.grm_path is not None:
+            args.grm, id_dict=id_dict, keep=ids, thres=args.sparse_thresh)
+    elif args.grmgz is not None:
         ids, fam_labels = slmm.match_grm_ids(
-            ids, fam_labels, grm_path=args.grm_path, grm_source='gcta')
+            ids, fam_labels, grm_path=args.grmgz, grm_source='gcta')
         id_dict = make_id_dict(ids)
         grm_data, grm_row_ind, grm_col_ind = slmm.build_grm_arr(
-            args.grm_path, id_dict=id_dict, thres=args.sparse_thresh)
+            args.grmgz, id_dict=id_dict, thres=args.sparse_thresh)
     # Build sparse silbship array if fitting sib variance component
     if not args.no_sib_var:
         sib_data, sib_row_ind, sib_col_ind = slmm.build_sib_arr(fam_labels)
