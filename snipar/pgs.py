@@ -689,9 +689,25 @@ def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse
     slmm_model = slmm.LinearMixedModel(np.array(y.gts[no_NA,0],dtype=float), 
                     varcomp_arr_lst=varcomp_lst, covar_X=np.array(X[no_NA,:],dtype=float), add_intercept=True)
     # Optimize Lmm
+    print('Optimizing linear mixed model')
     slmm_model.scipy_optimize()
     # Print variance components
-    print(f'Variance components: {list(i for i in slmm_model.varcomps)}')
+    varcomps = list(i for i in slmm_model.varcomps)
+    vcomp_index=0
+    print('Variance components (after projecting out PGS and covariates):')
+    if ibdrel_path is not None:
+        print(f'GRM variance component: {varcomps[vcomp_index]:.3f}')
+        print(f'Variance explained by GRM: {varcomps[vcomp_index] / np.sum(varcomps) * 100:.1f}%')
+        vcomp_index+=1
+    print(f'Sibling variance component: {varcomps[vcomp_index]:.3f}')
+    print(f'Variance explained by sibling component: {varcomps[vcomp_index] / np.sum(varcomps) * 100:.1f}%')
+    print(f'Total variance: {np.sum(varcomps):.3f}')
+    # Print implied sibling correlation
+    if ibdrel_path is None:
+        print(f'Implied sibling correlation: {varcomps[0] / np.sum(varcomps):.3f}')
+    else:
+        print(f'Implied sibling correlation: {(0.5*varcomps[0] + varcomps[1]) / np.sum(varcomps):.3f}')
+    # Compute estimates
     ZT_Vinv_Z_imp = slmm_model.Z.T @ slmm_model.Vinv_Z
     alpha = [np.linalg.solve(ZT_Vinv_Z_imp, slmm_model.Z.T @ slmm_model.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
     return alpha, X_cols

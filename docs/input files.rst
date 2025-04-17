@@ -84,7 +84,7 @@ family-ID, individual-ID, and covariate values for the different covariates. (No
 
 genetic relationship (GRM) file
 -------------------------------
-.. _grm:
+.. _GRM:
 
 The genetic relationship file is used for modeling correlations between relatives in the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <gwas.py>` script. 
 The GRM file can be specified using the --grm option. This file should be a white space or tab delimited text file where 

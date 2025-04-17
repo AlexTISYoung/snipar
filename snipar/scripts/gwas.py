@@ -45,6 +45,7 @@ parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batch
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU. Uses all available by default.',default=1)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
+__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 args = parser.parse_args()
 num_threads = args.threads
 print('Number of threads for numpy: '+str(num_threads))
