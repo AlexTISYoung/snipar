@@ -55,7 +55,7 @@ else:
     ]
 
 setup(name='snipar',
-      version='0.0.21',
+      version='0.0.22',
       description='Library and command line scripts for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, performing family based genome-wide association and polygenic score analyses.',
       long_description = long_description,
       long_description_content_type="text/markdown",
