@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Infers direct effects, non-transmitted coefficients (NTCs), and population effects of genome-wide SNPs on a phenotype.
 
-Minimally: the script requires observed genotypes on phenotyped individuals and their parents, and/or 
-parental genotypes imputed by snipar's impute.py script, along with a phenotype file. 
+Minimally: the script requires observed genotypes on phenotyped individuals along with a phenotype file.
+If no imputed parental genotypes are provided, a pedigree file is required, and the script will analyze
+samples with siblings and/or both parents genotyped by default.  
 
 Args:
 @parser@
