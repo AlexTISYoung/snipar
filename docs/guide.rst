@@ -19,15 +19,15 @@ The imputation method and the family-based GWAS and polygenic score models are d
 A method for adjusting family-PGS analyses for assortative mating is described in `Young et al. 2023 <https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1>`_.
 
 Additional family-GWAS estimators that maximize power by inclusion of samples without genotyped first-degree relatives 
-and for samples with strong structure and/or admixutre (the robust estimator) are described in `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_.
-See the :ref:`tutorial <tutorial>` for an example of using the robust estimator, which requires imputation from phased data to be performed first.
+and for samples with strong structure and/or admixutre (the robust estimator) are described in `Guan et al. 2025 <https://www.nature.com/articles/s41588-025-02118-0>`_.
 This paper also describes the linear mixed model implemented in *snipar* for family-GWAS and PGS analyses: this 
 models correlations between siblings and between other relatives using a sparse genetic relationship matrix, :ref:`GRM <GRM>`.
 
 Installation
 ------------
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. We recommend using Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. 
+We recommend installing using pip in an Anaconda environment as the most reliable way to install *snipar* and its dependencies. 
 
 Installing Using pip
 ~~~~~~~~~~~~~~~~~~~~
@@ -82,11 +82,11 @@ Workflow
 --------
 .. _workflow:
 
-A typical *snipar* workflow for performing family-based GWAS using imputed parental genotypes (see flowchart below) is:
+A typical *snipar* workflow for performing family-GWAS using imputed parental genotypes (see flowchart below) is:
 
 1. Inferring identity-by-descent (IBD) segments shared between siblings (:ref:`ibd.py <ibd.py>`)
 2. Imputing missing parental genotypes (:ref:`impute.py <impute.py>`)
-3. Estimating direct effects and non-transmitted coefficients (NTCs) of genome-wide SNPs (:ref:`gwas.py <gwas.py>`)
+3. Estimating direct genetic effects and non-transmitted coefficients (NTCs) of genome-wide SNPs (:ref:`gwas.py <gwas.py>`)
 
 .. figure:: snipar_flowchart.png
    :scale: 30 %
@@ -198,8 +198,8 @@ Family-based genome-wide association analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Family-based GWAS is performed by the :ref:`gwas.py <gwas.py>` script. 
-This script estimates direct genetic effects and (when using designs with observed/imputed parental genotypes) non-transmitted coefficients, and population effects of input genetic variants
-on the phenotype specified in the :ref:`phenotype file <phenotype>`. (If multiple phenotypes are present in the :ref:`phenotype file <phenotype>`,
+This script estimates direct genetic effects and (when using designs with observed/imputed parental genotypes) and non-transmitted coefficients of the input variants — the population effects, as estimated by standard GWAS.
+The phenotype specified in the :ref:`phenotype file <phenotype>`. (If multiple phenotypes are present in the :ref:`phenotype file <phenotype>`,
 the phenotype to analyse can be specified by its column name using the '--phen' argument and by its column index using the '--phen_index' argument, where '--phen_index 1' corresponds to the first phenotype.)
 
 If imputed parental genotypes are not provided, the default behaviour of the :ref:`gwas.py <gwas.py>` is to perform a meta-analysis of samples with genotyped siblings but without both parents genotyped —
@@ -223,8 +223,8 @@ of the individual's sibling(s) to the regression.
 To improve power when imputed and/or observed parental genotypes are available, the '--impute_unrel' argument can be used to
 include samples without genotyped parents/siblings through linear imputation of parental genotypes. 
 This can increase the effective sample size by up to 50% when very large samples without genotyped relatives are available.
-See the discussion of the unified estimator in `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details.
-If applied to the full sampple for which standard GWAS would be applied, this method will give estimates of population effects
+See the discussion of the unified estimator in `Guan et al. 2025 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details.
+If applied to the full sample for which standard GWAS would be applied, this method will give estimates of population effects
 of equivalent power to standard GWAS along with direct genetic effect estimates.
 
 Methods with imputed parental genotypes can be susceptible to population stratification when samples are strongly structured (Fst > 0.01)
@@ -232,9 +232,9 @@ or when parents are admixed between similarly differentiated groups.
 To maximize power in these cases, one can use the '--robust' argument to use the robust estimator. 
 This requires parental genotypes imputed from phased data to work, although the imputed parental genotypes are not 
 directly used in regression design: the imputation procedure is used to work out parent-of-origin of alleles 
-to enable optimal use of samples with one parent genotyped. 
+to enable optimal use of samples with one parent genotyped. See the :ref:`tutorial <tutorial>` for an example of how to use this option.
 The default behaviour of the gwas.py script is also appropriate for strongly structured samples, but will
-generally have reduced power compared to the robust estimator. See `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details 
+generally have reduced power compared to the robust estimator. See `Guan et al. 2025 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details 
 
 By defualt the :ref:`gwas.py <gwas.py>` script estimates a variance component model that models the phenotypic correlation 
 between siblings after accounting for the covariates. Modelling correlations between siblings is important to ensure statistically efficient
@@ -245,33 +245,12 @@ specified by the '--sparse_thresh' argument (default is 0.05).
 Note that if no imputed parental genotypes are input, a :ref:`pedigree file <pedigree>` is required. 
 (A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
 
-To deal with potential large genotype datasets, the script processes chromosome files sequentially, and allows parellel processing of each chromosome if '--cpus [NUM_CPUS]'
+The script processes chromosome files sequentially, and allows parellel processing of each chromosome if '--cpus [NUM_CPUS]'
 is used. One can also provide the number of threads used by NumPy and Numba for each CPUs by providing '--threads [NUM_THREADS]'. We recommend increasing '--cpus' rather than '--threads'
 for most users. 
 
 The script outputs summary statistics in both gzipped :ref:`text format <sumstats_text>` and
 :ref:`HDF5 format <sumstats_hdf5>`.
-
-Estimating correlations between effects
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-As part of `Tan et al. 2022 <https://doi.org/10.1101/2024.10.01.24314703>`_, we estimated the genome-wide correlations between direct genetic effects and population effects
-and between direct genetic effects and average non-transmitted coefficients (NTCs). The correlation between direct genetic effects and population effects
-is a measure of how different direct genetic effects and effects estimated by standard GWAS (population effects) are. 
-
-We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
-It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
-and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
-It applies a method-of-moments based estimator that 
-accouts for the known sampling variance-covariance of the effect estimates, and for the correlations
-between effect estimates of nearby SNPs due to LD.
-
-Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
-heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
-LD-scores to account for correlations between nearby SNPs, not to separate out population stratification. 
-This is because we are (potentially) interested in the contribution of population stratification to population effects,
-and whether population stratification makes population effects different from direct effects. The approach used by LDSC 
-would remove some of the contribution of population stratification to differences between direct and population effects.   
 
 Family-based polygenic score analyses
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -290,7 +269,7 @@ the PGS values of all the genotyped individuals
 for whom :ref:`observed <observed genotypes>` or :ref:`imputed parental genotypes <imputed_file>` are available. 
 The script will output a :ref:`PGS file <pgs_file>`, 
 including the imputed/observed PGS values for each individual's parents, 
-facilitating family-based polygenic score analyses. 
+facilitating family-PGS analyses. 
 
 If the '--fit_sib' argument is provided, the :ref:`PGS file <pgs_file>` 
 will include a column corresponding to the average PGS value of the individual's sibling(s). 
@@ -302,10 +281,31 @@ and then use this as input to :ref:`pgs.py <pgs.py>` along with a :ref:`phenotyp
 
 The direct effect and NTCs of the PGS are estimated as fixed effects in a linear mixed model that includes
 a random effect that models (residual) phenotypic correlations between siblings.
-By providing a :ref:'GRM <GRM>', correlations between other relatives can also be modelled. The population effect is estimated
-from a separate linear mixed regression model that includes only the proband PGS as a fixed effect. 
+By providing a :ref:`GRM <GRM>`, correlations between other relatives can also be modelled. The population effect is estimated
+from a separate regression model that includes only the proband PGS (no control for parental PGS). 
 The estimates and their standard errors are output to :ref:`file <pgs_effects>` along with a separate
 :ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the direct effect and NTCs. 
 
 See the :ref:`simulation exercise <simulation>` for an example of how to use the :ref:`pgs.py <pgs.py>` script.
 This also shows how the PGS script can be used to adjust the results of family-PGS analysis for the impact of assortative mating. 
+
+Estimating correlations between effects
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+As part of `Tan et al. 2024 <https://doi.org/10.1101/2024.10.01.24314703>`_, we estimated the genome-wide correlations between direct genetic effects and population effects
+and between direct genetic effects and average non-transmitted coefficients (NTCs). The correlation between direct genetic effects and population effects
+is a measure of how different direct genetic effects and effects estimated by standard GWAS (population effects) are. 
+
+We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
+It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
+and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
+It applies a method-of-moments based estimator that 
+accouts for the known sampling variance-covariance of the effect estimates, and for the correlations
+between effect estimates of nearby SNPs due to LD.
+
+Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
+heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
+LD-scores to account for correlations between nearby SNPs, not to separate out population stratification. 
+This is because we are (potentially) interested in the contribution of population stratification to population effects,
+and whether population stratification makes population effects different from direct effects. The approach used by LDSC 
+would remove some of the contribution of population stratification to differences between direct and population effects.   

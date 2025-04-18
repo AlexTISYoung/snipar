@@ -41,7 +41,7 @@ parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater pe
 parser.add_argument('--vc_out', type=str, help='Prefix of output filename for variance component array (without .npy).')
 parser.add_argument('--vc_list', type=float, nargs='+', default=None, help='Pass in variance components as a list of floats.')
 parser.add_argument('--no_sib_var', action='store_true', default=False, help='Do not fit sibling variance component. Not recommended for family-GWAS.')
-parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysi (No header).')
+parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysis (No header).')
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU. Uses all available by default.',default=1)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
@@ -369,6 +369,5 @@ def main(args):
     print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":
-    args = parser.parse_args()
     args = parser.parse_args()
     main(args)
