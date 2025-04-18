@@ -44,6 +44,7 @@ jobs:
         export LIBRARY_PATH="/usr/local/opt/llvm/lib"
         export CC="$(brew --prefix llvm)/bin/clang"     
         export CXX="$(brew --prefix llvm)/bin/clang++"
+        export MACOSX_DEPLOYMENT_TARGET=14.7 
         python -m cibuildwheel --output-dir dist
 
     - name: Build wheels (windows-latest)      
