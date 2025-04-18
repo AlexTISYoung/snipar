@@ -12,7 +12,7 @@ Results:
         For each chromosome, a gzipped text file containing the SNP level summary statistics. 
         
 """
-import argparse, os, time
+import argparse
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.docgen import get_parser_doc
 ######### Command line arguments #########
@@ -47,34 +47,35 @@ parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
-args = parser.parse_args()
-num_threads = args.threads
-print('Number of threads for numpy: '+str(num_threads))
-# export OMP_NUM_THREADS=...
-os.environ['OMP_NUM_THREADS'] = str(num_threads)
-# export OPENBLAS_NUM_THREADS=...
-os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-# export MKL_NUM_THREADS=...
-os.environ['MKL_NUM_THREADS'] = str(num_threads)
-# export VECLIB_MAXIMUM_THREADS=...
-os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
-# export NUMEXPR_NUM_THREADS=...
-os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
-import numpy as np
-from numba import set_num_threads
-from numba import config as numba_config
-import snipar.read as read
-import snipar.slmm as slmm
-from snipar.gwas import process_chromosome
-from snipar.pedigree import get_sibpairs_from_ped
-from snipar.preprocess import remove_sibs
-from snipar.utilities import parse_obsfiles, parse_filelist, make_id_dict
+
 def main(args):
-    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
+    """Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    import os, time
+    num_threads = args.threads
+    print('Number of threads for numpy: '+str(num_threads))
+    # export OMP_NUM_THREADS=...
+    os.environ['OMP_NUM_THREADS'] = str(num_threads)
+    # export OPENBLAS_NUM_THREADS=...
+    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
+    # export MKL_NUM_THREADS=...
+    os.environ['MKL_NUM_THREADS'] = str(num_threads)
+    # export VECLIB_MAXIMUM_THREADS=...
+    os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
+    # export NUMEXPR_NUM_THREADS=...
+    os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
+    import numpy as np
+    from numba import set_num_threads
+    from numba import config as numba_config
+    import snipar.read as read
+    import snipar.slmm as slmm
+    from snipar.gwas import process_chromosome
+    from snipar.pedigree import get_sibpairs_from_ped
+    from snipar.preprocess import remove_sibs
+    from snipar.utilities import parse_obsfiles, parse_filelist, make_id_dict
     # Check if mutually incompatible design arguments supplied
     if int(args.robust) + int(args.sib_diff) + int(args.impute_unrel) > 1:
         raise argparse.ArgumentTypeError('Only supply one of --robust, --sib_diff and --impute_unrel.')
