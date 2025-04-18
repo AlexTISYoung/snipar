@@ -17,7 +17,7 @@
 
 *snipar* (single nucleotide imputation of parents) provides a command line toolbox for family-based analyses in genetics: 
 
-- **family-GWAS**: Perform family-GWAS (FGWAS) with a variety of estimators. *snipar* can perform family-GWAS using genetic differences between siblings, parent-offspring trios, and increase power through using imputed parental genotypes, which enables inclusion and optimal use of samples with only one parent genotyped. See [Tutorial: family-GWAS without imputed parental genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#family-based-gwas-without-imputed-parental-genotypes) and [Tutorial: family-GWAS with imputed parental genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#family-based-gwas-with-imputed-parental-genotypes). The regressions are performed in an efficient linear mixed model that accounts for correlations between siblings and more distant relatives.
+- **family-GWAS**: Perform family-GWAS (FGWAS) with a variety of estimators. *snipar* can perform family-GWAS using genetic differences between siblings, parent-offspring trios, and increase power through using imputed parental genotypes, which enables inclusion and optimal use of samples with only one parent genotyped and without genotyped parents or siblings. See [Simulation Exercise: family-GWAS without imputed parental genotypes](https://snipar.readthedocs.io/en/latest/simulation.html#family-based-gwas-without-imputed-parental-genotypes) and [Simulation Exercise: family-GWAS with imputed parental genotypes](https://snipar.readthedocs.io/en/latest/simulation.html#family-based-gwas-with-imputed-parental-genotypes). The regressions are performed in an efficient linear mixed model that accounts for correlations between siblings and more distant relatives.
 - **family-PGS analyses**: Compute and analyze polygenic scores (PGS) for a set of individuals along with their siblings and parents, using both observed and imputed parental genotypes. *snipar* can estimate the direct effect (within-family) effect of a polygenic score: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses). It can adjust for the impact of assortative mating on estimates of indirect genetic effects (effects of alleles in parents on offspring mediated through the environment) from family-based PGS analysis: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses).
 - **Imputation of missing parental genotypes**: For samples with at least one genotyped sibling and/or parent, but without both parents' genotypes available, *snipar* can impute missing parental genotypes according to Mendelian laws (Mendelian Imputation) and use these to increase power for family-GWAS and PGS analyses. See [Tutorial: imputing-missing-parental-genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#imputing-missing-parental-genotypes)
 - **Identity-by-descent (IBD) segments shared by siblings**: *snipar* implements a hidden markov model (HMM) to accurately infer identity-by-descent segments shared between siblings. The output of this is needed for imputation of missing parental genotypes from siblings. See [Tutorial: inferring IBD between siblings](https://snipar.readthedocs.io/en/latest/tutorial.html#inferring-ibd-between-siblings)
@@ -28,7 +28,7 @@
   <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
 </p>
 
-The above illustrates an end-to-end workflow for performing family-GWAS in *snipar* although not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information. Also: imputation for parent-offspring pairs can proceed without IBD inference. 
+The above illustrates an end-to-end workflow for performing family-GWAS in *snipar*, an example of which is given in the [Tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html). Not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information. Also: imputation for parent-offspring pairs can proceed without IBD inference. 
 
 # Publications
 
@@ -66,7 +66,7 @@ Documentation: https://snipar.rtfd.io/
 
 It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
-And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html)
+And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
 # Installing Using pip
 

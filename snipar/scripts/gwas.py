@@ -12,8 +12,9 @@ Results:
         For each chromosome, a gzipped text file containing the SNP level summary statistics. 
         
 """
-import argparse, os, time, sys
+import argparse, os, time
 from snipar.numrange import parseNumRange, NumRangeAction
+from snipar.docgen import get_parser_doc
 ######### Command line arguments #########
 parser = argparse.ArgumentParser(add_help=True)
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
@@ -67,8 +68,7 @@ import snipar.slmm as slmm
 from snipar.gwas import process_chromosome
 from snipar.pedigree import get_sibpairs_from_ped
 from snipar.preprocess import remove_sibs
-from snipar.utilities import get_parser_doc, parse_obsfiles, parse_filelist, make_id_dict
-__doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
+from snipar.utilities import parse_obsfiles, parse_filelist, make_id_dict
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

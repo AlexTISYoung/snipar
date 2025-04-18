@@ -88,7 +88,7 @@ direct genetic effects is substantially larger from the trio design than the sib
 Note that both designs use the same number of phenotype observations in a generalized least-squares regression, but the trio design uses more information from the parents.
 In this simulation, the effective sample size from the trio design should be about 45% larger than for the sib-differences design.
 
-By default, the gwas.py script will perform a meta-analysis of samples with genotyped siblings but without both parents genotyped —
+By default, the :ref:`gwas.py <gwas.py>` script will perform a meta-analysis of samples with genotyped siblings but without both parents genotyped —
 using the sib-difference estimator — and samples with both parents genotyped — using the trio design — when
 imputed parental genotypes are not provided. This should achieve something close to optimal power for family-GWAS
 without imputed parental genotypes. However, improved power can be achieved by using designs that take advantage of

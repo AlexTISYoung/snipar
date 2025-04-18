@@ -7,11 +7,22 @@ Introduction
 ------------
 
 *snipar* (single nucleotide imputation of parents) is a Python package for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, and for performing
-family based genome-wide association and polygenic score analyses using observed and/or imputed parental genotypes.
+family based genome-wide association and polygenic score analyses. *snipar* provides a script for estimating the different effects estimated by family-GWAS. 
+*snipar* also contains a module for simulating traits affected by assortative mating with and without indirect genetic effects. 
 
-*snipar* can use any genotyped samples who have at least one genotyped full-sibling or parent.
+*snipar* can perform family-GWAS and family-PGS analyses with and without imputed parental genotypes.
+
+*snipar* can impute missing parental genotypes for any samples who have at least one genotyped full-sibling and/or parent.
 
 The imputation method and the family-based GWAS and polygenic score models are described in `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_.
+
+A method for adjusting family-PGS analyses for assortative mating is described in `Young et al. 2023 <https://www.biorxiv.org/content/10.1101/2023.07.10.548458v1>`_.
+
+Additional family-GWAS estimators that maximize power by inclusion of samples without genotyped first-degree relatives 
+and for samples with strong structure and/or admixutre (the robust estimator) are described in `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_.
+See the :ref:`tutorial <tutorial>` for an example of using the robust estimator, which requires imputation from phased data to be performed first.
+This paper also describes the linear mixed model implemented in *snipar* for family-GWAS and PGS analyses: this 
+models correlations between siblings and between other relatives using a sparse genetic relationship matrix, :ref:`GRM <GRM>`.
 
 Installation
 ------------
@@ -71,7 +82,7 @@ Workflow
 --------
 .. _workflow:
 
-A typical *snipar* workflow for performing family-based GWAS (see flowchart below) is:
+A typical *snipar* workflow for performing family-based GWAS using imputed parental genotypes (see flowchart below) is:
 
 1. Inferring identity-by-descent (IBD) segments shared between siblings (:ref:`ibd.py <ibd.py>`)
 2. Imputing missing parental genotypes (:ref:`impute.py <impute.py>`)
@@ -87,6 +98,8 @@ A *snipar* workflow requires input files in certain formats. See :ref:`input fil
 Output files are documented :ref:`here <output_files>`. 
 
 The :ref:`tutorial <tutorial>` allows you to work through an example workflow before trying real data. 
+
+Note that family-GWAS can be performed without imputed parental genotypes. See the :ref:`simulation exercise <simulation>`.
 
 Inputting multiple chromosomes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -185,13 +198,18 @@ Family-based genome-wide association analysis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Family-based GWAS is performed by the :ref:`gwas.py <gwas.py>` script. 
-This script estimates direct effects, non-transmitted coefficients, and population effects of input genetic variants
+This script estimates direct genetic effects and (when using designs with observed/imputed parental genotypes) non-transmitted coefficients, and population effects of input genetic variants
 on the phenotype specified in the :ref:`phenotype file <phenotype>`. (If multiple phenotypes are present in the :ref:`phenotype file <phenotype>`,
-the phenotype to analyse can be specified using the '--phen_index' argument, where '--phen_index 1' corresponds to the first phenotype.)
+the phenotype to analyse can be specified by its column name using the '--phen' argument and by its column index using the '--phen_index' argument, where '--phen_index 1' corresponds to the first phenotype.)
 
-By default, for each variant, the script performs a regression of an individual's phenotype onto their genotype,
+If imputed parental genotypes are not provided, the default behaviour of the :ref:`gwas.py <gwas.py>` is to perform a meta-analysis of samples with genotyped siblings but without both parents genotyped —
+using the sib-difference estimator — and samples with both parents genotyped — using the trio design. This should achieve something close to optimal power for family-GWAS
+without imputed parental genotypes. However, improved power can be achieved by using designs that take advantage of
+imputed parental genotypes. 
+
+When imputed parental genotypes are provided, the default behaviour of the :ref:`gwas.py <gwas.py>` the script performs a regression of an individual's phenotype onto their genotype,
 their (imputed/observed) father's genotype, and their (imputed/observed) mother's genotype. This estimates
-the direct effect of the variant, and the paternal and maternal non-transmitted coefficients (NTCs). See
+the direct genetic effect of the variant, and the paternal and maternal non-transmitted coefficients (NTCs). See
 `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_ for more details. 
 
 If no parental genotypes are observed, then the imputed maternal & paternal genotypes become perfectly correlated.
@@ -202,29 +220,34 @@ the average NTC. One can include the '--parsum' argument to manually enable this
 If one wishes to model indirect genetic effects from siblings, one can use the '--fit_sib' option to add the genotype(s)
 of the individual's sibling(s) to the regression. 
 
-The gwas.py script first estimates a variance component model with two variance components, with one modelling the phenotypic correlation 
-between siblings and the other modelling correlation between individuals with genetic relatedness passing a chosen threshold 
-specified by the '--sparse_thres' argument (default is 0.05), and then does a transformation that allows the SNP effects to be 
-estimated by simple linear regression while accounting for correlations between samples. The second component requires input of 
-a relationship matrix, either from a GCTA GRM (`--grm_path`) or a IBD relatedness file estimated by KING (`--ibdrel_path``). One can
-choose to remove one of two components by providing the '--no_sib_var' or '--no_grm_var' argument.
+To improve power when imputed and/or observed parental genotypes are available, the '--impute_unrel' argument can be used to
+include samples without genotyped parents/siblings through linear imputation of parental genotypes. 
+This can increase the effective sample size by up to 50% when very large samples without genotyped relatives are available.
+See the discussion of the unified estimator in `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details.
+If applied to the full sampple for which standard GWAS would be applied, this method will give estimates of population effects
+of equivalent power to standard GWAS along with direct genetic effect estimates.
 
-To incorporate genotyped and phenotyped individuals without observed or imputed parental genotypes into the analysis, one can choose to 
-use the unified estimator by supplying the '--impute_unrel' argument, which enables linear imputation of parental genotypes.
-If strong population structure (Fst greater than 0.01) is present and is of concern, one can use the sibling-difference
-method ('--sib_diff'), which analyzes individuals with at least one genotyped sibling by regressing phenotypes onto the proband genotypes
-and the average sib genotypes in the proband families, or the robust estimator ('--robust'), which performs separate family-based regressions
-for individuals categorized into different groups based on the status of their parental genotypes. Note that in the current version,
-the sibling-difference and the robust methods only produce direct effect estimates. See `Guan et al. 2022 <https://www.biorxiv.org/content/10.1101/2022.10.24.513611v1>`_ 
-for more details. 
+Methods with imputed parental genotypes can be susceptible to population stratification when samples are strongly structured (Fst > 0.01)
+or when parents are admixed between similarly differentiated groups.
+To maximize power in these cases, one can use the '--robust' argument to use the robust estimator. 
+This requires parental genotypes imputed from phased data to work, although the imputed parental genotypes are not 
+directly used in regression design: the imputation procedure is used to work out parent-of-origin of alleles 
+to enable optimal use of samples with one parent genotyped. 
+The default behaviour of the gwas.py script is also appropriate for strongly structured samples, but will
+generally have reduced power compared to the robust estimator. See `Guan et al. 2022 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details 
 
-The script will use both :ref:`observed <observed genotypes>` and :ref:`imputed parental genotypes <imputed_file>` for analyses.
-Note that if no imputed parental genotypes are input, effects will be estimated using individuals with both parents or at least one sibs genotyped only,
-provided that a :ref:`pedigree file <pedigree>` is also input. 
+By defualt the :ref:`gwas.py <gwas.py>` script estimates a variance component model that models the phenotypic correlation 
+between siblings after accounting for the covariates. Modelling correlations between siblings is important to ensure statistically efficient
+estimates of direct genetic effects are obtained from samples with siblings. If a :ref:`GRM <GRM>` is provided, 
+an additional variance component will be added that models the correlation between individuals with genetic relatedness passing a chosen threshold 
+specified by the '--sparse_thresh' argument (default is 0.05). 
+
+Note that if no imputed parental genotypes are input, a :ref:`pedigree file <pedigree>` is required. 
 (A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
 
 To deal with potential large genotype datasets, the script processes chromosome files sequentially, and allows parellel processing of each chromosome if '--cpus [NUM_CPUS]'
-is used. One can also provide the number of threads used by NumPy and Numba for each CPUs by providing '--threads [NUM_THREADS]'.
+is used. One can also provide the number of threads used by NumPy and Numba for each CPUs by providing '--threads [NUM_THREADS]'. We recommend increasing '--cpus' rather than '--threads'
+for most users. 
 
 The script outputs summary statistics in both gzipped :ref:`text format <sumstats_text>` and
 :ref:`HDF5 format <sumstats_hdf5>`.
@@ -232,9 +255,9 @@ The script outputs summary statistics in both gzipped :ref:`text format <sumstat
 Estimating correlations between effects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As part of `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_, we estimated the genome-wide correlations between direct and population effects
-and between direct effects and average non-transmitted coefficients (NTCs). The correlation between direct effects and population effects
-is a measure of how different direct effects and effects estimated by standard GWAS (population effects) are. 
+As part of `Tan et al. 2022 <https://doi.org/10.1101/2024.10.01.24314703>`_, we estimated the genome-wide correlations between direct genetic effects and population effects
+and between direct genetic effects and average non-transmitted coefficients (NTCs). The correlation between direct genetic effects and population effects
+is a measure of how different direct genetic effects and effects estimated by standard GWAS (population effects) are. 
 
 We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
 It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
@@ -254,8 +277,8 @@ Family-based polygenic score analyses
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As in previous work (e.g. Kong et al. 2018: https://www.science.org/doi/abs/10.1126/science.aan6877), parental polygenic scores can be used as 'controls'
-to separate out the component of the association between phenotype and polygenic score (PGS) that is due to
-direct genetic effects. In `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_, we showed how this can be done using parental PGSs
+to estimate the within-family association between phenotype and PGS, which only reflects direct genetic effects. 
+In `Young et al. 2022 <https://www.nature.com/articles/s41588-022-01085-0>`_, we showed how this can be done using parental PGSs
 computed from imputed parental genotypes. *snipar* provides a script, :ref:`pgs.py <pgs.py>`,
 that can be used for computing and analysing PGSs using observed/imputed parental genotypes. 
 
@@ -278,7 +301,11 @@ One can first compute the PGS and write it to :ref:`file <pgs_file>`,
 and then use this as input to :ref:`pgs.py <pgs.py>` along with a :ref:`phenotype file <phenotype>`.
 
 The direct effect and NTCs of the PGS are estimated as fixed effects in a linear mixed model that includes
-a random effect that models (residual) phenotypic correlations between siblings. The population effect is estimated
+a random effect that models (residual) phenotypic correlations between siblings.
+By providing a :ref:'GRM <GRM>', correlations between other relatives can also be modelled. The population effect is estimated
 from a separate linear mixed regression model that includes only the proband PGS as a fixed effect. 
 The estimates and their standard errors are output to :ref:`file <pgs_effects>` along with a separate
 :ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the direct effect and NTCs. 
+
+See the :ref:`simulation exercise <simulation>` for an example of how to use the :ref:`pgs.py <pgs.py>` script.
+This also shows how the PGS script can be used to adjust the results of family-PGS analysis for the impact of assortative mating. 
