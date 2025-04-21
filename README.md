@@ -13,6 +13,7 @@
 [![Exercise](https://img.shields.io/badge/sim-exercise-20B2AA.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/simulation.html)
 [![Publication](https://img.shields.io/badge/Published-Nature%20Genetics-26af64.svg?colorB=26af64&style=popout)](https://www.nature.com/articles/s41588-025-02118-0)
 <a href="https://twitter.com/intent/follow?screen_name=alextisyoung"> <img src="https://img.shields.io/twitter/follow/alextisyoung.svg?style=social" alt="follow on Twitter"></a>
+[![PyPI Downloads](https://static.pepy.tech/badge/snipar)](https://pepy.tech/projects/snipar)
 
 
 *snipar* (single nucleotide imputation of parents) provides a command line toolbox for family-based analyses in genetics: 
