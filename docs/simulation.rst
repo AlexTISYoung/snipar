@@ -3,12 +3,12 @@
 Simulation Exercise
 ===================
 
-Exercise on simulating data using the simulate.py script and performing family-based polygenic score analysis. 
+Exercise on simulating data using the simulate.py script and performing family-based polygenic score analysis. This assumes you are working in a bash environment on a unix based machine, but similar steps should work in different environments. 
 
 Simulating data
 --------------------
 
-If *snipar* has been installed succesfully, the :ref:`command line scripts <scripts>` should be accessible as
+If *snipar* has been installed successfully, the :ref:`command line scripts <scripts>` should be accessible as
 executables in your terminal. *snipar* includes a script for simulating genotype-phenotype data according to 
 different scenarios: direct and indirect genetic effects, with and without assortative mating. 
 To simulate data, please first create a directory to store the data:
@@ -40,7 +40,7 @@ The FID and IID columns are the family and individual IDs, respectively. The Fat
 The FATHER_PHENO and MOTHER_PHENO columns are the phenotype values of the parents, and the DIRECT, FATHER_DIRECT, and MOTHER_DIRECT columns are the direct genetic effect components of the individual, father, and mother, respectively.
 The FIDs follow the format ``generation_family``, and the IIDs follow the format ``generation_family_individual``.
 So if you look at the end of pedigree.txt (e.g. using ``tail pedigree.txt``), you should see
-the FID of the last line as ``20_2999``, and the IID of the last line as ``20_2999_1``.
+the FID of the last line as ``21_2999``, and the IID of the last line as ``21_2999_1``.
 
 To enable analysis of the final generation phenotypes alone, we have placed the phenotype values for the final generation in a separate file (phenotype.txt). 
 
@@ -73,7 +73,7 @@ Since the genotype data of the final generation contains 3000 sibling pairs, but
 using genetic differences between siblings to estimate direct genetic effects (see `Guan et al. <https://www.nature.com/articles/s41588-025-02118-0>`_).
 The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_sibdiff.sumstats.gz.
 
-We can combine the final two generations' genotype data into one .bed file using this command:
+We can combine the final two generations' genotype data into one .bed file using this command. This assumes you have a plink binary executable available in your environment. If you do not, you can obtain one `here <https://www.cog-genomics.org/plink/>`_:
 
     ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
 
