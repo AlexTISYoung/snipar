@@ -86,7 +86,6 @@ setup(name='snipar',
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
       install_requires=install_requires,
-      test_suite="snipar/tests",
       zip_safe=False,
       ext_modules=[
                 MyExt("snipar.imputation.impute_from_sibs",
