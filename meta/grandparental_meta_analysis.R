@@ -415,7 +415,9 @@ dimnames(pgs_primary)[[2]] = dimnames(meta_results)[[3]]
 for (i in 1:length(primary_phenotypes)){
   pgs_primary[primary_phenotypes[i],] = meta_results[primary_pgs[i],primary_phenotypes[i],]
 }
-
+pgs_primary$shrinkage = 1-pgs_primary$average_NTC_direct_ratio
+pgs_primary$shrinkage_SE = pgs_primary$average_NTC_direct_ratio_SE
+pgs_primary$shrinkage_log10P = pgs_primary$average_NTC_direct_ratio_log10P
 pgs_ea = meta_results['educational_attainment',,]
 
 write.csv(pgs_primary,'~/Dropbox/grandparental/pgs_primary.csv',quote=F,row.names=F)
@@ -481,6 +483,10 @@ make_effect_plot = function(plot_effects,pgs_primary,plotname,width=7,height=7,d
 # Indirect effects plot 
 plot_effects = c('paternal','maternal','maternal_minus_paternal')
 make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/indirect_effects_plot.pdf',width=7,height=7)
+
+# shrinkage plot 
+plot_effects = c('average_NTC_direct_ratio')
+make_effect_plot(plot_effects,pgs_primary,'~/Dropbox/grandparental/shrinkage_plot.pdf',width=7,height=7)
 
 # Direct and indirect effects plot
 plot_effects = c('direct','paternal','maternal','maternal_minus_paternal')
