@@ -1,8 +1,10 @@
+import psutil
 import h5py
 import numpy as np
 import pandas as pd
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
+import math
 from math import log10
 import snipar.read as read
 import snipar.slmm as slmm
@@ -211,15 +213,39 @@ def compute_batch_boundaries(snp_ids,batch_size):
     return block_bounds
 
 
-def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, sib=False):
-    max_nbytes = 2147483647
-    if nbytes > max_nbytes:
-        raise ValueError('Too many bytes to handle for multiprocessing.')
-    n_tasks = num_cpus
-    f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
-    while int(nsnp / n_tasks) * nbytes > max_nbytes / 4 or f(nsnp, niid, n_tasks) > max_nbytes / 4:
-        n_tasks += num_cpus
-    return np.array_split(np.arange(nsnp), n_tasks)
+# def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, sib=False):
+#     max_nbytes = 2147483647
+#     if nbytes > max_nbytes:
+#         raise ValueError('Too many bytes to handle for multiprocessing.')
+#     n_tasks = num_cpus
+#     f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
+#     while int(nsnp / n_tasks) * nbytes > max_nbytes / 4 or f(nsnp, niid, n_tasks) > max_nbytes / 4:
+#         n_tasks += num_cpus
+#     return np.array_split(np.arange(nsnp), n_tasks)
+
+
+def split_batches(nsnp, niid, num_cpus, bytes_per_snp_out, mem_frac=0.5, parsum=False):
+    # Available memory per process
+    total_ram = psutil.virtual_memory().total
+    mem_per_proc = total_ram / num_cpus * mem_frac
+
+    # --- memory per SNP inside a worker ---
+    # (temporary nsnp_chunk × nid × 3 array)
+    bytes_per_snp_temp = niid * 2 * 4 if parsum is True else niid * 3 * 4  # float32
+
+    # total bytes per SNP (temp + outputs)
+    bytes_per_snp = bytes_per_snp_temp + bytes_per_snp_out
+
+    # max number of SNPs a worker can safely hold
+    max_chunk = int(mem_per_proc // bytes_per_snp)
+    if max_chunk < 1:
+        raise MemoryError(
+            f"Not enough memory: each SNP needs {bytes_per_snp/1e6:.2f} MB per process."
+        )
+
+    # split nsnp into chunks of size ≤ max_chunk
+    n_chunks = math.ceil(nsnp / max_chunk)
+    return np.array_split(np.arange(nsnp), n_chunks)
 
 
 _var_dict = {}
@@ -426,11 +452,20 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     freqs[:] = np.nan
 
 
-    nbytes = int((alpha.nbytes + alpha_cov.nbytes +
-                     alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
+    # nbytes = int((alpha.nbytes + alpha_cov.nbytes +
+    #                  alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
+    
+    nbytes = (
+        alpha_dim * 4 +                # alpha
+        alpha_dim * alpha_dim * 4 +    # alpha_cov
+        alpha_dim * 4 +                # alpha_ses
+        4                              # freqs
+    )
+
     # Compute batches
-    batches = split_batches(
-        snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, sib=fit_sib or sib_diff)
+    batches = split_batches(snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum)
+    # batches = split_batches(
+    #     snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, sib=fit_sib or sib_diff)
     if len(batches) == 1:
         # logger.info('Using 1 batch')
         print('Using 1 batch')
