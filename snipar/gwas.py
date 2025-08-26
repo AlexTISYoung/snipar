@@ -1,9 +1,8 @@
-import h5py
+import h5py, psutil, math
 import numpy as np
 import pandas as pd
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
-from math import log10
 import snipar.read as read
 import snipar.slmm as slmm
 from snipar.gtarray import impute_missing, impute_unrel_par_gts
@@ -15,7 +14,6 @@ from multiprocessing import Pool, RawArray
 from functools import partial
 import ctypes
 # import logging
-
 
 # logger = logging.getLogger(__name__)
 
@@ -110,7 +108,7 @@ def write_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_diff, a
 def outarray_effect(est, ses, freqs, vy):
     N_effective = vy/(2*freqs*(1-freqs)*np.power(ses,2))
     Z = est/ses
-    P = -log10(np.exp(1))*chi2.logsf(np.power(Z,2),1)
+    P = -math.log10(np.exp(1))*chi2.logsf(np.power(Z,2),1)
     array_out = np.column_stack((N_effective,est,ses,Z,P))
     array_out = np.round(array_out, decimals=6)
     array_out[:,0] = np.round(array_out[:,0], 0)
@@ -210,20 +208,105 @@ def compute_batch_boundaries(snp_ids,batch_size):
     block_bounds[n_blocks-1,:] = np.array([start,nsnp])
     return block_bounds
 
+def split_batches(
+    nsnp: int,
+    niid: int,
+    num_workers: int,
+    bytes_per_snp_out: int,
+    mem_frac: float = 0.8,
+    parsum: bool = False,
+    sib: bool = False,
+):
+    """
+    Make balanced, non-empty SNP batches so that:
+        (per-process peak RAM) * (#workers) <= mem_budget
 
-def split_batches(nsnp, niid, nbytes, num_cpus, parsum=False, sib=False):
-    max_nbytes = 2147483647
-    if nbytes > max_nbytes:
-        raise ValueError('Too many bytes to handle for multiprocessing.')
-    n_tasks = num_cpus
-    f = lambda x, y, z: x * y * 2 / z if parsum is False else x * y * 3 / z
-    while int(nsnp / n_tasks) * nbytes > max_nbytes / 4 or f(nsnp, niid, n_tasks) > max_nbytes / 4:
-        n_tasks += num_cpus
-    return np.array_split(np.arange(nsnp), n_tasks)
+    Design goals:
+      - Never create more workers than work units (cap by nsnp).
+      - No empty batches.
+      - Consistent diagnostics: procs, rounds, batches, sizes.
 
+    Returns
+    -------
+    list[np.ndarray]
+        Exactly (procs * rounds) batches, all non-empty.
+    """
+    if nsnp <= 0:
+        return []
+    # -- 1) Memory budget (simple & conservative)
+    vm = psutil.virtual_memory()
+    mem_budget = int(vm.available * mem_frac)
+    GLOBAL_HEADROOM = 256 * 2**20   # ~256 MiB for OS noise
+    PER_PROC_OVERHEAD = 64 * 2**20  # ~64 MiB per worker (Python/BLAS, etc.)
+    mem_budget = max(0, mem_budget - GLOBAL_HEADROOM)
+
+    # -- 2) Bytes/SNP of working memory in a process
+    num_cols = 3 - (1 if parsum else 0) + (1 if sib else 0)
+    BYTES_F32 = 4
+    bytes_per_snp_temp = niid * num_cols * BYTES_F32
+    bytes_per_snp = bytes_per_snp_temp + bytes_per_snp_out
+    if bytes_per_snp <= 0:
+        raise ValueError("bytes_per_snp computed as non-positive; check inputs.")
+
+    # -- 3) Choose #processes actually used (cap by nsnp to avoid empties)
+    procs = max(1, min(int(num_workers), nsnp))
+
+    def snps_per_proc_capacity(p: int) -> int:
+        per_proc_budget = (mem_budget // p) - PER_PROC_OVERHEAD
+        if per_proc_budget <= 0:
+            return 0
+        return int(per_proc_budget // bytes_per_snp)
+
+    snps_per_proc = snps_per_proc_capacity(procs)
+    while snps_per_proc < 1 and procs > 1:
+        procs -= 1
+        snps_per_proc = snps_per_proc_capacity(procs)
+
+    if snps_per_proc < 1:
+        need = PER_PROC_OVERHEAD + bytes_per_snp
+        raise MemoryError(
+            "Not enough memory for even 1 SNP with 1 worker.\n"
+            f"  budget={mem_budget/2**30:.2f} GiB, overhead={PER_PROC_OVERHEAD/2**20:.0f} MiB, "
+            f"bytes/SNP={bytes_per_snp/2**20:.2f} MiB, need≈{need/2**30:.2f} GiB"
+        )
+
+    # -- 4) Rounds and exact batch sizing (no empties)
+    per_round_capacity = procs * snps_per_proc
+    rounds = int(math.ceil(nsnp / per_round_capacity))
+    total_batches = procs * rounds
+
+    # Create exactly total_batches positive sizes summing to nsnp
+    # (balanced: first `rem` batches get one extra element)
+    base = nsnp // total_batches
+    rem  = nsnp % total_batches
+    # Because procs <= nsnp and rounds >= 1, base >= 1 here
+    sizes = [base + 1] * rem + [base] * (total_batches - rem)
+
+    # Build indices
+    idx = np.arange(nsnp, dtype=np.int64)
+    batches, start = [], 0
+    for s in sizes:
+        batches.append(idx[start:start+s])
+        start += s
+
+    # Diagnostics
+    actual_min = min(len(b) for b in batches)
+    actual_max = max(len(b) for b in batches)
+    est_peak_actual = procs * (PER_PROC_OVERHEAD + actual_max * bytes_per_snp)
+
+    print(
+        "[split_batches] procs={}  rounds={}  "
+        "capacity_snps/proc≈{}  planned_snps/proc≈{}..{}  batches={}  "
+        "est. peak (planned)≈{:.2f} GiB  budget≈{:.2f} GiB"
+        .format(
+            procs, rounds, snps_per_proc, actual_min, actual_max, len(batches),
+            est_peak_actual/2**30, mem_budget/2**30
+        )
+    )
+
+    return batches
 
 _var_dict = {}
-
 
 def _init_worker(y_, n_vararr_, varcomps_, covar_, covar_shape, **kwargs):
     _var_dict['y_'] = y_
@@ -424,13 +507,17 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     alpha_ses[:] = np.nan
     freqs = np.zeros((snp_ids.shape[0]),dtype=np.float32)
     freqs[:] = np.nan
-
-
-    nbytes = int((alpha.nbytes + alpha_cov.nbytes +
-                     alpha_ses.nbytes + freqs.nbytes) / snp_ids.shape[0])
+    # Compute number of output bytes per SNP
+    nbytes = (
+        alpha_dim * 4 +                # alpha
+        alpha_dim * alpha_dim * 4 +    # alpha_cov
+        alpha_dim * 4 +                # alpha_ses
+        4                              # freqs
+    )
     # Compute batches
-    batches = split_batches(
-        snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, sib=fit_sib or sib_diff)
+    batches = split_batches(snp_ids.shape[0], len(y.ids), num_workers=cpus, bytes_per_snp_out=nbytes, parsum=parsum, sib=fit_sib)
+    # batches = split_batches(
+    #     snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, sib=fit_sib or sib_diff)
     if len(batches) == 1:
         # logger.info('Using 1 batch')
         print('Using 1 batch')
