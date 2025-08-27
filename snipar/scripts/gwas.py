@@ -46,7 +46,7 @@ parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to b
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU. Uses all available by default.',default=1)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
-parser.add_argument('--batch_size',type=int,help='Batch size of SNPs to load at a time (reduce to reduce memory requirements)',default=100000)
+parser.add_argument('--maxmem',type=int,help='Maximum RAM to use in gigabytes (Gb). Default uses available RAM.',default=None)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
 def main(args):
@@ -365,9 +365,9 @@ def main(args):
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=False,
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs, trios_only=trios_only,
-                           max_missing=args.max_missing, min_maf=args.min_maf, batch_size=args.batch_size, 
+                           max_missing=args.max_missing, min_maf=args.min_maf,  
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=args.cpus, add_jitter=False,
-                           debug=False)
+                           debug=False,maxmem=args.maxmem)
     print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":

@@ -196,18 +196,6 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
     print('Writing text output to '+outfile)
     np.savetxt(outfile, outarray, fmt='%s')
 
-def compute_batch_boundaries(snp_ids,batch_size):
-    nsnp = snp_ids.shape[0]
-    n_blocks = int(np.ceil(float(nsnp)/float(batch_size)))
-    block_bounds = np.zeros((n_blocks,2),dtype=int)
-    start = 0
-    for i in range(n_blocks-1):
-        block_bounds[i,0] = start
-        block_bounds[i,1] = start+batch_size
-        start += batch_size
-    block_bounds[n_blocks-1,:] = np.array([start,nsnp])
-    return block_bounds
-
 def split_batches(
     nsnp: int,
     niid: int,
@@ -215,7 +203,8 @@ def split_batches(
     bytes_per_snp_out: int,
     mem_frac: float = 0.8,
     parsum: bool = False,
-    sib: bool = False,
+    sib: bool = False,\
+    maxmem: float = None
 ):
     """
     Make balanced, non-empty SNP batches so that:
@@ -234,8 +223,12 @@ def split_batches(
     if nsnp <= 0:
         return []
     # -- 1) Memory budget (simple & conservative)
-    vm = psutil.virtual_memory()
-    mem_budget = int(vm.available * mem_frac)
+    if maxmem is not None:
+        # Convert from gigabytes to bytes
+        mem_budget = int(maxmem * 1e9 * mem_frac)
+    else:
+        vm = psutil.virtual_memory()
+        mem_budget = int(vm.available * mem_frac)
     GLOBAL_HEADROOM = 256 * 2**20   # ~256 MiB for OS noise
     PER_PROC_OVERHEAD = 64 * 2**20  # ~64 MiB per worker (Python/BLAS, etc.)
     mem_budget = max(0, mem_budget - GLOBAL_HEADROOM)
@@ -439,9 +432,9 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
 
 def process_chromosome(chrom_out, y, varcomp_lst,
                        ped, imp_fams, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
-                       fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, batch_size=10000, 
+                       fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, robust=False, trios_sibs=False, trios_only=False,
-                       add_jitter=False, standard_gwas=False):
+                       add_jitter=False, standard_gwas=False, maxmem=None):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -515,9 +508,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         4                              # freqs
     )
     # Compute batches
-    batches = split_batches(snp_ids.shape[0], len(y.ids), num_workers=cpus, bytes_per_snp_out=nbytes, parsum=parsum, sib=fit_sib)
-    # batches = split_batches(
-    #     snp_ids.shape[0], len(y.ids), nbytes, cpus, parsum=parsum, sib=fit_sib or sib_diff)
+    batches = split_batches(snp_ids.shape[0], len(y.ids), num_workers=cpus, bytes_per_snp_out=nbytes, parsum=parsum, sib=fit_sib, maxmem=maxmem)
     if len(batches) == 1:
         # logger.info('Using 1 batch')
         print('Using 1 batch')
