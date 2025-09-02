@@ -196,107 +196,57 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
     print('Writing text output to '+outfile)
     np.savetxt(outfile, outarray, fmt='%s')
 
-def split_batches(
-    nsnp: int,
-    niid: int,
-    num_workers: int,
-    bytes_per_snp_out: int,
-    mem_frac: float = 0.8,
-    parsum: bool = False,
-    sib: bool = False,\
-    maxmem: float = None
-):
+def split_batches(nsnp: int, num_workers: int, batch_size = None) -> List[np.ndarray]:
     """
-    Make balanced, non-empty SNP batches so that:
-        (per-process peak RAM) * (#workers) <= mem_budget
-
-    Design goals:
-      - Never create more workers than work units (cap by nsnp).
-      - No empty batches.
-      - Consistent diagnostics: procs, rounds, batches, sizes.
-
-    Returns
-    -------
-    list[np.ndarray]
-        Exactly (procs * rounds) batches, all non-empty.
+    Partition SNP indices [0, nsnp) into batches:
+      - each batch has length <= batch_size
+      - prefer the number of batches to be a multiple of num_workers
+      - if that would force empty batches (nsnp too small), choose the largest feasible
+        multiple; if none >= minimal needed, fall back to the minimal (non-multiple),
+        and ALWAYS drop empties.
     """
+    if batch_size is None:
+        batch_size = nsnp
     if nsnp <= 0:
         return []
-    # -- 1) Memory budget (simple & conservative)
-    if maxmem is not None:
-        # Convert from gigabytes to bytes
-        mem_budget = int(maxmem * 1e9 * mem_frac)
+    if num_workers < 1:
+        raise ValueError("num_workers must be >= 1")
+    if batch_size < 1:
+        raise ValueError("batch_size must be >= 1")
+    def round_up_multiple(x: int, m: int) -> int:
+        return ((x + m - 1) // m) * m
+    def round_down_multiple(x: int, m: int) -> int:
+        return (x // m) * m
+    # Minimal batches to satisfy the max-size constraint
+    min_batches = math.ceil(nsnp / batch_size)
+    # Candidate: nearest multiple of workers at or above min_batches
+    cand = round_up_multiple(max(min_batches, num_workers), num_workers)
+    if cand <= nsnp:
+        total_batches = cand  # multiple of workers, no empties
     else:
-        vm = psutil.virtual_memory()
-        mem_budget = int(vm.available * mem_frac)
-    GLOBAL_HEADROOM = 256 * 2**20   # ~256 MiB for OS noise
-    PER_PROC_OVERHEAD = 64 * 2**20  # ~64 MiB per worker (Python/BLAS, etc.)
-    mem_budget = max(0, mem_budget - GLOBAL_HEADROOM)
-
-    # -- 2) Bytes/SNP of working memory in a process
-    num_cols = 3 - (1 if parsum else 0) + (1 if sib else 0)
-    BYTES_F32 = 4
-    bytes_per_snp_temp = niid * num_cols * BYTES_F32
-    bytes_per_snp = bytes_per_snp_temp + bytes_per_snp_out
-    if bytes_per_snp <= 0:
-        raise ValueError("bytes_per_snp computed as non-positive; check inputs.")
-
-    # -- 3) Choose #processes actually used (cap by nsnp to avoid empties)
-    procs = max(1, min(int(num_workers), nsnp))
-
-    def snps_per_proc_capacity(p: int) -> int:
-        per_proc_budget = (mem_budget // p) - PER_PROC_OVERHEAD
-        if per_proc_budget <= 0:
-            return 0
-        return int(per_proc_budget // bytes_per_snp)
-
-    snps_per_proc = snps_per_proc_capacity(procs)
-    while snps_per_proc < 1 and procs > 1:
-        procs -= 1
-        snps_per_proc = snps_per_proc_capacity(procs)
-
-    if snps_per_proc < 1:
-        need = PER_PROC_OVERHEAD + bytes_per_snp
-        raise MemoryError(
-            "Not enough memory for even 1 SNP with 1 worker.\n"
-            f"  budget={mem_budget/2**30:.2f} GiB, overhead={PER_PROC_OVERHEAD/2**20:.0f} MiB, "
-            f"bytes/SNP={bytes_per_snp/2**20:.2f} MiB, need≈{need/2**30:.2f} GiB"
-        )
-
-    # -- 4) Rounds and exact batch sizing (no empties)
-    per_round_capacity = procs * snps_per_proc
-    rounds = int(math.ceil(nsnp / per_round_capacity))
-    total_batches = procs * rounds
-
-    # Create exactly total_batches positive sizes summing to nsnp
-    # (balanced: first `rem` batches get one extra element)
+        # Try the largest multiple <= nsnp that still respects min_batches
+        down = round_down_multiple(nsnp, num_workers)
+        if down >= max(min_batches, 1):
+            total_batches = down
+        else:
+            # Fall back to minimal feasible (may NOT be a multiple)
+            total_batches = min_batches
+    # Balanced positive sizes summing to nsnp
     base = nsnp // total_batches
     rem  = nsnp % total_batches
-    # Because procs <= nsnp and rounds >= 1, base >= 1 here
     sizes = [base + 1] * rem + [base] * (total_batches - rem)
-
-    # Build indices
+    # Build batches and DROP any accidental empties (defensive)
     idx = np.arange(nsnp, dtype=np.int64)
     batches, start = [], 0
     for s in sizes:
-        batches.append(idx[start:start+s])
+        if s <= 0:
+            continue
+        batches.append(idx[start:start + s])
         start += s
-
-    # Diagnostics
-    actual_min = min(len(b) for b in batches)
-    actual_max = max(len(b) for b in batches)
-    est_peak_actual = procs * (PER_PROC_OVERHEAD + actual_max * bytes_per_snp)
-
-    print(
-        "[split_batches] procs={}  rounds={}  "
-        "capacity_snps/proc≈{}  planned_snps/proc≈{}..{}  batches={}  "
-        "est. peak (planned)≈{:.2f} GiB  budget≈{:.2f} GiB"
-        .format(
-            procs, rounds, snps_per_proc, actual_min, actual_max, len(batches),
-            est_peak_actual/2**30, mem_budget/2**30
-        )
-    )
-
+    # Sanity checks
+    assert sum(len(b) for b in batches) == nsnp
+    if batches:
+        assert max(len(b) for b in batches) <= batch_size
     return batches
 
 _var_dict = {}
@@ -434,7 +384,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                        ped, imp_fams, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
                        fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, robust=False, trios_sibs=False, trios_only=False,
-                       add_jitter=False, standard_gwas=False, maxmem=None):
+                       add_jitter=False, standard_gwas=False, batch_size=None):
     ######## Check for bed/bgen #######
     if bedfile is None and bgenfile is None:
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
@@ -508,7 +458,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         4                              # freqs
     )
     # Compute batches
-    batches = split_batches(snp_ids.shape[0], len(y.ids), num_workers=cpus, bytes_per_snp_out=nbytes, parsum=parsum, sib=fit_sib, maxmem=maxmem)
+    batches = split_batches(snp_ids.shape[0], cpus, batch_size=batch_size)
     if len(batches) == 1:
         # logger.info('Using 1 batch')
         print('Using 1 batch')

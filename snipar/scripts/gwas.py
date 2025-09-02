@@ -45,8 +45,8 @@ parser.add_argument('--no_sib_var', action='store_true', default=False, help='Do
 parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysis (No header).')
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU. Uses all available by default.',default=1)
+parser.add_argument('--batch_size',type=int,help='Maximum number of SNPs to use per-batch, one batch per CPU. Smaller batch_size decreases memory usage.',default=None)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
-parser.add_argument('--maxmem',type=int,help='Maximum RAM to use in gigabytes (Gb). Default uses available RAM.',default=None)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
 def main(args):
@@ -367,7 +367,7 @@ def main(args):
                            impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs, trios_only=trios_only,
                            max_missing=args.max_missing, min_maf=args.min_maf,  
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=args.cpus, add_jitter=False,
-                           debug=False,maxmem=args.maxmem)
+                           debug=False,batch_size=args.batch_size)
     print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":
