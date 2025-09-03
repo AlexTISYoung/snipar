@@ -251,8 +251,7 @@ else:
     R = R[np.tril_indices(R.shape[0])]
     R = R.reshape((1,R.shape[0]))
     R.tofile(args.outprefix+'_R.grm.bin')
-    #R.tofile('R.grm.bin')
-#del R
+del R
 
 print('Computing parental relatedness matrix')
 R_par = G[:,1,:].dot(G[:,1,:].T)/(2.0*G.shape[2])
@@ -264,13 +263,10 @@ else:
     R_par = R_par[np.tril_indices(R_par.shape[0])]
     R_par = R_par.reshape((1,R_par.shape[0]))
     R_par.tofile(args.outprefix+'_R_par.grm.bin')
-    #R_par.tofile('R_par.grm.bin')
-#del R_par
+del R_par
 print('Computing parent-offspring relatedness matrix')
 R_o_par = G[:,0,:].dot(G[:,1,:].T)
 R_o_par = (R_o_par + R_o_par.T)/(G.shape[2]*2.0)
-#code.interact(local=locals())
-#R_o_par = R_o_par/np.mean(np.diag(R_o_par))
 if args.hdf5_out:
     h5out.create_dataset('R_o_par', R_o_par.shape, dtype='f', chunks=True, compression='gzip',
                          compression_opts=9)
@@ -279,7 +275,6 @@ else:
     R_o_par = R_o_par[np.tril_indices(R_o_par.shape[0])]
     R_o_par = R_o_par.reshape((1,R_o_par.shape[0]))
     R_o_par.tofile(args.outprefix+'_R_o_par.grm.bin')
-    #R_o_par.tofile('R_o_par.grm.bin')
 del R_o_par
 # Save pedigree
 if args.hdf5_out:
