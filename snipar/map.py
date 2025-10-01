@@ -83,7 +83,7 @@ def map_from_bed(bedfile, chrom):
     # Check for NAs
     if np.var(bim_map) == 0:
         print('Map information not found in bim file.')
-        print('Using default map (decode sex averaged map on Hg19 coordinates)')
+        print('Using default map (decode sex averaged map on GRCh38 coordinates)')
         map = decode_map_from_pos(chrom, bim_pos)
         pc_mapped = str(round(100*(1-np.mean(np.isnan(map))),2))
         print('Found map positions for '+str(pc_mapped)+'% of SNPs')
