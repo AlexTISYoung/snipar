@@ -172,10 +172,12 @@ def run_imputation(data):
                             "pos",
                             "ratio_ibd0",
                             "mendelian_error_ratio",
-                            "estimated_genotyping_error",]:
-                    #TODO fix max estimator loggigng
-                    new_val = np.array(hf[key])
-                    hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
+                            "estimated_genotyping_error","num_observed_parental_alleles",
+                            "parent_ratio_backup","sib_ratio_backup","standard_f"]:
+                    # check if key exists in hf
+                    if key in hf:
+                        new_val = np.array(hf[key])
+                        hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
                 for key in ["bim_values"]:
                     #TODO fix max estimator loggigng
                     new_val = np.array(hf[key])
