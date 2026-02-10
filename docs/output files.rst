@@ -16,7 +16,7 @@ It has columns:
     'ID1'
         Individual ID (IID) of the first sibling in pair
     'ID2'
-        Inidividual ID (IID) of the second sibling in the pair
+        Individual ID (IID) of the second sibling in the pair
     'IBDType'
         The IBD type (0, 1, or 2) of the segment
     'Chr'

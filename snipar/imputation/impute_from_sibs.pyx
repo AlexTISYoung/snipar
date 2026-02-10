@@ -271,7 +271,7 @@ cdef void get_IBD(signed char[:] hap1,
 
 
 cdef int get_hap_index(int i, int j) nogil:
-    """Maps an unordered pair of integers to a single integer. Mapping is unique and continous.
+    """Maps an unordered pair of integers to a single integer. Mapping is unique and continuous.
     Args:
         i : int
             
@@ -394,7 +394,7 @@ cdef cpair[double, cpair[bint, float]] impute_snp_from_offsprings(int snp,
             The number of sibling pairs in snp_ibd2.
         
         use_backup : bint
-            Whether it should use backup bayesian imputation where there is no ibd infomation available.
+            Whether it should use backup bayesian imputation where there is no ibd information available.
 
     Returns:
         cpair[double, cpair[bint, float]]
@@ -434,7 +434,7 @@ cdef cpair[double, cpair[bint, float]] impute_snp_from_offsprings(int snp,
                 gs11 = phased_gts[sib_index1, snp, 1]
                 gs20 = phased_gts[sib_index2, snp, 0]
                 gs21 = phased_gts[sib_index2, snp, 1]
-                #checks whether inferred haplotype IBDs are consistend with the given IBD status
+                #checks whether inferred haplotype IBDs are consistent with the given IBD status
                 if h00+h01+h10+h11 == 1:
                     # From the four observed alleles two are shared. So the imputation result is sum of f and the three distinct alleles divided by two.
                     if h00==1:
@@ -505,7 +505,7 @@ cdef cpair[double, cpair[bint, float]] impute_snp_from_offsprings(int snp,
 
     elif len_snp_ibd2 > 0:
         num_observed_parental_alleles = 2
-        #As ibd2 simillar to having one individual, we divide snp sum of the pair by two
+        #As ibd2 similar to having one individual, we divide snp sum of the pair by two
         result = 0
         for pair_index in range(len_snp_ibd2):
             sib1 = sib_indexes[snp_ibd2[pair_index, 0]]
@@ -597,7 +597,7 @@ cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offspr
             The number of sibling pairs in snp_ibd2.
         
         use_backup : bint
-            Whether it should use backup bayesian imputation where there is no ibd infomation available.
+            Whether it should use backup bayesian imputation where there is no ibd information available.
 
     Returns:
         cpair[cpair[double, float], cpair[int, bint]]
@@ -799,7 +799,7 @@ cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offspr
             return_val.first.second = nan_float
 
     elif len_snp_ibd2 > 0:
-        #As ibd2 simillar to having one individual, we dividsnpe the sum of the pair by two
+        #As ibd2 similar to having one individual, we dividsnpe the sum of the pair by two
         result = 0
         for pair_index in range(len_snp_ibd2):
             sib1 = snp_ibd2[pair_index, 0]
@@ -969,7 +969,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
             Whether it should log the percentage of imputation's progress
         
         use_backup : boolean, optional
-            Whether it should use backup imputation where there is no ibd infomation available. It's false by default.
+            Whether it should use backup imputation where there is no ibd information available. It's false by default.
 
     Returns:
         tuple(list, numpy.array)
@@ -984,7 +984,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     if threads is not None:
         number_of_threads = threads
     logging.info("with chromosome " + str(chromosome)+": " + "imputing data ...")
-    #converting python obejcts to c
+    #converting python objects to c
     #sibships
     cdef int max_sibs = np.max(sibships["sib_count"])
     cdef int max_ibd_pairs = max_sibs*(max_sibs-1)//2
