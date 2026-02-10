@@ -242,7 +242,7 @@ The estimation procedure is summarized in this diagram:
 .. image:: two_gen_estimation.png
     :scale: 30 %
     :align: center
-    :alt: Two-generation estimation procedure accouting for assortative mating
+    :alt: Two-generation estimation procedure accounting for assortative mating
 
 The estimation requires as inputs: an estimate of the correlation between parents' scores, :math:`r_k`;
 the regression coefficients from two-generation PGI analysis, (:math:`\delta_{\text{PGI}:k},\alpha_{\text{PGI}:k}`);
@@ -253,7 +253,7 @@ The estimation procedure outputs estimates of: :math:`k`, the fraction of herita
 :math:`h^2_\text{eq}`, the equilibrium heritability, adjusting for the downward bias in heritability estimates from
 MZ-DZ comparisons, RDR, and sib-regression; 
 :math:`\alpha_\delta`, the indirect genetic effect of true direct genetic effect PGI;
-and :math:`v_{\eta:\delta}`, the fraction of phenotypic variance contribued by the indirect genetic effect component
+and :math:`v_{\eta:\delta}`, the fraction of phenotypic variance contributed by the indirect genetic effect component
 that is correlated with the direct genetic effect component. 
 
 We can use *snipar* to compute the two-generation PGI estimates and the correlation between parents' scores, 

@@ -36,7 +36,7 @@ class gtarray(object):
              The first column is for the father of that individual; the second column is for the mother of that individual.
              If the parent is neither observed nor imputed, the value is -1; if observed, 0; and if imputed, 1.
         num_obs_par_al : :class:`~numpy:numpy.array'
-             2 dimensioanal numpy arrray, with each entry holding the number of observed parental alleles for each individual on each locus.
+             2 dimensioanal numpy array, with each entry holding the number of observed parental alleles for each individual on each locus.
 
     Returns:
         G : :class:`snipar.gtarray`

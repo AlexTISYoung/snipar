@@ -58,8 +58,8 @@ class TestPedigree(SniparTest):
         sibs = sibs.groupby("FID").agg({"IID":max}).reset_index()
         no_parent_control = sibs[sibs["IID"]>1]["FID"].values.tolist()
         one_parent_control = pedigree[pedigree["has_father"] & pedigree["has_mother"]]["FID"].values.tolist()
-        expected_controlls = no_parent_control + one_parent_control
-        self.assertEqual(set(controlled_fams), set(expected_controlls))
+        expected_controls = no_parent_control + one_parent_control
+        self.assertEqual(set(controlled_fams), set(expected_controls))
         controlled_pedigree = controlled_pedigree[controlled_pedigree["FID"].str.startswith("_")]
         controlled_pedigree["FID"] = controlled_pedigree["FID"].str[3:]
         merged = pd.merge(pedigree, controlled_pedigree, on=["FID", "IID"])

@@ -29,7 +29,7 @@ parser.add_argument('--out', type=str, help="The summary statistics will output 
 parser.add_argument('--grm', type=str, help='Path to GRM file giving pairwise relatednsss information. Designed to work with KING IBD segment inference output (.seg file).', default=None)
 parser.add_argument('--grmgz', type=str, help='Path to GRM in GCTA grm.gz format (without .grm.gz suffix). Assumes .grm.id file with same root path also available.', default=None)
 parser.add_argument('--sparse_thresh', type=float, help='Threshold of GRM sparsity — elements below this value are set to zero', default=0.05)
-parser.add_argument('--impute_unrel', action='store_true', default=False, help='Whether to include unrelated individuals and impute their parental genotypes lineary or not. See Unified estimator in Guan et al.')
+parser.add_argument('--impute_unrel', action='store_true', default=False, help='Whether to include unrelated individuals and impute their parental genotypes linearly or not. See Unified estimator in Guan et al.')
 parser.add_argument('--robust', action='store_true', default=False, help='Use the robust estimator')
 parser.add_argument('--sib_diff', action='store_true', default=False, help='Use the sibling difference method')
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)

@@ -69,7 +69,7 @@ def recurcive_append(dictionary, index, element):
 def add_control(pedigree):
     """Adds control families to the pedigree table for testing.
 
-    For each family that has two or more siblings and both parents, creates a 3 new familes, one has no parents, one with no mother and one with no father.
+    For each family that has two or more siblings and both parents, creates a 3 new families, one has no parents, one with no mother and one with no father.
     gFID of these families are x+original_fid where x is "_o_", "_p_", "_m_" for these cases: no parent, only has father, only has mother. IIDs are the same in both families.
 
     Args:
@@ -183,7 +183,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                     start, end = segs[seg_counter]
                     prev_end = start
                 else:
-                    raise Exception("this segments starts after all meaningfull segments")
+                    raise Exception("this segments starts after all meaningful segments")
 
             if seg_start<start:
                 raise Exception("segment starts sooner than it should")
@@ -229,10 +229,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
         
         phased_address : str
-            Address of the phased bgen file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+            Address of the phased bgen file (does not include '.bgen'). Only one of unphased_address and phased_address is necessary.
 
         unphased_address : str
-            Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
+            Address of the bed file (does not include '.bed'). Only one of unphased_address and phased_address is necessary.
         
         ibd_address : str
             address of the ibd file. The king segments file should be accompanied with an allsegs file.
@@ -338,7 +338,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     if ibd_address is None:
         logging.info(f"with chromosomes {chromosomes} making an empty ibd dataframe")
         if (sibships["sib_count"]>1).any():
-            raise Exception("Should provide ibd file in the presense of families with multiple sibs")
+            raise Exception("Should provide ibd file in the presence of families with multiple sibs")
         ibd = {}
     else:
         ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
@@ -490,10 +490,10 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
 
     Args:
         phased_address : str
-            Address of the phased bgen file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+            Address of the phased bgen file (does not include '.bgen'). Only one of unphased_address and phased_address is necessary.
 
         unphased_address : str
-            Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.
+            Address of the bed file (does not include '.bed'). Only one of unphased_address and phased_address is necessary.
 
         bim: pandas.DataFrame
             A dataframe with these columns(dtype str): Chr id morgans coordinate allele1 allele2
