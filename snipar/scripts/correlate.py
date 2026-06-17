@@ -106,8 +106,16 @@ def main(args):
     if args.save_delete:
         delete_outfile = args.out+'_delete.txt'
         print('Saving jacknife delete values to '+str(delete_outfile))
-        delete_out = np.vstack((r_dir_pop_delete,r_dir_avg_NTC_delete)).T
-        delete_out = np.vstack((np.array(['r_direct_population','r_direct_avg_NTC']).reshape((1,2)),delete_out))
+        delete_out = np.hstack((r_dir_pop_delete,r_dir_avg_NTC_delete))
+        delete_header = np.array([
+            'r_direct_population',
+            'reg_population_direct',
+            'v_population_uncorr_direct',
+            'r_direct_avg_NTC',
+            'reg_avg_NTC_direct',
+            'v_avg_NTC_uncorr_direct',
+        ]).reshape((1,6))
+        delete_out = np.vstack((delete_header,delete_out))
         np.savetxt(delete_outfile, delete_out,fmt='%s')
 
 if __name__ == "__main__":

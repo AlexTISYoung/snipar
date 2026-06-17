@@ -123,12 +123,16 @@ class sumstats(object):
     def cor_direct_pop(self, n_blocks):
         print('Computing correlation between direct and population effects')
         r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = jacknife_est(self.direct,self.population,np.power(self.direct_SE,2),
-                                                                np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks)
+                                                                np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks,
+                                                                effect_1_name='direct effects',
+                                                                effect_2_name='population effects')
         return r_dir_pop, r_dir_pop_SE, r_dir_pop_delete
     def cor_direct_avg_NTC(self, n_blocks):
         print('Computing correlation between direct effects and average NTCs')
         r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = jacknife_est(self.direct,self.avg_NTC,np.power(self.direct_SE,2),
-                                                                                np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks)
+                                                                                np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks,
+                                                                                effect_1_name='direct effects',
+                                                                                effect_2_name='average NTCs')
         return r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete
     def compute_ld_scores(self, bedfiles, chroms, ld_wind, ld_out=None):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
@@ -256,7 +260,48 @@ def jacknife(z1,z2,v1,v2,r,l,n_blocks,block_size):
         jack_delete[i,:] = compute_corr(z1[mask[i,:]],z2[mask[i,:]],v1[mask[i,:]],v2[mask[i,:]],r[mask[i,:]],l[mask[i,:]])
     return jack_delete
 
-def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
+def _mask_outputs_with_negative_variance(est, se, delete, internal_est, residual_var_2,
+                                         effect_1_name='first effects',
+                                         effect_2_name='second effects'):
+    negative_variances = []
+    if np.isfinite(internal_est[0]) and internal_est[0] < 0:
+        negative_variances.append((effect_1_name, internal_est[0]))
+    if np.isfinite(internal_est[1]) and internal_est[1] < 0:
+        negative_variances.append((effect_2_name, internal_est[1]))
+    if np.isfinite(residual_var_2) and residual_var_2 < 0:
+        negative_variances.append(('residual '+effect_2_name, residual_var_2))
+
+    if len(negative_variances) == 0:
+        return est, se, delete
+
+    output_names = [
+        'correlation between '+effect_1_name+' and '+effect_2_name,
+        'regression coefficient of '+effect_2_name+' on '+effect_1_name,
+        'proportion of variance in '+effect_2_name+' uncorrelated with '+effect_1_name,
+    ]
+    invalid_outputs = set()
+    if np.isfinite(internal_est[0]) and internal_est[0] < 0:
+        invalid_outputs.update([0, 1, 2])
+    if np.isfinite(internal_est[1]) and internal_est[1] < 0:
+        invalid_outputs.update([0, 2])
+    if np.isfinite(residual_var_2) and residual_var_2 < 0:
+        invalid_outputs.add(2)
+
+    negative_msg = '; '.join([name+' variance = '+str(value) for name, value in negative_variances])
+    invalid_msg = '; '.join([output_names[i] for i in sorted(invalid_outputs)])
+    print('WARNING: Negative variance estimate(s) detected in correlate.py: '+negative_msg)
+    print('WARNING: Setting the following correlate.py output estimate(s), SE(s), and delete value(s) to NA because they rely on negative variance estimate(s): '+invalid_msg)
+
+    est = est.copy()
+    se = se.copy()
+    delete = delete.copy()
+    for i in invalid_outputs:
+        est[i] = np.nan
+        se[i] = np.nan
+        delete[:,i] = np.nan
+    return est, se, delete
+
+def jacknife_est(z1,z2,v1,v2,r,l,n_blocks,effect_1_name='first effects',effect_2_name='second effects'):
     # Estimate
     est = compute_corr(z1,z2,v1,v2,r,l)
     # Calculate blocks
@@ -269,5 +314,7 @@ def jacknife_est(z1,z2,v1,v2,r,l,n_blocks):
     for i in range(jack_delete.shape[1]):
         jack_vars[i] = ((n_blocks-1)/n_blocks)*np.sum(np.power(jack_delete[:,i]-np.mean(jack_delete[:,i]),2))
     # Adjust estimate of uncorrelated variance for error in regression coefficient
+    residual_var_2 = est[5]*est[1]
     est[5] = est[5]-est[0]*jack_vars[4]
-    return est[3:6], np.sqrt(jack_vars[3:6]), jack_delete[:,3:6]
+    return _mask_outputs_with_negative_variance(est[3:6], np.sqrt(jack_vars[3:6]), jack_delete[:,3:6],
+                                                est, residual_var_2, effect_1_name, effect_2_name)
