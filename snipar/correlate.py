@@ -4,6 +4,45 @@ import gzip
 from snipar.ld import ldscores_from_bed
 from snipar.utilities import make_id_dict
 import numpy as np
+import pandas as pd
+
+SUMSTATS_COLUMN_ALIASES = {
+    'SNP': ['SNP', 'snp', 'rsid', 'RSID', 'ID'],
+    'pos': ['pos', 'BP', 'bp', 'position', 'POSITION'],
+    'A1': ['A1', 'a1', 'allele1', 'effect_allele'],
+    'A2': ['A2', 'a2', 'allele2', 'other_allele'],
+    'freq': ['freq', 'f', 'FRQ', 'EAF', 'eaf'],
+    'direct_Beta': ['direct_Beta', 'theta_direct'],
+    'direct_SE': ['direct_SE', 'se_direct'],
+    'avg_NTC_Beta': ['avg_NTC_Beta', 'avg_parental_Beta', 'theta_avgNTC', 'theta_avg_NTC'],
+    'avg_NTC_SE': ['avg_NTC_SE', 'avg_parental_SE', 'se_avgNTC', 'se_avg_NTC'],
+    'population_Beta': ['population_Beta', 'theta_population'],
+    'population_SE': ['population_SE', 'se_population'],
+    'r_direct_avg_NTC': [
+        'r_direct_avg_NTC',
+        'r_direct_avg_parental',
+        'rg_direct_avgNTC',
+        'rg_direct_avg_NTC',
+    ],
+    'r_direct_population': ['r_direct_population', 'rg_direct_population'],
+}
+
+SUMSTATS_CANONICAL_COLUMNS = [
+    'SNP',
+    'pos',
+    'A1',
+    'A2',
+    'freq',
+    'direct_Beta',
+    'direct_SE',
+    'avg_NTC_Beta',
+    'avg_NTC_SE',
+    'population_Beta',
+    'population_SE',
+    'r_direct_avg_NTC',
+    'r_direct_population',
+]
+SUMSTATS_STRING_COLUMNS = {'SNP', 'A1', 'A2'}
 
 class sumstats(object):
     def __init__(self,chrom,sid,pos, A1, A2, freqs, direct, direct_SE, avg_NTC, avg_NTC_SE, population, population_SE, r_direct_avg_NTC, r_direct_pop, ldscores = None, map=None):
@@ -111,13 +150,18 @@ class sumstats(object):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(ld_files.shape[0]):
             print('Reading LD scores from '+ld_files[i])
-            ld_chr = np.loadtxt(ld_files[i],dtype=str,usecols=(1,3))
-            in_sid_dict = np.array([x in self.sid_dict for x in ld_chr[:,0]])
-            if np.sum(in_sid_dict) > 0:
-                ld_chr = ld_chr[in_sid_dict,:]
-                ld_indices = np.array([self.sid_dict[x] for x in ld_chr[:,0]])
-                self.ldscores[ld_indices] = np.array(ld_chr[:,1],dtype=float)
-                self.ldscores.mask[ld_indices] = False
+            try:
+                ld_snps, ld_scores = read_ldscore_file_pandas(ld_files[i])
+            except Exception as exc:  # pylint: disable=broad-except
+                print('WARNING: Fast pandas LD-score reader failed for '+ld_files[i]+': '+str(exc))
+                print('WARNING: Falling back to legacy np.loadtxt LD-score reader.')
+                ld_snps, ld_scores = read_ldscore_file_loadtxt(ld_files[i])
+            ld_indices = pd.Series(ld_snps).map(self.sid_dict)
+            valid = ld_indices.notna().to_numpy() & np.isfinite(ld_scores)
+            if np.sum(valid) > 0:
+                valid_indices = ld_indices.loc[valid].to_numpy(dtype=int)
+                self.ldscores[valid_indices] = ld_scores[valid]
+                self.ldscores.mask[valid_indices] = False
             else:
                 raise(ValueError('No SNPs in common between LD scores and summary statistics'))
     def cor_direct_pop(self, n_blocks):
@@ -147,30 +191,132 @@ class sumstats(object):
             else:
                 raise(ValueError('No SNPs in common between LD scores and sumstats'))
 
+def read_ldscore_file_pandas(ld_file):
+    header = read_text_header(ld_file)
+    if 'SNP' in header and 'L2' in header:
+        data = pd.read_table(
+            ld_file,
+            sep=r'\s+',
+            usecols=['SNP', 'L2'],
+            dtype={'SNP': str},
+            compression='infer',
+            engine='c',
+        )
+        print('Interpreting LD-score columns in '+ld_file+': SNP <- SNP; L2 <- L2')
+    else:
+        data = pd.read_table(
+            ld_file,
+            sep=r'\s+',
+            usecols=[1, 3],
+            compression='infer',
+            engine='c',
+        )
+        data.columns = ['SNP', 'L2']
+        data['SNP'] = data['SNP'].astype(str)
+        print('Interpreting LD-score columns in '+ld_file+': SNP <- column 2; L2 <- column 4')
+    return data['SNP'].to_numpy(), pd.to_numeric(data['L2'], errors='coerce').to_numpy()
+
+def read_ldscore_file_loadtxt(ld_file):
+    data = np.loadtxt(ld_file,dtype=str,usecols=(1,3),skiprows=1)
+    if data.ndim == 1:
+        data = data.reshape((1, data.shape[0]))
+    return data[:,0], np.array(data[:,1],dtype=float)
+
+def read_text_header(path):
+    opener = gzip.open if str(path).endswith('.gz') else open
+    with opener(path, 'rt') as handle:
+        return handle.readline().strip().split()
+
+def resolve_column_aliases(header, aliases, required_columns):
+    exact_lookup = {name: name for name in header}
+    lower_lookup = {}
+    for name in header:
+        lower_lookup.setdefault(name.lower(), name)
+
+    resolved = {}
+    missing = []
+    for canonical in required_columns:
+        selected = None
+        for candidate in aliases[canonical]:
+            if candidate in exact_lookup:
+                selected = exact_lookup[candidate]
+                break
+            if candidate.lower() in lower_lookup:
+                selected = lower_lookup[candidate.lower()]
+                break
+        if selected is None:
+            missing.append(canonical)
+        else:
+            resolved[canonical] = selected
+
+    if missing:
+        raise(ValueError('Missing required column(s): '+', '.join(missing)))
+    return resolved
+
+def print_column_interpretation(resolved_columns, file_label):
+    print('Interpreting columns in '+file_label+':')
+    for canonical in SUMSTATS_CANONICAL_COLUMNS:
+        source = resolved_columns[canonical]
+        if source == canonical:
+            print('  '+canonical+' <- '+source)
+        else:
+            print('  '+canonical+' <- '+source+' (alias)')
+
+def sumstats_from_columns(chrom, columns):
+    return sumstats(chrom,
+                    columns['SNP'],
+                    columns['pos'],
+                    columns['A1'],
+                    columns['A2'],
+                    columns['freq'],
+                    columns['direct_Beta'],
+                    columns['direct_SE'],
+                    columns['avg_NTC_Beta'],
+                    columns['avg_NTC_SE'],
+                    columns['population_Beta'],
+                    columns['population_SE'],
+                    columns['r_direct_avg_NTC'],
+                    columns['r_direct_population'])
+
+def read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns):
+    usecols = list(dict.fromkeys([resolved_columns[col] for col in SUMSTATS_CANONICAL_COLUMNS]))
+    dtype = {resolved_columns[col]: str for col in SUMSTATS_STRING_COLUMNS}
+    data = pd.read_table(
+        sumstats_file,
+        sep=r'\s+',
+        usecols=usecols,
+        dtype=dtype,
+        compression='infer',
+        engine='c',
+    )
+    columns = {}
+    for canonical in SUMSTATS_CANONICAL_COLUMNS:
+        source = resolved_columns[canonical]
+        if canonical in SUMSTATS_STRING_COLUMNS:
+            columns[canonical] = data[source].astype(str).to_numpy()
+        else:
+            columns[canonical] = pd.to_numeric(data[source], errors='coerce').to_numpy()
+    return sumstats_from_columns(chrom, columns)
+
+def read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns):
+    col_indices = tuple([header.index(resolved_columns[col]) for col in SUMSTATS_CANONICAL_COLUMNS])
+    data = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
+    if data.ndim == 1:
+        data = data.reshape((1, data.shape[0]))
+    columns = {canonical: data[:,i] for i, canonical in enumerate(SUMSTATS_CANONICAL_COLUMNS)}
+    return sumstats_from_columns(chrom, columns)
+
 def read_sumstats_file(sumstats_file, chrom):
     print('Reading sumstats from '+sumstats_file)
-    # Read header
-    sumstats_file_o = gzip.open(sumstats_file,'r')
-    sumstats_header = sumstats_file_o.readline().decode('UTF-8').split(' ')
-    sumstats_header[len(sumstats_header)-1] = sumstats_header[len(sumstats_header)-1].split('\n')[0]
-    sumstats_header = np.array(sumstats_header)
-    sumstats_file_o.close()
-    ## Find columns
-    # Keep backwards compatibility with old sumstats files
-    if 'avg_parental_Beta' in sumstats_header:
-        parname = 'avg_parental'
-    else:
-        parname = 'avg_NTC'
-    # Find column indices
-    colnames = ['SNP','pos','A1','A2','freq','direct_Beta',
-                'direct_SE',parname+'_Beta',parname+'_SE',
-                'population_Beta','population_SE','r_direct_'+parname,'r_direct_population']
-    col_indices = tuple([np.where(sumstats_header==x)[0][0] for x in colnames])
-    # Read summary statistics
-    s = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
-    # Return sumstats class
-    return sumstats(chrom, s[:,0],s[:,1],s[:,2],s[:,3],s[:,4],
-                    s[:,5],s[:,6],s[:,7],s[:,8],s[:,9],s[:,10],s[:,11],s[:,12])
+    header = read_text_header(sumstats_file)
+    resolved_columns = resolve_column_aliases(header, SUMSTATS_COLUMN_ALIASES, SUMSTATS_CANONICAL_COLUMNS)
+    print_column_interpretation(resolved_columns, sumstats_file)
+    try:
+        return read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns)
+    except Exception as exc:  # pylint: disable=broad-except
+        print('WARNING: Fast pandas sumstats reader failed for '+sumstats_file+': '+str(exc))
+        print('WARNING: Falling back to legacy np.loadtxt sumstats reader.')
+        return read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns)
 
 def read_sumstats_files(sumstats_files, chroms):
     s = read_sumstats_file(sumstats_files[0], chroms[0])
