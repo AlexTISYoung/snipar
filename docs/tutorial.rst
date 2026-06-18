@@ -15,7 +15,7 @@ Before working through the tutorial, please first install the package and read t
 Test data
 --------------------
 
-If *snipar* has been installed succesfully, the :ref:`command line scripts <scripts>` should be accessible as
+If *snipar* has been installed successfully, the :ref:`command line scripts <scripts>` should be accessible as
 executables in your terminal. A script that should be accessible loads the tutorial example data into a specified directory.
 To create a directory called 'example_data/' in the current directory and load the example data into it, use the command:
 
@@ -198,7 +198,7 @@ computed from .bed files by providing them through the --bed argument to :ref:`c
 Polygenic score analyses
 ------------------------
 
-For an exercise involving polygenic score analysis, please see the :ref:`Simulation Exercse <simulation>`.
+For an exercise involving polygenic score analysis, please see the :ref:`Simulation Exercise <simulation>`.
 
 .. In addition to family based GWAS, *snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
 .. and for performing family based polygenic score analyses. 

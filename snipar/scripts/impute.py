@@ -50,13 +50,13 @@ def run_imputation(data):
                     These can be used for testing the imputation. The tests.test_imputation.imputation_test uses these.
 
                 use_backup : bool, optional
-                    Whether it should use backup imputation where there is no ibd infomation available.
+                    Whether it should use backup imputation where there is no ibd information available.
 
                 phased_address: str, optional
-                    Address of the bed file (does not inlude '.bgen'). Only one of unphased_address and phased_address is neccessary.
+                    Address of the bed file (does not include '.bgen'). Only one of unphased_address and phased_address is necessary.
                 
                 unphased_address: str, optional
-                    Address of the bed file (does not inlude '.bed'). Only one of unphased_address and phased_address is neccessary.                
+                    Address of the bed file (does not include '.bed'). Only one of unphased_address and phased_address is necessary.                
 
                 ibd_address : str
                     address of the ibd file. The king segments file should be accompanied with an allsegs file.
@@ -340,7 +340,7 @@ parser.add_argument('-silent_progress',
                     help = "Hides the percentage of progress from logging")
 parser.add_argument('-use_backup',
                     action='store_true',
-                    help = "Whether it should use backup imputation where there is no ibd infomation available")                    
+                    help = "Whether it should use backup imputation where there is no ibd information available")                    
 parser.add_argument('--ibd',
                     type=str,
                     help='Address of the IBD file without suffix. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
@@ -379,18 +379,18 @@ parser.add_argument('--end',
 parser.add_argument('--pedigree',
                     type=str,
                     default = None,
-                    help="Address of the pedigree file. Pedigree file is ' ' seperated with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Default NaN value of Pedigree file is '0'. If your NaN value is something else be sure to specify it with --pedigree_nan option.")
+                    help="Address of the pedigree file. Pedigree file is ' ' separated with columns 'FID', 'IID', 'FATHER_ID', 'MOTHER_ID'. Default NaN value of Pedigree file is '0'. If your NaN value is something else be sure to specify it with --pedigree_nan option.")
 parser.add_argument('--king',
                     type=str,
                     default = None,
-                    help="""Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+                    help="""Address of a kinship file in KING format. kinship file is a '\t' separated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
         Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
         The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
         This file is used in creating a pedigree file and can be generated using KING.""")
 parser.add_argument('--agesex',
                     type=str,
                     default = None,
-                    help="""Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
+                    help="""Address of the agesex file. This is a " " separated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
         Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
         Age column is used for distinguishing between parent and child in a parent-offsring relationship inferred from the kinship file.
         ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.""")
