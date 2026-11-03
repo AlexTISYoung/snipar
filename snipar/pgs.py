@@ -8,6 +8,7 @@ import numpy.ma as ma
 import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
 import numdifftools as nd
+import warnings
 from snipar.pgs_am import *
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -592,7 +593,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
 
-def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025):
+def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025, return_fit=False, sample_ids=None):
     pg.gts = ma.array(pg.gts,fill_value=np.nan)
     pg.gts = pg.gts.filled()
     if ngen in [1,2,3]:
@@ -610,7 +611,7 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
     ## Fit model
     if ngen==1:
         print('Fitting 1 generation model (proband only)')
-        alpha, alpha_cols = make_and_fit_model(y, pg, ['proband'], ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+        pg_cols = ['proband']
     elif ngen==2 or ngen==3:
         if fit_sib:
             if 'sibling' in pg.sid:
@@ -637,7 +638,6 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
             pg_cols += ['paternal','maternal']
         if ngen==2:
             print('Fitting 2 generation model (proband and observed/imputed parents)')
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
         elif ngen==3:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             if gparsum:
@@ -665,13 +665,16 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
                 pg_cols += ['gp','gm']
             else:
                 pg_cols += ['gpp','gpm','gmp','gmm']
-            alpha, alpha_cols = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path, covariates=covariates, sparse_thresh=sparse_thresh)
+    fit = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path,
+                             covariates=covariates, sparse_thresh=sparse_thresh,
+                             return_fit=True, sample_ids=sample_ids)
+    alpha, alpha_cols = fit['alpha'], fit['cols']
     # Save to file
     if outprefix is not None:
         write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
-    return alpha, alpha_cols
+    return fit if return_fit else (alpha, alpha_cols)
 
-def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025):
+def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025, return_fit=False, sample_ids=None):
     pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
     if covariates is not None:
         X = np.hstack((covariates.gts,np.array(pg.gts[:,pg_col_indices])))
@@ -680,7 +683,9 @@ def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse
         X = np.array(pg.gts[:, pg_col_indices])
         X_cols = np.hstack((np.array(['intercept']),pg_cols))
     # Check for NAs
-    no_NA = np.sum(np.isnan(X),axis=1)==0
+    no_NA = np.all(np.isfinite(X), axis=1) & np.isfinite(y.gts[:, 0])
+    if sample_ids is not None:
+        no_NA &= np.isin(pg.ids, sample_ids)
     print('Sample size: '+str(np.sum(no_NA)))
     ## Read GRM
     id_dict = make_id_dict(pg.ids[no_NA])
@@ -710,7 +715,107 @@ def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse
     # Compute estimates
     ZT_Vinv_Z_imp = slmm_model.Z.T @ slmm_model.Vinv_Z
     alpha = [np.linalg.solve(ZT_Vinv_Z_imp, slmm_model.Z.T @ slmm_model.Vinv_y), np.linalg.inv(ZT_Vinv_Z_imp)]
+    if return_fit:
+        return dict(alpha=alpha, cols=X_cols, ids=pg.ids[no_NA].copy(),
+                    model=slmm_model)
     return alpha, X_cols
+
+
+def pgs_model_cross_covariance(population_fit, direct_fit):
+    """Sampling covariance between two GLS fits on the same individuals.
+
+    Let A_j = (X_j' V_j^-1 X_j)^-1 X_j' V_j^-1. The residual from
+    the full, two-generation model is shared by both fits; omitted parental
+    contributions in the population residual are assumed orthogonal to it.
+    Therefore Cov(b_1, b_2) = A_1 V_2 A_2'. Since V_2 A_2' = X_2 C_2,
+    this needs only sparse solves already performed during fitting. It also
+    works when separately estimated variance components are not proportional.
+
+    The returned matrix has population-model rows and direct-model columns.
+    Variance-component estimation uncertainty is ignored, as in the existing
+    GLS standard errors. The model-specific marginal variances remain C_1
+    and C_2; geometric-mean scaling of residual variances is not appropriate.
+    """
+    if not np.array_equal(population_fit['ids'], direct_fit['ids']):
+        raise ValueError('PGS ratio models must use the same individuals in the same order')
+    model_1, model_2 = population_fit['model'], direct_fit['model']
+    if not np.array_equal(model_1.y, model_2.y):
+        raise ValueError('PGS ratio models must use the same phenotype and scale')
+    covariance_1, covariance_2 = population_fit['alpha'][1], direct_fit['alpha'][1]
+    return covariance_1 @ (model_1.Vinv_Z.T @ model_2.Z) @ covariance_2
+
+
+def direct_population_ratio(population_fit, direct_fit, outprefix=None):
+    """Estimate the 2-gen/1-gen proband coefficient ratio and delta-method SE.
+
+    Uses the marginal variance from each fitted model and their shared-error
+    covariance. A weak denominator is flagged because the delta approximation
+    can be inaccurate near zero. Substantially non-positive-semidefinite
+    fitted covariance estimates are flagged and produce an undefined SE.
+    """
+    cross = pgs_model_cross_covariance(population_fit, direct_fit)
+    pop_index = list(population_fit['cols']).index('proband')
+    direct_index = list(direct_fit['cols']).index('proband')
+    population = float(population_fit['alpha'][0][pop_index])
+    direct = float(direct_fit['alpha'][0][direct_index])
+    pop_var = float(population_fit['alpha'][1][pop_index, pop_index])
+    direct_var = float(direct_fit['alpha'][1][direct_index, direct_index])
+    covariance = float(cross[pop_index, direct_index])
+    joint = np.array([[pop_var, covariance], [covariance, direct_var]])
+    result = dict(ratio=np.nan, se=np.nan, direct=direct, population=population,
+                  direct_se=np.sqrt(direct_var), population_se=np.sqrt(pop_var),
+                  covariance=covariance,
+                  sampling_correlation=covariance / np.sqrt(pop_var * direct_var),
+                  n=len(population_fit['ids']), status='ok',
+                  method='GLS_shared_full_model_residual_delta')
+    if not np.all(np.isfinite(joint)) or min(pop_var, direct_var) <= 0:
+        result['status'] = 'invalid_covariance'
+    elif np.linalg.eigvalsh(joint)[0] < -1e-10 * max(pop_var, direct_var):
+        result['status'] = 'inconsistent_marginal_covariance'
+    if not np.isfinite(direct):
+        result['status'] = 'invalid_direct_coefficient'
+    elif population == 0 or not np.isfinite(population):
+        result['status'] = 'undefined_zero_denominator'
+    else:
+        result['ratio'] = direct / population
+        if result['status'] == 'ok':
+            gradient = np.array([-direct / population ** 2, 1.0 / population])
+            variance = float(gradient @ joint @ gradient)
+            result['se'] = np.sqrt(max(0.0, variance))
+            if abs(population) < 1.96 * np.sqrt(pop_var):
+                result['status'] = 'weak_denominator'
+    if result['status'] != 'ok':
+        warnings.warn('Direct/population PGS ratio: ' + result['status'], RuntimeWarning)
+    print('Direct/population PGS ratio: {} (SE {}); {}'.format(
+        result['ratio'], result['se'], result['status']))
+    if outprefix is not None:
+        with open(outprefix + '.direct_population_ratio.txt', 'w') as output:
+            output.write('\t'.join(result) + '\n')
+            output.write('\t'.join(str(value) for value in result.values()) + '\n')
+        cross_out = np.vstack((
+            np.hstack((['term'], direct_fit['cols'])),
+            np.column_stack((population_fit['cols'], cross))))
+        np.savetxt(outprefix + '.1_2.cross_vcov.txt', cross_out, fmt='%s', delimiter='\t')
+        joint_out = np.vstack((['term', 'population', 'direct'],
+                               np.column_stack((['population', 'direct'], joint))))
+        np.savetxt(outprefix + '.direct_population.vcov.txt', joint_out, fmt='%s', delimiter='\t')
+    return result
+
+
+def fit_pgs_model_pair(y, pg, **kwargs):
+    """Fit both generations on the full model's complete cases and their ratio.
+
+    The full model is fitted first so absent parental scores cannot change the
+    sample used for the population coefficient. Existing single-model return
+    values and effect files are unchanged.
+    """
+    direct_fit = fit_pgs_model(y, pg, 2, return_fit=True, **kwargs)
+    population_kwargs = dict(kwargs, sample_ids=direct_fit['ids'])
+    population_fit = fit_pgs_model(y, pg, 1, return_fit=True,
+                                    **population_kwargs)
+    ratio = direct_population_ratio(population_fit, direct_fit,
+                                    outprefix=kwargs.get('outprefix'))
+    return population_fit, direct_fit, ratio
 
 def write_estimates(outprefix, alpha, cols):
     cols = cols.reshape((cols.shape[0],1))

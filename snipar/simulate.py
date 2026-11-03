@@ -308,6 +308,152 @@ def simulate_effects(haps, n_causal, h2, old_haps=None, v_indirect=0, r_direct_i
         a[:,1] = a[:,1] * np.sqrt(v_eg / np.var(eta_p+eta_m))
     return a, causal, h2_total
 
+
+def stabilizing_selection_weights(phenotype, variance, optimum=0.0):
+    """Gaussian viability fitness; variance is in fixed baseline phenotype units."""
+    phenotype = np.asarray(phenotype, dtype=float)
+    if phenotype.ndim != 1 or not np.isfinite(phenotype).all():
+        raise ValueError('Selection phenotypes must be a finite one-dimensional array')
+    if np.isnan(variance) or variance <= 0 or not np.isfinite(optimum):
+        raise ValueError('Selection variance must be positive and optimum must be finite')
+    return np.exp(-0.5 * (phenotype - optimum) ** 2 / variance)
+
+
+def stabilizing_selection_diagnostics(haps, effects, genetic, phenotype, indices):
+    """Partition genetic variance into diagonal and effect-signed LD components."""
+    scores = np.concatenate([genetic[sex][indices[sex]] for sex in range(2)])
+    values = np.concatenate([phenotype[sex][indices[sex]] for sex in range(2)])
+    genic, diagonal, cursor = 0.0, 0.0, 0
+    for chromosome in haps:
+        dosage = np.concatenate([
+            chromosome[indices[sex], sex].sum(axis=2, dtype=np.uint8) for sex in range(2)
+        ])
+        mean = dosage.mean(axis=0)
+        variance = (dosage * dosage).mean(axis=0) - mean ** 2
+        frequency = mean / 2
+        squared_effect = effects[cursor:cursor + dosage.shape[1]] ** 2
+        diagonal += np.dot(variance, squared_effect)
+        genic += np.dot(2 * frequency * (1 - frequency), squared_effect)
+        cursor += dosage.shape[1]
+    genetic_variance = np.var(scores)
+    return dict(n_individuals=len(scores), genetic_variance=float(genetic_variance),
+                phenotypic_variance=float(np.var(values)), mean_phenotype=float(np.mean(values)),
+                genic_variance=float(genic), genotypic_diagonal_variance=float(diagonal),
+                signed_offdiagonal_ld_variance=float(genetic_variance - diagonal),
+                residual_variance=float(np.var(values - scores)),
+                genetic_residual_covariance=float(np.mean((scores - scores.mean()) *
+                                                        (values - scores - np.mean(values - scores)))))
+
+
+def forward_sim_stabilizing_selection(haps, maps, n_generations, n_causal, h2,
+                                     selection_variance, nfam_output, unlinked=True,
+                                     optimum=0.0):
+    """Select breeders over generations, then sample offspring before selection.
+
+    Effects, residual variance and the phenotype origin remain fixed. Neutral
+    controls use selection_variance=inf. Final parents are unique within sex;
+    earlier generations use survivor sampling with replacement at constant size.
+    """
+    if int(n_generations) != n_generations or n_generations < 1:
+        raise ValueError('At least one integer generation of selection is required')
+    if not 0 < h2 <= 1:
+        raise ValueError('Selection simulations require 0 < h2 <= 1')
+    n_candidates = haps[0].shape[0]
+    if int(nfam_output) != nfam_output or not 1 <= nfam_output <= n_candidates:
+        raise ValueError('Output family count must be a positive integer no larger than the breeding pool')
+    stabilizing_selection_weights(np.zeros(1), selection_variance, optimum)
+    effects, causal, _ = simulate_effects(haps, n_causal, h2)
+    initial_genetic = compute_genetic_component(haps, causal, effects)
+    origin = np.mean(np.concatenate(initial_genetic))
+    genetic = tuple(x - origin for x in initial_genetic)
+    phenotype = tuple(x + np.sqrt(1 - h2) * np.random.randn(len(x)) for x in genetic)
+    history, variance_rows = [], []
+    for generation in range(n_generations):
+        all_indices = (np.arange(n_candidates), np.arange(n_candidates))
+        history.append(dict(generation=generation, phase='before_selection',
+                            **stabilizing_selection_diagnostics(haps, effects, genetic, phenotype, all_indices)))
+        survivors = tuple(np.flatnonzero(np.random.random(n_candidates) <
+                          stabilizing_selection_weights(phenotype[sex], selection_variance, optimum))
+                          for sex in range(2))
+        if any(len(x) == 0 for x in survivors):
+            raise ValueError('No surviving breeders in one sex; increase the breeding pool or weaken selection')
+        history.append(dict(generation=generation, phase='after_selection',
+                            **stabilizing_selection_diagnostics(haps, effects, genetic, phenotype, survivors)))
+        final = generation == n_generations - 1
+        if final and any(len(x) < nfam_output for x in survivors):
+            raise ValueError('Not enough unique surviving final parents; increase --selection_nfam')
+        n_pairs = nfam_output if final else n_candidates
+        father_indices, mother_indices = tuple(
+            np.random.choice(x, n_pairs, replace=not final) for x in survivors
+        )
+        # From generation 1 onward each index labels a brother/sister pair.
+        if generation > 0:
+            same_family = father_indices == mother_indices
+            attempts = 0
+            while same_family.any():
+                if final:
+                    np.random.shuffle(mother_indices)
+                else:
+                    mother_indices[same_family] = np.random.choice(survivors[1], same_family.sum())
+                same_family = father_indices == mother_indices
+                attempts += 1
+                if attempts > 1000:
+                    raise ValueError('Unable to find matings without full-sibling pairs')
+        new_haps, ibd = [], []
+        for chromosome, recombination_map in zip(haps, maps):
+            args = (father_indices, mother_indices, chromosome[:, 0], chromosome[:, 1])
+            result = produce_next_gen_unlinked(*args) if unlinked else produce_next_gen(*args, recombination_map)
+            new_haps.append(result[0])
+            ibd.append(result[1])
+        new_genetic = tuple(x - origin for x in compute_genetic_component(new_haps, causal, effects))
+        new_phenotype = tuple(x + np.sqrt(1 - h2) * np.random.randn(n_pairs) for x in new_genetic)
+        delta_p, delta_m = genetic[0][father_indices], genetic[1][mother_indices]
+        variance_rows.append(compute_vcomps(*new_genetic, *new_phenotype,
+                             delta_p=delta_p, delta_m=delta_m, verbose=False))
+        print('Selection generation {}: {} male and {} female survivors; offspring genetic variance {:.6g}'.format(
+            generation + 1, len(survivors[0]), len(survivors[1]), variance_rows[-1][0]))
+        if final:
+            missing = np.full(n_candidates, np.nan)
+            parent_ped = create_ped_output(*genetic, *phenotype, missing, missing, missing, missing,
+                                           gen=0, header=True)
+            child_ped = create_ped_output(*new_genetic, *new_phenotype,
+                                         phenotype[0][father_indices], phenotype[1][mother_indices],
+                                         delta_p, delta_m, father_indices=father_indices,
+                                         mother_indices=mother_indices, gen=1, header=False)
+            ped = np.vstack((parent_ped, child_ped))
+            history.append(dict(generation=n_generations, phase='offspring_before_selection',
+                                **stabilizing_selection_diagnostics(new_haps, effects, new_genetic, new_phenotype,
+                                                                  (np.arange(n_pairs), np.arange(n_pairs)))))
+        else:
+            haps, genetic, phenotype = new_haps, new_genetic, new_phenotype
+    variance = np.vstack((np.array(['v_g', 'v_y', 'r_delta']), np.asarray(variance_rows)))
+    metadata = dict(selection_variance=float(selection_variance), optimum=float(optimum),
+                    n_generations=int(n_generations), baseline_h2=float(h2), residual_variance=1 - h2,
+                    genetic_origin=float(origin), breeding_pairs=n_candidates, output_families=int(nfam_output),
+                    offspring_sampling='before selection; no phenotype ascertainment',
+                    effects_rescaled_after_selection=False, history=history)
+    return new_haps, haps, father_indices, mother_indices, ibd, ped, effects, variance, metadata
+
+
+def selection_family_relationships(ped, parent_siblings=True):
+    """Sibling and first-cousin relationships when only some breeders are sampled."""
+    children = ped[np.char.startswith(ped[:, 0], '1_')]
+    rows = [['ID1', 'ID2', 'PropIBD', 'InfType']]
+    rows += [[children[i, 1], children[i + 1, 1], '0.5', 'FS']
+             for i in range(0, len(children), 2)]
+    if parent_siblings:
+        paternal, maternal = {}, {}
+        for child in children:
+            paternal.setdefault(child[2], []).append(child[1])
+            maternal.setdefault(child[3], []).append(child[1])
+        for father, paternal_children in paternal.items():
+            sister = father.rsplit('_', 1)[0] + '_1'
+            for first in paternal_children:
+                for second in maternal.get(sister, []):
+                    if first.rsplit('_', 1)[0] != second.rsplit('_', 1)[0]:
+                        rows.append([first, second, '0.125', '3rd'])
+    return np.asarray(rows)
+
 def compute_vcomps(G_p ,G_m, Y_p, Y_m, delta_p=None, delta_m=None, v_indirect=0, eta_p=None, eta_m=None, verbose=True):
     if v_indirect==0:
         V = np.zeros((3))

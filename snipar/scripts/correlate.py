@@ -7,7 +7,8 @@ Args:
 @parser@
 Results:
     correlations
-        A text file containing the estimated correlations and their standard errors. 
+        A text file containing the estimated correlations, non-sampling effect
+        variances, direct/population variance ratio, and their standard errors.
         
 """
 import numpy as np
@@ -82,31 +83,62 @@ def main(args):
 
     # Compute correlations 
     print('Using '+str(s.sid.shape[0])+' SNPs to compute correlations')
-    r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = s.cor_direct_pop(args.n_blocks)
+    (r_dir_pop, r_dir_pop_SE, r_dir_pop_delete,
+     v_dir_pop, v_dir_pop_SE, v_dir_pop_delete) = s.cor_direct_pop(
+        args.n_blocks,
+        return_variances=True,
+    )
     print('Correlation between direct and population effects: '+str(round(r_dir_pop[0],4))+' (S.E. '+str(round(r_dir_pop_SE[0],4))+')')
     print('Regression coefficient of population on direct effects: '+str(round(r_dir_pop[1],4))+' (S.E. '+str(round(r_dir_pop_SE[1],4))+')')
     print('Proportion of variance in population effects uncorrelated with direct effects: '+str(round(r_dir_pop[2],4))+' (S.E. '+str(round(r_dir_pop_SE[2],4))+')')
-    r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = s.cor_direct_avg_NTC(args.n_blocks)
+    (r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete,
+     v_dir_avg_NTC, v_dir_avg_NTC_SE, v_dir_avg_NTC_delete) = s.cor_direct_avg_NTC(
+        args.n_blocks,
+        return_variances=True,
+    )
     print('Correlation between direct and average NTCs: '+str(round(r_dir_avg_NTC[0],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[0],4))+')')
     print('Regression coefficient of average NTCs on direct effects: '+str(round(r_dir_avg_NTC[1],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[1],4))+')')
     print('Proportion of variance in average NTCs uncorrelated with direct effects: '+str(round(r_dir_avg_NTC[2],4))+' (S.E. '+str(round(r_dir_avg_NTC_SE[2],4))+')')
+    print('Non-sampling variance of direct effects: '+str(v_dir_pop[0])+' (S.E. '+str(v_dir_pop_SE[0])+')')
+    print('Non-sampling variance of population effects: '+str(v_dir_pop[1])+' (S.E. '+str(v_dir_pop_SE[1])+')')
+    print('Non-sampling variance of average NTCs: '+str(v_dir_avg_NTC[1])+' (S.E. '+str(v_dir_avg_NTC_SE[1])+')')
+    print('Ratio of direct-effect to population-effect non-sampling variance: '+str(v_dir_pop[2])+' (S.E. '+str(v_dir_pop_SE[2])+')')
 
     outfile = str(args.out)+'_corrs.txt'
     print('Saving correlation estimates to '+outfile)
-    first_col = np.array(['r_direct_population','reg_population_direct','v_population_uncorr_direct','r_direct_avg_NTC','reg_avg_NTC_direct','v_avg_NTC_uncorr_direct']).reshape((6,1))
+    first_col = np.array([
+        'r_direct_population',
+        'reg_population_direct',
+        'v_population_uncorr_direct',
+        'r_direct_avg_NTC',
+        'reg_avg_NTC_direct',
+        'v_avg_NTC_uncorr_direct',
+        'var_direct',
+        'var_population',
+        'var_avg_NTC',
+        'var_ratio_direct_population',
+    ]).reshape((10,1))
     header = np.array(['correlation','est','SE']).reshape((1,3))
-    cor_out = np.zeros((6,2))
+    cor_out = np.zeros((10,2))
     cor_out[0:3,0] = r_dir_pop
     cor_out[0:3,1] = r_dir_pop_SE
     cor_out[3:6,0] = r_dir_avg_NTC
     cor_out[3:6,1] = r_dir_avg_NTC_SE
+    cor_out[6:,0] = np.array([v_dir_pop[0], v_dir_pop[1], v_dir_avg_NTC[1], v_dir_pop[2]])
+    cor_out[6:,1] = np.array([v_dir_pop_SE[0], v_dir_pop_SE[1], v_dir_avg_NTC_SE[1], v_dir_pop_SE[2]])
     outarray = np.vstack((header,np.hstack((first_col,cor_out))))
     np.savetxt(outfile,outarray,fmt='%s')
 
     if args.save_delete:
         delete_outfile = args.out+'_delete.txt'
         print('Saving jacknife delete values to '+str(delete_outfile))
-        delete_out = np.hstack((r_dir_pop_delete,r_dir_avg_NTC_delete))
+        variance_delete = np.column_stack((
+            v_dir_pop_delete[:,0],
+            v_dir_pop_delete[:,1],
+            v_dir_avg_NTC_delete[:,1],
+            v_dir_pop_delete[:,2],
+        ))
+        delete_out = np.hstack((r_dir_pop_delete,r_dir_avg_NTC_delete,variance_delete))
         delete_header = np.array([
             'r_direct_population',
             'reg_population_direct',
@@ -114,7 +146,11 @@ def main(args):
             'r_direct_avg_NTC',
             'reg_avg_NTC_direct',
             'v_avg_NTC_uncorr_direct',
-        ]).reshape((1,6))
+            'var_direct',
+            'var_population',
+            'var_avg_NTC',
+            'var_ratio_direct_population',
+        ]).reshape((1,10))
         delete_out = np.vstack((delete_header,delete_out))
         np.savetxt(delete_outfile, delete_out,fmt='%s')
 

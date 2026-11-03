@@ -42,6 +42,15 @@ SUMSTATS_CANONICAL_COLUMNS = [
     'r_direct_avg_NTC',
     'r_direct_population',
 ]
+SUMSTATS_AVG_NTC_COLUMNS = [
+    'avg_NTC_Beta',
+    'avg_NTC_SE',
+    'r_direct_avg_NTC',
+]
+SUMSTATS_DIRECT_POPULATION_COLUMNS = [
+    col for col in SUMSTATS_CANONICAL_COLUMNS
+    if col not in SUMSTATS_AVG_NTC_COLUMNS
+]
 SUMSTATS_STRING_COLUMNS = {'SNP', 'A1', 'A2'}
 
 class sumstats(object):
@@ -164,20 +173,20 @@ class sumstats(object):
                 self.ldscores.mask[valid_indices] = False
             else:
                 raise(ValueError('No SNPs in common between LD scores and summary statistics'))
-    def cor_direct_pop(self, n_blocks):
+    def cor_direct_pop(self, n_blocks, return_variances=False):
         print('Computing correlation between direct and population effects')
-        r_dir_pop, r_dir_pop_SE, r_dir_pop_delete = jacknife_est(self.direct,self.population,np.power(self.direct_SE,2),
-                                                                np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks,
-                                                                effect_1_name='direct effects',
-                                                                effect_2_name='population effects')
-        return r_dir_pop, r_dir_pop_SE, r_dir_pop_delete
-    def cor_direct_avg_NTC(self, n_blocks):
+        return jacknife_est(self.direct,self.population,np.power(self.direct_SE,2),
+                            np.power(self.population_SE,2),self.r_direct_pop,self.ldscores,n_blocks,
+                            effect_1_name='direct effects',
+                            effect_2_name='population effects',
+                            return_variances=return_variances)
+    def cor_direct_avg_NTC(self, n_blocks, return_variances=False):
         print('Computing correlation between direct effects and average NTCs')
-        r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete = jacknife_est(self.direct,self.avg_NTC,np.power(self.direct_SE,2),
-                                                                                np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks,
-                                                                                effect_1_name='direct effects',
-                                                                                effect_2_name='average NTCs')
-        return r_dir_avg_NTC, r_dir_avg_NTC_SE, r_dir_avg_NTC_delete
+        return jacknife_est(self.direct,self.avg_NTC,np.power(self.direct_SE,2),
+                            np.power(self.avg_NTC_SE,2),self.r_direct_avg_NTC,self.ldscores, n_blocks,
+                            effect_1_name='direct effects',
+                            effect_2_name='average NTCs',
+                            return_variances=return_variances)
     def compute_ld_scores(self, bedfiles, chroms, ld_wind, ld_out=None):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(bedfiles.shape[0]):
@@ -253,14 +262,102 @@ def resolve_column_aliases(header, aliases, required_columns):
         raise(ValueError('Missing required column(s): '+', '.join(missing)))
     return resolved
 
-def print_column_interpretation(resolved_columns, file_label):
+def resolve_sumstats_columns(header):
+    resolved = resolve_column_aliases(
+        header,
+        SUMSTATS_COLUMN_ALIASES,
+        SUMSTATS_DIRECT_POPULATION_COLUMNS,
+    )
+    derived_columns = set()
+    resolved_avg_ntc = {}
+    missing_avg_ntc = []
+    for canonical in SUMSTATS_AVG_NTC_COLUMNS:
+        try:
+            resolved_avg_ntc.update(
+                resolve_column_aliases(header, SUMSTATS_COLUMN_ALIASES, [canonical])
+            )
+        except ValueError:
+            missing_avg_ntc.append(canonical)
+
+    if len(missing_avg_ntc) == 0:
+        resolved.update(resolved_avg_ntc)
+    else:
+        derived_columns.update(SUMSTATS_AVG_NTC_COLUMNS)
+        if len(missing_avg_ntc) < len(SUMSTATS_AVG_NTC_COLUMNS):
+            print(
+                'WARNING: Some average NTC columns are missing; deriving all average '
+                'NTC columns from direct and population columns for consistency.'
+            )
+    return resolved, derived_columns
+
+def print_column_interpretation(resolved_columns, file_label, derived_columns=None):
+    if derived_columns is None:
+        derived_columns = set()
     print('Interpreting columns in '+file_label+':')
     for canonical in SUMSTATS_CANONICAL_COLUMNS:
-        source = resolved_columns[canonical]
-        if source == canonical:
-            print('  '+canonical+' <- '+source)
+        if canonical in derived_columns:
+            print('  '+canonical+' <- derived from direct/population columns')
         else:
-            print('  '+canonical+' <- '+source+' (alias)')
+            source = resolved_columns[canonical]
+            if source == canonical:
+                print('  '+canonical+' <- '+source)
+            else:
+                print('  '+canonical+' <- '+source+' (alias)')
+
+def numeric_array(values):
+    return np.asarray(pd.to_numeric(values, errors='coerce'), dtype=float)
+
+def divide_or_nan(numerator, denominator):
+    out = np.full(np.asarray(numerator).shape, np.nan, dtype=float)
+    np.divide(
+        numerator,
+        denominator,
+        out=out,
+        where=np.isfinite(denominator) & (denominator != 0),
+    )
+    return out
+
+def derive_avg_ntc_from_direct_population(columns):
+    direct_beta = numeric_array(columns['direct_Beta'])
+    direct_se = numeric_array(columns['direct_SE'])
+    population_beta = numeric_array(columns['population_Beta'])
+    population_se = numeric_array(columns['population_SE'])
+    r_direct_population = numeric_array(columns['r_direct_population'])
+
+    var_direct = np.power(direct_se, 2)
+    var_population = np.power(population_se, 2)
+    cov_direct_population = r_direct_population * direct_se * population_se
+    var_avg_ntc = var_population + var_direct - 2.0 * cov_direct_population
+
+    tol = 1e-12
+    negative_var = np.isfinite(var_avg_ntc) & (var_avg_ntc < -tol)
+    if np.any(negative_var):
+        print(
+            'WARNING: Derived average NTC sampling variance is negative for '
+            +str(np.sum(negative_var))+
+            ' SNP(s); setting derived average NTC SE and direct-average NTC '
+            'sampling correlations to NA for those SNPs.'
+        )
+    var_avg_ntc = np.where(
+        negative_var,
+        np.nan,
+        np.where(var_avg_ntc < 0, 0.0, var_avg_ntc),
+    )
+    avg_ntc_se = np.sqrt(var_avg_ntc)
+    cov_direct_avg_ntc = cov_direct_population - var_direct
+
+    columns['avg_NTC_Beta'] = population_beta - direct_beta
+    columns['avg_NTC_SE'] = avg_ntc_se
+    columns['r_direct_avg_NTC'] = divide_or_nan(
+        cov_direct_avg_ntc,
+        direct_se * avg_ntc_se,
+    )
+    return columns
+
+def complete_sumstats_columns(columns, derived_columns):
+    if any(col in derived_columns for col in SUMSTATS_AVG_NTC_COLUMNS):
+        columns = derive_avg_ntc_from_direct_population(columns)
+    return columns
 
 def sumstats_from_columns(chrom, columns):
     return sumstats(chrom,
@@ -278,8 +375,9 @@ def sumstats_from_columns(chrom, columns):
                     columns['r_direct_avg_NTC'],
                     columns['r_direct_population'])
 
-def read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns):
-    usecols = list(dict.fromkeys([resolved_columns[col] for col in SUMSTATS_CANONICAL_COLUMNS]))
+def read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns, derived_columns):
+    read_columns = [col for col in SUMSTATS_CANONICAL_COLUMNS if col in resolved_columns]
+    usecols = list(dict.fromkeys([resolved_columns[col] for col in read_columns]))
     dtype = {resolved_columns[col]: str for col in SUMSTATS_STRING_COLUMNS}
     data = pd.read_table(
         sumstats_file,
@@ -290,33 +388,36 @@ def read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns):
         engine='c',
     )
     columns = {}
-    for canonical in SUMSTATS_CANONICAL_COLUMNS:
+    for canonical in read_columns:
         source = resolved_columns[canonical]
         if canonical in SUMSTATS_STRING_COLUMNS:
             columns[canonical] = data[source].astype(str).to_numpy()
         else:
             columns[canonical] = pd.to_numeric(data[source], errors='coerce').to_numpy()
+    columns = complete_sumstats_columns(columns, derived_columns)
     return sumstats_from_columns(chrom, columns)
 
-def read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns):
-    col_indices = tuple([header.index(resolved_columns[col]) for col in SUMSTATS_CANONICAL_COLUMNS])
+def read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns, derived_columns):
+    read_columns = [col for col in SUMSTATS_CANONICAL_COLUMNS if col in resolved_columns]
+    col_indices = tuple([header.index(resolved_columns[col]) for col in read_columns])
     data = np.loadtxt(sumstats_file,dtype=str,skiprows=1,usecols=col_indices)
     if data.ndim == 1:
         data = data.reshape((1, data.shape[0]))
-    columns = {canonical: data[:,i] for i, canonical in enumerate(SUMSTATS_CANONICAL_COLUMNS)}
+    columns = {canonical: data[:,i] for i, canonical in enumerate(read_columns)}
+    columns = complete_sumstats_columns(columns, derived_columns)
     return sumstats_from_columns(chrom, columns)
 
 def read_sumstats_file(sumstats_file, chrom):
     print('Reading sumstats from '+sumstats_file)
     header = read_text_header(sumstats_file)
-    resolved_columns = resolve_column_aliases(header, SUMSTATS_COLUMN_ALIASES, SUMSTATS_CANONICAL_COLUMNS)
-    print_column_interpretation(resolved_columns, sumstats_file)
+    resolved_columns, derived_columns = resolve_sumstats_columns(header)
+    print_column_interpretation(resolved_columns, sumstats_file, derived_columns)
     try:
-        return read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns)
+        return read_sumstats_file_pandas(sumstats_file, chrom, resolved_columns, derived_columns)
     except Exception as exc:  # pylint: disable=broad-except
         print('WARNING: Fast pandas sumstats reader failed for '+sumstats_file+': '+str(exc))
         print('WARNING: Falling back to legacy np.loadtxt sumstats reader.')
-        return read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns)
+        return read_sumstats_file_loadtxt(sumstats_file, chrom, header, resolved_columns, derived_columns)
 
 def read_sumstats_files(sumstats_files, chroms):
     s = read_sumstats_file(sumstats_files[0], chroms[0])
@@ -447,20 +548,72 @@ def _mask_outputs_with_negative_variance(est, se, delete, internal_est, residual
         delete[:,i] = np.nan
     return est, se, delete
 
-def jacknife_est(z1,z2,v1,v2,r,l,n_blocks,effect_1_name='first effects',effect_2_name='second effects'):
+def _jacknife_variance(delete_values):
+    n_blocks = delete_values.shape[0]
+    return ((n_blocks-1)/n_blocks)*np.sum(
+        np.power(delete_values-np.mean(delete_values, axis=0), 2),
+        axis=0,
+    )
+
+def _variance_outputs(est, jack_delete, jack_vars):
+    variance_est = np.array([est[0], est[1], np.nan], dtype=float)
+    variance_se = np.array([
+        np.sqrt(jack_vars[0]),
+        np.sqrt(jack_vars[1]),
+        np.nan,
+    ])
+    variance_delete = np.column_stack((
+        jack_delete[:,0],
+        jack_delete[:,1],
+        np.full(jack_delete.shape[0], np.nan),
+    ))
+
+    if np.isfinite(est[0]) and est[0] >= 0 and np.isfinite(est[1]) and est[1] > 0:
+        variance_est[2] = est[0]/est[1]
+        valid_delete = np.logical_and(
+            np.isfinite(jack_delete[:,0]) & (jack_delete[:,0] >= 0),
+            np.isfinite(jack_delete[:,1]) & (jack_delete[:,1] > 0),
+        )
+        variance_delete[valid_delete,2] = (
+            jack_delete[valid_delete,0]/jack_delete[valid_delete,1]
+        )
+        if np.all(valid_delete):
+            variance_se[2] = np.sqrt(_jacknife_variance(variance_delete[:,2]))
+        else:
+            print(
+                'WARNING: At least one delete-block direct/population variance '
+                'ratio was undefined because a corrected variance was non-positive; '
+                'setting its jackknife SE to NA.'
+            )
+    else:
+        print(
+            'WARNING: Corrected variance ratio is undefined because a full-sample '
+            'corrected variance was non-positive; setting its estimate, SE, and '
+            'delete values to NA.'
+        )
+    return variance_est, variance_se, variance_delete
+
+def jacknife_est(z1,z2,v1,v2,r,l,n_blocks,effect_1_name='first effects',effect_2_name='second effects',return_variances=False):
     # Estimate
     est = compute_corr(z1,z2,v1,v2,r,l)
     # Calculate blocks
     block_size = int(np.floor(z1.shape[0]/n_blocks))
     # Get jacknife ests
     jack_delete = jacknife(z1,z2,v1,v2,r,l,int(n_blocks),block_size)
-    n_blocks = jack_delete.shape[0]
     # Compute jacknife-variance
-    jack_vars = np.zeros((jack_delete.shape[1]),dtype=np.float_)
-    for i in range(jack_delete.shape[1]):
-        jack_vars[i] = ((n_blocks-1)/n_blocks)*np.sum(np.power(jack_delete[:,i]-np.mean(jack_delete[:,i]),2))
+    jack_vars = _jacknife_variance(jack_delete)
     # Adjust estimate of uncorrelated variance for error in regression coefficient
     residual_var_2 = est[5]*est[1]
     est[5] = est[5]-est[0]*jack_vars[4]
-    return _mask_outputs_with_negative_variance(est[3:6], np.sqrt(jack_vars[3:6]), jack_delete[:,3:6],
-                                                est, residual_var_2, effect_1_name, effect_2_name)
+    correlation_outputs = _mask_outputs_with_negative_variance(
+        est[3:6],
+        np.sqrt(jack_vars[3:6]),
+        jack_delete[:,3:6],
+        est,
+        residual_var_2,
+        effect_1_name,
+        effect_2_name,
+    )
+    if not return_variances:
+        return correlation_outputs
+    return correlation_outputs + _variance_outputs(est, jack_delete, jack_vars)

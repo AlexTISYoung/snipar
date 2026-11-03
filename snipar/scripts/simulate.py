@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Simulates genotype-phenotype data using forward simulation. Phenotypes can be affected 
-by direct genetic effects, indirect genetic effects (vertical transmission), and assortative mating.
+by direct genetic effects, indirect genetic effects (vertical transmission), assortative mating,
+or multigeneration Gaussian stabilizing selection on breeders.
 
 Args:
 @parser@
@@ -10,7 +11,7 @@ Results:
         
 """
 import numpy as np
-import h5py, argparse
+import h5py, argparse, json
 from snipar.ibd import write_segs_from_matrix
 from snipar.utilities import *
 from snipar.simulate import *
@@ -36,6 +37,14 @@ parser.add_argument('--r_par',type=float,help='Phenotypic correlation of parents
 parser.add_argument('--v_indir',type=float,help='Variance explained by parental indirect genetic effects as a fraction of the heritability, e.g 0.5',default=0)
 parser.add_argument('--r_dir_indir',type=float,help='Correlation between direct and indirect genetic effects',default=None)
 parser.add_argument('--beta_vert',type=float,help='Vertical transmission coefficient',default=0)
+parser.add_argument('--n_stabilizing', type=int, default=0,
+                    help='Generations of Gaussian viability selection; final offspring are sampled before selection')
+parser.add_argument('--selection_variance', type=float, default=None,
+                    help='Gaussian fitness variance in baseline phenotype units; inf gives a matched neutral control')
+parser.add_argument('--selection_optimum', type=float, default=0.0,
+                    help='Fixed optimum relative to the initial mean genetic value')
+parser.add_argument('--selection_nfam', type=int, default=None,
+                    help='Breeding-pool pairs before selection; defaults to four times --nfam')
 parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
 parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
 parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
@@ -46,6 +55,17 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
+    selection = args.n_stabilizing != 0
+    if selection:
+        if args.n_stabilizing < 1 or args.selection_variance is None or args.nfam is None:
+            raise ValueError('Selection requires positive --n_stabilizing, --selection_variance and --nfam')
+        if args.n_random or args.n_am or args.v_indir or args.beta_vert:
+            raise ValueError('Selection currently supports direct effects only, without additional random/assortative generations')
+        if args.bgen and args.selection_nfam is not None:
+            raise ValueError('The breeding pool is determined by the input haplotypes when using --bgen')
+        stabilizing_selection_weights(np.zeros(1), args.selection_variance, args.selection_optimum)
+    elif args.selection_variance is not None or args.selection_nfam is not None:
+        raise ValueError('Selection parameters require --n_stabilizing')
     if args.beta_vert > 0:
         if args.v_indir >0:
             raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
@@ -86,13 +106,28 @@ def main(args):
         if args.nfam is None:
             raise(ValueError('Must specify number of families to simulate'))
         unlinked = True
-        haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(args.nfam, args.n_causal, maf=None,min_maf=0.05)
+        if selection:
+            n_breeding = args.selection_nfam if args.selection_nfam is not None else 4 * args.nfam
+            haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(
+                n_breeding, args.n_causal, maf=args.maf, min_maf=args.min_maf)
+        else:
+            haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(args.nfam, args.n_causal, maf=None,min_maf=0.05)
     else:
         unlinked = False
         haps, maps, snp_ids, alleles, positions, chroms = haps_from_bgen(args.bgen, args.chr_range)
     ######################## Perform simulation ##################
-    new_haps, haps, father_indices, mother_indices, ibd, ped, a, V = forward_sim(haps, maps, args.n_random, args.n_am, unlinked, args.n_causal, args.h2, 
-                                                                    v_indirect=args.v_indir, r_direct_indirect=args.r_dir_indir, r_y=args.r_par, beta_vert=args.beta_vert)
+    if selection:
+        new_haps, haps, father_indices, mother_indices, ibd, ped, a, V, selection_metadata = forward_sim_stabilizing_selection(
+            haps, maps, args.n_stabilizing, args.n_causal, args.h2, args.selection_variance,
+            args.nfam, unlinked=unlinked, optimum=args.selection_optimum)
+        if not np.isfinite(selection_metadata['selection_variance']):
+            selection_metadata['selection_variance'] = None
+            selection_metadata['neutral_control'] = True
+        with open(args.outprefix + 'selection_metadata.json', 'w') as handle:
+            json.dump(selection_metadata, handle, indent=2, allow_nan=False)
+    else:
+        new_haps, haps, father_indices, mother_indices, ibd, ped, a, V = forward_sim(haps, maps, args.n_random, args.n_am, unlinked, args.n_causal, args.h2, 
+                                                                        v_indirect=args.v_indir, r_direct_indirect=args.r_dir_indir, r_y=args.r_par, beta_vert=args.beta_vert)
     ##############################################################
     ### Save variance components ###
     print('Saving variance components to '+args.outprefix+'VCs.txt')
@@ -102,7 +137,8 @@ def main(args):
     n_last = ped[ped.shape[0]-1,0].split('_')[0]
     last_gen = [x.split('_')[0]==n_last for x in ped[:,0]]
     np.savetxt(args.outprefix+'pedigree.txt',ped,fmt='%s')
-    rel = find_sibs_and_cousins(ped)
+    rel = (selection_family_relationships(ped, parent_siblings=args.n_stabilizing > 1)
+           if selection else find_sibs_and_cousins(ped))
     np.savetxt(args.outprefix+'last_gen_rel.seg',rel,fmt='%s',delimiter='\t')
     #np.savetxt(args.outprefix+'sibs.fam',ped[last_gen,:],fmt='%s')
     phen_out = ped[last_gen,:]
