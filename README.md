@@ -69,6 +69,15 @@ It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
 And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
+## Binary-outcome PGS analyses
+
+[`snipar/scripts/pgs.R`](snipar/scripts/pgs.R) fits one- and two-generation
+logistic mixed models from precomputed scores and a binary phenotype. It writes
+the effect estimates, their sampling covariance matrices, and the direct to
+population coefficient ratio with its standard error. The R script runs
+independently of Python and requires `lme4`. See [input formats, examples, and
+output definitions](docs/pgs_binary.md).
+
 # Installing Using pip
 
 *snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX (14.7 and higher). We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 

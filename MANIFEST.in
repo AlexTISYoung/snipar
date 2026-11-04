@@ -1,4 +1,7 @@
 include README.md
+include docs/pgs_binary.md
+include snipar/scripts/pgs.R
+include snipar/tests/test_pgs_binary.R
 recursive-include docs *.txt
 recursive-include snipar util_data/**
 recursive-include snipar tests/test_data/*
