@@ -1,4 +1,5 @@
 .. _tutorial:
+
 ========
 Tutorial
 ========
@@ -179,74 +180,170 @@ For example:
 
     ``gwas.py phenotype.txt --out trios_sibs_singletons --bgen chr_@_trios_sibs_singletons --pedigree pedigree.txt --cpus 1 --impute_unrel``
 
+.. _correlations_tutorial:
+
 Correlations between effects
 ----------------------------
 
-*snipar* provides a script (:ref:`correlate.py <correlate.py>`) to compute correlations between direct and population effects and between direct effects and average NTCs. 
-To compute these correlations from the effects estimated in this tutorial (output by gwas.py to chr_1_young.sumstats.gz) 
-using the LD scores computed by ibd.py (and output to chr_1.l2.ldscore.gz), use the following command: 
+How closely do population effects track direct effects across SNPs? Are they
+also similar in magnitude? We can answer both questions with the family-GWAS
+results from the earlier step (``chr_1_young.sumstats.gz``) and the LD scores
+from ``ibd.py`` (``chr_1.l2.ldscore.gz``). In the ``example_data`` directory, run
 
-    ``correlate.py chr_@_young effect --ldscores chr_@``
+.. code-block:: bash
 
-The ``tan`` branch fits a single positive semidefinite covariance matrix and reconstructs
-population effects as direct effects plus average NTCs. The estimated correlations,
-effect moments, and standard-deviation ratios are output to ``effect_corrs.txt`` with
-``correlation``, ``est``, and ``SE`` columns. Standard errors use a genomic block jackknife
-that refits the weights and covariance constraint for each deletion. Additional files
-contain the fitted covariance matrices and diagnostics; ``--save_delete`` saves the
-delete estimates. The original ten output rows are retained first, including regression,
-residual-variance, and variance-ratio statistics, followed by additional covariances and
-SD ratios. Every statistic uses the same updated coherent fit and refitted deletions.
-Select output rows by name when consuming the additional outputs.
+   correlate.py chr_@_young effect --ldscores chr_@ --save_delete
 
-The method estimates marginal effect moments using the full sampling covariance.
-LD scores provide inverse redundancy weights, without an LDSC stratification correction.
-Supply LD scores computed separately by :ref:`ibd.py <ibd.py>` or LDSC, or replace
-``--ldscores chr_@`` with ``--bed chr_@`` to compute them from chromosome-specific
-PLINK files. Prefixes using ``#`` are also accepted. ``--ld_wind`` sets the window in
-cM, ``--ld_out`` saves per-chromosome LD-score files, and ``--threads`` sets Numba threads.
-To explicitly disable LD weighting, use ``--ld-weight none``. Sampling-correlation
-outlier filtering retains the six-SD default; ``--no-corr-filter`` disables it.
-A single summary-statistic file without a chromosome column retains its input row order
-for the jackknife and must therefore already be genomically ordered.
-See the `coherent correlation reference <https://github.com/AlexTISYoung/snipar/blob/tan/docs/coherent_correlations.md>`_
-for input requirements, defaults, and output definitions.
+The first argument, ``chr_@_young``, identifies the summary-statistic files.
+The script replaces ``@`` with each chromosome number. The second argument,
+``effect``, is your choice of output prefix. This run creates five files
+beginning with ``effect_`` in the current directory. To save them under
+another name and directory, replace ``effect``
+with, for example, ``results/height``. The estimates will then be in
+``results/height_corrs.txt``.
+
+Check the input filenames printed in the terminal. In this example they are
+``chr_1_young.sumstats.gz`` and ``chr_1.l2.ldscore.gz``. The filtering summary
+shows how many SNPs were retained and gives the reasons for any exclusions.
+The tutorial summary statistics contain direct, paternal and maternal estimates
+and their pairwise sampling correlations, so the script selects ``parental``
+mode automatically. It fits their covariance jointly, averages the two parental
+NTCs, and adds that average to the direct effect to obtain the population
+effect. Every statistic below uses the same fitted covariance matrix.
+
+The terminal shows all 17 estimates alongside their standard errors, starting
+with the three statistics reported in the revised manuscript. To retrieve
+those three results from ``effect_corrs.txt`` by row name, run
+
+.. code-block:: bash
+
+   awk 'NR == 1 || $1 == "r_direct_population" || $1 == "r_direct_avg_NTC" || $1 == "sqrt_var_ratio_population_direct"' effect_corrs.txt
+
+Here is an example from a run on the 1,000 retained tutorial SNPs. The first
+two rows describe alignment and the third describes relative magnitude.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Statistic
+     - Estimate
+     - SE
+   * - ``r_direct_population``
+     - 0.895
+     - 0.024
+   * - ``r_direct_avg_NTC``
+     - 0.477
+     - 0.107
+   * - ``sqrt_var_ratio_population_direct``
+     - 1.532
+     - 0.075
+
+Direct and population effects track one another closely across these SNPs.
+Direct effects also correlate positively with average NTCs, as expected in
+this simulation. The ratio of 1.532 means the population effects are about
+53% larger on the root-mean-square scale. The order of the names matters:
+``sqrt_var_ratio_direct_population`` is the reciprocal (0.653 here), and
+``var_ratio_direct_population`` is the square of that reciprocal (0.426).
+
+The estimates use all retained SNPs. To calculate their standard errors,
+the analysis omits each of 200 genomic blocks in turn and refits the weights
+and covariance matrix. Each output file answers a different question.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - File
+     - How to read it
+   * - ``effect_corrs.txt``
+     - The 17 effect statistics and their standard errors. Look up ``r_direct_population`` to see how closely direct and population effects track each other across SNPs.
+   * - ``effect_moments.tsv``
+     - The fitted variances and covariances and their standard errors. For example, find ``var_paternal`` to see how much the paternal NTC varies across SNPs in this simulation.
+   * - ``effect_sampling_covariance.tsv``
+     - A matrix showing how estimates vary together across jackknife refits. For the sampling covariance between the two reported correlations, read the ``r_direct_population`` row at the ``r_direct_avg_NTC`` column. Diagonal entries give squared standard errors.
+   * - ``effect_diagnostics.json``
+     - Input and fit details. Check the retained SNP count and input mode, then look for warnings about boundary fits or undefined standard errors.
+   * - ``effect_delete.txt``
+     - One row for each omitted ``block``, saved by ``--save_delete``. Read down the ``r_direct_population`` column to see how the correlation changes as each block is left out. The other statistics and the fitted input moments appear alongside it.
+
+You can also compare the fit with raw moments that use the same weight for
+every effect pair at a SNP. Add ``--common-weight`` to the command above to
+include these estimates in the moments, sampling covariance and deletion tables.
+
+If you skipped the LD-score output in the IBD step, replace ``--ldscores chr_@``
+with ``--bed chr_@`` to calculate LD scores from the tutorial genotypes.
+See :doc:`correlate` for alternative input formats and :ref:`correlation_outputs`
+for the full output definitions.
 
 Polygenic score analyses
 ------------------------
 
-For an exercise involving polygenic score analysis, please see the :ref:`Simulation Exercse <simulation>`.
+The :ref:`pgs.py <pgs.py>` script computes PGSs for individuals and their parents,
+then estimates their effects on a phenotype. We will first compute the scores
+and then analyse them, so that the same scores can be reused for other phenotypes.
 
-.. In addition to family based GWAS, *snipar* provides a script (:ref:`pgs.py <pgs.py>`) for computing polygenic scores (PGS) based on observed/imputed genotypes,
-.. and for performing family based polygenic score analyses. 
-.. Here, we give some examples of how to use this script. The script computes a PGS
-.. from a :ref:`weights file <weights>`. 
-.. For the tutorial, we provide a weights file (direct_weights.txt) in `LD-pred <https://github.com/bvilhjal/ldpred>`_ format
-.. where the weights are the true direct genetic effect of the SNP. 
+The tutorial includes ``direct_weights.txt``, where the weights are the true
+direct SNP effects used to simulate the phenotype. This file uses LDpred column
+names, which we specify explicitly. After the imputation step above, run:
 
-.. To compute the PGS from the weights in direct_weights.txt, use the following command:
+.. code-block:: bash
 
-..     ``pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt``
+   pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt \
+       --SNP sid --beta_col ldpred_beta --A1 nt1 --A2 nt2
     
-.. This uses the weights in the weights file to compute the PGS for each genotyped individual for whom observed or imputed parental genotypes are available.
-.. It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. 
+This writes ``direct.pgs.txt``, with a row for each included individual and
+columns for their own and their parents' scores. Parental scores use observed
+genotypes where available and imputed genotypes otherwise. If you skipped
+imputation, replace ``--imp chr_@`` with ``--pedigree pedigree.txt``; scores
+will then be computed only for individuals with both parents genotyped.
 
-.. To estimate direct, paternal, and maternal effects of the PGS, use the following command:
+To estimate the PGS effects on the tutorial phenotype, run:
 
-..     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
+    ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
 
-.. This uses a linear mixed model that has a random effect for mean differences between families (defined as sibships here) and fixed effects for the direct,
-.. paternal, and maternal effects of the PGS. It also estimates the 'population' effect of the PGS: the effect from regression of individuals' phenotypes onto their PGS values.
-.. The estimated effects and their standard errors are output to direct.effects.txt, described :ref:`here <pgs_effects>`. 
-.. The sampling variance-covariance matrix of the direct effect and paternal and maternal NTCs is output to direct.vcov.txt, described :ref:`here <pgs_vcov>`.
+By default, this fits two linear mixed models on the same individuals. The
+one-generation model estimates the population effect from the individual's
+own PGS. The two-generation model includes parental scores to estimate the
+direct effect and parental NTCs. Both account for residual similarities
+between siblings.
 
-.. Estimates of the direct effect of the PGS should be equal to 1 in expectation since
-.. we are using the true direct effects as the weights, so the PGS corresponds to the true direct effect component of the trait.
-.. The paternal/maternal NTC estimates capture the correlation between the direct and indirect parental effects. The population effect estimate
-.. should be greater than 1, since this captures both the direct effect of the PGS, and the correlation between direct and indirect parental effects.
+Start by inspecting these files:
 
-.. If parental genotypes have been imputed from sibling data alone, 
-.. then imputed paternal and maternal PGS are perfectly correlated, 
-.. and the above regression on proband, paternal, and maternal PGS becomes collinear. 
-.. To deal with this, add the --parsum option to the above command, 
-.. which will estimate the average NTC rather than separate maternal and paternal NTCs.
+* ``direct.1.effects.txt``: the ``proband`` row gives the population effect.
+* ``direct.2.effects.txt``: the ``proband`` row gives the direct effect, and
+  the ``paternal`` and ``maternal`` rows give the parental NTCs.
+* ``direct.direct_population_ratio.txt``: the ``ratio`` column gives the
+  direct effect divided by the population effect, and ``se`` gives its
+  standard error, accounting for covariance between the estimates.
+
+Each effects file has three columns without a header: coefficient name,
+estimate, and standard error. The ratio file has a header; for example, view
+it with ``cat direct.direct_population_ratio.txt``. Its ``n`` column reports
+the common sample size. Check that ``status`` is ``ok`` before interpreting
+the ratio. A ``weak_denominator`` means the population coefficient is too
+close to zero for the usual ratio approximation to be reliable.
+
+In this example, the direct coefficient should be close to 1 because the
+score uses the true direct effects. The population coefficient also reflects
+the association with parental indirect effects. The ratio helps compare these
+two estimates; it is a ratio of PGS regression coefficients, rather than the
+SNP-effect variance ratio produced by ``correlate.py``.
+
+The script also writes covariance matrices; see :ref:`PGS output files
+<pgs_effects>` and :ref:`pgs_ratio` for details. To fit only one model, add
+``--gen_models 1`` or ``--gen_models 2``; a single-model run does not produce
+the ratio files. If parental scores are imputed from siblings alone, use
+``--parsum`` to fit their sum and estimate the average NTC. A precomputed
+file containing only a ``parental`` score column selects this automatically.
+
+For a longer exercise exploring indirect effects and assortative mating,
+continue to the :ref:`simulation exercise <simulation>`.
+
+Binary outcomes
+~~~~~~~~~~~~~~~
+
+The tutorial's ``phenotype.txt`` contains a quantitative phenotype. For your
+own binary outcome, coded 0/1, use :doc:`pgs.R <pgs_binary>` with the same
+precomputed scores and a separate binary phenotype file. The R script fits
+logistic mixed models with a family random intercept and reports a
+direct/population ratio on the log-odds coefficient scale.

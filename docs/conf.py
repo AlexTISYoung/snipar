@@ -1,5 +1,3 @@
-import sphinx_rtd_theme
-from sphinx.ext import apidoc
 # -*- coding: utf-8 -*-
 #
 # Configuration file for the Sphinx documentation builder.
@@ -14,9 +12,11 @@ from sphinx.ext import apidoc
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
+from pathlib import Path
 import sys
-sys.path.insert(0, os.path.abspath('..'))
+
+# Resolve the checkout independently of the directory used to invoke Sphinx.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # -- Project information -----------------------------------------------------
 
 project = u'snipar'
@@ -47,7 +47,7 @@ extensions = [
     'sphinx_rtd_theme',
 ]
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = []
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
@@ -62,7 +62,7 @@ source_suffix = '.rst'
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -72,8 +72,12 @@ exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
 
-# Prevent docs from having Rust dependency
-autodoc_mock_imports = ["pysnptools", "bed_reader"]
+# Command-line help does not require the optional native extension builds.
+autodoc_mock_imports = [
+    "pysnptools",
+    "bed_reader",
+    "snipar.imputation.impute_from_sibs",
+]
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
@@ -90,11 +94,10 @@ html_theme = 'sphinx_rtd_theme'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = []
 html_logo = "snipar_logo.png"
 html_theme_options = {
     'logo_only': True,
-    'display_version': False,
 }
 
 # Custom sidebar templates, must be a dictionary that maps document names
@@ -183,14 +186,5 @@ epub_title = project
 epub_exclude_files = ['search.html']
 
 
-# -- Extension configuration -------------------------------------------------
-
-def run_apidoc(_):
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-    cur_dir = os.path.abspath(os.path.dirname(__file__))
-    module = '../snipar/'
-    output_path = os.path.join(cur_dir, 'source')
-    apidoc.main(['-e', '-o', output_path, module, '--force'])
-
-def setup(app):
-    app.connect('builder-inited', run_apidoc)
+# scripts.rst includes the public command-line modules directly with autodoc.
+# Do not generate an unlinked API tree as a side effect of a user-guide build.

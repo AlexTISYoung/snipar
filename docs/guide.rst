@@ -1,4 +1,5 @@
 .. _guide:
+
 =====
 Guide
 =====
@@ -119,7 +120,7 @@ This will result in :ref:`output files <output_files>` that are also split by ch
 can also be specified using the numerical wildcard character, @, e.g. '--out /path/to/output/dir/chr_@'.
 
 Inferring identity-by-descent segments 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If your sample contains full-sibling pairs (without both parents genotyped),
 it is necessary to first infer the identity-by-descent (IBD) segments
@@ -167,7 +168,7 @@ The HMM will output the IBD segments to a :ref:`gzipped text file with suffix ib
 LD scores are calculated for each SNP. These can also be output in LDSC format using the --ld_out option. 
 
 Imputing missing parental genotypes 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 :ref:`impute.py <impute.py>` is responsible for imputing the missing parental genotypes.
 This is done for individuals with at least one sibling and/or parent genotyped but without both parents genotyped. 
@@ -279,43 +280,75 @@ input a :ref:`phenotype file <phenotype>` to :ref:`pgs.py <pgs.py>`.
 One can first compute the PGS and write it to :ref:`file <pgs_file>`, 
 and then use this as input to :ref:`pgs.py <pgs.py>` along with a :ref:`phenotype file <phenotype>`.
 
+By default, the script fits both a one-generation model (proband PGS only) and
+a two-generation model (proband and parental PGS). These models use the same
+individuals with finite phenotype, required PGS, and prepared covariate values,
+so their estimates can be compared directly. Use ``--gen_models 1`` or
+``--gen_models 2`` to fit only one of these models.
+See :ref:`covariate inputs <covariates>` for the handling of missing covariates.
+
 The direct effect and NTCs of the PGS are estimated as fixed effects in a linear mixed model that includes
 a random effect that models (residual) phenotypic correlations between siblings.
 By providing a :ref:`GRM <GRM>`, correlations between other relatives can also be modelled. The population effect is estimated
 from a separate regression model that includes only the proband PGS (no control for parental PGS). 
 The estimates and their standard errors are output to :ref:`file <pgs_effects>` along with a separate
-:ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the direct effect and NTCs. 
+:ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the regression coefficients.
+
+When both models are fitted, the script also reports the ratio of the direct
+effect to the population effect, with a standard error that accounts for the
+sampling covariance between the two estimates. The ratio and its status are
+written to ``<out>.direct_population_ratio.txt``. See :ref:`PGS ratio results
+<pgs_ratio>` for how to interpret this file, including cases where the
+population effect is too close to zero for a reliable ratio.
+
+For individuals with both parents genotyped, ``--grandpar`` can add observed
+or imputed grandparental scores when computing PGS. These can be used in a
+three-generation model with ``--gen_models 1-3``. See :doc:`pgs` for the
+required score columns and examples.
 
 See the :ref:`simulation exercise <simulation>` for an example of how to use the :ref:`pgs.py <pgs.py>` script.
 This also shows how the PGS script can be used to adjust the results of family-PGS analysis for the impact of assortative mating. 
+Adjustment of imputed parental scores during score computation and adjustment
+of two-generation effect estimates using ``--h2f`` are separate steps;
+:doc:`pgs` explains when each is applied.
+
+For a binary phenotype coded 0/1, use :doc:`pgs.R <pgs_binary>` with
+precomputed PGSs. It fits one- and two-generation logistic mixed models with
+a family random intercept and reports the ratio of their proband log-odds
+coefficients. The R script requires ``lme4`` and does not compute scores from
+genotypes; scores produced by ``pgs.py`` can be used as input.
 
 Estimating correlations between effects
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-As part of `Tan et al. 2024 <https://doi.org/10.1101/2024.10.01.24314703>`_, we estimated the genome-wide correlations between direct genetic effects and population effects
-and between direct genetic effects and average non-transmitted coefficients (NTCs). The correlation between direct genetic effects and population effects
-is a measure of how different direct genetic effects and effects estimated by standard GWAS (population effects) are. 
+The revised manuscript by Tan et al., *Family-GWAS reveals effects of
+environment and mating on genetic associations* (20 November 2026), asks
+how closely population effects align with direct genetic effects and how large
+they are relative to one another. Figure 1 and Supplementary Table 4 report
+three quantities defined in Supplementary Note §§2.1–2.3:
 
-We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
-It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
-and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
-On the ``tan`` branch, it fits one positive semidefinite covariance matrix using the full
-per-SNP sampling covariance and Gaussian feasible-GLS weights. Population effects are
-reconstructed as direct effects plus average NTCs. All reported moments, correlations,
-and standard-deviation ratios share this fit and the same genomic block deletions.
-By default, the weights and covariance constraint are refitted in each deletion.
-Inverse LD-score weights account approximately for redundancy between nearby SNPs.
-Supply precomputed LD scores or use ``--bed`` with chromosome-specific PLINK files.
-The existing ``--ld_wind``, ``--ld_out``, and ``--threads`` options are retained.
-Sampling-correlation outlier filtering keeps the six-SD default; ``--no-corr-filter`` disables it.
+* The direct–population correlation measures how consistently SNPs with
+  larger direct effects also have larger population effects.
+* The direct–average-NTC correlation measures how direct effects covary,
+  on a standardised scale, with the average non-transmitted coefficient.
+* The population/direct SD ratio compares the root-mean-square magnitudes
+  of population and direct effects across SNPs. A ratio of 1 means equal
+  magnitudes, and a ratio above 1 means larger population effects. The
+  population-on-direct regression slope is the direct–population correlation
+  multiplied by this ratio.
 
-See the `coherent correlation method and output reference <https://github.com/AlexTISYoung/snipar/blob/tan/docs/coherent_correlations.md>`_
-for input modes, additional output rows, and boundary diagnostics. The original ten
-output rows remain first, with all statistics derived from the updated coherent fit.
+:ref:`correlate.py <correlate.py>` takes family-GWAS :ref:`summary statistics
+<sumstats_text>` and fits a single positive semidefinite signal covariance
+matrix. The fit accounts for each SNP's sampling variances and covariances.
+It uses the identity population effect = direct effect + average NTC to
+derive all three statistics from the same effects and retained SNPs. Inverse
+LD-score weighting reduces the contribution of SNPs that tag many neighbours.
+The estimates describe marginal SNP effects, which can include the influence
+of population stratification on population effects.
 
-Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
-heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
-LD-scores to account for correlations between nearby SNPs, not to separate out population stratification. 
-This is because we are (potentially) interested in the contribution of population stratification to population effects,
-and whether population stratification makes population effects different from direct effects. The approach used by LDSC 
-would remove some of the contribution of population stratification to differences between direct and population effects.
+By default, a 200-block genomic jackknife refits the covariance matrix and
+its precision weights after each deletion. The fit diagnostics flag estimates
+at a boundary, where ordinary normal confidence intervals can be unreliable.
+For a worked example with the supplied data, see the :ref:`tutorial
+<correlations_tutorial>`. See :doc:`correlate` for input modes, effect scales,
+and the full set of statistics.

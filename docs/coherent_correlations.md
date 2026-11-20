@@ -7,6 +7,15 @@ deviation ratios come from that matrix and share the same SNPs and genomic
 jackknife deletions. The implementation is in `snipar/coherent.py`; the older
 `snipar.correlate` library remains available for existing Python callers.
 
+The revised manuscript by Tan et al., *Family-GWAS reveals effects of environment
+and mating on genetic associations* (20 November 2026, Supplementary Note
+§§2.1–2.3 and Supplementary Table 4), reports three rows from `_corrs.txt`.
+`r_direct_population` and `r_direct_avg_NTC` measure alignment across SNPs.
+`sqrt_var_ratio_population_direct` measures relative root-mean-square magnitude,
+with population effects in the numerator. A value above one indicates larger
+population effects on this scale. The historical `var_ratio_direct_population`
+row uses the reciprocal direction and reports a variance ratio.
+
 ## Run
 
 After installing this branch of snipar:
@@ -47,7 +56,7 @@ The existing flags and defaults are retained: `--min_maf 0.05`,
 sampling-correlation outlier filtering. `--help` lists all supported options.
 The summary-statistic route needs NumPy, SciPy, and pandas without importing
 snipar's compiled imputation extensions; the genotype route additionally needs
-SNIPar's genotype dependencies. Output compatibility is described below.
+SNIPar's genotype dependencies.
 
 If Numba is installed, optional `snipar/coherent_kernels.py` accelerates the same Gaussian
 GLS equations with fused compiled loops. Otherwise the NumPy implementation is
@@ -182,33 +191,34 @@ The requested correlations are `Cov(D,P)/sqrt(Var(D)Var(P))` and
 `sqrt_var_ratio_direct_population` means **sqrt[Var(D)/Var(P)]**. All three
 pairwise SD ratios and their reciprocals are emitted with explicit names.
 
-Files use the output prefix:
+The default run writes four files under the chosen output prefix.
 
 | Suffix | Contents |
 | --- | --- |
-| `_corrs.txt` | Original ten output rows first, followed by additional D/N/P covariances and six directed SD ratios; `correlation est SE` columns |
-| `_moments.tsv` | Nonredundant input-basis moments and their SEs |
-| `_covariance.tsv` | Coherent D/N/P signal covariance (necessarily singular since P=D+N) |
-| `_basis_covariance.tsv` | Fitted direct/NTC signal covariance |
-| `_moment_sampling_covariance.tsv` | Joint jackknife covariance of input-basis moments |
-| `_metric_sampling_covariance.tsv` | Joint jackknife covariance of expanded moments and nonlinear outputs |
-| `_common_weight_moments.tsv` | Diagnostic raw moments using one scalar inverse-LD weight for every entry, with SEs |
-| `_common_weight_covariance.tsv` | Diagnostic common-weight matrix, without a PSD constraint |
-| `_common_weight_moment_sampling_covariance.tsv` | Joint jackknife covariance of the common-weight diagnostic moments |
+| `_corrs.txt` | All 17 effect statistics, with columns `correlation` (statistic name), `est` and `SE` |
+| `_moments.tsv` | Each distinct fitted variance and covariance for the input effects and for D, N and P, with columns `moment`, `est` and `SE` |
+| `_sampling_covariance.tsv` | One square jackknife covariance matrix for the 17 effect statistics and any additional input moments. Each estimate labels a row and a column. Diagonal entries are squared SEs and off-diagonal entries are sampling covariances. |
 | `_diagnostics.json` | Filtering, convergence, blocks, boundary and undefined-output diagnostics |
-| `_delete.txt`, `_moment_delete.tsv`, `_common_weight_moment_delete.tsv` | Metric, input-basis moment, and common-weight moment deletions when `--save_delete` is set |
 
-The command retains the original ten rows in their original order:
-`r_direct_population`, `reg_population_direct`, `v_population_uncorr_direct`,
-`r_direct_avg_NTC`, `reg_avg_NTC_direct`, `v_avg_NTC_uncorr_direct`,
+The first eight rows retain the following statistics from earlier releases, in order:
+`r_direct_population`, `reg_population_direct`, `r_direct_avg_NTC`, `reg_avg_NTC_direct`,
 `var_direct`, `var_population`, `var_avg_NTC`, and `var_ratio_direct_population`.
-Every estimate and deletion, including these compatibility statistics, is derived
-from the same coherent covariance fit. Their values therefore change with the
-updated method. Additional covariance and SD-ratio rows follow the original rows;
-select statistics by name rather than assuming a fixed total row count.
-`var_ratio_direct_population` remains Var(D)/Var(P), whereas the additional
-`sqrt_var_ratio_direct_population` is its square root. The same ordering applies
-to the metric delete file. Tab-separated files use `NA` for undefined values.
+Three pairwise covariances and six directed SD ratios follow.
+For example, `var_ratio_direct_population` gives Var(D)/Var(P), and
+`sqrt_var_ratio_direct_population` gives its square root.
+
+Add `--save_delete` to write all leave-one-block-out estimates to `_delete.txt`.
+Each row starts with the omitted block label (`block`).
+The next 17 columns give the statistics from that refit in the same order
+as the rows of `_corrs.txt`. Columns named `moment_<name>` give the fitted
+input-basis moments.
+Tab-separated files use `NA` for undefined values.
+
+Add `--common-weight` (also spelled `--common_weight`) to include raw
+common-weight input moments in `_moments.tsv` and on both axes of
+`_sampling_covariance.tsv`. The entries use names such as
+`common_weight_moment_var_direct`. With `--save_delete`, the same names
+identify the extra columns in `_delete.txt`.
 
 The common-weight diagnostic implements the distinct finite-panel target
 `sum_j w_j (y_j y_j' - S_j) / sum_j w_j`
@@ -271,3 +281,6 @@ standard_errors = dict(zip(result["metric_names"], result["se"]))
 Rows passed directly to the API must already be ordered genomically, unless
 `blocks=` supplies prespecified block membership. It accepts complete finite
 vectors; file filtering is the CLI's responsibility.
+
+Python callers can pass `common_weight=False` to skip the common-weight
+diagnostic. The Python API includes it by default.

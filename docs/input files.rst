@@ -1,4 +1,5 @@
 .. _input files:
+
 ===========
 Input files
 ===========
@@ -10,8 +11,11 @@ IDs
 
 We have followed a typical convention that input files giving individual level information (phenotype, pedigree, etc.) 
 tend to have both family ID (FID) and individual ID (IID) columns. Note, however, 
-that *snipar* ignores the entries in the FID column, using only individual IDs. Therefore,
-entries in the IID column need to be unique. 
+that the Python analysis scripts match individuals using IID, so entries in
+the IID column need to be unique. PGS files also use FID to group full-siblings.
+The :doc:`binary-outcome R script <pgs_binary>` instead matches input rows by
+the pair ``FID, IID`` and uses FID for its family random intercept; both IDs
+must agree across its input files.
 
 Observed genotypes
 ------------------
@@ -35,7 +39,7 @@ are in /path/to/haplotypes/chr_1.bgen, /path/to/haplotypes/chr_2.bgen, ..., /pat
 *snipar* scripts with '--bgen /path/to/haplotypes/chr_@', where @ is interpreted as a numerical wildcard character. 
 
 Pedigree 
---------
+---------
 .. _pedigree:
 
 This is a white-space delimited text file with header "FID", "IID", "FATHER_ID", "MOTHER_ID", 
@@ -74,19 +78,30 @@ The phenotype file is a white-space delimited text file with a header. It has co
 family-ID, individual-ID, and phenotype values for the different phenotypes. 
 To specify the k'th phenotype for analysis (relevant for :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>`),
 add '--phen_index k' to your command; by default, the first phenotype will be used.  
+With :ref:`pgs.py <pgs.py>`, you can also select a phenotype by its case-sensitive
+column name, for example ``--phen height``. A name supplied with ``--phen`` takes
+precedence over ``--phen_index``. Missing values are represented by ``NA`` by
+default; use ``--missing_char`` to specify a different value.
 
 covariate file
 --------------
-.. _phenotype:
+.. _covariates:
 
 The covariate file has the same format as the phenotype file (above). It is a white-space delimited text file with a header. It has columns (in order) for
 family-ID, individual-ID, and covariate values for the different covariates. (Note, covariates must be numerical). 
+Provide it to :ref:`pgs.py <pgs.py>` with ``--covar covariates.txt``. When both
+one- and two-generation PGS models are fitted, they use the same individuals
+with finite phenotype, required PGS, and prepared covariate values. The Python
+covariate reader centres columns and replaces missing entries with zero
+(mean imputation); missing records for phenotyped individuals cause an error.
+The :doc:`R script <pgs_binary>` instead excludes rows with missing required
+covariates from both models.
 
 genetic relationship (GRM) file
 -------------------------------
 .. _GRM:
 
-The genetic relationship file is used for modeling correlations between relatives in the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <gwas.py>` script. 
+The genetic relationship file is used for modeling correlations between relatives in the :ref:`gwas.py <gwas.py>` and :ref:`pgs.py <pgs.py>` script.
 The GRM file can be specified using the --grm option. This file should be a white space or tab delimited text file where 
 each row specifies a pairwise relationship. Minimally, it should have columns ID1 and ID2, giving the IDs of the pair, and 
 a column named 'PropIBD' or 'relatedness' giving the relatedness coefficient between the pair. 
@@ -102,9 +117,11 @@ weights file
 
 This file is used to input the SNP weights to the :ref:`pgs.py <pgs.py>` script for computation of the PGS. 
 The weights file is a plain-text file with columns giving (minimally) the SNP ID, the SNP weight, the 
-effect allele, and the alternative allele. The script is setup to process weights files as output by LD-pred
-by default. If your weights file has different column names, these can be specified through the command 
+effect allele, and the alternative allele. The default column names are
+``SNP``, ``b``, ``A1``, and ``A2``, respectively. The weight is given with respect
+to allele ``A1``. If your weights file has different column names, these can be specified through the command
 line arguments of the :ref:`pgs.py <pgs.py>` script:
+
     '--SNP'
         the column name for the column containing the SNP IDs
     '--beta_col'
@@ -113,3 +130,21 @@ line arguments of the :ref:`pgs.py <pgs.py>` script:
         the column name for the column with the effect allele
     '--A2'
         the column name for the column with the alternative allele
+
+The tutorial's ``direct_weights.txt`` uses LDpred column names. To read that
+file, specify ``--SNP sid --beta_col ldpred_beta --A1 nt1 --A2 nt2``.
+Whitespace is the default separator; use ``--sep`` for another delimiter.
+
+Precomputed PGS file
+--------------------
+
+Use ``--pgs scores.pgs.txt`` to analyse scores that have already been computed,
+together with ``--phenofile``. The :ref:`PGS output format <pgs_file>` can be
+read directly. A file with only ``FID``, ``IID``, and score columns is also
+accepted, but parental IDs are needed to restrict the analysis to individuals
+with both parents genotyped using ``--bpg``.
+
+The one-generation model requires a ``proband`` score column. The default
+two-generation model also requires ``paternal`` and ``maternal``, or a
+``parental`` column containing their sum. See :doc:`pgs` for sibling and
+grandparental score columns and model options.

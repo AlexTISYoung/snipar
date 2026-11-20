@@ -99,7 +99,8 @@ def compute_ldscores(bed_pattern, snp_ids, chromosomes, ld_wind=1.0, ld_out=None
         rows = np.arange(len(snp_ids)) if unknown_chromosomes else np.flatnonzero(valid_chrom & (chromosomes == chrom))
         if not len(rows):
             continue
-        print('Computing LD scores for chromosome ' + str(chrom), flush=True)
+        print(f'Computing LD scores for chromosome {chrom} from {bed}, '
+              f'{bed.with_suffix(".bim")} and {bed.with_suffix(".fam")}', flush=True)
         # Export separately: the legacy writer formats its chromosome array
         # into the filename rather than using the scalar chromosome number.
         values, identifiers = ldscores_from_bed(str(bed), chrom, ld_wind, None)
@@ -128,6 +129,7 @@ def compute_ldscores(bed_pattern, snp_ids, chromosomes, ld_wind=1.0, ld_out=None
             table = bim.loc[identifiers].reset_index()[['CHR', 'SNP', 'BP']]
             table['L2'] = values
             table.to_csv(output, sep='\t', index=False, compression='gzip', na_rep='NA')
+            print(f'Saved computed LD scores to {output}', flush=True)
             metadata['ldscore_files'].append(str(output))
     if not metadata['bed_files']:
         raise ValueError('No genotype chromosomes overlap the summary statistics.')

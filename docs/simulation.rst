@@ -1,4 +1,5 @@
 .. _simulation:
+
 ===================
 Simulation Exercise
 ===================
@@ -180,16 +181,19 @@ To compute the PGS using the true direct genetic effects as weights, use the fol
 
     ``pgs.py direct --bed chr_@ --imp chr_@ --weights causal_effects.txt --beta_col direct``
     
-It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. The pgs computation script
-automatically estimates the correlation between parents' PGS values (also using full-sibling offspring PGS values to do this)
-and performs an adjustment for assortative mating when using the imputed parental genotypes to compute the PGS. 
+It outputs the PGS to a :ref:`PGS file <pgs_file>`: direct.pgs.txt. The PGS computation script
+automatically estimates the correlation between parents' PGS values (also using full-sibling offspring PGS values to do this).
+It adjusts imputed parental PGS values for assortative mating when the estimated correlation
+divided by its standard error is greater than 1.5. Use ``--no_am_adj`` to skip this score adjustment;
+see :ref:`PGS analysis <pgs_analysis>` for details.
 
 To estimate direct effect and average NTC of the PGS, use the following command:
 
     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt --grm last_gen_rel.seg``
 
-This will output a population effect estimate (1 generation model) to direct.1.effects.txt, and 
-direct effect and average NTC estimates to (2 generation model) to direct.2.effects.txt. The
+By default, this fits the 1 and 2 generation models on the same individuals with complete
+phenotype and required PGS observations. It outputs a population effect estimate (1 generation model) to direct.1.effects.txt, and
+direct effect and average NTC estimates (2 generation model) to direct.2.effects.txt. The
 population and direct effect estimates are the coefficients on the proband PGS in the 1 and 2
 generation models, so are indicated by the 'proband' row. The average NTC estimate is the
 coefficient on the parental PGS in the two-generation model. The first column gives the name
@@ -197,9 +201,24 @@ of the covariate/PGS column, the second column gives the estimated regression co
 and the third column gives the standard error of the estimate. The sampling variance-covariance matrix of the estimates is output to direct.1.vcov.txt (for the 1 generation model) and
 direct.2.vcov.txt (for the 2 generation model).
 
+The script also writes direct.direct_population_ratio.txt. Its ``ratio`` column is the
+direct coefficient divided by the population coefficient, and ``se`` is its standard error,
+accounting for the sampling covariance between the two estimates. The ``n`` column gives
+the shared sample size. Inspect the result with:
+
+    ``column -t direct.direct_population_ratio.txt``
+
+Check that ``status`` is ``ok`` before interpreting the estimate. In particular,
+``weak_denominator`` means that the population coefficient is close to zero and the
+delta-method standard error can be unreliable. The additional files direct.1_2.cross_vcov.txt and
+direct.direct_population.vcov.txt contain the cross-model and population/direct covariance
+matrices. See :ref:`direct/population ratio output <pgs_ratio>` for the complete column
+and status descriptions.
+
 As we are using the true direct effects as weights, the PGS captures all of the heritability,
 and the direct and population effects should both be the same (1 in expectation), and the 
-average parental NTC should be zero (in expectation). To check this, read in the 
+average parental NTC should be zero (in expectation). The direct/population ratio should
+therefore be close to 1. To check the effect estimates, read in the
 effect estimate output files in *R* or look at them using a text viewer (e.g. less -S on a unix system).
 
 To compute the PGS from the true direct genetic effects+estimation error (such as would be obtained from a family-GWAS), 
@@ -216,15 +235,25 @@ To estimate direct effect and average NTC of the PGS, use the following command:
     ``pgs.py direct_v1 --pgs direct_v1.pgs.txt --phenofile phenotype.txt --grm last_gen_rel.seg``
 
 This will output a population effect estimate (1 generation model) to direct_v1.1.effects.txt, and 
-direct effect and average NTC estimates to (2 generation model) to direct_v2.2.effects.txt. 
+direct effect and average NTC estimates (2 generation model) to direct_v1.2.effects.txt.
+The paired-model ratio is written to direct_v1.direct_population_ratio.txt.
 
 Unlike when using the true direct genetic effects as weights, the direct effect of the PGS estimated
-from noisy weights (in direct_v1.1.effects.txt) will be smaller than the population effect (direct_v1.2.effects.txt).
+from noisy weights (in direct_v1.2.effects.txt) will be smaller than the population effect (direct_v1.1.effects.txt).
 This is because the PGS does not capture all of the heritability due to estimation error in the weights. 
 The PGS has its population effect inflated (relative to its direct effect) by assortative mating, 
 which induces a correlation with the component of the heritability not directly captured by the PGS due to estimation error. 
 This inflation is not captured by the direct effect of the PGS because the within-family variation used to estimate the direct effect is due to the random segregation of genetic material during meiosis.
-Here, the ratio between direct and population effects of the PGS should be around 0.86. 
+Here, the ratio between direct and population effects of the PGS should be around 0.86.
+Read the estimate and its standard error with:
+
+    ``column -t direct_v1.direct_population_ratio.txt``
+
+The ``direct`` and ``population`` columns show the two coefficients used in the ratio.
+You can choose a single model with ``--gen_models 1`` or ``--gen_models 2``, but the
+ratio is produced only when both models are requested in the same run. A standalone
+one-generation analysis can retain individuals whose parental PGS is missing; the paired
+analysis keeps the two models' samples identical.
 
 One should also observe a statistically significant average parental NTC (in direct_v1.2.effects.txt) of the PGS from 
 the two-generation model despite the absence of parental indirect genetic effects in this simulation. Here,
@@ -298,4 +327,40 @@ the ratio between direct and population effects that would be expected based on 
 which should be around 0.86; the indirect genetic effect of true direct genetic effect PGI, :math:`\alpha_\delta`, which should not be
 statistically significantly different from zero (with high probability) because there are no parental indirect genetic effects in this simulation; 
 and :math:`v_{\eta:\delta}`, the contribution to the phenotypic variance from the indirect genetic effect component correlated with direct genetic effect component,
-which should also not be statistically indistinguishable from zero (with high probability). These estimates are output to direct_v1_obs.am_adj_pars.txt. 
+which should also be statistically indistinguishable from zero (with high probability). These estimates are output to direct_v1_obs.am_adj_pars.txt.
+
+The ``rho`` row in this file is the ratio predicted from assortative mating alone.
+The empirical ratio estimated from the paired regressions is in
+direct_v1_obs.direct_population_ratio.txt. These two outputs answer different questions
+and can be compared in this simulation, where the indirect genetic effects are zero.
+For another dataset, an externally estimated parental PGS correlation and its standard
+error can be supplied with ``--rk estimate,SE`` alongside ``--h2f``. Otherwise, this
+post-fit adjustment estimates the correlation using observed parental scores; it requires
+individuals with both parents genotyped.
+
+Using the scores for a binary phenotype
+---------------------------------------
+
+For a binary phenotype, the :doc:`pgs_binary` script fits one- and two-generation
+logistic mixed models with a family random intercept. It uses the same complete
+cases in both models and reports the direct/population coefficient ratio and
+its standard error.
+
+You can reuse direct_v1.pgs.txt with a separate binary phenotype file containing
+columns ``FID IID case_status``, where ``case_status`` is coded 0 or 1. Both
+values must occur in the analysis sample. The phenotype.txt file generated in
+this exercise contains a continuous phenotype; use it with ``pgs.py`` as above.
+With R and the R package ``lme4`` installed, run the installed ``pgs.R`` command:
+
+.. code-block:: bash
+
+   pgs.R direct_v1_binary --pgs direct_v1.pgs.txt \
+       --phenofile binary_phenotype.txt --phen case_status --parsum
+
+``--parsum`` uses the combined parental score in this example. The outputs
+include direct_v1_binary.1.effects.txt, direct_v1_binary.2.effects.txt, and
+direct_v1_binary.direct_population_ratio.txt. The regression coefficients are
+on the log-odds scale, and the reported ratio divides the two-generation
+``proband`` log-odds coefficient by the one-generation ``proband`` log-odds
+coefficient. See :doc:`pgs_binary` for installation, input formats, diagnostics,
+and guidance on interpreting the ratio.

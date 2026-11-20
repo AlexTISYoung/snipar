@@ -74,7 +74,7 @@ def build_parser():
         ),
     )
     parser.add_argument("sumstats", help="Text/gzip file or prefix without .sumstats.gz; @ expands to chromosomes.")
-    parser.add_argument("out", help="Output prefix.")
+    parser.add_argument("out", help="Output filename prefix, e.g. 'effect' writes effect_corrs.txt.")
     parser.add_argument("--chr_range", "--chr-range", nargs="*", default=None,
                         help="Chromosomes as integers/ranges, e.g. 1-22 or 1 3-5; @ defaults to available 1-22.")
     parser.add_argument("--ldscores", help="LDSC text/gzip file or prefix without .l2.ldscore.gz; @ is supported.")
@@ -104,7 +104,10 @@ def build_parser():
     parser.add_argument("--duplicate-snps", choices=["error", "drop"], default="error",
                         help="Reject duplicate summary-statistic SNP IDs, or explicitly exclude every row for each duplicated ID.")
     parser.add_argument("--save_delete", "--save-delete", action="store_true",
-                        help="Save metric and moment leave-one-block-out estimates.")
+                        help="Write all leave-one-block-out estimates to OUT_delete.txt, one row per omitted block.")
+    parser.add_argument("--common-weight", "--common_weight", action="store_true",
+                        help="Include raw common-weight moments in the moment and sampling covariance tables "
+                             "and, with --save_delete, in the per-block table.")
     parser.add_argument("--jackknife", choices=["refit", "frozen"], default="refit",
                         help="Refit optimal weights in each deletion, or freeze full-sample weights.")
     parser.add_argument("--max_iter", "--max-iter", type=int, default=100)
@@ -332,6 +335,8 @@ def read_ldscores(files):
 def prepare_inputs(args):
     chromosomes = parse_chromosomes(args.chr_range)
     files = resolve_files(args.sumstats, "sumstats.gz", chromosomes)
+    for path, _ in files:
+        print(f"Reading summary statistics from {path}", flush=True)
     data, mode = read_sumstats(files, args.mode, args.block_column,
                               enforce_chromosome="@" in args.sumstats, duplicate_snps=args.duplicate_snps)
     effects, sampling, ses, names = build_effect_arrays(data, mode)
@@ -366,6 +371,8 @@ def prepare_inputs(args):
     bed_metadata = {}
     if args.ldscores:
         ld_files = resolve_files(args.ldscores, "l2.ldscore.gz", chromosomes)
+        for path, _ in ld_files:
+            print(f"Reading LD scores from {path}", flush=True)
         ldscores = data["SNP"].map(read_ldscores(ld_files)).to_numpy(dtype=float)
     elif args.bed:
         from snipar.coherent_ld import compute_ldscores
@@ -466,20 +473,17 @@ def with_legacy_metrics(result):
         with np.errstate(divide="ignore", invalid="ignore"):
             return np.stack([
                 np.where(positive, column["cov_direct_population"] / direct, np.nan),
-                1 - column["r_direct_population"] ** 2,
                 np.where(positive, column["cov_direct_avg_NTC"] / direct, np.nan),
-                1 - column["r_direct_avg_NTC"] ** 2,
                 column["sqrt_var_ratio_direct_population"] ** 2,
             ], axis=-1)
 
-    extra_names = ["reg_population_direct", "v_population_uncorr_direct",
-                   "reg_avg_NTC_direct", "v_avg_NTC_uncorr_direct",
+    extra_names = ["reg_population_direct", "reg_avg_NTC_direct",
                    "var_ratio_direct_population"]
     estimates = np.concatenate([result["estimates"], derived(result["estimates"])])
     deletions = np.concatenate([result["delete_values"], derived(result["delete_values"])], axis=1)
     all_names = names + extra_names
-    legacy_order = ["r_direct_population", "reg_population_direct", "v_population_uncorr_direct",
-                    "r_direct_avg_NTC", "reg_avg_NTC_direct", "v_avg_NTC_uncorr_direct",
+    legacy_order = ["r_direct_population", "reg_population_direct",
+                    "r_direct_avg_NTC", "reg_avg_NTC_direct",
                     "var_direct", "var_population", "var_avg_NTC", "var_ratio_direct_population"]
     ordered_names = legacy_order + [name for name in all_names if name not in legacy_order]
     order = [all_names.index(name) for name in ordered_names]
@@ -487,7 +491,7 @@ def with_legacy_metrics(result):
     updated["metric_names"] = ordered_names
     updated["estimates"] = estimates[order]
     updated["delete_values"] = deletions[:, order]
-    updated["metric_covariance"] = _jackknife_covariance(updated["delete_values"])
+    updated["metric_covariance"] = _jackknife_covariance(updated["delete_values"], updated["estimates"])
     updated["se"] = np.sqrt(np.maximum(np.diag(updated["metric_covariance"]), 0))
     updated["diagnostics"] = dict(result["diagnostics"])
     updated["diagnostics"]["undefined_se_metrics"] = [
@@ -496,43 +500,98 @@ def with_legacy_metrics(result):
 
 
 def write_outputs(result, prefix, metadata, save_delete=False):
+    from snipar.coherent import _jackknife_covariance, _moment_names
+
     Path(prefix).parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"correlation": result["metric_names"], "est": result["estimates"], "SE": result["se"]}).to_csv(
-        prefix + "_corrs.txt", sep="\t", index=False, na_rep="NA")
-    pd.DataFrame({"moment": result["moment_names"], "est": result["moments"], "SE": result["moment_se"]}).to_csv(
-        prefix + "_moments.tsv", sep="\t", index=False, na_rep="NA")
-    for suffix, values, names in [
-        ("_covariance.tsv", result["expanded_covariance"], result["expanded_names"]),
-        ("_basis_covariance.tsv", result["covariance"], result["effect_names"]),
-        ("_moment_sampling_covariance.tsv", result["moment_covariance"], result["moment_names"]),
-    ]:
-        pd.DataFrame(values, index=names, columns=names).to_csv(prefix + suffix, sep="\t", index_label="effect", na_rep="NA")
-    if "metric_covariance" in result:
-        pd.DataFrame(result["metric_covariance"], index=result["metric_names"], columns=result["metric_names"]).to_csv(
-            prefix + "_metric_sampling_covariance.tsv", sep="\t", index_label="metric", na_rep="NA")
+    metric_names = result["metric_names"]
+    input_names = result["moment_names"]
+    common_names = []
+    estimates = [result["estimates"], result["moments"]]
+    deletes = [result["delete_values"], result["moment_delete"]]
     if "common_weight_moments" in result:
-        pd.DataFrame({"moment": result["moment_names"], "est": result["common_weight_moments"],
-                      "SE": result["common_weight_moment_se"]}).to_csv(
-            prefix + "_common_weight_moments.tsv", sep="\t", index=False, na_rep="NA")
-        pd.DataFrame(result["common_weight_covariance"], index=result["effect_names"],
-                     columns=result["effect_names"]).to_csv(
-            prefix + "_common_weight_covariance.tsv", sep="\t", index_label="effect", na_rep="NA")
-        pd.DataFrame(result["common_weight_moment_covariance"], index=result["moment_names"],
-                     columns=result["moment_names"]).to_csv(
-            prefix + "_common_weight_moment_sampling_covariance.tsv", sep="\t", index_label="moment", na_rep="NA")
+        common_names = ["common_weight_moment_" + name for name in input_names]
+        estimates.append(result["common_weight_moments"])
+        deletes.append(result["common_weight_moment_delete"])
+
+    # Input moments can also be reported metrics. Use a single column per
+    # statistic when estimating their joint covariance from the same blocks.
+    names = pd.Index([*metric_names, *input_names, *common_names])
+    keep = ~names.duplicated()
+    names = names[keep]
+    values = np.concatenate(estimates)[keep]
+    block_deletes = np.column_stack(deletes)
+    sampling_covariance = _jackknife_covariance(block_deletes[:, keep], values)
+    summary = pd.DataFrame({"est": values, "SE": np.sqrt(np.maximum(np.diag(sampling_covariance), 0))},
+                           index=names)
+    summary.loc[metric_names].to_csv(prefix + "_corrs.txt", sep="\t", index_label="correlation", na_rep="NA")
+    expanded_names = _moment_names(result["expanded_names"])
+    moment_names = list(dict.fromkeys([*input_names, *expanded_names, *common_names]))
+    summary.loc[moment_names].to_csv(prefix + "_moments.tsv", sep="\t", index_label="moment", na_rep="NA")
+    pd.DataFrame(sampling_covariance, index=names, columns=names).to_csv(
+        prefix + "_sampling_covariance.tsv", sep="\t", index_label="statistic", na_rep="NA")
     diagnostics = dict(result["diagnostics"])
     diagnostics["input"] = metadata
     with open(prefix + "_diagnostics.json", "w", encoding="utf-8") as handle:
         json.dump(_json_safe(diagnostics), handle, indent=2, allow_nan=False)
         handle.write("\n")
     if save_delete:
-        pd.DataFrame(result["delete_values"], columns=result["metric_names"]).to_csv(
-            prefix + "_delete.txt", sep="\t", index=False, na_rep="NA")
-        pd.DataFrame(result["moment_delete"], columns=result["moment_names"]).to_csv(
-            prefix + "_moment_delete.tsv", sep="\t", index=False, na_rep="NA")
-        if "common_weight_moment_delete" in result:
-            pd.DataFrame(result["common_weight_moment_delete"], columns=result["moment_names"]).to_csv(
-                prefix + "_common_weight_moment_delete.tsv", sep="\t", index=False, na_rep="NA")
+        blocks = pd.Index(diagnostics["block_labels"], name="block")
+        delete_names = [*metric_names, *("moment_" + name for name in input_names), *common_names]
+        pd.DataFrame(block_deletes, index=blocks, columns=delete_names).to_csv(
+            prefix + "_delete.txt", sep="\t", na_rep="NA")
+
+
+def print_filter_summary(metadata):
+    counts = metadata["qc"]
+    total, kept = counts["rows_read"], counts["rows_retained"]
+    if kept == total:
+        print(f"All {total:,} SNPs passed filtering.", flush=True)
+        return
+
+    print(f"SNP filtering: retained {kept:,} of {total:,} input rows.")
+    reasons = {
+        "excluded_duplicate_id_rows": "duplicate SNP IDs",
+        "excluded_incomplete": "missing or non-finite input values",
+        "excluded_chr": "outside the selected chromosomes",
+        "excluded_maf": f"minor allele frequency below {metadata['min_maf']:g}",
+        "excluded_ld": "missing, non-finite or non-positive LD scores",
+        "excluded_corr": f"outlying sampling correlations (threshold: {metadata['corr_filter']} SD)",
+    }
+    print("Rows excluded by reason:")
+    for key, reason in reasons.items():
+        if counts.get(key, 0):
+            print(f"  {counts[key]:>8,}  {reason}", flush=True)
+
+
+def print_estimates(result):
+    # Lead with the three manuscript statistics. Use the output keys to keep
+    # estimates and jackknife SEs paired even if the file order changes.
+    labels = {
+        "r_direct_population": "Correlation: direct and population",
+        "r_direct_avg_NTC": "Correlation: direct and average NTC",
+        "sqrt_var_ratio_population_direct": "SD ratio: population / direct",
+        "reg_population_direct": "Regression slope: population on direct",
+        "reg_avg_NTC_direct": "Regression slope: average NTC on direct",
+        "var_direct": "Variance: direct",
+        "var_population": "Variance: population",
+        "var_avg_NTC": "Variance: average NTC",
+        "var_ratio_direct_population": "Variance ratio: direct / population",
+        "cov_direct_avg_NTC": "Covariance: direct and average NTC",
+        "cov_direct_population": "Covariance: direct and population",
+        "cov_avg_NTC_population": "Covariance: average NTC and population",
+        "sqrt_var_ratio_direct_population": "SD ratio: direct / population",
+        "sqrt_var_ratio_avg_NTC_population": "SD ratio: average NTC / population",
+        "sqrt_var_ratio_direct_avg_NTC": "SD ratio: direct / average NTC",
+        "sqrt_var_ratio_population_avg_NTC": "SD ratio: population / average NTC",
+        "sqrt_var_ratio_avg_NTC_direct": "SD ratio: average NTC / direct",
+    }
+    table = pd.DataFrame({"Estimate": result["estimates"], "SE": result["se"]},
+                         index=result["metric_names"])
+    order = [key for key in labels if key in table.index]
+    order.extend(key for key in table.index if key not in labels)
+    table = table.loc[order].rename(index=labels)
+    print(f"\nEstimates and jackknife standard errors ({result['diagnostics']['n_blocks']:,} blocks)")
+    print(table.to_string(float_format="{:.5g}".format, na_rep="NA"), flush=True)
 
 
 def main(argv=None):
@@ -573,18 +632,25 @@ def main(argv=None):
         print("Number of threads: " + str(num_threads), flush=True)
     try:
         effects, sampling, ldscores, blocks, names, metadata = prepare_inputs(args)
-        print("Using {} SNPs in {} mode ({} effects).".format(len(effects), metadata["mode"], args.effect_scale), flush=True)
+        print_filter_summary(metadata)
+        print("Fitting {} mode ({} effects).".format(metadata["mode"], args.effect_scale), flush=True)
         if metadata["mode"] in ("parental", "average"):
             print("Population = direct + average NTC; supplied population columns are ignored.", flush=True)
-        print("QC: " + json.dumps(metadata["qc"], sort_keys=True), flush=True)
         result = fit_coherent(effects, sampling, ldscores=ldscores, n_blocks=args.n_blocks,
                               blocks=blocks, effect_names=names, max_iter=args.max_iter,
-                              tol=args.tol, chunk_size=args.chunk_size, jackknife=args.jackknife)
+                              tol=args.tol, chunk_size=args.chunk_size, jackknife=args.jackknife,
+                              common_weight=args.common_weight)
         result = with_legacy_metrics(result)
         for warning in result["diagnostics"].get("warnings", []):
             print("WARNING: " + str(warning), flush=True)
         write_outputs(result, args.out, metadata, args.save_delete)
+        print_estimates(result)
         print("Saved estimates and standard errors to " + args.out + "_corrs.txt", flush=True)
+        print("Variance and covariance estimates: " + args.out + "_moments.tsv", flush=True)
+        print("Jackknife sampling covariance: " + args.out + "_sampling_covariance.tsv", flush=True)
+        print("Filtering and fit diagnostics: " + args.out + "_diagnostics.json", flush=True)
+        if args.save_delete:
+            print("All leave-one-block-out estimates saved to " + args.out + "_delete.txt", flush=True)
         return result
     except (ValueError, OSError, RuntimeError, np.linalg.LinAlgError) as exc:
         parser.exit(2, "error: {}\n".format(exc))

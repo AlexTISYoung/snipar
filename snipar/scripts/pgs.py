@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 """Infers direct effects, non-transmitted coefficients (NTCs), and population effects of a PGS on a phenotype.
 
-Minimally: the script requires observed genotypes on  individuals and their parents, and/or 
-parental genotypes imputed by snipar's impute.py script, along with a SNP weights file.
+Compute scores from observed genotypes, observed or imputed parental genotypes,
+and a SNP weights file. Alternatively, analyse a precomputed PGS file with a
+phenotype file. By default, one- and two-generation models use the same sample
+and report the direct/population coefficient ratio with its standard error.
 
 Args:
 @parser@
@@ -43,14 +45,14 @@ parser.add_argument('--chr_range',
                     type=parseNumRange,
                     nargs='*',
                     action=NumRangeAction,
-                    help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
+                    help='Chromosomes for score computation. Supply ranges in x-y format or individual chromosome numbers.', default=None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
 parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
 parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='SNP')
 parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='b')
 parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='A1')
 parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='A2')
-parser.add_argument('--sep',type=str,help='Column separator in weights file. If not provided, an attempt to determine this will be made.',default=None)
+parser.add_argument('--sep',type=str,help='Column separator in weights file (default: whitespace).',default=None)
 parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
 parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
@@ -78,7 +80,7 @@ parser.add_argument('--compute_controls', action='store_true', default=False,
                     help='Compute PGS for control families (default False)')
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)',default='NA')
 parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
-parser.add_argument('--force_am_adj',action='store_true',help='Force assortative mating adjustment even when estimated correlation is noisy/not significant',default=False)
+parser.add_argument('--force_am_adj',action='store_true',help='Currently has no effect; the assortative mating score adjustment still requires an estimated correlation divided by its SE greater than 1.5.',default=False)
 parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
 parser.add_argument('--batch_size',type=int,help='Batch size for reading in SNPs (default 10000)',default=10000)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))

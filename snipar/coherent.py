@@ -293,11 +293,13 @@ def _derived(covariance):
     return keys, np.asarray(values), expanded
 
 
-def _jackknife_covariance(delete):
-    """No nan-dropping: an undefined deletion makes the affected row/col NA."""
+def _jackknife_covariance(delete, estimates=None):
+    """An undefined estimate or deletion makes its covariance row and column NA."""
     b, k = delete.shape
     covariance = np.full((k, k), np.nan)
     valid = np.all(np.isfinite(delete), axis=0)
+    if estimates is not None:
+        valid &= np.isfinite(estimates)
     delta = delete[:, valid] - delete[:, valid].mean(axis=0)
     covariance[np.ix_(valid, valid)] = (b - 1) / b * delta.T @ delta
     return covariance
@@ -305,7 +307,7 @@ def _jackknife_covariance(delete):
 
 def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
                  blocks=None, effect_names=None, max_iter=100, tol=1e-7,
-                 chunk_size=20000, jackknife='refit'):
+                 chunk_size=20000, jackknife='refit', common_weight=True):
     """Estimate moments, correlations, SD ratios and their joint jackknife SEs.
 
     Columns must be [D, average NTC] or [D, paternal NTC, maternal NTC].
@@ -314,6 +316,7 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
     faster conditional approximation retaining full-fit product weights; it
     is not the full refitted jackknife. Boundary SEs are descriptive and do
     not justify ordinary Wald intervals for zero variances or |r|=1.
+    Set ``common_weight=False`` to skip the separate common-weight diagnostic.
     """
     y, s, ld = _validate(effects, sampling_covariance, ldscores)
     n, p = y.shape
@@ -370,12 +373,40 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
         moment_delete[block] = deleted[_pairs(p)]
         delete_values[block] = _derived(deleted)[1]
     moment_covariance = _jackknife_covariance(moment_delete)
-    metric_covariance = _jackknife_covariance(delete_values)
-    undefined = ~np.isfinite(estimates)
-    metric_covariance[undefined, :] = metric_covariance[:, undefined] = np.nan
-    # A separate finite-panel diagnostic uses ONE scalar weight per SNP for
-    # every matrix entry. Unlike the model-based GLS fit, it is not constrained
-    # or reweighted using the estimated covariance, and can be indefinite.
+    metric_covariance = _jackknife_covariance(delete_values, estimates)
+    block_sizes = np.bincount(block_ids)
+    diagnostics.update({
+        'n_snps': n, 'n_blocks': b, 'block_labels': [str(x) for x in block_labels],
+        'block_sizes': block_sizes.tolist(), 'jackknife': jackknife,
+        'jackknife_boundary_count': boundary_deletes,
+        'jackknife_max_iterations': max(delete_iterations) if delete_iterations else None,
+        'undefined_se_metrics': [metric_names[k] for k in range(len(metric_names))
+                                 if not np.isfinite(metric_covariance[k, k])],
+        'warnings': [],
+    })
+    warnings = diagnostics['warnings']
+    if diagnostics['boundary'] or boundary_deletes:
+        warnings.append('PSD boundary encountered; jackknife SEs are descriptive, ordinary Wald intervals can be unreliable.')
+    if jackknife == 'frozen':
+        warnings.append('Frozen full-fit weights: SEs are conditional approximations, not a full refitted jackknife.')
+    if block_sizes.max() > 2 * block_sizes.min():
+        warnings.append('Highly unequal block sizes: the ordinary equal-block jackknife may be poorly calibrated.')
+    if diagnostics['undefined_se_metrics']:
+        warnings.append('An undefined full-sample or deletion statistic has SE=NA; invalid deletions were not dropped.')
+    result = dict(
+        effect_names=list(effect_names), covariance=covariance,
+        moment_names=moment_names, moments=covariance[_pairs(p)],
+        moment_covariance=moment_covariance, moment_se=np.sqrt(np.maximum(np.diag(moment_covariance), 0)),
+        moment_delete=moment_delete, metric_names=metric_names, estimates=estimates,
+        se=np.sqrt(np.maximum(np.diag(metric_covariance), 0)), delete_values=delete_values,
+        metric_covariance=metric_covariance, expanded_covariance=expanded,
+        expanded_names=['direct', 'avg_NTC', 'population'], diagnostics=diagnostics,
+    )
+    if not common_weight:
+        return result
+
+    # The finite-panel diagnostic uses the same scalar weight for every product
+    # at a SNP and permits indefinite covariance matrices.
     scalar = 1 / ld
     scalar /= scalar.sum()
     i, j = _pairs(p)
@@ -390,38 +421,13 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
     common_delete = (common_moments - common_totals) / (1 - common_mass[:, None])
     common_sampling_covariance = _jackknife_covariance(common_delete)
     common_covariance = _matrix(common_moments, p)
-    common_eigenvalues = np.linalg.eigvalsh(common_covariance)
-    block_sizes = np.bincount(block_ids)
-    diagnostics.update({
-        'n_snps': n, 'n_blocks': b, 'block_labels': [str(x) for x in block_labels],
-        'block_sizes': block_sizes.tolist(), 'jackknife': jackknife,
-        'jackknife_boundary_count': boundary_deletes,
-        'jackknife_max_iterations': max(delete_iterations) if delete_iterations else None,
-        'common_weight_min_eigenvalue': float(common_eigenvalues[0]),
-        'common_weight_is_psd': bool(common_eigenvalues[0] >= 0),
-        'undefined_se_metrics': [metric_names[k] for k in range(len(metric_names))
-                                 if not np.isfinite(metric_covariance[k, k])],
-        'warnings': [],
-    })
-    warnings = diagnostics['warnings']
-    if diagnostics['boundary'] or boundary_deletes:
-        warnings.append('PSD boundary encountered; jackknife SEs are descriptive, ordinary Wald intervals can be unreliable.')
-    if jackknife == 'frozen':
-        warnings.append('Frozen full-fit weights: SEs are conditional approximations, not a full refitted jackknife.')
-    if block_sizes.max() > 2 * block_sizes.min():
-        warnings.append('Highly unequal block sizes: the ordinary equal-block jackknife may be poorly calibrated.')
-    if diagnostics['undefined_se_metrics']:
-        warnings.append('An undefined full-sample or deletion statistic has SE=NA; invalid deletions were not dropped.')
-    return dict(
-        effect_names=list(effect_names), covariance=covariance,
-        moment_names=moment_names, moments=covariance[_pairs(p)],
-        moment_covariance=moment_covariance, moment_se=np.sqrt(np.maximum(np.diag(moment_covariance), 0)),
-        moment_delete=moment_delete, metric_names=metric_names, estimates=estimates,
-        se=np.sqrt(np.maximum(np.diag(metric_covariance), 0)), delete_values=delete_values,
-        metric_covariance=metric_covariance, expanded_covariance=expanded,
+    min_eigenvalue = float(np.linalg.eigvalsh(common_covariance)[0])
+    diagnostics['common_weight_min_eigenvalue'] = min_eigenvalue
+    diagnostics['common_weight_is_psd'] = min_eigenvalue >= 0
+    result.update(
         common_weight_covariance=common_covariance, common_weight_moments=common_moments,
         common_weight_moment_covariance=common_sampling_covariance,
         common_weight_moment_se=np.sqrt(np.maximum(np.diag(common_sampling_covariance), 0)),
         common_weight_moment_delete=common_delete,
-        expanded_names=['direct', 'avg_NTC', 'population'], diagnostics=diagnostics,
     )
+    return result

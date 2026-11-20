@@ -1,4 +1,5 @@
 .. _output_files:
+
 ============
 Output files
 ============
@@ -6,7 +7,7 @@ Output files
 We describe the output files here. Examples are produced by working through the :ref:`tutorial <tutorial>`. 
 
 IBD segments file 
------------------
+------------------
 .. _ibd_segments_file:
 
 The :ref:`ibd.py <ibd.py>` script outputs one gzipped text file per chromosome containing the IBD segments for each sibling pair
@@ -35,7 +36,7 @@ It has columns:
 
 
 imputed parental genotypes file 
--------------------------------
+--------------------------------
 .. _imputed_file:
 
 For each chromosome, the :ref:`impute.py <impute.py>` script outputs a HDF5 file containing the imputed parental genotypes. 
@@ -179,7 +180,7 @@ in the summary statistics output. Also, if '--fit_sib' is used to include an ind
 this will be included in the output. 
 
 HDF5 summary statistics 
------------------------
+------------------------
 .. _sumstats_hdf5:
 
 The :ref:`gwas.py <gwas.py>` script outputs one HDF5 file per chromosome containing the summary statistics for variants in the input. 
@@ -215,7 +216,8 @@ PGS file
 The :ref:`pgs.py <pgs.py>` script can be used to compute polygenic scores for genotyped individuals
 along with the parental polygenic scores based on observed and/or imputed parental genotypes. 
 The :ref:`pgs.py <pgs.py>` script will output a PGS file, which is a white-space delimited text
-file with columns: FID (family ID), IID (individual ID), FATHER_ID, MOTHER_ID, proband PGS, paternal PGS, maternal PGS. 
+file with a header and columns ``FID``, ``IID``, ``FATHER_ID``, ``MOTHER_ID``,
+``proband``, ``paternal``, and ``maternal``.
 (If the PGS has been computed from parental genotypes imputed from siblings alone, it will output the imputed parental PGS,
 the sum of paternal and maternal PGS values, instead of the paternal and maternal PGS values separately.)
 
@@ -226,7 +228,11 @@ row. The paternal and maternal PGS columns give the PGS values of the individual
 and these values can be computed from either imputed or observed parental genotypes. 
 
 If the PGS was computed with the '--fit_sib' option, the output will include a column
-for the average of the proband's siblings' PGS values.
+named ``sibling`` for the average of the proband's siblings' PGS values.
+With ``--grandpar``, grandparental score columns are also included; see
+:doc:`pgs` for their names and availability. With ``--compute_controls``,
+additional score files have suffixes ``.pgs.control_paternal.txt``,
+``.pgs.control_maternal.txt``, and ``.pgs.control_sibling.txt``.
 
 PGS effects
 -----------
@@ -238,12 +244,16 @@ model (regression of phenotype onto proband PGS, which estimates the population 
 and a two-generation model (regression of phenotype
 onto proband, paternal, and maternal PGS; or proband and combined parental PGS). 
 
-When this is done, the script will write a file
-with suffix 1.effects.txt for the results of one-generation analysis, and 2.effects.txt for the results of two-generation analysis. 
+When both models are requested, they are fitted on the same individuals with
+finite observations for the two-generation model after covariate preparation.
+The script writes ``<out>.1.effects.txt`` for the population model and
+``<out>.2.effects.txt`` for the model estimating the direct effect and NTCs.
+Use ``--gen_models`` to choose which models to fit; a requested three-generation
+model writes ``<out>.3.effects.txt``.
 The output includes the estimated intercept and covariate coefficients for the regression as well as the PGS 
 effect estimates. 
 
-This file has three columns: the first gives the name of the regression coefficient 
+Each effects file has no header and three columns: the first gives the name of the regression coefficient
 (i.e. proband, for proband PGS; parental, for parental PGS; etc.), the second gives the corresponding regression coefficient,
 and the third gives the standard error. For example, in the two-generation analysis, 
 if your PGS file has columns proband, paternal, maternal,
@@ -255,6 +265,87 @@ PGS effects sampling covariance
 -------------------------------
 .. _pgs_vcov:
 
-The :ref:`pgs.py <pgs.py>` script will write a file
-with suffix vcov.txt in addition to the file with suffix effects.txt (described above). This file contains
-the sampling variance-covariance matrix of the regression coefficients. 
+Each fitted model also writes ``<out>.<generation>.vcov.txt``, containing the
+sampling variance-covariance matrix of its regression coefficients, with
+coefficient names labelling rows and columns.
+
+Direct/population PGS ratio
+---------------------------
+.. _pgs_ratio_files:
+
+When both one- and two-generation models are requested (the default), the
+script writes three additional files:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - File
+     - Contents
+   * - ``<out>.direct_population_ratio.txt``
+     - One result row with a header: the direct/population coefficient ratio,
+       its standard error, both coefficients and their standard errors,
+       sampling covariance and correlation, sample size, status, and method.
+   * - ``<out>.1_2.cross_vcov.txt``
+     - Covariance between the models' coefficients. Rows are one-generation
+       coefficients; columns are two-generation coefficients.
+   * - ``<out>.direct_population.vcov.txt``
+     - The 2 by 2 covariance matrix for the population and direct proband
+       coefficients, in that order.
+
+Read the ``status`` column before interpreting the ratio. A
+``weak_denominator`` means the population effect is too close to zero for
+the usual ratio approximation to be reliable; other diagnostic statuses can
+leave the ratio or its standard error as ``nan``. See :ref:`pgs_ratio` for
+all columns, statuses, and the standard-error calculation.
+
+Assortative-mating-adjusted PGS effects
+---------------------------------------
+
+When ``--h2f`` is supplied and the two-generation model is fitted, the
+additional file ``<out>.am_adj_pars.txt`` contains the adjusted estimates and
+standard errors. The usual effects and ratio files still contain the
+unadjusted model results. See :doc:`pgs` and the :ref:`simulation exercise
+<simulation>` for the required inputs and interpretation.
+
+Correlations between effects
+-----------------------------
+
+Start with ``<out>_corrs.txt`` for estimates and ``<out>_diagnostics.json``
+for the SNP count, input mode, and fit warnings. The table has columns
+``correlation`` (the statistic name), ``est``, and ``SE``. The first eight
+rows give two correlations, two regression slopes, three variances and the
+direct/population variance ratio. The remaining nine rows give three pairwise
+covariances and six directed standard deviation ratios. The revised
+manuscript's population/direct magnitude ratio is
+``sqrt_var_ratio_population_direct``.
+
+``<out>_moments.tsv`` lists each distinct fitted variance and covariance for
+the input effects and for direct, average NTC and population effects. Its
+columns are ``moment``, ``est`` and ``SE``. ``<out>_sampling_covariance.tsv`` is
+a single square matrix covering the estimates in both the results table and
+the moments table. The diagonal gives their jackknife sampling variances and
+the off-diagonal entries give their sampling covariances.
+
+With ``--save_delete``, ``<out>_delete.txt`` contains one row per omitted
+block. Each row starts with the ``block`` label, followed by the 17
+statistics in ``<out>_corrs.txt`` order and the fitted input moments
+(``moment_<name>``). Use ``--common-weight`` to include
+raw input moments (``common_weight_moment_<name>``) in the moments table,
+the sampling covariance matrix and, if requested, the deletion table.
+See :ref:`correlation_outputs` for worked examples and interpretation of
+``NA`` values.
+
+Binary-outcome PGS results
+--------------------------
+
+The :ref:`pgs.R <pgs.R>` script uses the same main output suffixes for its
+one- and two-generation logistic mixed models. Its effects files have headers
+``term``, ``estimate``, and ``se``; estimates are on the log-odds scale.
+The ratio is calculated from those log-odds coefficients.
+
+The primary effect standard errors and paired-model covariance files use a
+family-cluster sandwich calculation. The R script also writes
+``<out>.1.model_vcov.txt`` and ``<out>.2.model_vcov.txt`` with the model-based
+covariance estimates, and ``<out>.model_info.tsv`` with fit diagnostics.
+See :ref:`binary_pgs_outputs` for the complete output reference.

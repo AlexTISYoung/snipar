@@ -55,6 +55,8 @@ def _load(tmp_path, name="input", options=()):
 
 def test_native_chromosome_files_ld_qc_and_end_to_end_outputs(tmp_path):
     frame = _frame(120)
+    block_labels = ["chr1_A", "chr1_B", "chr2_A", "chr2_B"]
+    frame["region"] = np.repeat(block_labels, 30)
     frame.loc[0, "direct_SE"] = np.nan
     frame.loc[1, "freq"] = .01
     ld = pd.DataFrame({"SNP": frame.SNP, "L2": 1 + np.arange(len(frame)) / 120})
@@ -68,7 +70,7 @@ def test_native_chromosome_files_ld_qc_and_end_to_end_outputs(tmp_path):
                tmp_path / "ld{}.l2.ldscore.gz".format(chromosome), " ")
     arguments = [str(tmp_path / "chr@"), str(tmp_path / "fit"),
                  "--chr_range", "1-2", "--ldscores", str(tmp_path / "ld@"),
-                 "--n_blocks", "4", "--save_delete"]
+                 "--block-column", "region", "--save_delete"]
     prepared = cli.prepare_inputs(cli.build_parser().parse_args(arguments))
     expected_rows = np.arange(4, len(frame))
     np.testing.assert_allclose(prepared[0], frame.loc[expected_rows, ["direct_Beta", "avg_NTC_Beta"]])
@@ -79,32 +81,59 @@ def test_native_chromosome_files_ld_qc_and_end_to_end_outputs(tmp_path):
     }
     completed = _run_cli(arguments, tmp_path)
     assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = completed.stdout
+    for chromosome in (1, 2):
+        assert f"Reading summary statistics from {tmp_path}/chr{chromosome}.sumstats.gz" in report
+        assert f"Reading LD scores from {tmp_path}/ld{chromosome}.l2.ldscore.gz" in report
+    assert "retained 116 of 120 input rows" in report
+    for count, reason in [(1, "missing or non-finite input values"),
+                          (1, "minor allele frequency below 0.05"),
+                          (2, "missing, non-finite or non-positive LD scores")]:
+        assert f"{count}  {reason}" in report
     output = pd.read_csv(tmp_path / "fit_corrs.txt", sep="\t").set_index("correlation")
     assert list(output.columns) == ["est", "SE"]
+    assert not output.index.str.endswith("_uncorr_direct").any()
+    assert "_uncorr_direct" not in report
+    assert "uncorrelated with direct" not in report.lower()
+    for label, key in [("Correlation: direct and population", "r_direct_population"),
+                       ("SD ratio: population / direct", "sqrt_var_ratio_population_direct"),
+                       ("SD ratio: direct / population", "sqrt_var_ratio_direct_population")]:
+        row = next(line for line in report.splitlines() if line.startswith(label))
+        np.testing.assert_allclose(np.array(row.split()[-2:], dtype=float),
+                                   output.loc[key, ["est", "SE"]], rtol=5e-5)
     for metric in ("r_direct_population", "r_direct_avg_NTC",
                    "sqrt_var_ratio_direct_population", "sqrt_var_ratio_direct_avg_NTC",
                    "sqrt_var_ratio_avg_NTC_population"):
         assert np.isfinite(output.loc[metric]).all()
-    covariance = pd.read_csv(tmp_path / "fit_covariance.tsv", sep="\t", index_col=0)
-    np.testing.assert_allclose(covariance.loc["population", "population"],
-                              covariance.loc["direct", "direct"] + covariance.loc["avg_NTC", "avg_NTC"]
-                              + 2 * covariance.loc["direct", "avg_NTC"])
+    moments = pd.read_csv(tmp_path / "fit_moments.tsv", sep="\t").set_index("moment")
+    assert list(moments.columns) == ["est", "SE"]
+    assert moments.index.is_unique
+    assert set(moments.index) == {
+        "var_direct", "var_avg_NTC", "var_population",
+        "cov_direct_avg_NTC", "cov_direct_population", "cov_avg_NTC_population",
+    }
+    np.testing.assert_allclose(moments, output.loc[moments.index])
+    np.testing.assert_allclose(moments.est["var_population"], moments.est["var_direct"]
+                               + moments.est["var_avg_NTC"] + 2 * moments.est["cov_direct_avg_NTC"])
     legacy_names = [
-        "r_direct_population", "reg_population_direct", "v_population_uncorr_direct",
-        "r_direct_avg_NTC", "reg_avg_NTC_direct", "v_avg_NTC_uncorr_direct",
+        "r_direct_population", "reg_population_direct", "r_direct_avg_NTC", "reg_avg_NTC_direct",
         "var_direct", "var_population", "var_avg_NTC", "var_ratio_direct_population",
     ]
-    assert list(output.index[:10]) == legacy_names
+    assert list(output.index[:len(legacy_names)]) == legacy_names
     deletes = pd.read_csv(tmp_path / "fit_delete.txt", sep="\t")
-    assert list(deletes.columns) == list(output.index)
+    assert list(deletes.columns) == ["block", *output.index, "moment_var_direct",
+                                    "moment_cov_direct_avg_NTC", "moment_var_avg_NTC"]
+    assert list(deletes["block"]) == block_labels
+    metric_covariance = pd.read_csv(tmp_path / "fit_sampling_covariance.tsv", sep="\t", index_col="statistic")
+    assert len(output.index) == 17
+    assert list(metric_covariance.index) == list(metric_covariance.columns) == list(output.index)
+    np.testing.assert_allclose(np.diag(metric_covariance), output.SE ** 2)
     # Independently derive the compatibility outputs from the common joint
     # moments, including each deletion before calculating jackknife errors.
     def legacy_values(values):
         return {
             "reg_population_direct": values["cov_direct_population"] / values["var_direct"],
             "reg_avg_NTC_direct": values["cov_direct_avg_NTC"] / values["var_direct"],
-            "v_population_uncorr_direct": 1 - values["r_direct_population"] ** 2,
-            "v_avg_NTC_uncorr_direct": 1 - values["r_direct_avg_NTC"] ** 2,
             "var_ratio_direct_population": values["var_direct"] / values["var_population"],
         }
     for name, expected in legacy_values(output.est).items():
@@ -113,14 +142,15 @@ def test_native_chromosome_files_ld_qc_and_end_to_end_outputs(tmp_path):
         np.testing.assert_allclose(deletes[name], expected)
         expected_se = np.sqrt((len(expected) - 1) * np.mean((expected - expected.mean()) ** 2))
         np.testing.assert_allclose(output.loc[name, "SE"], expected_se)
-    for suffix in ("moments.tsv", "basis_covariance.tsv", "moment_sampling_covariance.tsv",
-                   "metric_sampling_covariance.tsv", "common_weight_moments.tsv",
-                   "common_weight_covariance.tsv", "common_weight_moment_sampling_covariance.tsv",
-                   "delete.txt", "moment_delete.tsv", "common_weight_moment_delete.tsv"):
-        assert (tmp_path / ("fit_" + suffix)).is_file()
+    assert {p.name for p in tmp_path.glob("fit_*")} == {
+        "fit_corrs.txt", "fit_moments.tsv", "fit_sampling_covariance.tsv", "fit_diagnostics.json", "fit_delete.txt",
+    }
     diagnostics = json.loads((tmp_path / "fit_diagnostics.json").read_text())
+    assert "common_weight_min_eigenvalue" not in diagnostics
+    assert "common_weight_is_psd" not in diagnostics
     assert diagnostics["input"]["mode"] == "average"
     assert diagnostics["n_blocks"] == 4
+    assert diagnostics["block_labels"] == block_labels
     assert diagnostics["converged"]
 
 
@@ -138,6 +168,51 @@ def test_direct_population_transforms_full_sampling_covariance(tmp_path):
     assert derived[5]["mode"] == "direct-population"
     np.testing.assert_allclose(derived[0], average[0], atol=1e-14)
     np.testing.assert_allclose(derived[1], average[1], atol=1e-14)
+
+
+def test_parental_and_common_weight_moments_share_joint_sampling_covariance(tmp_path):
+    frame = _frame(120)
+    difference = np.random.default_rng(28).normal(0, .4, len(frame))
+    frame["paternal_Beta"] = frame.avg_NTC_Beta + difference
+    frame["maternal_Beta"] = frame.avg_NTC_Beta - difference
+    frame["paternal_SE"] = np.linspace(.1, .3, len(frame))
+    frame["maternal_SE"] = .15
+    frame["r_direct_paternal"] = frame["r_direct_maternal"] = -.2
+    frame["r_paternal_maternal"] = .1
+    _write(frame, tmp_path / "input.sumstats.gz")
+    result = cli.main([str(tmp_path / "input"), str(tmp_path / "fit"), "--ld-weight", "none",
+                       "--n-blocks", "4", "--save-delete", "--common-weight"])
+    diagnostics = json.loads((tmp_path / "fit_diagnostics.json").read_text())
+    assert diagnostics["input"]["mode"] == "parental"
+    assert {"common_weight_min_eigenvalue", "common_weight_is_psd"} <= diagnostics.keys()
+
+    input_names = result["moment_names"]
+    raw_names = ["common_weight_moment_" + name for name in input_names]
+    metric_names = result["metric_names"]
+    additional = [name for name in input_names if name not in metric_names]
+    assert len(additional) == 5
+    expanded = ["var_direct", "cov_direct_avg_NTC", "cov_direct_population",
+                "var_avg_NTC", "cov_avg_NTC_population", "var_population"]
+    moments = pd.read_csv(tmp_path / "fit_moments.tsv", sep="\t").set_index("moment")
+    assert moments.index.is_unique
+    assert set(moments.index) == set(expanded + additional + raw_names)
+    metrics = pd.read_csv(tmp_path / "fit_corrs.txt", sep="\t").set_index("correlation")
+    np.testing.assert_allclose(moments.loc[expanded], metrics.loc[expanded])
+    np.testing.assert_allclose(moments.loc[input_names, "est"], result["moments"])
+    np.testing.assert_allclose(moments.loc[input_names, "SE"], result["moment_se"])
+    np.testing.assert_allclose(moments.loc[raw_names, "est"], result["common_weight_moments"])
+    np.testing.assert_allclose(moments.loc[raw_names, "SE"], result["common_weight_moment_se"])
+
+    sampling = pd.read_csv(tmp_path / "fit_sampling_covariance.tsv", sep="\t", index_col="statistic")
+    assert list(sampling.index) == list(sampling.columns) == metric_names + additional + raw_names
+    deletes = pd.read_csv(tmp_path / "fit_delete.txt", sep="\t")
+    np.testing.assert_allclose(deletes[raw_names], result["common_weight_moment_delete"])
+    unique_columns = metric_names + ["moment_" + name for name in additional] + raw_names
+    values = deletes[unique_columns].to_numpy()
+    centered = values - values.mean(axis=0)
+    np.testing.assert_allclose(sampling, (len(values) - 1) / len(values) * centered.T @ centered, atol=1e-14)
+    np.testing.assert_allclose(np.diag(sampling.loc[moments.index, moments.index]), moments.SE ** 2, atol=1e-14)
+    assert {p.name for p in tmp_path.glob("fit_*.tsv")} == {"fit_moments.tsv", "fit_sampling_covariance.tsv"}
 
 
 def test_missing_parental_covariance_never_imputed_and_sibling_uses_average(tmp_path):
@@ -239,6 +314,8 @@ def test_legacy_parser_options_and_defaults():
     assert defaults.ld_wind == 1
     assert defaults.threads is None
     assert not defaults.save_delete
+    assert not defaults.common_weight
+    assert cli.parser.parse_args(["input", "out", "--common_weight"]).common_weight
     args = cli.parser.parse_args([
         "input", "out", "--chr_range", "1-2", "4", "--bed", "chr#",
         "--threads", "3", "--min_maf", ".1", "--corr_filter", "5",
@@ -278,7 +355,12 @@ def test_legacy_namespace_receives_new_defaults(tmp_path):
     assert metadata["mode"] == "average"
     assert metadata["effect_scale"] == "per-allele"
     assert metadata["ld_weight"] == "inverse"
-    assert (tmp_path / "fit_delete.txt").is_file()
+    deletes = pd.read_csv(tmp_path / "fit_delete.txt", sep="\t", dtype={"block": str})
+    assert list(deletes["block"]) == result["diagnostics"]["block_labels"]
+    np.testing.assert_allclose(deletes[result["metric_names"]], result["delete_values"], atol=1e-15)
+    columns = ["moment_" + name for name in result["moment_names"]]
+    np.testing.assert_allclose(deletes[columns], result["moment_delete"], atol=1e-15)
+    assert "common_weight_moment_delete" not in result
 
 
 def test_single_file_without_chromosomes_keeps_supplied_genomic_order(tmp_path):
@@ -328,6 +410,9 @@ def test_bed_scores_preserve_qc_alignment_and_match_precomputed_fit(tmp_path, mo
     common = [str(tmp_path / "input"), str(tmp_path / "fit"), "--n_blocks", "4"]
     from_bed = cli.main(common + ["--bed", "chr#", "--ld_wind", "2.5", "--ld_out", "computed"])
     from_scores = cli.main(common + ["--ldscores", str(tmp_path / "scores")])
+    assert {p.name for p in tmp_path.glob("fit_*")} == {
+        "fit_corrs.txt", "fit_moments.tsv", "fit_sampling_covariance.tsv", "fit_diagnostics.json",
+    }
     assert len(calls) == 1
     pattern, snp_ids, chromosomes, window, output = calls[0]
     assert pattern == "chr#"

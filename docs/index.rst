@@ -16,6 +16,9 @@ Welcome to snipar's documentation!
    output files
    scripts
    simulation
+   pgs
+   pgs_binary
+   correlate
 
 Indices and tables
 ==================
