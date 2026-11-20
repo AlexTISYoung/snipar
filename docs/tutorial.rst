@@ -188,12 +188,29 @@ using the LD scores computed by ibd.py (and output to chr_1.l2.ldscore.gz), use 
 
     ``correlate.py chr_@_young effect --ldscores chr_@``
 
-This should give a correlation between direct effects and average NTCs of close to 0.5. The estimated correlations
-and their standard errors, estimated by block-jacknife, are output to effect_corrs.txt. 
+The ``tan`` branch fits a single positive semidefinite covariance matrix and reconstructs
+population effects as direct effects plus average NTCs. The estimated correlations,
+effect moments, and standard-deviation ratios are output to ``effect_corrs.txt`` with
+``correlation``, ``est``, and ``SE`` columns. Standard errors use a genomic block jackknife
+that refits the weights and covariance constraint for each deletion. Additional files
+contain the fitted covariance matrices and diagnostics; ``--save_delete`` saves the
+delete estimates. The original ten output rows are retained first, including regression,
+residual-variance, and variance-ratio statistics, followed by additional covariances and
+SD ratios. Every statistic uses the same updated coherent fit and refitted deletions.
+Select output rows by name when consuming the additional outputs.
 
-The method is similar to LDSC, but correlates the marginal effects (not joint-fit effects adjusted for population stratification, as LDSC attempts to use), 
-adjusting for the known sampling variance-covariance matrix of the effects. The LD scores are used for weighting. LD scores output by LDSC can be input. If LD scores are not available, they can be
-computed from .bed files by providing them through the --bed argument to :ref:`correlate.py <correlate.py>`. 
+The method estimates marginal effect moments using the full sampling covariance.
+LD scores provide inverse redundancy weights, without an LDSC stratification correction.
+Supply LD scores computed separately by :ref:`ibd.py <ibd.py>` or LDSC, or replace
+``--ldscores chr_@`` with ``--bed chr_@`` to compute them from chromosome-specific
+PLINK files. Prefixes using ``#`` are also accepted. ``--ld_wind`` sets the window in
+cM, ``--ld_out`` saves per-chromosome LD-score files, and ``--threads`` sets Numba threads.
+To explicitly disable LD weighting, use ``--ld-weight none``. Sampling-correlation
+outlier filtering retains the six-SD default; ``--no-corr-filter`` disables it.
+A single summary-statistic file without a chromosome column retains its input row order
+for the jackknife and must therefore already be genomically ordered.
+See the `coherent correlation reference <https://github.com/AlexTISYoung/snipar/blob/tan/docs/coherent_correlations.md>`_
+for input requirements, defaults, and output definitions.
 
 Polygenic score analyses
 ------------------------

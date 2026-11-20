@@ -299,13 +299,23 @@ is a measure of how different direct genetic effects and effects estimated by st
 We provide a script, :ref:`correlate.py <correlate.py>`, that estimates these correlations. 
 It takes as input the :ref:`summary statistics <sumstats_text>` files output by :ref:`gwas.py <gwas.py>`
 and LD-scores for the SNPs (as output by :ref:`ibd.py <ibd.py>` or by LDSC). 
-It applies a method-of-moments based estimator that 
-accouts for the known sampling variance-covariance of the effect estimates, and for the correlations
-between effect estimates of nearby SNPs due to LD.
+On the ``tan`` branch, it fits one positive semidefinite covariance matrix using the full
+per-SNP sampling covariance and Gaussian feasible-GLS weights. Population effects are
+reconstructed as direct effects plus average NTCs. All reported moments, correlations,
+and standard-deviation ratios share this fit and the same genomic block deletions.
+By default, the weights and covariance constraint are refitted in each deletion.
+Inverse LD-score weights account approximately for redundancy between nearby SNPs.
+Supply precomputed LD scores or use ``--bed`` with chromosome-specific PLINK files.
+The existing ``--ld_wind``, ``--ld_out``, and ``--threads`` options are retained.
+Sampling-correlation outlier filtering keeps the six-SD default; ``--no-corr-filter`` disables it.
+
+See the `coherent correlation method and output reference <https://github.com/AlexTISYoung/snipar/blob/tan/docs/coherent_correlations.md>`_
+for input modes, additional output rows, and boundary diagnostics. The original ten
+output rows remain first, with all statistics derived from the updated coherent fit.
 
 Note that this is different to genetic correlation as estimated by LDSC. LDSC attempts to use LD-scores to estimate
 heritability and to separate out this from bias due to population stratification. The :ref:`correlate.py <correlate.py>` estimator only uses
 LD-scores to account for correlations between nearby SNPs, not to separate out population stratification. 
 This is because we are (potentially) interested in the contribution of population stratification to population effects,
 and whether population stratification makes population effects different from direct effects. The approach used by LDSC 
-would remove some of the contribution of population stratification to differences between direct and population effects.   
+would remove some of the contribution of population stratification to differences between direct and population effects.
