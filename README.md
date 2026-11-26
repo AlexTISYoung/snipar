@@ -19,11 +19,11 @@
 *snipar* (single nucleotide imputation of parents) provides a command line toolbox for family-based analyses in genetics: 
 
 - **family-GWAS**: Perform family-GWAS (FGWAS) with a variety of estimators. *snipar* can perform family-GWAS using genetic differences between siblings, parent-offspring trios, and increase power through using imputed parental genotypes, which enables inclusion and optimal use of samples with only one parent genotyped and without genotyped parents or siblings. See [Simulation Exercise: family-GWAS without imputed parental genotypes](https://snipar.readthedocs.io/en/latest/simulation.html#family-based-gwas-without-imputed-parental-genotypes) and [Simulation Exercise: family-GWAS with imputed parental genotypes](https://snipar.readthedocs.io/en/latest/simulation.html#family-based-gwas-with-imputed-parental-genotypes). The regressions are performed in an efficient linear mixed model that accounts for correlations between siblings and more distant relatives.
-- **family-PGS analyses**: Compute and analyze polygenic scores (PGS) for a set of individuals along with their siblings and parents, using both observed and imputed parental genotypes. *snipar* can estimate the direct effect (within-family) of a polygenic score: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses). It can adjust for the impact of assortative mating on estimates of indirect genetic effects (effects of alleles in parents on offspring mediated through the environment) from family-based PGS analysis: see [Simulation Exercise: Polygenic score analyses](https://snipar.readthedocs.io/en/latest/simulation.html#polygenic-score-analyses).
+- **Family PGS analyses**: `pgs.py` computes family scores from observed or imputed genotypes and fits linear mixed models for quantitative traits. It also supports adjustment for assortative mating. For a binary trait, `pgs.R` fits logistic mixed models using the same score file. Both workflows report the direct-to-population PGS coefficient ratio and its standard error. See the [Python PGS guide](docs/pgs.rst) and [R PGS guide](docs/pgs_binary.rst).
 - **Imputation of missing parental genotypes**: For samples with at least one genotyped sibling and/or parent, but without both parents' genotypes available, *snipar* can impute missing parental genotypes according to Mendelian laws (Mendelian Imputation) and use these to increase power for family-GWAS and PGS analyses. See [Tutorial: imputing-missing-parental-genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#imputing-missing-parental-genotypes)
 - **Identity-by-descent (IBD) segments shared by siblings**: *snipar* implements a hidden markov model (HMM) to accurately infer identity-by-descent segments shared between siblings. The output of this is needed for imputation of missing parental genotypes from siblings. See [Tutorial: inferring IBD between siblings](https://snipar.readthedocs.io/en/latest/tutorial.html#inferring-ibd-between-siblings)
-- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html)
-- **Estimate correlations between effects**: The `tan` branch's `correlate.py` fits one positive semidefinite covariance matrix from direct genetic effects and non-transmitted coefficients (NTCs), accounting for their full sampling covariance. Population effects are reconstructed as direct + average NTC. Correlations, effect variances, and standard-deviation ratios share the same fit and genomic block jackknife. See [Coherent correlation analysis: inputs, method, and outputs](docs/coherent_correlations.md) and [Tutorial: correlations between effects](https://snipar.readthedocs.io/en/latest/tutorial.html#correlations-between-effects).
+- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html). The `tan` branch also supports selection of breeders according to their phenotype over multiple generations. See [Simulating stabilizing selection](docs/simulation.rst#simulating-stabilizing-selection).
+- **Correlations between GWAS effects**: `correlate.py` fits a joint covariance matrix for direct effects and non-transmitted coefficients (NTCs) using their per-SNP sampling covariance. It derives population effects as direct effects plus average NTCs. The results include the direct–population and direct–NTC correlations and the population-to-direct standard deviation ratio, with genomic block jackknife standard errors. See the [correlation guide and output tables](docs/correlate.rst).
 
 <p align="center">
   <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
@@ -69,14 +69,37 @@ It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
 And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
-## Binary-outcome PGS analyses
+## Running the `tan` branch analyses
 
-[`snipar/scripts/pgs.R`](snipar/scripts/pgs.R) fits one- and two-generation
-logistic mixed models from precomputed scores and a binary phenotype. It writes
-the effect estimates, their sampling covariance matrices, and the direct to
-population coefficient ratio with its standard error. The R script runs
-independently of Python and requires `lme4`. See [input formats, examples, and
-output definitions](docs/pgs_binary.md).
+To install the Python commands for this branch, run the following in a supported Python environment. The examples below use input files in the checkout directory.
+
+```bash
+git clone --branch tan https://github.com/AlexTISYoung/snipar.git
+cd snipar
+python -m pip install .
+```
+
+For GWAS summary statistics in `chr_1.sumstats.gz`, `chr_2.sumstats.gz`, etc., and corresponding LD scores in `ld_chr1.l2.ldscore.gz`, `ld_chr2.l2.ldscore.gz`, run
+
+```bash
+correlate.py 'chr_@' trait --ldscores 'ld_chr@'
+```
+
+`trait_corrs.txt` reports 17 estimates and their standard errors. `trait_moments.tsv` contains the fitted variances and covariances, `trait_sampling_covariance.tsv` gives the sampling covariance of the estimates, and `trait_diagnostics.json` records filtering and fit diagnostics. Add `--save_delete` to save the block deletions or `--common-weight` to include the raw moment comparison. [Correlation method and options](docs/correlate.rst)
+
+For a quantitative trait, fit the default one- and two-generation models using a family score file from `pgs.py` and a phenotype file with `FID`, `IID`, and the trait value.
+
+```bash
+pgs.py quantitative --pgs scores.pgs.txt --phenofile quantitative.txt
+```
+
+For a binary trait, use a phenotype column coded 0/1. The standalone R script runs from the checkout with R and the `lme4` package.
+
+```bash
+Rscript snipar/scripts/pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status
+```
+
+Both PGS commands write `PREFIX.direct_population_ratio.txt`. The ratio divides the two-generation proband coefficient by the one-generation proband coefficient on the same sample. For `pgs.R`, both coefficients are on the log-odds scale. See the [quantitative-trait guide](docs/pgs.rst) and [binary-trait guide](docs/pgs_binary.rst) for score columns, covariates, and covariance outputs.
 
 # Installing Using pip
 

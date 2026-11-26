@@ -98,9 +98,9 @@ is never standardized.
 
 Models use the Laplace approximation (`nAGQ=1`) and `lme4`'s `bobyqa` optimizer.
 `--maxfun N` sets the evaluation limit, which defaults to 200000. A valid fit
-requires at least three families, at least one family with multiple
-participants, and identifiable fixed effects; the
-script reports convergence and likelihood diagnostics.
+requires at least three families and at least one family with multiple
+participants in the complete-case sample, together with identifiable fixed
+effects; the script reports convergence and likelihood diagnostics.
 
 ## Output files
 
@@ -115,6 +115,12 @@ With output prefix `results/trait`, the script writes:
 | `.direct_population.vcov.txt` | The two-by-two sampling covariance matrix for the population and direct proband coefficients. |
 | `.1.model_vcov.txt`, `.2.model_vcov.txt` | Model-based `lme4::vcov` matrices, provided separately for comparison. |
 | `.model_info.tsv` | Model, sample, convergence, and likelihood diagnostics. |
+
+The ratio table has columns `ratio`, `se`, `direct`, `population`,
+`direct_se`, `population_se`, `covariance`, `sampling_correlation`, `n`,
+`n_families`, `status`, and `method`. Counts refer to the shared complete-case
+sample. The method label is `Laplace_family_cluster_sandwich_delta`. The
+population/direct covariance matrix orders both axes as `population`, `direct`.
 
 Tables have headers. Covariance matrices label their rows and columns. The
 primary effect SEs, marginal covariance matrices, cross-model covariance, and

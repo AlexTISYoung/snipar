@@ -131,10 +131,10 @@ standard deviation in the complete-case sample, giving all generations a
 common scale. Covariates retain their supplied units and the binary
 phenotype is not standardized.
 
-The full dataset must contain at least three families, at least one family
-with multiple participants, and a proband score with positive finite
-standard deviation. Both fixed-effect designs must have full rank: constant
-or collinear scores and covariates cause an error.
+The complete-case analysis sample must contain at least three families, at
+least one family with multiple participants, and a proband score with
+positive finite standard deviation. Both fixed-effect designs must have full
+rank: constant or collinear scores and covariates cause an error.
 
 Fitting uses ``lme4::glmer``, the Laplace approximation (``nAGQ=1``) and the
 ``bobyqa`` optimizer. ``--maxfun N`` changes the optimizer evaluation limit
@@ -171,6 +171,13 @@ and ``OUT.model_info.tsv`` for the sample counts and model diagnostics.
      - Model-based ``lme4::vcov`` matrices for comparison with the primary sampling covariance estimates.
    * - ``.model_info.tsv``
      - Phenotype, sample and case/control counts, exclusions, score scale, family counts, random-intercept SD, boundary indicator, and convergence and likelihood diagnostics for both models.
+
+The ratio table has columns ``ratio``, ``se``, ``direct``, ``population``,
+``direct_se``, ``population_se``, ``covariance``, ``sampling_correlation``,
+``n``, ``n_families``, ``status`` and ``method``. ``n`` and ``n_families``
+count the shared complete-case individuals and families. The method label is
+``Laplace_family_cluster_sandwich_delta``. The rows and columns of
+``.direct_population.vcov.txt`` are ordered ``population``, then ``direct``.
 
 Tables are tab-delimited with headers and use ``NA`` for missing results.
 Covariance matrices label both rows and columns. The primary coefficient

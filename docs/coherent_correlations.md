@@ -207,11 +207,17 @@ Three pairwise covariances and six directed SD ratios follow.
 For example, `var_ratio_direct_population` gives Var(D)/Var(P), and
 `sqrt_var_ratio_direct_population` gives its square root.
 
+Compared with the earlier output layout, `v_population_uncorr_direct` and
+`v_avg_NTC_uncorr_direct` are no longer emitted. Separate fitted-covariance
+files are consolidated into `_moments.tsv`, and the separate sampling-covariance
+files into `_sampling_covariance.tsv`. Read statistics by name when updating
+code that used the earlier row positions or file suffixes.
+
 Add `--save_delete` to write all leave-one-block-out estimates to `_delete.txt`.
 Each row starts with the omitted block label (`block`).
 The next 17 columns give the statistics from that refit in the same order
 as the rows of `_corrs.txt`. Columns named `moment_<name>` give the fitted
-input-basis moments.
+input-basis moments, replacing the separate `_moment_delete.tsv` file.
 Tab-separated files use `NA` for undefined values.
 
 Add `--common-weight` (also spelled `--common_weight`) to include raw
@@ -284,3 +290,7 @@ vectors; file filtering is the CLI's responsibility.
 
 Python callers can pass `common_weight=False` to skip the common-weight
 diagnostic. The Python API includes it by default.
+`fit_coherent` returns the core effect moments, correlations and SD ratios.
+The command additionally derives the two regression slopes and the
+direct/population variance ratio, so the API's `metric_names` are not the
+same as the 17 rows in the command's `_corrs.txt` file.

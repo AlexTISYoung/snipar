@@ -129,7 +129,9 @@ To include sibling effects, use ``--fit_sib`` both when computing scores and
 when fitting models 2 or 3. Model 1 still uses only the proband score and any
 covariates.
 
-Phenotypes and covariates are matched to scores by individual ID. Use
+Phenotypes and covariates are matched to scores by ``IID`` alone, so each
+``IID`` must be unique across families and consistent across the input files.
+``FID`` defines sibling groups but is not part of this matching key. Use
 ``--phen`` to select a case-sensitive phenotype name, or ``--phen_index`` for
 its one-based position (default 1). ``--missing_char`` defaults to ``NA``.
 ``--bpg`` restricts the analysis to individuals with both parents genotyped.

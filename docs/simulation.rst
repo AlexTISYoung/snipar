@@ -364,3 +364,60 @@ on the log-odds scale, and the reported ratio divides the two-generation
 ``proband`` log-odds coefficient by the one-generation ``proband`` log-odds
 coefficient. See :doc:`pgs_binary` for installation, input formats, diagnostics,
 and guidance on interpreting the ratio.
+
+.. _stabilizing_selection_tutorial:
+
+Simulating stabilizing selection
+--------------------------------
+
+Breeders whose phenotypes are closer to a fixed optimum have a higher chance
+of surviving to reproduce. To try this with 100 independent causal SNPs, run
+
+.. code-block:: bash
+
+   mkdir -p sim_stabilizing
+   simulate.py 100 0.5 sim_stabilizing/ --nfam 200 \
+       --n_stabilizing 3 --selection_variance 2 --save_par_gts
+
+The positional arguments give the number of causal SNPs, the initial
+heritability due to direct effects (0.5), and the output prefix. The trailing
+slash puts the output in ``sim_stabilizing/``. Each offspring's phenotype is
+its direct genetic value plus a random environmental contribution. Selection
+acts on the breeders for three generations. The final sample contains two
+siblings per family, measured before selection on their own phenotypes.
+
+* ``--n_stabilizing 3`` sets the number of generations of selection. The
+  default is zero. This mode models direct effects with random pairing among
+  survivors. Leave ``--n_am``, ``--n_random``, ``--v_indir`` and ``--beta_vert``
+  at zero.
+* ``--selection_optimum`` sets the favoured phenotype relative to the initial
+  mean genetic value. It defaults to zero and stays fixed across generations.
+* ``--selection_variance 2`` sets the width of the survival curve in squared
+  phenotype units. Smaller positive values give stronger selection. At 2, a
+  candidate two phenotype units from the optimum has about a 37% chance of
+  surviving, compared with 100% at the optimum.
+* ``--nfam 200`` requests 200 final families. ``--selection_nfam`` sets the
+  initial number of candidates of each sex (default four times ``--nfam``,
+  or 800 here). Increase the pool if too few survive. With phased ``--bgen``
+  input, the haplotypes determine the pool size. For simulated genotypes,
+  ``--maf`` fixes the allele frequency across SNPs and ``--min_maf`` sets the
+  lower bound when frequencies are drawn (default 0.05).
+* ``--save_par_gts`` adds the final parental generation's PLINK files to the
+  offspring genotypes saved by default.
+
+Open ``sim_stabilizing/phenotype.txt`` for the 400 offspring phenotypes.
+In ``selection_metadata.json``, compare ``phenotypic_variance`` before and
+after selection within each generation to see how the survivors differ from
+the candidate pool. ``VCs.txt`` reports genetic and phenotypic variance in
+successive offspring generations.
+
+For a neutral comparison, keep the same settings and use
+``--selection_variance inf``. Every candidate survives in this run. The two
+runs draw their own founders and environmental effects, so their realised
+variances will vary.
+
+.. code-block:: bash
+
+   mkdir -p sim_neutral
+   simulate.py 100 0.5 sim_neutral/ --nfam 200 \
+       --n_stabilizing 3 --selection_variance inf --save_par_gts

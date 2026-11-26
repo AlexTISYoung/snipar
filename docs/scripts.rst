@@ -247,4 +247,7 @@ For the full file and row definitions, see :ref:`correlation_outputs`.
 simulate.py
 ------------
 .. _simulate.py:
+
+For a worked example with a neutral control, see :ref:`stabilizing_selection_tutorial`.
+
 .. automodule:: snipar.scripts.simulate

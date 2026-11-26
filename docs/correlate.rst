@@ -191,6 +191,10 @@ population-to-direct SD ratio :math:`k_{P/D}`. The historical
 direction. For example, a direct/population variance ratio of 0.64 corresponds
 to a population/direct SD ratio of :math:`1/\sqrt{0.64}=1.25`.
 
+The earlier ``v_population_uncorr_direct`` and ``v_avg_NTC_uncorr_direct``
+rows are no longer emitted. Select statistics by name when updating code
+that relied on their earlier row positions.
+
 The other files use the same output prefix.
 
 .. list-table::
@@ -212,6 +216,11 @@ For example, the ``cov_direct_population`` row in ``_moments.tsv`` gives the
 covariance of direct and population effects across SNPs. To find the sampling
 variance of that estimate, look up ``cov_direct_population`` on both axes of
 ``_sampling_covariance.tsv``.
+
+These tables replace the earlier separate fitted-covariance,
+sampling-covariance and moment-deletion files. For example,
+``_basis_covariance.tsv`` is represented by named rows in ``_moments.tsv``,
+and ``_moment_delete.tsv`` is included in ``_delete.txt`` when requested.
 
 Add ``--common-weight`` to compare fitted and raw input moments. Look for
 ``common_weight_moment_var_direct`` alongside ``var_direct`` in ``_moments.tsv``,
@@ -244,9 +253,9 @@ equations used by the NumPy implementation.
 
 Check the diagnostics for boundary fits and undefined statistics. A correlation
 requires two positive fitted variances and an SD ratio requires a positive
-denominator variance. An undefined deletion makes the corresponding jackknife
-standard error ``NA``. At a zero variance or a perfect correlation, jackknife
-standard errors are descriptive and ordinary normal confidence intervals can
-be unreliable.
+denominator variance. An undefined full-sample estimate or deletion makes the
+corresponding jackknife standard error ``NA``. At a zero variance or a perfect
+correlation, jackknife standard errors are descriptive and ordinary normal
+confidence intervals can be unreliable.
 
 See :ref:`correlate.py <correlate.py>` for all command-line options.
