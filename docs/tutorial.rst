@@ -382,7 +382,12 @@ With the scores from this BED-based run, ``1.proband`` is about 4.63 and
 coefficient is about 22% smaller on the log-odds scale after including
 parental scores. Alternate imputation runs can change these numbers slightly.
 
-Check the sample used by both models and the ratio status in the diagnostics.
+The terminal also reports the family random-intercept variance. This is the
+remaining variation in baseline log odds across families after accounting for
+the fitted scores. Here it is about 2.18 (SE 0.36) in the one-generation
+model and 2.44 (SE 0.45) in the two-generation model, in squared log-odds
+units. The diagnostics table saves these estimates alongside the sample
+counts and ratio status.
 
     ``column -t direct_binary.model_info.tsv``
 

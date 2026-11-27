@@ -171,18 +171,11 @@ standard errors, uncertainty in estimated variance components is not included.
 The ``direct_population_ratio`` row in ``analysis.effects.txt`` contains the
 ratio in ``est`` and its standard error in ``SE``. The component estimates
 are the ``1.proband`` and ``2.proband`` rows in the same table.
-Two additional tab-delimited covariance files are written:
-
-.. list-table:: Paired-model output files
-   :header-rows: 1
-   :widths: 45 55
-
-   * - Suffix
-     - Contents
-   * - ``.1_2.cross_vcov.txt``
-     - Cross-model covariance matrix; rows are model 1 terms and columns are model 2 terms, including intercept and covariates.
-   * - ``.direct_population.vcov.txt``
-     - The 2-by-2 covariance matrix for the population and direct proband coefficients, in that order.
+The tab-delimited ``analysis.1_2.cross_vcov.txt`` gives the covariance
+between models, with model 1 terms as rows and model 2 terms as columns.
+Its ``proband`` row, ``proband`` column entry is the covariance between the
+population and direct estimates. The corresponding entries in
+``analysis.1.vcov.txt`` and ``analysis.2.vcov.txt`` give their variances.
 
 The terminal reports the ratio status and warns when it is not ``ok``.
 The Python return value also retains the status and method

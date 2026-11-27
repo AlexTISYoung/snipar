@@ -102,7 +102,8 @@ check_numerics <- function() {
         stopifnot(max(abs(score) / sqrt(diag(information))) < .005)
         scores <- numDeriv::jacobian(family_loglik, parameters)
         scores <- sweep(scores, 2L, colMeans(scores), FUN = "-")
-        expected <- scores %*% solve(information)[, -1L, drop = FALSE]
+        joint_influence <- scores %*% solve(information)
+        expected <- joint_influence[, -1L, drop = FALSE]
         actual <- logistic_family_influence(fit)
         stopifnot(identical(colnames(actual$influences), colnames(X)),
                   identical(rownames(actual$influences), levels(groups)))
@@ -111,6 +112,13 @@ check_numerics <- function() {
         assert_close(unname(actual$influence),
                      unname(actual$influences[, "proband"]), 1e-12,
                      paste(name, "selected proband influence"))
+        expected_variance <- as.numeric(VarCorr(fit)$FID[1L, 1L])
+        sigma_influence <- 2 * parameters[[1L]] * joint_influence[, 1L]
+        expected_se <- sqrt(sum(sigma_influence^2) * nlevels(groups) / (nlevels(groups) - 1L))
+        assert_close(actual$diagnostics$random_intercept_variance, expected_variance,
+                     1e-12, paste(name, "family variance"))
+        assert_close(actual$diagnostics$random_intercept_variance_se, expected_se,
+                     2e-4 * expected_se, paste(name, "family variance sandwich SE"))
         influences[[name]] <- actual$influences
     }
     result <- logistic_direct_population_ratio(fits$population, fits$direct)
@@ -174,7 +182,9 @@ check_zero_variance <- function() {
     actual <- logistic_family_influence(fit)
     assert_close(unname(actual$influences), unname(expected), 1e-5,
                  "Zero-variance full GLM cluster influences")
-    stopifnot(actual$diagnostics$boundary)
+    stopifnot(actual$diagnostics$boundary,
+              actual$diagnostics$random_intercept_variance <= 1e-8,
+              is.na(actual$diagnostics$random_intercept_variance_se))
     cat("PASS: zero random-intercept variance agrees with the full GLM sandwich\n")
 }
 
@@ -229,13 +239,14 @@ read_covariance <- function(path) {
 }
 
 check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_families,
-                              expected_direct_terms) {
+                              expected_direct_terms, console) {
     estimates <- read_output(paste0(prefix, ".effects.txt"))
     stopifnot(identical(names(estimates), c("statistic", "est", "SE")),
               !anyDuplicated(estimates$statistic),
               sum(estimates$statistic == "direct_population_ratio") == 1L,
               !any(file.exists(paste0(prefix, c(".1.effects.txt", ".2.effects.txt",
-                                                ".direct_population_ratio.txt")))))
+                                                ".direct_population_ratio.txt", ".direct_population.vcov.txt",
+                                                ".1.model_vcov.txt", ".2.model_vcov.txt")))))
     effects <- lapply(1:2, function(generation) {
         rows <- startsWith(estimates$statistic, paste0(generation, "."))
         output <- estimates[rows, ]
@@ -257,9 +268,6 @@ check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_famil
                      1e-10, paste("CLI generation", generation, "SE/covariance agreement"))
         stopifnot(min(eigen(covariance[[generation]], symmetric = TRUE,
                              only.values = TRUE)$values) > -1e-9)
-        model_covariance <- read_covariance(paste0(prefix, ".", generation, ".model_vcov.txt"))
-        stopifnot(identical(dimnames(model_covariance), dimnames(covariance[[generation]])),
-                  all(is.finite(model_covariance)))
     }
     stopifnot(all(c("proband", "age", "PC1") %in% effects[[1L]]$term),
               all(expected_direct_terms %in% effects[[2L]]$term))
@@ -271,19 +279,12 @@ check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_famil
     cross <- read_covariance(paste0(prefix, ".1_2.cross_vcov.txt"))
     stopifnot(identical(rownames(cross), effects[[1L]]$term),
               identical(colnames(cross), effects[[2L]]$term))
-    joint <- read_covariance(paste0(prefix, ".direct_population.vcov.txt"))
-    joint <- joint[c("population", "direct"), c("population", "direct")]
+    joint <- diag(vapply(covariance, function(v) v["proband", "proband"], numeric(1L)))
+    dimnames(joint) <- list(c("population", "direct"), c("population", "direct"))
+    joint[1L, 2L] <- joint[2L, 1L] <- cross["proband", "proband"]
     gradient <- c(-direct / population^2, 1 / population)
     assert_close(ratio$SE, sqrt(as.numeric(t(gradient) %*% joint %*% gradient)),
                  1e-10, "CLI delta-method SE reconstruction")
-    assert_close(joint["population", "population"],
-                 covariance[[1L]]["proband", "proband"], 1e-10,
-                 "CLI joint population variance")
-    assert_close(joint["direct", "direct"],
-                 covariance[[2L]]["proband", "proband"], 1e-10,
-                 "CLI joint direct variance")
-    assert_close(joint["population", "direct"], cross["proband", "proband"],
-                 1e-10, "CLI cross-model proband covariance")
     combined <- rbind(cbind(covariance[[1L]], cross),
                       cbind(t(cross), covariance[[2L]]))
     stopifnot(min(eigen(combined, symmetric = TRUE, only.values = TRUE)$values) > -1e-9)
@@ -302,6 +303,22 @@ check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_famil
               length(unique(info$ratio_status)) == 1L,
               all(info$ratio_status %in% c("ok", "weak_denominator")),
               all(info$ratio_method == "Laplace_family_cluster_sandwich_delta"))
+    assert_close(info$random_intercept_variance, info$random_intercept_sd^2, 1e-10,
+                 "CLI family random-intercept variance")
+    heading <- grep("^ *generation +random_intercept_variance +random_intercept_variance_se +boundary", console)
+    stopifnot(length(heading) == 1L)
+    printed <- read.table(text = console[heading + 0:2], header = TRUE)
+    stopifnot(identical(printed$generation, info$generation),
+              identical(printed$boundary, info$boundary))
+    assert_close(printed$random_intercept_variance, info$random_intercept_variance,
+                 1e-5, "Printed variance components")
+    stopifnot(identical(is.na(printed$random_intercept_variance_se), info$boundary))
+    interior <- !info$boundary
+    if (any(interior)) {
+        assert_close(printed$random_intercept_variance_se[interior],
+                     info$random_intercept_variance_se[interior], 1e-5,
+                     "Printed variance-component SEs")
+    }
     assert_close(info$sandwich_se, sqrt(diag(joint)), 1e-10,
                  "CLI proband diagnostic SEs")
     expected_correlation <- joint["population", "direct"] / sqrt(prod(diag(joint)))
@@ -352,9 +369,9 @@ check_cli <- function() {
     arguments <- c(prefix, "--pgs", pgs_path, "--phenofile", phen_path,
                    "--phen", "case", "--covar", covar_path,
                    "--covar_cols", "PC1,age")
-    run_cli(arguments)
+    console <- run_cli(arguments)
     check_cli_outputs(prefix, expected_n, expected_cases, expected_families,
-                      c("proband", "paternal", "maternal", "PC1", "age"))
+                      c("proband", "paternal", "maternal", "PC1", "age"), console)
 
     # With parental-only scores, verify the parental-sum option, sibling term,
     # covariate-column defaults, phenotype indexing and common score scaling.
@@ -362,11 +379,11 @@ check_cli <- function() {
                           parental = pgs$paternal + pgs$maternal, sibling = sibling)
     write_input(pgs_sum[sample(n), ], pgs_path)
     sum_prefix <- file.path(work, "parental_sum")
-    run_cli(c(sum_prefix, "--pgs", pgs_path, "--phenofile", phen_path,
+    sum_console <- run_cli(c(sum_prefix, "--pgs", pgs_path, "--phenofile", phen_path,
               "--phen_index", "2", "--covar", covar_path,
               "--parsum", "--fit_sib", "--scale_pgs"))
     check_cli_outputs(sum_prefix, expected_n, expected_cases, expected_families,
-                      c("proband", "parental", "sibling", "PC1", "age"))
+                      c("proband", "parental", "sibling", "PC1", "age"), sum_console)
 
     duplicate_path <- file.path(work, "duplicates.tsv")
     write_input(rbind(pgs, pgs[1L, ]), duplicate_path)

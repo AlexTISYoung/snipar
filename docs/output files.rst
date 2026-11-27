@@ -273,20 +273,11 @@ Direct/population PGS ratio
 When both one- and two-generation models are requested (the default), read the
 ``direct_population_ratio`` row of ``<out>.effects.txt``. Its ``est`` is
 ``2.proband`` divided by ``1.proband``, and ``SE`` accounts for covariance
-between those estimates. The script also writes two covariance files:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 45 55
-
-   * - File
-     - Contents
-   * - ``<out>.1_2.cross_vcov.txt``
-     - Covariance between the models' coefficients. Rows are one-generation
-       coefficients; columns are two-generation coefficients.
-   * - ``<out>.direct_population.vcov.txt``
-     - The 2 by 2 covariance matrix for the population and direct proband
-       coefficients, in that order.
+between those estimates. The rows of ``<out>.1_2.cross_vcov.txt`` are
+one-generation coefficients and the columns are two-generation coefficients.
+The entry at row ``proband`` and column ``proband`` gives the covariance
+between the population and direct estimates. The corresponding entries
+of the two per-model covariance files give their individual variances.
 
 Check the ratio status printed in the terminal before interpreting the ratio. A
 ``weak_denominator`` means the population effect is too close to zero for
@@ -342,8 +333,8 @@ one- and two-generation logistic mixed models. Its single tab-separated
 ``1.proband`` and ``2.proband`` are on the log-odds scale, and the
 ``direct_population_ratio`` row is calculated from those coefficients.
 
-The primary effect standard errors and paired-model covariance files use a
-family-cluster sandwich calculation. The R script also writes
-``<out>.1.model_vcov.txt`` and ``<out>.2.model_vcov.txt`` with the model-based
-covariance estimates, and ``<out>.model_info.tsv`` with fit diagnostics.
+The effect standard errors and covariance files use a family-cluster
+sandwich calculation. The R script prints each model's family
+random-intercept variance and SE and saves them with sample counts and fit
+diagnostics in ``<out>.model_info.tsv``.
 See :ref:`binary_pgs_outputs` for the complete output reference.

@@ -5,12 +5,16 @@ Minimally: the script requires observed genotypes on phenotyped individuals alon
 If no imputed parental genotypes are provided, a pedigree file is required, and the script will analyze
 samples with siblings and/or both parents genotyped by default.  
 
+**Usage**
+
+    ``gwas.py phenotype.txt --bed chr_@ --imp chr_@ --chr_range 1 --cpus 1 --out chr_@_young``
+
 Args:
 @parser@
 
 Results:
-    sumstats.gz
-        For each chromosome, a gzipped text file containing the SNP level summary statistics. 
+    ``OUT.sumstats.gz``, ``OUT.sumstats.hdf5``
+        Per-chromosome SNP summary statistics in text and HDF5 formats. Use ``--no_hdf5_out`` to write only the text file.
         
 """
 import argparse
@@ -44,8 +48,8 @@ parser.add_argument('--vc_list', type=float, nargs='+', default=None, help='Pass
 parser.add_argument('--no_sib_var', action='store_true', default=False, help='Do not fit sibling variance component. Not recommended for family-GWAS.')
 parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysis (No header).')
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
-parser.add_argument('--threads',type=int,help='Number of threads to use per CPU. Uses all available by default.',default=1)
-parser.add_argument('--batch_size',type=int,help='Maximum number of SNPs to use per-batch, one batch per CPU. Smaller batch_size decreases memory usage.',default=None)
+parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.',default=1)
+parser.add_argument('--batch_size',type=int,help='Maximum SNPs per batch. For analyses using imputed parents, batches contain matched observed and imputed SNPs. Smaller batches use less memory.',default=None)
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 

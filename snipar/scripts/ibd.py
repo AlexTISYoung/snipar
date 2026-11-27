@@ -5,6 +5,10 @@ Minimally: the script requires observed sibling genotypes in either .bed or .bge
 on the relations present in the dataset, which can be provided using a pedigree file or the results
 of KING kinship inference along with age and sex information (from which a pedigree can be constructed).
 
+**Usage**
+
+    ``ibd.py --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4 --ld_out``
+
 Args:
 @parser@
 
@@ -44,11 +48,11 @@ parser.add_argument('--pedigree',
                     type=str,
                     default=None,
                     help='Address of pedigree file')
-parser.add_argument('--map',type=str,default=None)
+parser.add_argument('--map', type=str, help='Path to a SHAPEIT-format genetic map with pposition and gposition columns.')
 parser.add_argument('--out',
                     type=str,
                     default = 'ibd',
-                    help="The IBD segments will output to this path, one file for each chromosome. If the path contains '#', the '#' will be replaced with the chromosome number. Otherwise, the segments will be output to the given path with file names chr_1.ibd.segments.gz, chr_2.segments.gz, etc.")
+                    help="Output prefix for per-chromosome IBD segments. An @ in the prefix is replaced with the chromosome number.")
 parser.add_argument('--p_error',type=float,help='Probability of genotyping error. By default, this is estimated from genotyped parent-offspring pairs.',default=None)
 parser.add_argument('--min_length',type=float,help='Smooth segments with length less than min_length (cM)',
                     default=0.01)

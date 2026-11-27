@@ -154,24 +154,28 @@ Other fixed effects follow the same ``MODEL.TERM`` naming convention.
      - Sampling covariance matrices for all fixed effects.
    * - ``.1_2.cross_vcov.txt``
      - Cross-model sampling covariance, with one-generation terms as rows and two-generation terms as columns.
-   * - ``.direct_population.vcov.txt``
-     - Two-by-two sampling covariance matrix for the population and direct proband coefficients.
-   * - ``.1.model_vcov.txt``, ``.2.model_vcov.txt``
-     - Model-based ``lme4::vcov`` matrices for comparison with the primary sampling covariance estimates.
    * - ``.model_info.tsv``
-     - Phenotype, sample and case/control counts, exclusions, score scale, family counts, random-intercept SD, boundary indicator, convergence and likelihood diagnostics, and ``ratio_status`` and ``ratio_method`` for both models.
+     - Family random-intercept variance and SE, random-intercept SD, boundary indicator, phenotype, sample counts and exclusions, score scale, convergence and likelihood diagnostics, and ``ratio_status`` and ``ratio_method`` for both models.
 
 In ``.model_info.tsv``, ``n`` and ``n_families`` count the shared
-complete-case individuals and families. ``ratio_method`` is
-``Laplace_family_cluster_sandwich_delta``. The rows and columns of
-``.direct_population.vcov.txt`` are ordered ``population``, then ``direct``.
+complete-case individuals and families. The script prints each model's
+``random_intercept_variance`` and ``random_intercept_variance_se``.
+The variance measures how much families' baseline log odds differ after
+accounting for the fitted scores and covariates. Its units are squared log
+odds. The family-cluster delta-method SE is ``NA`` at the boundary
+(estimated SD at most ``1e-4``), where the usual approximation breaks down.
+
+The ``ratio_method`` label is ``Laplace_family_cluster_sandwich_delta``.
+To form the two-by-two covariance matrix for the population and direct
+coefficients, use the ``proband`` row and ``proband`` column entry from each
+file. The one- and two-generation covariance files give the corresponding
+diagonal entries and the cross-model file gives the shared off-diagonal entry.
 
 Tables are tab-delimited with headers and use ``NA`` for missing results.
 Covariance matrices label both rows and columns. The primary coefficient
 SEs, within-model and cross-model covariance matrices, and ratio SE all use
 the same family-cluster sandwich calculation with a :math:`G/(G-1)`
-correction for :math:`G` families. The ``.model_vcov.txt`` files provide a
-separate model-based comparison and are not used to compute the ratio SE.
+correction for :math:`G` families.
 
 .. _binary_pgs_ratio:
 

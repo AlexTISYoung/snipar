@@ -46,11 +46,6 @@ FID, IID, FATHER_ID, MOTHER_ID, SEX, PHENO, FATHER_PHENO, MOTHER_PHENO, DIRECT, 
 The FID and IID columns are the family and individual IDs, respectively. The FATHER_ID and MOTHER_ID columns are the IDs of the parents of the individual.
 The FATHER_PHENO and MOTHER_PHENO columns are the phenotype values of the parents, and the DIRECT, FATHER_DIRECT, and MOTHER_DIRECT columns are the direct genetic effect components of the individual, father, and mother, respectively.
 
-For simulations produced by version 0.0.23 or earlier with indirect genetic effects, you can recover parental phenotypes for recorded parents by matching ``FATHER_ID`` and ``MOTHER_ID`` to ``IID`` and reading ``PHENO`` from those rows.
-The FIDs follow the format ``generation_family``, and the IIDs follow the format ``generation_family_individual``.
-So if you look at the end of pedigree.txt (e.g. using ``tail pedigree.txt``), you should see
-the FID of the last line as ``21_2999``, and the IID of the last line as ``21_2999_1``.
-
 To enable analysis of the final generation phenotypes alone, we have placed the phenotype values for the final generation in a separate file (phenotype.txt). 
 
 We have also included a file (last_gen_rel.seg) that records the sibling and cousin relationships in the final generation to give an example of how a sparse genetic relatedness matrix, a :ref:`GRM <GRM>`,
@@ -216,9 +211,9 @@ accounting for their sampling covariance. Inspect the estimates with:
 
 Check the ratio status printed in the terminal before interpreting it. In particular,
 ``weak_denominator`` means that the population coefficient is close to zero and the
-delta-method standard error can be unreliable. The additional files direct.1_2.cross_vcov.txt and
-direct.direct_population.vcov.txt contain the cross-model and population/direct covariance
-matrices. See :ref:`direct/population ratio output <pgs_ratio>` for the complete output
+delta-method standard error can be unreliable. The ``proband`` row and ``proband``
+column of ``direct.1_2.cross_vcov.txt`` give the covariance between the population
+and direct estimates. See :ref:`direct/population ratio output <pgs_ratio>` for the complete output
 and status descriptions.
 
 As we are using the true direct effects as weights, the PGS captures all of the heritability,
@@ -363,7 +358,7 @@ in ``last_gen_rel.seg`` are not modelled by this binary analysis.
 
 You can reuse direct_v1.pgs.txt with a separate binary phenotype file containing
 columns ``FID IID case_status``, where ``case_status`` is coded 0 or 1. Both
-values must occur in the analysis sample. For this demonstration, create an
+values must occur in the analysis sample. For this demonstration, create a
 binary phenotype file by splitting the simulated continuous phenotype at its
 median.
 
@@ -377,7 +372,10 @@ With R and the R package ``lme4`` installed, run the installed ``pgs.R`` command
 ``direct_v1_binary.effects.txt`` collects all estimates in columns
 ``statistic``, ``est``, and ``SE``. The ``direct_population_ratio`` row divides
 the ``2.proband`` log-odds coefficient by the ``1.proband`` log-odds coefficient.
-The ``2.parental`` row gives the combined parental-score coefficient.
+The ``2.parental`` row gives the combined parental-score coefficient. The
+terminal also shows the estimated family random-intercept variance and its
+SE for each model. A larger variance means more variation across families
+in baseline log odds after accounting for the fitted scores.
 See :doc:`pgs_binary` for installation, input formats, diagnostics,
 and guidance on interpreting the ratio.
 
@@ -387,11 +385,11 @@ Simulating stabilizing selection
 --------------------------------
 
 Breeders whose phenotypes are closer to a fixed optimum have a higher chance
-of surviving to reproduce. To try this with 100 independent causal SNPs, run
+of surviving to reproduce. To try this with 100 unlinked causal SNPs, run
 
     ``mkdir -p sim_stabilizing``
 
-    ``simulate.py 100 0.5 sim_stabilizing/ --nfam 200 --n_stabilizing 3 --selection_variance 2 --save_par_gts``
+    ``simulate.py 100 0.5 sim_stabilizing/ --nfam 1500 --n_stabilizing 3 --selection_variance 0.25 --save_par_gts``
 
 The positional arguments give the number of causal SNPs, the initial
 heritability due to direct effects (0.5), and the output prefix. The trailing
@@ -406,13 +404,13 @@ siblings per family, measured before selection on their own phenotypes.
   at zero.
 * ``--selection_optimum`` sets the favoured phenotype relative to the initial
   mean genetic value. It defaults to zero and stays fixed across generations.
-* ``--selection_variance 2`` sets the width of the survival curve in squared
-  phenotype units. Smaller positive values give stronger selection. At 2, a
-  candidate two phenotype units from the optimum has about a 37% chance of
+* ``--selection_variance 0.25`` sets the width of the survival curve in squared
+  phenotype units. Smaller positive values give stronger selection. At 0.25, a
+  candidate one phenotype unit from the optimum has about a 14% chance of
   surviving, compared with 100% at the optimum.
-* ``--nfam 200`` requests 200 final families. ``--selection_nfam`` sets the
+* ``--nfam 1500`` requests 1,500 final families. ``--selection_nfam`` sets the
   initial number of candidates of each sex (default four times ``--nfam``,
-  or 800 here). Increase the pool if too few survive. With phased BGEN input
+  or 6,000 here). Increase the pool if too few survive. With phased BGEN input
   (for example, ``--bgen phased_chr_@ --chr_range 1``), the haplotypes determine
   the pool size, so omit ``--selection_nfam``. SNP positions must use GRCh38
   coordinates covered by the bundled deCODE map. The simulator drops unmapped SNPs.
@@ -422,7 +420,7 @@ siblings per family, measured before selection on their own phenotypes.
 * ``--save_par_gts`` adds the final parental generation's PLINK files to the
   offspring genotypes saved by default.
 
-Open ``sim_stabilizing/phenotype.txt`` for the 400 offspring phenotypes.
+Open ``sim_stabilizing/phenotype.txt`` for the 3,000 offspring phenotypes.
 In ``selection_metadata.json``, compare ``phenotypic_variance`` before and
 after selection within each generation to see how the survivors differ from
 the candidate pool. ``VCs.txt`` reports genetic and phenotypic variance in
@@ -435,4 +433,58 @@ variances will vary.
 
     ``mkdir -p sim_neutral``
 
-    ``simulate.py 100 0.5 sim_neutral/ --nfam 200 --n_stabilizing 3 --selection_variance inf --save_par_gts``
+    ``simulate.py 100 0.5 sim_neutral/ --nfam 1500 --n_stabilizing 3 --selection_variance inf --save_par_gts``
+
+Family GWAS in the final generation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Begin in the selected population. PLINK combines the observed offspring and
+parental genotypes. The pedigree then links each phenotyped offspring to both
+parents. The relatedness file lets the GWAS account for siblings in the sample.
+
+    ``cd sim_stabilizing``
+
+    ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
+
+    ``gwas.py phenotype.txt --bed chr_@_combined --pedigree pedigree.txt --grm last_gen_rel.seg --out trio_@ --cpus 1``
+
+The GWAS writes direct, paternal and maternal effect estimates to
+``trio_1.sumstats.gz``. Use these estimates to compare direct and population
+effects across SNPs. The simulated loci are unlinked, so give them equal
+weight with ``--ld-weight none``. With 100 loci and 20 jackknife blocks, each
+jackknife fit drops about five SNPs to estimate uncertainty.
+
+    ``correlate.py trio_@ effects --ld-weight none --n_blocks 20``
+
+    ``awk 'NR == 1 || $1 == "r_direct_population" || $1 == "r_direct_avg_NTC" || $1 == "sqrt_var_ratio_population_direct"' effects_corrs.txt``
+
+Move to the neutral control and repeat the four commands from ``plink``
+through ``awk``. Each directory will then contain its own ``effects_corrs.txt``.
+
+    ``cd ../sim_neutral``
+
+Interpreting the comparison
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Read ``sqrt_var_ratio_population_direct`` first. It is the standard
+deviation of population effects divided by that of direct effects. In one
+run the ratio was 0.78 under selection (SE 0.02) and 1.01 in the neutral
+control (SE 0.03). A ratio below one means that population GWAS effects
+vary less across SNPs than direct effects. Their directions can still agree
+closely, as measured by ``r_direct_population``.
+
+Stabilizing selection favours combinations of alleles whose effects offset
+one another. In this simulation it can generate a negative correlation between
+direct effects and the average non-transmitted coefficient
+(``r_direct_avg_NTC``), even though the phenotype has only direct genetic
+and environmental components. In the neutral control the true non-transmitted
+component has zero variance, so its estimated correlation can fluctuate widely
+or be undefined. See ``effects_diagnostics.json`` for boundary warnings when
+interpreting jackknife SEs.
+
+The larger simulations in the revised analysis by Tan et al. used 20
+generations and five replicates. The mean population-to-direct SD ratio was
+0.756 under strong stabilizing selection and 1.004 in the neutral control.
+The smaller exercise illustrates the same comparison. Each simulation draws
+a new sample, so your estimates will vary. See the
+`Tan et al. preprint and version history <https://doi.org/10.1101/2024.10.01.24314703>`_.

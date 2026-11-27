@@ -80,12 +80,11 @@ def test_ratio_api_writes_both_models_once_and_preserves_covariances(tmp_path):
             np.testing.assert_equal(float(row['SE']), np.sqrt(fit['alpha'][1][index,index]))
     np.testing.assert_equal(float(rows['direct_population_ratio']['est']), result['ratio'])
     np.testing.assert_equal(float(rows['direct_population_ratio']['SE']), result['se'])
-    joint = np.loadtxt(str(prefix)+'.direct_population.vcov.txt', dtype=str, delimiter='\t')
-    assert list(joint[0]) == ['term', 'population', 'direct']
-    np.testing.assert_allclose(joint[1:, 1:].astype(float),
-                               [[result['population_se']**2, result['covariance']],
-                                [result['covariance'], result['direct_se']**2]])
-    assert Path(str(prefix)+'.1_2.cross_vcov.txt').is_file()
+    cross = np.loadtxt(str(prefix)+'.1_2.cross_vcov.txt', dtype=str, delimiter='\t')
+    assert list(cross[0, 1:]) == list(fit2['cols'])
+    assert list(cross[1:, 0]) == list(fit1['cols'])
+    np.testing.assert_allclose(cross[1:, 1:].astype(float), pgs.pgs_model_cross_covariance(fit1, fit2))
+    assert not Path(str(prefix)+'.direct_population.vcov.txt').exists()
     for suffix in ('.1.effects.txt', '.2.effects.txt', '.direct_population_ratio.txt'):
         assert not Path(str(prefix)+suffix).exists()
 
@@ -193,7 +192,7 @@ def test_cli_default_and_selected_generations_share_one_table(tmp_path, inputs, 
         np.testing.assert_allclose(float(rows['direct_population_ratio']['est']),
                                    float(rows['2.proband']['est'])/float(rows['1.proband']['est']))
         assert Path(str(prefix)+'.1_2.cross_vcov.txt').is_file()
-        assert Path(str(prefix)+'.direct_population.vcov.txt').is_file()
+        assert not Path(str(prefix)+'.direct_population.vcov.txt').exists()
     if adjusted:
         expected += ['am_adj.'+name for name in
                      ['delta','alpha','rk','k','r','h2_eq','rho','alpha_delta','v_eta_delta']]

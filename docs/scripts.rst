@@ -4,6 +4,12 @@
 Command Line Scripts
 ====================
 
+.. _snipar_example_data.py:
+
+snipar_example_data.py
+----------------------
+.. automodule:: snipar.example.snipar_example_data
+
 ibd.py
 ------
 .. _ibd.py:
@@ -23,9 +29,9 @@ pgs.py
 -------
 .. _pgs.py:
 
-For examples and an explanation of the results, see :doc:`pgs`.
-
 .. automodule:: snipar.scripts.pgs
+
+For examples and an explanation of the results, see :doc:`pgs`.
 
 pgs.R
 -----
@@ -34,6 +40,8 @@ pgs.R
 Fits one- and two-generation logistic mixed models for a binary phenotype using
 precomputed PGSs and a family random intercept. Both models use the same
 individuals. The script requires R and ``lme4``.
+
+**Usage**
 
     ``pgs.R trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status``
 
@@ -97,8 +105,7 @@ Results:
         the population log-odds coefficient and ``2.proband`` is the direct
         log-odds coefficient. The ``direct_population_ratio`` row divides the
         latter by the former, with its delta-method standard error. Standard
-        errors account for clustering within families. Separate per-model
-        effect and ratio estimate files are not written.
+        errors account for clustering within families.
 
     ``OUT.1.vcov.txt``, ``OUT.2.vcov.txt``
         Family-cluster sandwich covariance matrices for the fixed effects of
@@ -108,18 +115,14 @@ Results:
         Sampling covariance between models, with one-generation terms in rows
         and two-generation terms in columns.
 
-    ``OUT.direct_population.vcov.txt``
-        Joint sampling covariance matrix for the population and direct proband
-        coefficients, in that order. It is used to calculate the ratio standard error.
-
-    ``OUT.1.model_vcov.txt``, ``OUT.2.model_vcov.txt``
-        Model-based fixed-effect covariance matrices from ``lme4``, provided for comparison.
-
     ``OUT.model_info.tsv``
         Fit diagnostics for each model, including case and control counts,
-        family count, score scaling, convergence, and random-intercept standard deviation.
-        ``ratio_status`` and ``ratio_method`` record the paired ratio's diagnostic
-        status and method; check ``ratio_status`` before interpreting it.
+        family count, score scaling and convergence. The script also prints each
+        model's between-family random-intercept variance (squared log-odds units)
+        and its family-cluster standard error. These appear here as
+        ``random_intercept_variance`` and ``random_intercept_variance_se``.
+        A boundary fit has an unavailable variance SE (``NA``).
+        Check ``ratio_status`` and ``ratio_method`` when interpreting the ratio.
 
 For example input files and guidance on interpreting the ratio, see :doc:`pgs_binary`.
 
@@ -130,6 +133,8 @@ correlate.py
 Estimates the variances and covariances of family-GWAS effects across SNPs,
 accounting for their sampling covariance. Population effects are reconstructed
 as direct effects plus average non-transmitted coefficients (NTCs).
+
+**Usage**
 
     ``correlate.py chr_@_young effect --ldscores chr_@ --save_delete``
 
@@ -242,6 +247,6 @@ simulate.py
 ------------
 .. _simulate.py:
 
-For a worked example with a neutral control, see :ref:`stabilizing_selection_tutorial`.
-
 .. automodule:: snipar.scripts.simulate
+
+For a worked example with a neutral control, see :ref:`stabilizing_selection_tutorial`.

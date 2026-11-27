@@ -5,6 +5,8 @@ import pandas as pd
 from os import path
 from typing import Tuple
 
+from snipar.docgen import get_parser_doc
+
 def make_id_dict(x,col=0):
     """
     Make a dictionary that maps from the values in the given column (col) to their row-index in the input array
@@ -120,30 +122,6 @@ def linear2coord(ind: int) -> Tuple[int, int]:
     ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
     ind2 = ind - (ind1 - 1) * ind1 / 2
     return int(ind1 - 1), int(ind2 - 1)
-
-def get_parser_doc(parser):
-    doc = ""
-    for action in parser._actions:
-        options = str(action.option_strings)[1:-1]
-        default = action.default
-        type = ""
-        if action.type:
-            if "'" in str(action.type):
-                type = str(action.type).split("'")[1]
-        
-        help = action.help
-        default_substring = ""
-        if default:
-            default_substring = f", default={default}"
-        
-        arg_doc = f"""    {options} : {type}{default_substring}
-            {help}
-
-"""
-        doc += arg_doc
-    
-    return doc
-
 
 def read_oxford_sample(filename):
     """Read individual IDs, preserving leading zeros and skipping the column-type row."""

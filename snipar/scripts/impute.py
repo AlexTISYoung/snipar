@@ -2,14 +2,18 @@
 """
 This script performs imputation of missing parental genotypes from observed genotypes in a family. 
 It can impute missing parents from families with no genotyped parents but at least two genotyped siblings, or one genotyped parent and one or more genotyped offspring. 
-To specify the siblings, one can either provide a pedigree file (--pedigree option) or
-the relatedness inference output from KING with the --related --degree 1 options along with age and sex information.
+To specify the siblings, one can either provide a pedigree file (``--pedigree`` option) or
+the relatedness inference output from KING with the ``--related`` ``--degree 1`` options along with age and sex information.
 
 The pedigree file is a plain text file with header and columns: FID (family ID), IID (individual ID), FATHER_ID (ID of father), MOTHER_ID (ID of mother).
 Note that individuals are assumed to have unique individual IDS (IID). Siblings are identified through individuals that have the same FID and the same FATHER_ID and MOTHER_ID.
 
-Use the --king option to provide the KING relatedness inference output (usually has suffix .kin0) and the --agesex option to provide the age & sex information. The script
+Use the ``--king`` option to provide the KING relatedness inference output (usually has suffix .kin0) and the ``--agesex`` option to provide the age & sex information. The script
 constructs a pedigree from this information and outputs it in the HDF5 output.
+
+**Usage**
+
+    ``impute.py --ibd chr_@.ibd --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4``
 
 Args:
 @parser@
@@ -379,7 +383,7 @@ parser.add_argument('--pedigree',
 parser.add_argument('--king',
                     type=str,
                     default = None,
-                    help="""Address of a kinship file in KING format. kinship file is a '\t' separated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+                    help="""Address of a kinship file in KING format. The tab-delimited file has columns "FID1", "ID1", "FID2", "ID2", and "InfType".
             Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
             The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
             This file is used in creating a pedigree file and can be generated using KING.""")

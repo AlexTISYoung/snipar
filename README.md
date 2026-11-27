@@ -87,7 +87,7 @@ For a binary trait, use a phenotype column coded 0/1. The installed `pgs.R` comm
 
 > `pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status`
 
-Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, with columns `statistic`, `est`, and `SE`. The `1.proband` and `2.proband` rows give the population and direct coefficients. The `direct_population_ratio` row gives the direct coefficient divided by the population coefficient on the same sample, with its standard error. For `pgs.R`, these coefficients are on the log-odds scale. Covariance matrices are available in separate files. See the [quantitative-trait guide](https://snipar.readthedocs.io/en/latest/pgs.html) and [binary-trait guide](https://snipar.readthedocs.io/en/latest/pgs_binary.html).
+Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, with columns `statistic`, `est`, and `SE`. The `1.proband` and `2.proband` rows give the population and direct coefficients. The `direct_population_ratio` row gives the direct coefficient divided by the population coefficient on the same sample, with its standard error. For `pgs.R`, these coefficients are on the log-odds scale. It also prints each model's family random-intercept variance and standard error and saves them in `PREFIX.model_info.tsv`. Per-model and cross-model covariance matrices are available in separate files. See the [quantitative-trait guide](https://snipar.readthedocs.io/en/latest/pgs.html) and [binary-trait guide](https://snipar.readthedocs.io/en/latest/pgs_binary.html).
 
 # Installing Using pip
 

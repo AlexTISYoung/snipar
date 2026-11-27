@@ -196,6 +196,8 @@ class gtarray(object):
             self.map = self.map[filter_pass]
         if self.error_probs is not None:
             self.error_probs = self.error_probs[filter_pass]
+        if self.num_obs_par_al is not None:
+            self.num_obs_par_al = self.num_obs_par_al[:, filter_pass]
         if self.standard_f is not None:
             self.standard_f = self.standard_f[filter_pass]
 
@@ -262,6 +264,8 @@ class gtarray(object):
                 self.fams = self.fams[indices]
             if self.par_status is not None:
                 self.par_status = self.par_status[indices, :]
+            if self.num_obs_par_al is not None:
+                self.num_obs_par_al = self.num_obs_par_al[indices, :]
 
     def mean_normalise(self):
         """

@@ -102,9 +102,7 @@ With output prefix `results/trait`, the script writes:
 | `.effects.txt` | All fixed effects and the direct/population ratio, with columns `statistic`, `est`, and `SE`. |
 | `.1.vcov.txt`, `.2.vcov.txt` | Labeled sampling covariance matrices for all fixed effects. |
 | `.1_2.cross_vcov.txt` | Sampling covariance between models, with one-generation rows and two-generation columns. |
-| `.direct_population.vcov.txt` | The two-by-two sampling covariance matrix for the population and direct proband coefficients. |
-| `.1.model_vcov.txt`, `.2.model_vcov.txt` | Model-based `lme4::vcov` matrices, provided separately for comparison. |
-| `.model_info.tsv` | Model, sample, convergence, and likelihood diagnostics, plus `ratio_status` and `ratio_method`. |
+| `.model_info.tsv` | Family random-intercept variance and SE, random-intercept SD, boundary indicator, sample counts, convergence and likelihood diagnostics, plus `ratio_status` and `ratio_method`. |
 
 The tab-separated `.effects.txt` table names coefficients `1.TERM` and
 `2.TERM`: `1.proband` is the population effect and `2.proband` is the direct
@@ -113,8 +111,18 @@ effect. `direct_population_ratio` gives their ratio, with its estimate in
 model-prefixed naming convention.
 
 Counts in `.model_info.tsv` refer to the shared complete-case sample.
-The `ratio_method` label is `Laplace_family_cluster_sandwich_delta`. The
-population/direct covariance matrix orders both axes as `population`, `direct`.
+The script prints each model's estimated family random-intercept variance and
+its SE. The `random_intercept_variance` column measures how much families'
+baseline log odds differ after accounting for the fitted scores and covariates.
+Its units are squared log odds. The family-cluster delta-method SE is stored in
+`random_intercept_variance_se`. It is `NA` at the boundary (estimated SD at
+most `1e-4`), where the usual SE approximation breaks down.
+
+The `ratio_method` label is `Laplace_family_cluster_sandwich_delta`. To form
+the two-by-two covariance matrix of the population and direct coefficients,
+take the `proband` row and `proband` column entry from each file. The
+one- and two-generation covariance files give the corresponding diagonal
+entries and the cross-model file gives the shared off-diagonal entry.
 
 Tables have headers. Covariance matrices label their rows and columns. The
 primary effect SEs, marginal covariance matrices, cross-model covariance, and
@@ -133,8 +141,7 @@ The joint sampling covariance comes from stacked family contributions to the
 Laplace likelihood. It includes the random-intercept SD as an estimated
 nuisance parameter for interior fits; at the zero-SD boundary it uses the
 fixed-effect block. A delta-method calculation then accounts for covariance
-between the direct and population coefficient estimates. The separately saved
-model-based covariance matrices are not used for that calculation.
+between the direct and population coefficient estimates.
 
 A zero population coefficient gives an undefined ratio and SE. A population
 coefficient within 1.96 sandwich SEs of zero is flagged as weak, because the

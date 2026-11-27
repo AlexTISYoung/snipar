@@ -755,7 +755,7 @@ def direct_population_ratio(population_fit, direct_fit, outprefix=None, write_ef
     covariance. A weak denominator is flagged because the delta approximation
     can be inaccurate near zero. Substantially non-positive-semidefinite
     fitted covariance estimates are flagged and produce an undefined SE.
-    With outprefix, writes cross/joint covariance files and one effects table
+    With outprefix, writes the cross-model covariance matrix and one effects table
     containing both models and the ratio, unless write_effects is False.
     """
     cross = pgs_model_cross_covariance(population_fit, direct_fit)
@@ -800,9 +800,6 @@ def direct_population_ratio(population_fit, direct_fit, outprefix=None, write_ef
             np.hstack((['term'], direct_fit['cols'])),
             np.column_stack((population_fit['cols'], cross))))
         np.savetxt(outprefix + '.1_2.cross_vcov.txt', cross_out, fmt='%s', delimiter='\t')
-        joint_out = np.vstack((['term', 'population', 'direct'],
-                               np.column_stack((['population', 'direct'], joint))))
-        np.savetxt(outprefix + '.direct_population.vcov.txt', joint_out, fmt='%s', delimiter='\t')
         if write_effects:
             write_pgs_effects(outprefix, {
                 1: (population_fit['alpha'], population_fit['cols']),

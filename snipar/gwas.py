@@ -4,6 +4,7 @@ import pandas as pd
 from pysnptools.snpreader import Bed
 from scipy.stats import chi2
 import snipar.read as read
+from snipar.read.variants import MatchedVariants, bgen_variant_ids, match_variants
 import snipar.slmm as slmm
 from snipar.gtarray import impute_missing, impute_unrel_par_gts
 from snipar.utilities import *
@@ -265,10 +266,14 @@ def _init_worker(y_, n_vararr_, varcomps_, covar_, covar_shape, **kwargs):
     # _var_dict['ped_shape'] = ped_shape
 
 
-def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
+def process_batch(snp_ids, ped, n_vararr, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
                   parsum=False, fit_sib=False, sib_diff=False, max_missing=5, min_maf=0.01, verbose=False, 
                   print_sample_info=False, impute_unrel=False, standard_gwas=False, robust=False, trios_sibs=False,
                   add_jitter=False):
+    """Fit a batch given SNP IDs or their precomputed observed/imputed alignment."""
+    matched_variants = None
+    if isinstance(snp_ids, MatchedVariants):
+        matched_variants, snp_ids = snp_ids, None
     y = np.frombuffer(_var_dict['y_'], dtype='float')
     varcomps = _var_dict['varcomps_']
     # no need to provide residual var arr
@@ -288,7 +293,7 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
     G = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
                             ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=sib_diff,
                             include_unrel=impute_unrel, robust=robust, trios_sibs=trios_sibs,
-                            verbose=False, print_sample_info=print_sample_info)
+                            verbose=False, print_sample_info=print_sample_info, matched_variants=matched_variants)
     if G.ids.shape[0] > pheno_ids.shape[0]:
         G.filter_ids(pheno_ids)
     # Check for empty fam labels
@@ -314,6 +319,8 @@ def process_batch(snp_ids, ped,  n_vararr, imp_fams, pheno_ids=None, bedfile=Non
     if verbose:
         # logger.info(str(G.shape[2])+' SNPs that pass filters')
         print(str(G.shape[2])+' SNPs that pass filters')
+    if G.sid.size == 0:
+        return G.freqs, G.sid, None, None, None
     #### Fill NAs ####
     if verbose:
         # logger.info('Imputing missing values with population frequencies')
@@ -390,20 +397,18 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
     if bedfile is not None and bgenfile is not None:
         raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
+    aliases = None
     if bedfile is not None:
         bed = Bed(bedfile,count_A1 = True)
         gts_id_dict = make_id_dict(bed.iid,1)
         snp_ids = bed.sid
         pos = np.array(bed.pos[:,2],dtype=int)
-        alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5))
+        alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5),ndmin=2)
         chrom = np.array(bed.pos[:,0],dtype=int)
     elif bgenfile is not None:
         bgen = open_bgen(bgenfile, verbose=False)
         gts_id_dict = make_id_dict(bgen.samples)
-        snp_ids = bgen.ids
-        # If SNP IDs are broken, try rsids
-        if np.unique(snp_ids).shape[0] == 1:
-            snp_ids = bgen.rsids
+        snp_ids, aliases = bgen_variant_ids(bgen)
         pos = np.array(bgen.positions,dtype=int)
         alleles = np.array([x.split(',') for x in bgen.allele_ids])
         chrom = np.array(bgen.chromosomes,dtype='U2')
@@ -422,6 +427,17 @@ def process_chromosome(chrom_out, y, varcomp_lst,
             print('WARNING: less than 100 individuals with observed parental genotypes. If the total sample size is small, consider using the --parsum argument to prevent issues due to collinearity.')
     ####### Compute batches #######
     print('Found '+str(snp_ids.shape[0])+' SNPs')
+    # Align to original file columns before removing duplicate observed IDs from the output.
+    matched = None
+    if par_gts_f is not None and not sib_diff:
+        with h5py.File(par_gts_f, 'r') as imputation:
+            try:
+                matched = match_variants(snp_ids, chrom, pos, alleles, imputation, aliases=aliases)
+            except ValueError as error:
+                label = chrom_out or ','.join(np.unique(chrom).astype(str))
+                location = f'chromosome {label}, ' if label and label != '0' else ''
+                raise ValueError(f'{error} ({location}{bedfile or bgenfile}, {par_gts_f})') from error
+        print(f'Matched {matched.sid.size} SNPs between observed and imputed genotypes')
     # Remove duplicates
     unique_snps, counts = np.unique(snp_ids, return_counts=True)
     non_duplicate = set(unique_snps[counts==1])
@@ -458,7 +474,10 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         4                              # freqs
     )
     # Compute batches
-    batches = split_batches(snp_ids.shape[0], cpus, batch_size=batch_size)
+    if matched is None:
+        batches = [snp_ids[idx] for idx in split_batches(snp_ids.size, cpus, batch_size)]
+    else:
+        batches = [matched.subset(idx) for idx in split_batches(matched.sid.size, cpus, batch_size)]
     if len(batches) == 1:
         # logger.info('Using 1 batch')
         print('Using 1 batch')
@@ -521,7 +540,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
     if debug:
         _init_worker_(y_, len(varcomp_lst), varcomps_, covar_, covar_shape,) # ped_, ped_shape)
         # batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(np.array(['rs115317704']))
-        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(snp_ids[batches[0]])
+        batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses = process_batch_(batches[0])
         exit('Debug finishsed.')
     import time
     start = time.time()
@@ -530,8 +549,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         initializer=_init_worker_,
         initargs=(y_, len(varcomp_lst), varcomps_, covar_, covar_shape,) # ped_, ped_shape)
     ) as pool:
-        result = pool.map(
-            process_batch_, [snp_ids[ind] for ind in batches], chunksize=1)
+        result = pool.map(process_batch_, batches, chunksize=1)
     
     for i in range(0, len(result)):
         batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses \

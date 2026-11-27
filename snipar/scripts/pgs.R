@@ -103,6 +103,12 @@ logistic_family_influence <- function(fit, term = "proband") {
              max(abs(scaled_score)))
     }
     scores <- sweep(scores, 2L, colMeans(scores), FUN = "-")
+    variance_se <- NA_real_
+    if (!boundary) {
+        # theta is the family random-intercept SD; d(theta^2)/d(theta) = 2*theta.
+        variance_influence <- 2 * as.numeric(theta) * (scores %*% inverse_information[, 1L])
+        variance_se <- sqrt(sum(variance_influence^2) * n_families / (n_families - 1L))
+    }
     influences <- scores %*% inverse_information[, coefficient_indices, drop = FALSE]
     dimnames(influences) <- list(levels(group), colnames(X))
     influence <- influences[, term]
@@ -119,6 +125,8 @@ logistic_family_influence <- function(fit, term = "proband") {
         diagnostics = data.frame(
             n_families = n_families,
             random_intercept_sd = as.numeric(theta),
+            random_intercept_variance = as.numeric(theta)^2,
+            random_intercept_variance_se = variance_se,
             boundary = boundary,
             laplace_loglik = sum(loglik),
             lme4_loglik = fitted_loglik,
@@ -224,7 +232,9 @@ pgs_binary_usage <- function() {
         "is required. Coefficients are log odds; ratio is the 2-gen/1-gen\n",
         "proband coefficient ratio. All coefficients and the ratio are written\n",
         "to OUT.effects.txt with columns statistic, est, SE. Ratio status and\n",
-        "method are recorded in OUT.model_info.tsv. Sampling covariance files\n",
+        "method are recorded in OUT.model_info.tsv. Both models report the family\n",
+        "random-intercept variance and its SE on screen and in that table.\n",
+        "The per-model and cross-model sampling covariance files\n",
         "and the ratio SE use a family-cluster sandwich of Laplace scores (nAGQ=1).\n"
     ))
 }
@@ -465,7 +475,6 @@ pgs_binary_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
             SE = sqrt(diag(covariance)), stringsAsFactors = FALSE
         )
         write_pgs_binary_matrix(covariance, paste0(prefix, ".vcov.txt"))
-        write_pgs_binary_matrix(as.matrix(vcov(fit)), paste0(prefix, ".model_vcov.txt"))
     }
     effects <- rbind(effects[[1L]], effects[[2L]], data.frame(
         statistic = "direct_population_ratio", est = result$ratio$ratio,
@@ -474,7 +483,6 @@ pgs_binary_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
     write.table(effects, paste0(options$out, ".effects.txt"), sep = "\t",
                 row.names = FALSE, quote = FALSE, na = "NA")
     write_pgs_binary_matrix(result$cross_vcov, paste0(options$out, ".1_2.cross_vcov.txt"))
-    write_pgs_binary_matrix(result$joint_vcov, paste0(options$out, ".direct_population.vcov.txt"))
     diagnostics <- result$diagnostics
     diagnostics$ratio_status <- result$ratio$status
     diagnostics$ratio_method <- result$ratio$method
@@ -496,6 +504,9 @@ pgs_binary_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
                 row.names = FALSE, quote = FALSE, na = "NA")
     cat("Complete-case sample:", nrow(analysis), "individuals in", nlevels(analysis$FID),
         "families; excluded:", prepared$excluded_n, "\n")
+    cat("Estimated family random-intercept variance (squared log-odds units)\n")
+    print(diagnostics[c("generation", "random_intercept_variance",
+                        "random_intercept_variance_se", "boundary")], row.names = FALSE)
     cat("Direct/population PGS ratio:", result$ratio$ratio, "(SE", result$ratio$se,
         ");", result$ratio$status, "\n")
     cat("Estimates and standard errors:", paste0(options$out, ".effects.txt"), "\n")

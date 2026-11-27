@@ -3,11 +3,23 @@
 by direct genetic effects, indirect genetic effects (vertical transmission), assortative mating,
 or multigeneration Gaussian stabilizing selection on breeders.
 
+**Usage**
+
+    ``simulate.py 100 0.5 selected_ --nfam 200 --n_stabilizing 3 --selection_variance 2 --save_par_gts``
+
 Args:
 @parser@
 
 Results:
-    genotype data in .bed format; full pedigree including phenotype and genetic components for all generations
+    Genotypes and phenotypes
+        Final-generation genotypes in PLINK format and ``phenotype.txt`` with the offspring phenotypes.
+        With ``--save_par_gts``, the simulation also writes the parents’ PLINK files.
+
+    Pedigree and genetic effects
+        ``pedigree.txt`` records phenotypes and genetic components across generations.
+        ``causal_effects.txt`` contains the simulated locus effects.
+        With ``--n_stabilizing`` greater than zero, ``selection_metadata.json`` records the selection settings and outcomes.
+        All filenames begin with the chosen ``outprefix``.
         
 """
 import numpy as np

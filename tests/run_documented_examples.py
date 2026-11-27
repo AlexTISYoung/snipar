@@ -30,10 +30,10 @@ def table(path, **kwargs):
     return pd.read_csv(path, sep=r"\s+", **kwargs)
 
 
-def check_gwas(directory, names):
+def check_gwas(directory, names, n_snps=1000):
     for name in names:
         summary = table(directory / f"{name}.sumstats.gz")
-        assert len(summary) == 1000 and summary.SNP.is_unique, name
+        assert len(summary) == n_snps and summary.SNP.is_unique, name
         assert np.isfinite(summary.direct_Beta).all() and summary.direct_SE.gt(0).all(), name
         with h5py.File(directory / f"{name}.sumstats.hdf5") as h5:
             assert np.isfinite(h5["estimate"][:]).all(), name
@@ -51,12 +51,13 @@ def check_pgs(directory, prefix):
     for model in (1, 2):
         cov = table(directory / f"{prefix}.{model}.vcov.txt", index_col=0)
         np.testing.assert_allclose(np.diag(cov), effects.loc[[f"{model}.{t}" for t in cov.index], "SE"] ** 2)
-    assert (directory / f"{prefix}.1_2.cross_vcov.txt").is_file()
-    paired = table(directory / f"{prefix}.direct_population.vcov.txt", index_col=0)
+    cross = table(directory / f"{prefix}.1_2.cross_vcov.txt", index_col=0)
+    paired = np.diag(effects.loc[["1.proband", "2.proband"], "SE"] ** 2)
+    paired[0, 1] = paired[1, 0] = cross.loc["proband", "proband"]
     pop, direct = effects.loc[["1.proband", "2.proband"], "est"]
     gradient = np.array([-direct / pop**2, 1 / pop])
     np.testing.assert_allclose(effects.loc["direct_population_ratio"],
-                               [direct / pop, np.sqrt(gradient @ paired.values @ gradient)])
+                               [direct / pop, np.sqrt(gradient @ paired @ gradient)])
     return effects
 
 
@@ -64,6 +65,9 @@ def check_binary(directory, prefix, expected_counts):
     info = table(directory / f"{prefix}.model_info.tsv")
     assert len(info) == 2 and info.convergence.eq("OK").all() and info.ratio_status.eq("ok").all()
     assert (info[["n", "cases", "controls", "n_families"]].values == expected_counts).all()
+    np.testing.assert_allclose(info.random_intercept_variance, info.random_intercept_sd ** 2)
+    assert info.loc[~info.boundary, "random_intercept_variance_se"].gt(0).all()
+    assert info.loc[info.boundary, "random_intercept_variance_se"].isna().all()
 
 
 def tutorial(root):
@@ -114,7 +118,11 @@ def tutorial(root):
 
 def simulation(root):
     lines = commands("simulation.rst")
-    run(lines, root)
+    # The exercise asks readers to repeat the observed-trio analysis in the control directory.
+    selected = lines.index("cd sim_stabilizing")
+    neutral = lines.index("cd ../sim_neutral")
+    analysis = lines[selected + 1:neutral]
+    run(lines[:neutral + 1] + analysis + lines[neutral + 1:], root)
     sim = root / "sim"
     phenotypes = table(sim / "phenotype.txt")
     assert len(phenotypes) == 6000 and phenotypes.FID.nunique() == 3000
@@ -126,8 +134,27 @@ def simulation(root):
         folder = sim / name
         meta = json.loads((folder / "selection_metadata.json").read_text())
         assert meta.get("neutral_control", False) is neutral and meta["n_generations"] == 3
-        assert meta["selection_variance"] == (None if neutral else 2.0)
-        assert len(table(folder / "phenotype.txt")) == 400
+        assert meta["selection_variance"] == (None if neutral else 0.25)
+        offspring = table(folder / "phenotype.txt")
+        assert len(offspring) == 3000 and offspring.FID.nunique() == 1500
+        pedigree = table(folder / "pedigree.txt").set_index("IID").loc[offspring.IID]
+        combined_ids = set(table(folder / "chr_1_combined.fam", header=None)[1])
+        for relatives in (offspring.IID, pedigree.FATHER_ID, pedigree.MOTHER_ID):
+            assert set(relatives) <= combined_ids
+        check_gwas(folder, ["trio_1"], n_snps=100)
+        trio = table(folder / "trio_1.sumstats.gz")
+        for parent in ("paternal", "maternal"):
+            assert np.isfinite(trio[f"{parent}_Beta"]).all() and trio[f"{parent}_SE"].gt(0).all()
+        diagnostics = json.loads((folder / "effects_diagnostics.json").read_text())
+        assert diagnostics["input"]["mode"] == "parental" and diagnostics["input"]["ld_weight"] == "none"
+        assert diagnostics["converged"] and diagnostics["n_blocks"] == 20
+        assert 20 <= diagnostics["n_snps"] <= len(trio)
+        estimates = table(folder / "effects_corrs.txt", index_col=0)
+        ratio = estimates.loc["sqrt_var_ratio_population_direct"]
+        assert ratio.SE > 0 and np.isfinite(ratio.SE)
+        np.testing.assert_allclose(ratio.est, np.sqrt(estimates.loc["var_population", "est"] /
+                                                      estimates.loc["var_direct", "est"]))
+        assert "r_direct_avg_NTC" in estimates.index
         phases = {(row["generation"], row["phase"]): row for row in meta["history"]}
         for generation in range(3):
             before = phases[generation, "before_selection"]["n_individuals"]
@@ -136,7 +163,7 @@ def simulation(root):
                 assert after == before
             else:
                 assert 0 < after < before
-    return len(lines)
+    return len(lines) + len(analysis)
 
 
 if __name__ == "__main__":

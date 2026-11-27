@@ -6,26 +6,28 @@ and a SNP weights file. Alternatively, analyse a precomputed PGS file with a
 phenotype file. By default, one- and two-generation models use the same sample
 and report the direct/population coefficient ratio with its standard error.
 
+**Usage**
+
+    ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
+
 Args:
 @parser@
 
 Results:
-    PGS file
-        Output when inputting observed and imputed genotype files and a weights file. 
-        A file with PGS values for each individual and their parents, with suffix .pgs.txt.
-        Also includes sibling PGS if --fit_sib is specified, and grandparental PGS if --grandpar is specified.
-    PGS effect estimates
-        Output when inputting a phenotype file.
-        One .effects.txt table contains statistic, est, and SE columns for all requested models,
-        with generation-qualified coefficient names such as 1.proband and 2.proband.
-        Per-model .N.vcov.txt files contain the coefficient sampling covariance matrices.
-    Direct/population PGS ratio
-        When both 1- and 2-generation models are requested, fits them on the same complete cases
-        and includes direct_population_ratio and its delta-method SE in .effects.txt.
-        Optional assortative-mating-adjusted results use am_adj.<parameter> rows in that table.
-        .1_2.cross_vcov.txt contains covariance between models and .direct_population.vcov.txt
-        contains the joint population/direct proband covariance matrix.
-        
+    ``OUT.pgs.txt``
+        When computing scores, the table records each individual's PGS and their parents' scores.
+        It also includes sibling scores with ``--fit_sib`` and grandparental scores with ``--grandpar``.
+
+    ``OUT.effects.txt``
+        With a phenotype file, the columns ``statistic``, ``est``, and ``SE`` report the requested
+        models' coefficients, including ``1.proband`` and ``2.proband``. When both models are fitted,
+        ``direct_population_ratio`` gives their paired direct/population ratio and its delta-method SE.
+        Assortative-mating-adjusted estimates, when requested, use ``am_adj.<parameter>`` rows.
+
+    ``OUT.N.vcov.txt``, ``OUT.1_2.cross_vcov.txt``
+        Each fitted generation model ``N`` has a coefficient sampling covariance matrix. A paired
+        fit also writes the cross-model covariance, with one-generation terms in rows and
+        two-generation terms in columns.
 """
 import argparse
 import numpy as np
