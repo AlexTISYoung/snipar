@@ -105,7 +105,7 @@ To perform imputation from the phased .bgen file in example_data/, use the follo
 
     ``impute.py --ibd chr_@.ibd --bgen chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4``
 
-As with the ibd.py script, the impute_runner.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
+As with the ibd.py script, the impute.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
 Family-based GWAS with imputed parental genotypes
 -------------------------------------------------
@@ -144,8 +144,9 @@ Here's an example command invoking the robust estimator:
 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --cpus 1 --robust --out chr_@_robust``
 
-By default, the script outputs summary statistics in a :ref:`gzipped text file <sumstats_text>`: chr_1.sumstats.gz;
-In addition to the text summary statistics, :ref:`HDF5 format summary statistics <sumstats_hdf5>` are also output to chr_1.sumstats.hdf5.
+Without ``--out``, the script outputs summary statistics in a :ref:`gzipped text file <sumstats_text>` named
+``_chr_1.sumstats.gz`` and an :ref:`HDF5 file <sumstats_hdf5>` named ``_chr_1.sumstats.hdf5``
+(note the leading underscore). Use ``--out chr_@`` to write ``chr_1.sumstats.gz`` and ``chr_1.sumstats.hdf5`` instead.
 Alternatively, you can specify the output filename using the ``--out`` command: for example, with ``--out chr_@_X``, the script will
 output the results to chr_1_X.sumstats.gz and chr_1_X.sumstats.hdf5; if '@' is not in the output suffix, e.g., ``--out gwas``, the results will
 be stored in gwas_chr_1.sumstats.gz and gwas_chr_1.sumstats.hdf5.
