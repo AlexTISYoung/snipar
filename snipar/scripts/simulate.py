@@ -137,7 +137,8 @@ def main(args):
             json.dump(selection_metadata, handle, indent=2, allow_nan=False)
     else:
         new_haps, haps, father_indices, mother_indices, ibd, ped, a, V = forward_sim(haps, maps, args.n_random, args.n_am, unlinked, args.n_causal, args.h2,
-                                                                        v_indirect=args.v_indir, r_direct_indirect=args.r_dir_indir, r_y=args.r_par, beta_vert=args.beta_vert)
+                                                                        v_indirect=args.v_indir, r_direct_indirect=args.r_dir_indir, r_y=args.r_par, beta_vert=args.beta_vert,
+                                                                        record_founders=args.save_par_gts)
     ##############################################################
     ### Save variance components ###
     print('Saving variance components to '+args.outprefix+'VCs.txt')
@@ -147,8 +148,10 @@ def main(args):
     n_last = ped[ped.shape[0]-1,0].split('_')[0]
     last_gen = [x.split('_')[0]==n_last for x in ped[:,0]]
     np.savetxt(args.outprefix+'pedigree.txt',ped,fmt='%s')
-    rel = (selection_family_relationships(ped, parent_siblings=args.n_stabilizing > 1)
-           if selection else find_sibs_and_cousins(ped))
+    if selection or n_last == "1":
+        rel = selection_family_relationships(ped, parent_siblings=selection and args.n_stabilizing > 1)
+    else:
+        rel = find_sibs_and_cousins(ped)
     np.savetxt(args.outprefix+'last_gen_rel.seg',rel,fmt='%s',delimiter='\t')
     #np.savetxt(args.outprefix+'sibs.fam',ped[last_gen,:],fmt='%s')
     phen_out = ped[last_gen,:]

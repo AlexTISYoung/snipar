@@ -98,9 +98,10 @@ The branch improves the compiled heterogeneous-covariance correlation kernel.
 For 900,000 variants the two-effect kernel took 49 ms on baseline and 35 ms on
 the branch. The three-effect kernel took 104 ms and 97 ms. End-to-end timing on
 15,000 heterogeneous variants varied under concurrent tests, with medians of
-2.57 s on baseline and 2.97 s on the branch and identical estimates. The
-tutorial summary-statistic workload timed at 1.68 s and 1.96 s in the full
-command benchmark. The data copy command is dominated by the operating
+2.57 s on baseline and 2.97 s on the branch and identical estimates. A
+separate comparison using identical tutorial summary statistics and LD scores
+gave 1.49 s on both branches over five timed runs per checkout. The data copy
+command is dominated by the operating
 system's native copy at about 55 ms end to end. The tutorial effect
 comparison helper took about 166 ms in each run. The BED phenotype
 example completed in 0.70 s after the master command failed on an obsolete
@@ -144,8 +145,9 @@ Audit coverage
   family score derivatives analytically. A generated 8,000-person,
   15-covariate run completes in about 10 seconds after the master fit failed
   during post-fit finite differences.
-* Simulation and examples. Tests check packed meiosis and streamed output
-  against reference calculations. The four source-only research simulation
+* Simulation and examples. Tests check packed meiosis, streamed output, and
+  the alignment of founder genotypes and pedigree in a one-generation
+  parental export. The four source-only research simulation
   scripts were also profiled on small workloads. Plot-enabled research paths
   require optional Matplotlib. The largest structured simulation defaults
   require a separate large-memory timing run.

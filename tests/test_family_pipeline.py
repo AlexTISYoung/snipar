@@ -258,3 +258,24 @@ def test_streamed_segments_preserve_text_output(tmp_path):
     write_segs_from_matrix(ibd, pairs, snps, pos, gmap, 1, in_memory)
     write_segs_from_matrix(ibd, pairs, snps, pos, gmap, 1, streamed, return_segments=False)
     assert gzip.decompress(in_memory.read_bytes()) == gzip.decompress(streamed.read_bytes())
+
+
+@pytest.mark.parametrize("indirect", [False, True])
+def test_simulator_exports_founder_genotypes_without_additional_generations(tmp_path, indirect):
+    from pysnptools.snpreader import Bed
+
+    command = ["20", ".5", str(tmp_path) + "/", "--nfam", "25", "--save_par_gts", "--maf", ".3"]
+    if indirect:
+        command.extend(["--v_indir", ".2", "--r_dir_indir", "0"])
+    simulate.main(simulate.parser.parse_args(command))
+    parents = Bed(str(tmp_path / "chr_1_par"), count_A1=True).read()
+    pedigree = pd.read_csv(tmp_path / "pedigree.txt", sep=r"\s+", dtype=str)
+    children = pedigree.loc[pedigree.FID.str.startswith("1_")]
+    assert len(parents.iid) == 50
+    assert set(parents.iid[:, 1]) == set(children.FATHER_ID) | set(children.MOTHER_ID)
+    founders = pedigree.loc[pedigree.FID.str.startswith("0_")].set_index("IID")
+    weights = pd.read_csv(tmp_path / "causal_effects.txt", sep=r"\s+")
+    np.testing.assert_allclose(parents.val @ weights.direct, founders.loc[parents.iid[:, 1], "DIRECT"].astype(float),
+                               atol=1e-10)
+    relationship = pd.read_csv(tmp_path / "last_gen_rel.seg", sep=r"\s+")
+    assert list(relationship.InfType.unique()) == ["FS"]

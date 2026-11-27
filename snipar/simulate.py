@@ -564,7 +564,8 @@ def create_ped_output(G_males, G_females, Y_males, Y_females, Y_p, Y_m, delta_p,
         ped = np.vstack((pedcols,ped))
     return ped
 
-def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indirect=0, r_direct_indirect=0, beta_vert=0, r_y=None,):
+def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indirect=0,
+                r_direct_indirect=0, beta_vert=0, r_y=None, *, record_founders=False):
     nfam = haps[0].shape[0]
     if ngen_am>0 and r_y is None:
         raise(ValueError('Must provide parental phenotypic correlation for assortative mating'))
@@ -724,6 +725,24 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
     else:
         ped[(a_count*2*nfam):((a_count+1)*2*nfam),:] = create_ped_output(G_males, G_females, Y_males, Y_females, Y_p, Y_m, delta_p, delta_m, 
                                 eta_males=eta_males, eta_females=eta_females, eta_p=eta_p, eta_m=eta_m, father_indices=father_indices, mother_indices=mother_indices, gen=a_count+1, header=False)
+    if record_founders and total_matings == 0:
+        # The base population is stored in genotype-row order, while final
+        # parental phenotypes and IDs follow the random mating permutation.
+        paternal_order = np.argsort(father_indices)
+        maternal_order = np.argsort(mother_indices)
+        missing = np.full(nfam, np.nan)
+        indirect = {}
+        if v_indirect:
+            indirect = dict(eta_males=eta_p[paternal_order], eta_females=eta_m[maternal_order],
+                            eta_p=missing, eta_m=missing)
+        founders = create_ped_output(
+            delta_p[paternal_order], delta_m[maternal_order],
+            Y_p[paternal_order], Y_m[maternal_order],
+            missing, missing, missing, missing,
+            gen=0, header=False, **indirect,
+        )
+        founders[:, 2:4] = "0"
+        ped = np.vstack((founders, ped))
     ped = np.vstack((pedcols,ped))
     ## Return output
     return new_haps, haps, father_indices, mother_indices, ibd, ped, a, V
