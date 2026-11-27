@@ -125,7 +125,8 @@ def simulation(root):
     for name, neutral in (("sim_stabilizing", False), ("sim_neutral", True)):
         folder = sim / name
         meta = json.loads((folder / "selection_metadata.json").read_text())
-        assert meta["neutral_control"] is neutral and meta["n_generations"] == 3
+        assert meta.get("neutral_control", False) is neutral and meta["n_generations"] == 3
+        assert meta["selection_variance"] == (None if neutral else 2.0)
         assert len(table(folder / "phenotype.txt")) == 400
         phases = {(row["generation"], row["phase"]): row for row in meta["history"]}
         for generation in range(3):
