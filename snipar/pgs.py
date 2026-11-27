@@ -451,7 +451,7 @@ class pgarray(gtarray):
         parent_ids[~parent_genotyped] = 'NA'
         pg_out = np.column_stack((self.fams,self.ids,parent_ids,self.gts))
         pg_header = np.column_stack((np.array(['FID','IID','FATHER_ID','MOTHER_ID']).reshape(1,4),self.sid.reshape(1,self.sid.shape[0])))
-        pg_out = np.row_stack((pg_header,pg_out))
+        pg_out = np.vstack((pg_header,pg_out))
         print('Writing PGS to ' + filename)
         np.savetxt(filename, pg_out, fmt='%s')
         return pg_out

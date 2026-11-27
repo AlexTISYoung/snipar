@@ -25,6 +25,28 @@ def _table(prefix):
     return {row['statistic']: row for row in rows}
 
 
+def test_parental_correlation_se_and_score_file_round_trip(tmp_path):
+    rng = np.random.default_rng(64)
+    n = 100
+    parents = rng.multivariate_normal([0, 0], [[1, .3], [.3, 1]], size=n)
+    offspring = parents.mean(axis=1) + rng.normal(scale=np.sqrt(.5), size=n)
+    family = np.arange(n).astype(str)
+    pedigree = np.column_stack([family, ['child'+f for f in family],
+                                ['father'+f for f in family], ['mother'+f for f in family]])
+    scores = pgs.pgarray(np.column_stack([offspring, parents]), pedigree[:, 1],
+                         sid=np.array(['proband', 'paternal', 'maternal']),
+                         fams=family, par_status=np.zeros((n, 2), dtype=int), ped=pedigree)
+
+    correlation, se, _ = scores.estimate_r()
+    assert abs(correlation - .3) < 3 * se
+    assert 0 < se < 1
+    filename = str(tmp_path / 'family.pgs.txt')
+    scores.write(filename)
+    reread = pgs.read_pgs(filename)
+    np.testing.assert_array_equal(reread.ped, pedigree)
+    np.testing.assert_allclose(reread.gts, scores.gts)
+
+
 def _fits():
     rng = np.random.default_rng(71)
     x = rng.normal(size=80)

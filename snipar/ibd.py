@@ -393,7 +393,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     if ibdmatrix:
         outfile = outfile_name(outprefix,'.ibdmatrix.gz', chrom)
         print('Writing matrix output to ' + str(outfile))
-        ibd = np.row_stack(
+        ibd = np.vstack(
             (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
              np.column_stack((sibpairs, ibd))))
         np.savetxt(outfile, ibd, fmt='%s')

@@ -126,7 +126,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
         outstack.append(outarray_effect(alpha[:,0],np.sqrt(alpha_cov[:,0,0]),freqs,vy))
         header += [effects[i]+'_N',effects[i]+'_Beta',effects[i]+'_SE',effects[i]+'_Z',effects[i]+'_log10_P']
         # Output array
-        outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
+        outarray = np.vstack((np.array(header),np.column_stack(outstack)))
         print('Writing text output to '+outfile)
         np.savetxt(outfile, outarray, fmt='%s')
         return
@@ -192,7 +192,7 @@ def write_txt_output(chrom, snp_ids, pos, alleles, outfile, parsum, sib, sib_dif
     outstack.append(np.round(alpha_corr_out,6))
     header += corrs
     # Output array
-    outarray = np.row_stack((np.array(header),np.column_stack(outstack)))
+    outarray = np.vstack((np.array(header),np.column_stack(outstack)))
     print('Writing text output to '+outfile)
     np.savetxt(outfile, outarray, fmt='%s')
 

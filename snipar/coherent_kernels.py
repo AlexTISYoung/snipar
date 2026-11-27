@@ -203,11 +203,15 @@ def normal_equations(y, s, weight, sigma, chunk_size=20000, return_info=False):
         rows = start+np.flatnonzero(bad)
         n_fallback += len(rows)
         if len(rows):
-            inverse = np.linalg.inv(s[rows]+sigma)
+            y_rows, s_rows = y[rows], s[rows]
+            inverse = np.linalg.inv(s_rows+sigma)
             precision = ((inverse[:, a, c]*inverse[:, b, d]+inverse[:, a, d]*inverse[:, b, c])
                          * mult[:, None]*mult[None, :]/4.0)
             precision *= weight[rows, None, None]
-            products = y[rows[:, None], i]*y[rows[:, None], j]-s[rows[:, None], i, j]
+            # Index rows before selecting traits, as in the NumPy estimator.
+            # Joint advanced indexing makes the trait axis contiguous instead,
+            # which changes einsum's reduction for near-singular covariances.
+            products = y_rows[:, i]*y_rows[:, j]-s_rows[:, i, j]
             chunk_information += precision.sum(axis=0)
             chunk_rhs += np.einsum('nij,nj->ni', precision, products).sum(axis=0)
         information += chunk_information
