@@ -31,7 +31,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
 
 def sp_solve_dense3d_lu(sps_mat: csc_matrix,
                             dense_mat: np.ndarray) -> np.ndarray:
-        """Compute product of the inverse of given sparse matrix and given 3-d dense array uisng LU; used for repeated OLS.
+        """Compute product of the inverse of given sparse matrix and given 3-d dense array using LU; used for repeated OLS.
 
         Args:
             sps_mat (csc_matrix): 2-d sparse matrix.
@@ -219,7 +219,7 @@ def impute_from_sibs_po_phased(g1,g2,gm, ibd,f):
 
 # def solve(sps_mat: csc_matrix,
 #           dense_mat: np.ndarray) -> np.ndarray:
-#         """Compute product of the inverse of given sparse matrix and given 3-d dense array uisng LU; used for repeated OLS.
+#         """Compute product of the inverse of given sparse matrix and given 3-d dense array using LU; used for repeated OLS.
 
 #         Args:
 #             sps_mat (csc_matrix): 2-d sparse matrix.

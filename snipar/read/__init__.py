@@ -36,7 +36,7 @@ def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts
         gts_f : :class:`str`
             path to bed file with observed genotypes
         snp_ids : :class:`numpy.ndarray`
-            If provided, only obtains the subset of SNPs specificed that are present in both imputed and observed genotypes
+            If provided, only obtains the subset of SNPs specified that are present in both imputed and observed genotypes
         ids : :class:`numpy.ndarray`
             If provided, only obtains the ids with observed genotypes and imputed/observed parental genotypes (and observed sibling genotypes if sib=True)
         sib : :class:`bool`

@@ -303,7 +303,7 @@ class LinearMixedModel:
     @staticmethod
     def sp_solve_dense3d_lu(sps_mat: csc_matrix,
                             dense_mat: np.ndarray) -> np.ndarray:
-        """Compute product of the inverse of given sparse matrix and given 3-d dense array uisng LU; used for repeated OLS.
+        """Compute product of the inverse of given sparse matrix and given 3-d dense array using LU; used for repeated OLS.
 
         Args:
             sps_mat (csc_matrix): 2-d sparse matrix.
@@ -551,7 +551,7 @@ class LinearMixedModel:
 
         Raises:
             RuntimeError: Conjugate gradient did not converge
-            RuntimeError: Illigal input for conjugate gradient
+            RuntimeError: Illegal input for conjugate gradient
 
         Returns:
             float: REML log likelihood

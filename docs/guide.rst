@@ -41,7 +41,7 @@ Sometimes this may not work because the pip in the system is outdated. You can u
 
     ``pip install --upgrade pip``
 
-You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. 
+You may encounter problems with the installation due to Python version incompatibility or package conflicts with your existing Python environment.
 To overcome this, you can try installing in a virtual environment. 
 In a bash shell, this could be done by using the following commands in your directory of choice:
     
@@ -237,7 +237,7 @@ to enable optimal use of samples with one parent genotyped. See the :ref:`tutori
 The default behaviour of the gwas.py script is also appropriate for strongly structured samples, but will
 generally have reduced power compared to the robust estimator. See `Guan et al. 2025 <https://www.nature.com/articles/s41588-025-02118-0>`_ for more details 
 
-By defualt the :ref:`gwas.py <gwas.py>` script estimates a variance component model that models the phenotypic correlation 
+By default the :ref:`gwas.py <gwas.py>` script estimates a variance component model that models the phenotypic correlation
 between siblings after accounting for the covariates. Modelling correlations between siblings is important to ensure statistically efficient
 estimates of direct genetic effects are obtained from samples with siblings. If a :ref:`GRM <GRM>` is provided, 
 an additional variance component will be added that models the correlation between individuals with genetic relatedness passing a chosen threshold 
@@ -246,7 +246,7 @@ specified by the '--sparse_thresh' argument (default is 0.05).
 Note that if no imputed parental genotypes are input, a :ref:`pedigree file <pedigree>` is required. 
 (A pedigree input is not needed when inputting :ref:`imputed parental genotypes <imputed_file>`.)
 
-The script processes chromosome files sequentially, and allows parellel processing of each chromosome if '--cpus [NUM_CPUS]'
+The script processes chromosome files sequentially, and allows parallel processing of each chromosome if '--cpus [NUM_CPUS]'
 is used. One can also provide the number of threads used by NumPy and Numba for each CPUs by providing '--threads [NUM_THREADS]'. We recommend increasing '--cpus' rather than '--threads'
 for most users. 
 

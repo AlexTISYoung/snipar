@@ -55,7 +55,7 @@ def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None
             # merge on index, i.e., ids
             df = df.merge(df_, how='inner', left_index=True, right_index=True)
     if len(df.index) == 0:
-        raise ValueError('No commond ids among chromosome files.')
+        raise ValueError('No common ids among chromosome files.')
     if covar is not None:
         df_covar = pd.DataFrame(index=covar.ids)
         df = df.merge(df_covar, how='inner', left_index=True, right_index=True)

@@ -105,7 +105,7 @@ Note: installing *snipar* requires the package *bed_reader*, which in turn requi
 
 # Virtual Environment
 
-You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
+You may encounter problems with the installation due to Python version incompatibility or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
 
 To create the venv, use the following commands in your directory of choice:
 

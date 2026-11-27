@@ -16,7 +16,7 @@ Before working through the tutorial, please first install the package and read t
 Test data
 --------------------
 
-If *snipar* has been installed succesfully, the :ref:`command line scripts <scripts>` should be accessible as
+If *snipar* has been installed successfully, the :ref:`command line scripts <scripts>` should be accessible as
 executables in your terminal. A script that should be accessible loads the tutorial example data into a specified directory.
 To create a directory called 'example_data/' in the current directory and load the example data into it, use the command:
 

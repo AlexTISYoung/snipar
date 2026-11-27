@@ -66,14 +66,14 @@ def create_pedigree(king_address, agesex_address, same_parents_in_ped=True):
     
     Args:
         king_address : str
-            Address of a kinship file in KING format. kinship file is a '\t' seperated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
+            Address of a kinship file in KING format. kinship file is a '\t' separated csv with columns "FID1", "ID1", "FID2", "ID2, "InfType".
             Each row represents a relationship between two individuals. InfType column states the relationship between two individuals.
             The only relationships that matter for this script are full sibling and parent-offspring which are shown by 'FS' and 'PO' respectively.
             This file is used in creating a pedigree file and can be generated using KING.
             As fids starting with '_' are reserved for control there should be no fids starting with '_'.
 
         agesex_address : str
-            Address of the agesex file. This is a " " seperated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
+            Address of the agesex file. This is a " " separated CSV with columns "FID", "IID", "FATHER_ID", "MOTHER_ID", "sex", "age".
             Each row contains the age and sex of one individual. Male and Female sex should be represented with 'M' and 'F'.
             Age column is used for distinguishing between parent and child in a parent-offspring relationship inferred from the kinship file.
             ID1 is a parent of ID2 if there is a 'PO' relationship between them and 'ID1' is at least 12 years older than ID2.
