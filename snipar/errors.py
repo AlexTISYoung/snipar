@@ -1,10 +1,11 @@
 """Estimate genotyping error from Mendelian inconsistencies in observed pairs."""
 
 import numpy as np
-from numba import njit, prange
+from numba import get_num_threads, njit, prange
 
-from snipar.read.bed import read_PO_pairs_from_bed
-from snipar.read.bgen import read_PO_pairs_from_bgen
+from snipar.observed import allele_stats, open_observed
+from snipar.read.family import IdIndex
+from snipar.resources import plan_batches
 from snipar.utilities import make_id_dict
 
 
@@ -52,20 +53,40 @@ def estimate_genotyping_error_rate(ped, bedfiles=None, bgenfiles=None, min_maf=0
 def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
     if (bedfile is None) == (bgenfile is None):
         raise ValueError('Must provide exactly one BED or BGEN file')
-    if bedfile is not None:
-        gts, pair_ped, _ = read_PO_pairs_from_bed(ped, bedfile)
-    else:
-        gts, pair_ped, _ = read_PO_pairs_from_bgen(ped, bgenfile)
-    indices = gts.id_dict
-    pairs = np.array([(indices[child], indices[parent])
-                      for _, child, father, mother, *_ in pair_ped
-                      for parent in (father, mother) if parent in indices], dtype=int)
-    gts.filter_maf(min_maf)
-    errors, called = _count_pairs(np.asfortranarray(gts.gts.filled(np.nan)), pairs)
-    exposure = called * gts.freqs * (1 - gts.freqs)
-    rate = np.full(exposure.shape, np.nan)
-    np.divide(errors, exposure, out=rate, where=exposure > 0)
-    return g_error(rate, errors, exposure, gts.sid)
+    with open_observed(bedfile, bgenfile, num_threads=get_num_threads()) as source:
+        row = IdIndex(source.ids).lookup(ped[:, 1:4])
+        found = (row[:, :1] >= 0) & (row[:, 1:] >= 0)
+        children, parents = np.where(found)
+        if children.size == 0:
+            raise ValueError('No genotyped parent-offspring pairs for genotyping error estimation')
+        pairs = np.column_stack((row[children, 0], row[children, parents + 1]))
+        samples = np.unique(pairs)
+        pairs = np.searchsorted(samples, pairs)
+        m = len(source.sid)
+        if not m:
+            return g_error(np.empty(0), np.empty(0, dtype=int), np.empty(0), source.sid.copy())
+        print(f'{len(pairs)} parent-offspring pairs found in {bedfile if bedfile is not None else bgenfile}')
+        if len(pairs) * m < 10 ** 5:
+            print('Warning: limited information for estimation of genotyping error probability.')
+        _, batch = plan_batches(m, len(samples) * (2 if source.bed else 24),
+                                fixed_bytes=source.fixed_bytes)
+        errors = np.empty(m, dtype=np.int64)
+        exposure = np.empty(m)
+        maf_keep = np.empty(m, dtype=bool)
+        for start in range(0, m, batch):
+            end = min(start + batch, m)
+            genotypes = source.read(samples, np.arange(start, end))
+            total, observed = allele_stats(genotypes)
+            freqs = total / np.maximum(2 * observed, 1)
+            maf_keep[start:end] = (freqs > min_maf) & (freqs < 1 - min_maf)
+            errors[start:end], called = _count_pairs(genotypes, pairs)
+            exposure[start:end] = called * freqs * (1 - freqs)
+            del genotypes
+        exposure = exposure[maf_keep]
+        errors = errors[maf_keep]
+        rate = np.full(exposure.shape, np.nan)
+        np.divide(errors, exposure, out=rate, where=exposure > 0)
+        return g_error(rate, errors, exposure, source.sid[maf_keep])
 
 
 @njit(parallel=True, cache=True)
@@ -77,9 +98,9 @@ def _count_pairs(gts, pair_indices):
         for i in range(pair_indices.shape[0]):
             child, parent = pair_indices[i, 0], pair_indices[i, 1]
             a, b = gts[child, j], gts[parent, j]
-            if np.isfinite(a) and np.isfinite(b):
+            if a >= 0 and b >= 0 and np.isfinite(a) and np.isfinite(b):
                 called[j] += 1
-                errors[j] += abs(a - b) > 1
+                errors[j] += abs(float(a) - float(b)) > 1
     return errors, called
 
 

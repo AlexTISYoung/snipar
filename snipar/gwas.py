@@ -4,17 +4,24 @@ import time
 
 import h5py
 import numpy as np
-from pysnptools.snpreader import Bed
+import pandas as pd
 from scipy.special import log_ndtr
 import snipar.read as read
-from snipar.read.variants import MatchedVariants, bgen_variant_ids, match_variants
+from snipar.read.variants import MatchedVariants
 import snipar.slmm as slmm
 from snipar.gtarray import impute_missing, impute_unrel_par_gts
-from snipar.utilities import encode_str_array, make_id_dict, open_bgen, outfile_name
-from snipar.preprocess import find_par_gts
+from snipar.utilities import encode_str_array, make_id_dict, outfile_name
 from typing import List
-from multiprocessing import Pool, RawArray
 from functools import partial
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, ThreadPoolExecutor, wait
+from contextlib import ExitStack
+from itertools import islice
+from multiprocessing import RawArray, get_context
+from multiprocessing.util import Finalize
+from threading import Lock, local
+from typing import NamedTuple
+
+from snipar.resources import MIB, available_cpus, limit_native_threads, plan_batches, worker_environment
 
 
 def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None, keep=None, include_unrel=False):
@@ -127,69 +134,126 @@ def split_batches(nsnp: int, num_workers: int, batch_size = None) -> List[np.nda
         multiple; if none >= minimal needed, fall back to the minimal (non-multiple),
         and ALWAYS drop empties.
     """
+    index = np.arange(max(nsnp, 0), dtype=np.int64)
+    return [index[batch] for batch in _batch_slices(nsnp, num_workers, batch_size)]
+
+
+def _number_of_batches(nsnp, num_workers, batch_size):
+    if nsnp <= 0:
+        return 0
     if batch_size is None:
         batch_size = nsnp
-    if nsnp <= 0:
-        return []
     if num_workers < 1:
-        raise ValueError("num_workers must be >= 1")
+        raise ValueError('num_workers must be >= 1')
     if batch_size < 1:
-        raise ValueError("batch_size must be >= 1")
-    def round_up_multiple(x: int, m: int) -> int:
-        return ((x + m - 1) // m) * m
-    def round_down_multiple(x: int, m: int) -> int:
-        return (x // m) * m
-    # Minimal batches to satisfy the max-size constraint
-    min_batches = math.ceil(nsnp / batch_size)
-    # Candidate: nearest multiple of workers at or above min_batches
-    cand = round_up_multiple(max(min_batches, num_workers), num_workers)
-    if cand <= nsnp:
-        total_batches = cand  # multiple of workers, no empties
-    else:
-        # Try the largest multiple <= nsnp that still respects min_batches
-        down = round_down_multiple(nsnp, num_workers)
-        if down >= max(min_batches, 1):
-            total_batches = down
-        else:
-            # Fall back to minimal feasible (may NOT be a multiple)
-            total_batches = min_batches
-    # Balanced positive sizes summing to nsnp
-    base = nsnp // total_batches
-    rem  = nsnp % total_batches
-    sizes = [base + 1] * rem + [base] * (total_batches - rem)
-    # Build batches and DROP any accidental empties (defensive)
-    idx = np.arange(nsnp, dtype=np.int64)
-    batches, start = [], 0
-    for s in sizes:
-        if s <= 0:
-            continue
-        batches.append(idx[start:start + s])
-        start += s
-    # Sanity checks
-    assert sum(len(b) for b in batches) == nsnp
-    if batches:
-        assert max(len(b) for b in batches) <= batch_size
-    return batches
+        raise ValueError('batch_size must be >= 1')
+    needed = (nsnp + batch_size - 1) // batch_size
+    up = ((needed + num_workers - 1) // num_workers) * num_workers
+    if up <= nsnp:
+        return up
+    down = (nsnp // num_workers) * num_workers
+    return down if down >= needed else needed
+
+
+def _batch_slices(nsnp, num_workers, batch_size):
+    total = _number_of_batches(nsnp, num_workers, batch_size)
+    if total:
+        size, extra = divmod(nsnp, total)
+        start = 0
+        for i in range(total):
+            stop = start + size + (i < extra)
+            yield slice(start, stop)
+            start = stop
+
+
+def _bounded_results(executor, task, batches, workers):
+    batches = iter(batches)
+    pending = {executor.submit(task, batch) for batch in islice(batches, workers)}
+    while pending:
+        completed, pending = wait(pending, return_when=FIRST_COMPLETED)
+        for future in completed:
+            yield future.result()
+            batch = next(batches, None)
+            if batch is not None:
+                pending.add(executor.submit(task, batch))
+
+
+class _SharedArray(NamedTuple):
+    memory: object
+    shape: tuple
+    dtype: np.dtype
+
+    def view(self):
+        array = np.frombuffer(self.memory, dtype=self.dtype).reshape(self.shape)
+        array.flags.writeable = False
+        return array
+
+
+def _share_array(array):
+    if array is None:
+        return None
+    if array.dtype.hasobject:
+        raise ValueError('GWAS worker arrays must have a fixed-width data type')
+    memory = RawArray('b', array.nbytes)
+    np.copyto(np.frombuffer(memory, dtype=array.dtype).reshape(array.shape), array)
+    return _SharedArray(memory, array.shape, array.dtype)
+
+
+def _share_plans(plans):
+    if plans is not None:
+        return tuple(type(plan)(*(_share_array(field) if isinstance(field, np.ndarray) else field
+                                   for field in plan)) for plan in plans)
+
+
+def _restore_plans(plans):
+    if plans is not None:
+        return tuple(type(plan)(*(field.view() if isinstance(field, _SharedArray) else field
+                                   for field in plan)) for plan in plans)
+
+
+def _fit_model(y, components, sigmas, covariates, family_labels, add_jitter, solver='lu'):
+    if len(components) == len(sigmas) == 2:
+        # A leading GRM may be provided solely for imputation.
+        components = components[1:]
+    return slmm.LinearMixedModel(y, components, sigmas, covariates, add_intercept=True,
+                                 add_jitter=add_jitter, family_labels=family_labels,
+                                 snp_solver=solver)
+
+
+def _readers(stack, options, plans, sibling_plans):
+    reader = stack.enter_context(read.prepare_gts_matrix(**options, sample_plans=plans))
+    sibling = None
+    if sibling_plans is not None:
+        sibling_opts = dict(options, par_gts_f=None, sib_diff=True, robust=False)
+        sibling = stack.enter_context(read.prepare_gts_matrix(**sibling_opts, sample_plans=sibling_plans))
+    return reader, sibling
+
+
+def _start_process_worker(options, plans, sibling_plans, y, components, sigmas, covar,
+                          family_labels, add_jitter, threads, processor, solver, model_ids, variants):
+    from numba import config, set_num_threads
+
+    set_num_threads(min(threads, config.NUMBA_NUM_THREADS))
+    stack = ExitStack()
+    try:
+        stack.enter_context(limit_native_threads(threads))
+        reader, sibling = _readers(stack, options, _restore_plans(plans), _restore_plans(sibling_plans))
+        arrays = tuple(tuple(a.view() for a in component) for component in components)
+        model = _fit_model(y.view(), arrays, sigmas, None if covar is None else covar.view(),
+                           None if family_labels is None else family_labels.view(), add_jitter, solver)
+    except BaseException:
+        stack.close()
+        raise
+    Finalize(None, stack.close, exitpriority=1)
+    _var_dict.clear()
+    _var_dict.update(model=model, reader=reader, sibling_reader=sibling, batch_processor=processor,
+                     model_ids=model_ids.view(), variants=MatchedVariants(*(a.view() for a in variants)))
+
 
 _var_dict = {}
 
-def _init_worker(y_, n_vararr_, varcomps_, covar_, covar_shape, batch_processor=None, state=None, **kwargs):
-    worker = _var_dict if state is None else state
-    worker.clear()
-    worker['y_'] = y_
-    worker['varcomps_'] = varcomps_
-    worker['batch_processor'] = batch_processor
-    for i in range(n_vararr_):
-        worker[f'varcomp_data_{i}_'] = kwargs[f'varcomp_data_{i}_']
-        worker[f'varcomp_row_ind_{i}_'] = kwargs[f'varcomp_row_ind_{i}_']
-        worker[f'varcomp_col_ind_{i}_'] = kwargs[f'varcomp_col_ind_{i}_']
-    if covar_ is not None and covar_shape is not None:
-        worker['covar_'] = covar_
-        worker['covar_shape'] = covar_shape
-
-
 def _run_worker_batch(batch):
-    return _var_dict['batch_processor'](batch)
+    return _var_dict['batch_processor'](_var_dict['variants'].subset(batch))
 
 
 def process_batch(snp_ids, ped, n_vararr, imp_fams, pheno_ids=None, bedfile=None, bgenfile=None, par_gts_f=None,
@@ -201,22 +265,28 @@ def process_batch(snp_ids, ped, n_vararr, imp_fams, pheno_ids=None, bedfile=None
     matched_variants = None
     if isinstance(snp_ids, MatchedVariants):
         matched_variants, snp_ids = snp_ids, None
-    ####### Construct family based genotype matrix #######
-    G = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, snp_ids=snp_ids, 
-                            ids=pheno_ids, parsum=parsum, sib=fit_sib, sib_diff=sib_diff,
-                            include_unrel=impute_unrel, robust=robust, trios_sibs=trios_sibs,
-                            verbose=False, print_sample_info=print_sample_info, matched_variants=matched_variants)
+    # Prepared readers keep aligned row plans and handles for the worker's lifetime.
+    reader = worker.get('reader')
+    if reader is None:
+        G = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile,
+                                par_gts_f=par_gts_f, snp_ids=snp_ids, ids=pheno_ids, parsum=parsum,
+                                sib=fit_sib, sib_diff=sib_diff, include_unrel=impute_unrel,
+                                robust=robust, trios_sibs=trios_sibs, verbose=False,
+                                print_sample_info=print_sample_info, matched_variants=matched_variants)
+    else:
+        G = reader.read(matched_variants)
+        pheno_ids = worker['model_ids']
     if not np.array_equal(G.ids, pheno_ids):
         G.filter_ids(pheno_ids)
         if not np.array_equal(G.ids, pheno_ids):
             raise ValueError('Genotype batch does not contain every individual in the analysis cohort')
-    if not impute_unrel and np.any(G.fams == ''):
+    if reader is None and not impute_unrel and np.any(G.fams == ''):
         raise ValueError('No family label from pedigree for some individuals')
     G.compute_freqs()
     if impute_unrel and G.sid.size:
         G = impute_unrel_par_gts(G, sib=fit_sib, parsum=parsum, ped=ped)
-    G.filter_maf(min_maf, verbose=verbose)
-    G.filter_missingness(max_missing, verbose=verbose)
+    maf_pass = G.filter_maf(min_maf, verbose=verbose)
+    missing_pass = G.filter_missingness(max_missing, verbose=verbose)
     if G.sid.size == 0:
         return G.freqs, G.sid, None, None, None
     if G.has_NAs:
@@ -246,8 +316,13 @@ def process_batch(snp_ids, ped, n_vararr, imp_fams, pheno_ids=None, bedfile=None
                                                     add_intercept=True, add_jitter=add_jitter)
     model = worker['model']
     if robust:
-        G_sib = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile,
-                                    snp_ids=G.sid, ids=pheno_ids, sib_diff=True, match_snp_ids=True)
+        sibling_reader = worker.get('sibling_reader')
+        if sibling_reader is None:
+            G_sib = read.get_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile,
+                                        snp_ids=G.sid, ids=pheno_ids, sib_diff=True, match_snp_ids=True)
+        else:
+            tested = matched_variants.subset(maf_pass).subset(missing_pass)
+            G_sib = sibling_reader.read(tested)
         alpha, alpha_cov, alpha_ses = model.robust_est(G, G_sib)
     elif sib_diff:
         alpha, alpha_cov, alpha_ses = model.sib_diff_est(G.gts.data)
@@ -271,140 +346,178 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                        ped, imp_fams, sigmas, outprefix, covariates=None, bedfile=None, bgenfile=None, par_gts_f=None,
                        fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, robust=False, trios_sibs=False, trios_only=False,
-                       add_jitter=False, standard_gwas=False, batch_size=None):
-    ######## Check for bed/bgen #######
-    if bedfile is None and bgenfile is None:
-        raise(ValueError('Must supply either bed or bgen file with observed genotypes'))
-    if bedfile is not None and bgenfile is not None:
-        raise(ValueError('Both --bed and --bgen specified. Please specify one only'))
-    if cpus < 1:
-        raise ValueError('cpus must be positive')
-    aliases = None
-    if bedfile is not None:
-        bed = Bed(bedfile,count_A1 = True)
-        gts_id_dict = make_id_dict(bed.iid,1)
-        snp_ids = bed.sid
-        pos = np.array(bed.pos[:,2],dtype=int)
-        alleles = np.loadtxt(bedfile.split('.bed')[0]+'.bim',dtype=str,usecols=(4,5),ndmin=2)
-        chrom = np.array(bed.pos[:,0],dtype=int)
-    elif bgenfile is not None:
-        with open_bgen(bgenfile, verbose=False) as bgen:
-            gts_id_dict = make_id_dict(bgen.samples)
-            snp_ids, aliases = bgen_variant_ids(bgen)
-            snp_ids = snp_ids.copy()
-            if aliases is not None:
-                aliases = aliases.copy()
-            pos = np.array(bgen.positions, dtype=int)
-            alleles = np.array([allele_ids.split(',') for allele_ids in bgen.allele_ids])
-            chrom = np.array(bgen.chromosomes, dtype=str)
-        if np.any(chrom == ''):
+                       add_jitter=False, standard_gwas=False, batch_size=None, *,
+                       threads=1, family_labels=None, solver='lu', inference_model=None):
+    if (bedfile is None) == (bgenfile is None):
+        raise ValueError('Must supply exactly one BED or BGEN genotype file')
+    if cpus < 1 or threads < 1:
+        raise ValueError('cpus and threads must be positive')
+    threads = min(threads, available_cpus())
+    cpus = min(cpus, max(1, available_cpus() // threads))
+    options = dict(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, parsum=parsum,
+                   sib=fit_sib, sib_diff=sib_diff, include_unrel=impute_unrel, robust=robust,
+                   trios_sibs=trios_sibs, num_threads=threads)
+    with ExitStack() as stack:
+        stack.enter_context(limit_native_threads(threads))
+        ids = None if y is None else y.ids
+        reader = stack.enter_context(read.prepare_gts_matrix(ped=ped, imp_fams=imp_fams, ids=ids,
+                                                           **options))
+        observed = reader.observed_variants
+        print(f'Found {observed.sid.size} SNPs')
+        try:
+            matched = reader.match_variants(match_snp_ids=True)
+        except ValueError as error:
+            label = chrom_out or ','.join(np.unique(observed.chromosome).astype(str))
+            location = f'chromosome {label}, ' if label and label != '0' else ''
+            raise ValueError(f'{error} ({location}{bedfile or bgenfile}, {par_gts_f})') from error
+        # BGEN string metadata can arrive as Python objects. Fixed-width
+        # strings can be shared across spawned workers without object pointers.
+        matched = MatchedVariants(*(a.astype(str) if a.dtype.hasobject else a for a in matched))
+        if par_gts_f is not None and not sib_diff:
+            print(f'Matched {matched.sid.size} SNPs between observed and imputed genotypes')
+        _, index, counts = np.unique(observed.sid, return_inverse=True, return_counts=True)
+        retain = counts[index] == 1
+        if not np.all(retain):
+            print(f'Removing {np.count_nonzero(counts > 1)} duplicate SNP ids')
+            observed = observed.subset(retain)
+        chrom, snp_ids, pos, alleles = observed[:4]
+        if bgenfile is not None:
             chrom = np.where(chrom == '', str(chrom_out), chrom)
-    # Check for observed parents if not using parsum
-    if not parsum and not sib_diff:
-        par_status, gt_indices, fam_labels = find_par_gts(y.ids, ped, gts_id_dict)
-        parcount = np.sum(par_status==0,axis=1)
-        if np.sum(parcount>0)==0 and not trios_sibs:
-            # logger.warning('No individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
-            print('WARNING: no individuals with genotyped parents found. Using sum of imputed maternal and paternal genotypes to prevent collinearity.')
-            parsum = True
-        elif 100 > np.sum(parcount>0) > 0:
-            # logger.warning('Warning: low number of individuals with observed parental genotypes. Consider using the --parsum argument to prevent issues due to collinearity.')
-            print('WARNING: less than 100 individuals with observed parental genotypes. If the total sample size is small, consider using the --parsum argument to prevent issues due to collinearity.')
-    ####### Compute batches #######
-    print('Found '+str(snp_ids.shape[0])+' SNPs')
-    # Align to original file columns before removing duplicate observed IDs from the output.
-    matched = None
-    if par_gts_f is not None and not sib_diff:
-        with h5py.File(par_gts_f, 'r') as imputation:
-            try:
-                matched = match_variants(snp_ids, chrom, pos, alleles, imputation, aliases=aliases)
-            except ValueError as error:
-                label = chrom_out or ','.join(np.unique(chrom).astype(str))
-                location = f'chromosome {label}, ' if label and label != '0' else ''
-                raise ValueError(f'{error} ({location}{bedfile or bgenfile}, {par_gts_f})') from error
-        print(f'Matched {matched.sid.size} SNPs between observed and imputed genotypes')
-    # Remove duplicates
-    unique_snps, counts = np.unique(snp_ids, return_counts=True)
-    if np.any(counts > 1):
-        non_duplicate = set(unique_snps[counts == 1])
-        print('Removing '+str(np.sum(counts>1))+' duplicate SNP ids')
-        not_duplicated = np.array([x in non_duplicate for x in snp_ids])
-        snp_ids = snp_ids[not_duplicated]
-        pos = pos[not_duplicated]
-        chrom = chrom[not_duplicated]
-        alleles = alleles[not_duplicated,:]
-    snp_dict = make_id_dict(snp_ids)
-    if robust or sib_diff or standard_gwas or (trios_sibs and not trios_only):
-        alpha_dim = 1
-    else:
-        alpha_dim = 2
-        if fit_sib:
-            alpha_dim += 1
-        if not parsum:
-            alpha_dim += 1
-    # Keep untested SNPs in output in original file order.
-    alpha = np.full((snp_ids.size, alpha_dim), np.nan, dtype=np.float32)
-    alpha_cov = np.full((snp_ids.size, alpha_dim, alpha_dim), np.nan, dtype=np.float32)
-    alpha_ses = np.full_like(alpha, np.nan)
-    freqs = np.full(snp_ids.size, np.nan, dtype=np.float32)
-    variant_count = snp_ids.size if matched is None else matched.sid.size
-    indices = (slice(idx[0], idx[-1] + 1) for idx in split_batches(variant_count, cpus, batch_size))
-    batches = [snp_ids[idx] for idx in indices] if matched is None else [matched.subset(idx) for idx in indices]
-    print(f'Using {len(batches)} batch' if len(batches) == 1 else f'Using {len(batches)} batches')
+        snp_dict = make_id_dict(snp_ids)
 
-    def worker_array(values, dtype):
-        values = np.ascontiguousarray(values, dtype=dtype)
-        if cpus == 1:
-            return values
-        buffer = RawArray(np.ctypeslib.as_ctypes_type(values.dtype), values.size)
-        np.copyto(np.frombuffer(buffer, dtype=values.dtype), values.ravel())
-        return buffer
+        plans = reader.sample_plans
+        trios_only = trios_sibs and (plans[0].trio_count == len(plans[0].ids))
+        if not impute_unrel and np.any(plans[0].fams == ''):
+            raise ValueError('No family label from pedigree for some individuals')
+        if reader.parsum and not parsum:
+            print('No observed parental genotypes found. Fitting the sum of parental genotypes.')
+        parsum = reader.parsum
+        options['parsum'] = parsum
+        sibling_reader = sibling_plans = None
+        if robust:
+            sibling_opts = dict(options, par_gts_f=None, sib_diff=True, robust=False)
+            sibling_reader = stack.enter_context(read.prepare_gts_matrix(ped=ped, ids=ids, **sibling_opts))
+            sibling_plans = sibling_reader.sample_plans
 
-    y_ = worker_array(y.gts.data.reshape(-1), 'float64')
-    covar_ = worker_array(covariates.gts.data, 'float64') if covariates is not None else None
-    covar_shape = covariates.shape if covariates is not None else None
-    varcomp_dict = {
-        f'varcomp_{name}_{i}_': worker_array(values, dtype)
-        for i, component in enumerate(varcomp_lst)
-        for name, values, dtype in zip(('data', 'row_ind', 'col_ind'), component,
-                                       ('float64', 'uint32', 'uint32'))
-    }
-    process_batch_ = partial(process_batch, pheno_ids=y.ids, n_vararr=len(varcomp_lst),
-                             bedfile=bedfile, bgenfile=bgenfile,
-                             par_gts_f=par_gts_f, ped=ped, imp_fams=imp_fams,
-                             parsum=parsum, fit_sib=fit_sib, sib_diff=sib_diff, standard_gwas=standard_gwas,
-                             max_missing=max_missing, min_maf=min_maf,
-                             impute_unrel=impute_unrel,
-                             robust=robust,
-                             trios_sibs=trios_sibs,
-                             add_jitter=add_jitter)
-    _init_worker_ = partial(_init_worker, batch_processor=process_batch_, **varcomp_dict)
-    worker_args = (y_, len(varcomp_lst), sigmas, covar_, covar_shape)
-    if debug and batches:
-        state = {}
-        _init_worker_(*worker_args, state=state)
-        process_batch_(batches[0], worker_state=state)
-        raise SystemExit('Debug finished.')
-    start = time.time()
+        if robust or sib_diff or standard_gwas or (trios_sibs and not trios_only):
+            alpha_dim = 1
+        else:
+            alpha_dim = 2 + fit_sib + (not parsum)
+        # Untested SNPs remain present in the original file order.
+        alpha = np.full((snp_ids.size, alpha_dim), np.nan, dtype=np.float32)
+        alpha_cov = np.full((snp_ids.size, alpha_dim, alpha_dim), np.nan, dtype=np.float32)
+        alpha_ses = np.full_like(alpha, np.nan)
+        freqs = np.full(snp_ids.size, np.nan, dtype=np.float32)
 
-    def store_results(results):
-        for i, (batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses) in enumerate(results, 1):
-            if len(batch_snps):
-                batch_indices = np.array([snp_dict[x] for x in batch_snps])
-                alpha[batch_indices] = batch_alpha
-                alpha_cov[batch_indices] = batch_alpha_cov
-                alpha_ses[batch_indices] = batch_alpha_ses
-                freqs[batch_indices] = batch_freqs
-            print(f'Done batch {i} out of {len(batches)} #snps:{len(batch_snps)}')
+        covar = None if covariates is None else covariates.gts.data
+        response = y.gts.data.reshape(-1)
+        n = len(response)
+        structured = family_labels is not None and not len(varcomp_lst)
+        use_threads = structured and bedfile is not None and not robust and (not trios_sibs or trios_only)
+        # Allow also for filtering/imputation copies and the dense RHS blocks of a sparse solve.
+        per_variant = reader.bytes_per_variant + (10 if structured else 26) * reader.n_components * n
+        reader_fixed = reader.fixed_read_bytes
+        if sibling_reader is not None:
+            per_variant += sibling_reader.bytes_per_variant
+            reader_fixed += sibling_reader.fixed_read_bytes
+        model_bytes = n * (64 + 64 * robust + (0 if covar is None else 24 * covar.shape[1]))
+        model_bytes += sum(len(component[0]) * 72 for component in varcomp_lst)
+        worker_overhead = 0 if use_threads or cpus == 1 else 96 * MIB
+        shared_bytes = 0 if use_threads or cpus == 1 else sum(
+            array.nbytes for plan in (*plans, *(sibling_plans or ())) for array in plan
+            if isinstance(array, np.ndarray))
+        if shared_bytes:
+            shared_bytes += response.nbytes + ids.nbytes + (0 if covar is None else covar.nbytes)
+            shared_bytes += sum(sum(array.nbytes for array in component) for component in varcomp_lst)
+            shared_bytes += sum(array.nbytes for array in matched)
+        if batch_size is None:
+            batch_size = max(1, (256 * MIB) // per_variant)
+        try:
+            workers, width = plan_batches(
+                len(matched.sid), per_variant, workers=cpus, batch_size=batch_size,
+                fixed_bytes_per_worker=reader_fixed + worker_overhead + (0 if use_threads else model_bytes),
+                fixed_bytes=shared_bytes + (model_bytes if use_threads and inference_model is None else 0),
+            )
+        except MemoryError:
+            if not shared_bytes:
+                raise
+            # A spawn pool's shared serialization buffers can make an otherwise
+            # feasible chromosome exceed its budget. Use the in-process reader.
+            workers, width = plan_batches(len(matched.sid), per_variant, batch_size=batch_size,
+                                         fixed_bytes_per_worker=reader_fixed + model_bytes)
+        batch_size = width
+        total = _number_of_batches(len(matched.sid), workers, batch_size)
+        batches = _batch_slices(len(matched.sid), workers, batch_size)
+        print(f"Using {total} {'batch' if total == 1 else 'batches'} with up to {batch_size} variants "
+              f'and {workers} {"worker" if workers == 1 else "workers"}')
 
-    if cpus == 1:
-        state = {}
-        _init_worker_(*worker_args, state=state)
-        store_results(map(partial(process_batch_, worker_state=state), batches))
-    elif batches:
-        with Pool(processes=min(cpus, len(batches)), initializer=_init_worker_, initargs=worker_args) as pool:
-            store_results(pool.imap_unordered(_run_worker_batch, batches, chunksize=1))
-    print('Time used for inference: ', f'{time.time() - start:.2f}s')
+        processor = partial(process_batch, ped=None, n_vararr=len(varcomp_lst), imp_fams=None,
+                            parsum=parsum, fit_sib=fit_sib, sib_diff=sib_diff, standard_gwas=standard_gwas,
+                            max_missing=max_missing, min_maf=min_maf, impute_unrel=impute_unrel,
+                            robust=robust, trios_sibs=trios_sibs)
+
+        def store_results(results):
+            for i, (batch_freqs, batch_snps, batch_alpha, batch_alpha_cov, batch_alpha_ses) in enumerate(results, 1):
+                if len(batch_snps):
+                    indices = np.fromiter((snp_dict[s] for s in batch_snps), np.intp, count=len(batch_snps))
+                    alpha[indices] = batch_alpha
+                    alpha_cov[indices] = batch_alpha_cov
+                    alpha_ses[indices] = batch_alpha_ses
+                    freqs[indices] = batch_freqs
+                if total <= 50 or i == 1 or i == total or i % (total // 10) == 0:
+                    print(f'Done batch {i} out of {total} #snps:{len(batch_snps)}')
+
+        start = time.perf_counter()
+        if workers == 1 or debug or use_threads:
+            model = inference_model
+            if model is None:
+                model = _fit_model(response, varcomp_lst, sigmas, covar, family_labels, add_jitter, solver)
+            if workers == 1 or debug:
+                state = dict(model=model, reader=reader, sibling_reader=sibling_reader, model_ids=ids)
+                def task(batch):
+                    return processor(matched.subset(batch), worker_state=state)
+
+                if debug:
+                    task(next(batches))
+                    raise SystemExit('Debug finished.')
+                store_results(map(task, batches))
+            else:
+                # Populate shared read-only model state before any thread enters a solve.
+                model._family_snp_terms
+                state = local()
+                lock = Lock()
+
+                def start_thread():
+                    from numba import config, set_num_threads
+
+                    set_num_threads(min(threads, config.NUMBA_NUM_THREADS))
+                    # Each worker owns its BED/HDF5 handles, using the same numeric sample plan.
+                    with lock:
+                        private_reader, _ = _readers(stack, options, plans, None)
+                    state.values = dict(model=model, reader=private_reader, model_ids=ids)
+
+                def run_thread(batch):
+                    return processor(matched.subset(batch), worker_state=state.values)
+
+                with ThreadPoolExecutor(max_workers=workers, initializer=start_thread) as pool:
+                    store_results(_bounded_results(pool, run_thread, batches, workers))
+        else:
+            # Spawn keeps native thread pools and open HDF5 handles out of child state.
+            labels = family_labels
+            if structured:
+                labels, _ = pd.factorize(family_labels, sort=False)
+            shared = tuple(tuple(_share_array(np.asarray(array)) for array in component)
+                           for component in varcomp_lst)
+            initializer_args = (options, _share_plans(plans), _share_plans(sibling_plans),
+                                _share_array(response), shared, sigmas, _share_array(covar),
+                                _share_array(labels), add_jitter, threads, processor, solver, _share_array(ids),
+                                tuple(_share_array(array) for array in matched))
+            with worker_environment(threads), ProcessPoolExecutor(
+                max_workers=workers, mp_context=get_context('spawn'), initializer=_start_process_worker,
+                initargs=initializer_args,
+            ) as pool:
+                store_results(_bounded_results(pool, _run_worker_batch, batches, workers))
+    print('Time used for inference: ', f'{time.perf_counter() - start:.2f}s')
     if not no_hdf5_out:
         if chrom_out==0:
             hdf5_outfile = outfile_name(outprefix, '.sumstats.hdf5')

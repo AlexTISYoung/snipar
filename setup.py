@@ -49,6 +49,8 @@ install_requires = [
     'numba>=0.61,<1; sys_platform != "darwin" or platform_machine != "x86_64"',
     "statsmodels>=0.14.4,<1",
     "numdifftools>=0.9.41,<1",
+    "psutil>=6.1",
+    "threadpoolctl>=3.6,<4",
     "tqdm>=4.66.5",
 ]
 

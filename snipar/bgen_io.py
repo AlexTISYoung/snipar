@@ -95,6 +95,39 @@ class BgenFile:
             result[:, column, :] = probs[sample_index]
         return result
 
+    def read_dosage(self, samples=None, variants=None, *, order='F'):
+        """Return first-allele dosage without retaining a batch of probability planes."""
+        if samples is None:
+            samples = slice(None)
+        if isinstance(samples, slice):
+            count = len(range(*samples.indices(len(self.samples))))
+        else:
+            samples = _array_index(samples, len(self.samples), 'sample')
+            count = len(samples)
+        if variants is None:
+            variants = slice(None)
+        if isinstance(variants, slice):
+            variants = range(*variants.indices(len(self._reader)))
+        else:
+            variants = _array_index(variants, len(self._reader), 'variant')
+        output = np.empty((count, len(variants)), np.float32, order=order)
+        previous = None
+        for column, variant in enumerate(variants):
+            result = output[:, column]
+            if variant == previous:
+                result[:] = output[:, column - 1]
+                continue
+            probabilities = self._reader[int(variant)].probabilities
+            if probabilities.shape[1] == 4:
+                np.add(probabilities[samples, 0], probabilities[samples, 2], out=result, dtype=np.float32)
+            elif probabilities.shape[1] == 3:
+                np.multiply(probabilities[samples, 0], 2, out=result, dtype=np.float32)
+                np.add(result, probabilities[samples, 1], out=result, dtype=np.float32)
+            else:
+                raise ValueError('Expected diploid, biallelic BGEN genotypes')
+            previous = variant
+        return output
+
     def close(self):
         self._reader.close()
 

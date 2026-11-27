@@ -10,6 +10,8 @@ Results:
         
 """
 import argparse
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import h5py
 import snipar.read as read
@@ -20,6 +22,7 @@ from numba import set_num_threads
 from numba import config as numba_config
 from snipar.pedigree import get_sibpairs_from_ped
 from snipar.numrange import parseNumRange, NumRangeAction
+from snipar.resources import MIB, available_cpus, plan_batches
 
 def write_genoarray(G, outfile, parsum, sib, ped=None):
     """Write family genotypes and matching sample and variant metadata."""
@@ -45,22 +48,77 @@ def write_genoarray(G, outfile, parsum, sib, ped=None):
             output['pedigree'] = encode_str_array(ped)
 
 
+def _metadata(output, matrix, fit_sib, pedigree):
+    columns = ['proband', 'sib'] if fit_sib else ['proband']
+    columns += ['paternal', 'maternal'] if matrix.shape[1] == len(columns) + 2 else ['parent_sum']
+    output['ids'] = encode_str_array(matrix.ids)
+    output['fams'] = encode_str_array(matrix.fams)
+    output['genotype_cols'] = encode_str_array(columns)
+    if pedigree is not None:
+        output['pedigree'] = encode_str_array(pedigree)
+
+
 def gts_matrix_chromosome(chrom_out, pedigree, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
-                        fit_sib=False, parsum=False, max_missing=5, min_maf=0.01, imp_fams=None):
-    if imp_fams is None and par_gts_f is not None:
-        imputed_pedigree, imp_fams = read.build_ped_from_par_gts(par_gts_f)
-        if pedigree is None:
-            pedigree = imputed_pedigree
-    G = read.get_gts_matrix(ped=pedigree, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile,
-                            par_gts_f=par_gts_f, parsum=parsum, sib=fit_sib,
-                            verbose=True, print_sample_info=True)
-    if chrom_out:
-        G.chrom = np.where(G.chrom == '', str(chrom_out), G.chrom)
-    G.filter_maf(min_maf)
-    G.filter_missingness(max_missing)
-    hdf5_outfile = outfile_name(outprefix, '.genoarray.hdf5', chrom=chrom_out or None)
-    # The genotype reader selects parental sums automatically when every parent is imputed.
-    write_genoarray(G, hdf5_outfile, G.shape[1] == 2 + int(fit_sib), fit_sib, ped=pedigree)
+                          fit_sib=False, parsum=False, max_missing=5, min_maf=0.01,
+                          imp_fams=None, num_threads=None, *, batch_size=None):
+    """Build and write genotype columns without retaining the entire chromosome."""
+    if imp_fams is None and par_gts_f is not None and pedigree is None:
+        pedigree, imp_fams = read.build_ped_from_par_gts(par_gts_f)
+    outfile = Path(outfile_name(outprefix, '.genoarray.hdf5', chrom=chrom_out or None))
+    with read.prepare_gts_matrix(ped=pedigree, imp_fams=imp_fams, bedfile=bedfile,
+                                 bgenfile=bgenfile, par_gts_f=par_gts_f, parsum=parsum,
+                                 sib=fit_sib, verbose=True, num_threads=num_threads) as reader:
+        variants = reader.match_variants()
+        n, k = reader.group_shapes[0]
+        per_variant = reader.bytes_per_variant + 4 * n * k
+        if batch_size is None:
+            batch_size = max(1, (256 * MIB) // per_variant)
+        _, width = plan_batches(len(variants.sid), per_variant,
+                               batch_size=batch_size, fixed_bytes=reader.fixed_read_bytes + (8 << 20))
+        print(f'Writing {outfile} in blocks of up to {width} variants')
+        # Determine the width before extending the dataset, including alleles
+        # that may contain a multibyte character or a long insertion.
+        bim_width = max(encode_str_array(column.astype(str)).dtype.itemsize
+                        for column in (variants.chromosome, variants.sid, variants.pos, variants.alleles))
+        if chrom_out:
+            bim_width = max(bim_width, len(str(chrom_out).encode()))
+        tile_variants = min(width, 32)
+        tile_rows = min(n, max(1, (512 << 10) // (4 * k * tile_variants)))
+        with TemporaryDirectory(dir=outfile.parent, prefix='.snipar-genotypes-') as scratch:
+            pending = Path(scratch) / 'genotypes.hdf5'
+            with h5py.File(pending, 'w', rdcc_nbytes=8 << 20) as output:
+                genotypes = output.create_dataset('genotypes', (n, k, 0), maxshape=(n, k, len(variants.sid)),
+                                                  dtype='f', chunks=(tile_rows, k, tile_variants),
+                                                  compression='gzip', compression_opts=3, shuffle=True)
+                bim = output.create_dataset('bim', (0, 5), maxshape=(len(variants.sid), 5),
+                                            dtype=f'S{bim_width}')
+                written = 0
+                for start in range(0, len(variants.sid), width):
+                    block = variants.subset(slice(start, start + width))
+                    matrix = reader.read(block)
+                    if start == 0:
+                        _metadata(output, matrix, fit_sib, pedigree)
+                    matrix.compute_freqs()
+                    keep = (matrix.freqs > min_maf) & (matrix.freqs < 1 - min_maf)
+                    mask = matrix.gts.mask
+                    missing = mask.mean(axis=(0, 1)) if np.ndim(mask) else mask
+                    keep &= 100 * missing <= max_missing
+                    count = np.count_nonzero(keep)
+                    if count:
+                        rows = slice(written, written + count)
+                        chrom = np.where(matrix.chrom == '', str(chrom_out), matrix.chrom) if chrom_out else matrix.chrom
+                        metadata = np.column_stack((chrom[keep], matrix.sid[keep], matrix.pos[keep], matrix.alleles[keep]))
+                        bim.resize(written + count, axis=0)
+                        bim[rows] = encode_str_array(metadata)
+                        genotypes.resize(written + count, axis=2)
+                        data = matrix.gts.data
+                        values = data if count == keep.size else data[..., keep]
+                        genotypes[..., rows] = values
+                        written += count
+                        del values, data
+                    del matrix, mask
+            pending.replace(outfile)
+
 
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
@@ -91,9 +149,9 @@ def main(args):
     """
     # Set number of threads
     if args.threads is not None:
-        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+        num_threads = min(args.threads, numba_config.NUMBA_NUM_THREADS, available_cpus())
     else:
-        num_threads = numba_config.NUMBA_NUM_THREADS
+        num_threads = min(numba_config.NUMBA_NUM_THREADS, available_cpus())
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
 
@@ -148,7 +206,8 @@ def main(args):
         else:
             print('Obtaining genotype matrix')
         gts_matrix_chromosome(chroms[i], ped, args.out, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i],
-                        fit_sib=args.fit_sib, parsum=args.parsum, max_missing=args.max_missing, min_maf=args.min_maf)
+                        fit_sib=args.fit_sib, parsum=args.parsum, max_missing=args.max_missing, min_maf=args.min_maf,
+                         num_threads=num_threads)
         
 if __name__ == "__main__":
     args=parser.parse_args()

@@ -1,4 +1,3 @@
-from collections import defaultdict
 from itertools import combinations
 
 import numpy as np
@@ -6,22 +5,32 @@ import pandas as pd
 import logging
 from snipar.utilities import make_id_dict
 
-def get_sibpairs_from_ped(ped):
+def get_sibpairs_from_ped(ped, *, return_pairs=True):
+    """Normalize family IDs by their observed parent pair, optionally enumerating siblings."""
     ped = np.asarray(ped, dtype=str)
-    valid = (ped[:, 2] != "0") & (ped[:, 3] != "0") & ~np.char.startswith(ped[:, 0], "_")
+    valid = (ped[:, 2] != '0') & (ped[:, 3] != '0') & ~np.char.startswith(ped[:, 0], '_')
     ped = ped[valid]
-    families = defaultdict(list)
-    for i, (father, mother) in enumerate(ped[:, 2:4]):
-        families[father, mother].append(i)
-
-    if families:
-        # Ensure generated labels fit even if all input fields are short.
-        ped = ped.astype(f"U{max(ped.dtype.itemsize // 4, len(str(len(families) - 1)))}")
+    if not len(ped):
+        return None, ped
+    # Stable ties retain pedigree order within each sorted parent pair.
+    order = np.lexsort((ped[:, 3], ped[:, 2]))
+    pairs_of_parents = ped[order, 2:4]
+    new_family = np.empty(len(ped), dtype=bool)
+    new_family[0] = True
+    new_family[1:] = np.any(pairs_of_parents[1:] != pairs_of_parents[:-1], axis=1)
+    labels = np.cumsum(new_family) - 1
+    width = len(str(labels[-1]))
+    if width > ped.dtype.itemsize // 4:
+        ped = ped.astype(f'U{width}')
+    ped[order, 0] = labels.astype(f'U{width}')
+    if not return_pairs:
+        return None, ped
+    starts = np.flatnonzero(new_family)
+    stops = np.append(starts[1:], len(ped))
     pairs = []
-    for family_number, parents in enumerate(sorted(families)):
-        rows = families[parents]
-        ped[rows, 0] = str(family_number)
-        pairs.extend(combinations(ped[rows, 1], 2))
+    for start, stop in zip(starts, stops):
+        if stop - start > 1:
+            pairs.extend(combinations(ped[order[start:stop], 1], 2))
     return (np.asarray(pairs, dtype=ped.dtype) if pairs else None), ped
 
 class Person:

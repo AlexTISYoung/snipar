@@ -19,6 +19,7 @@ Results:
 """
 import argparse
 from numba import set_num_threads
+from snipar.resources import available_cpus
 from numba import config as numba_config
 import snipar.ibd
 import numpy as np
@@ -74,9 +75,9 @@ def main(args):
     """
     # Set number of threads
     if args.threads is not None:
-        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+        num_threads = min(args.threads, numba_config.NUMBA_NUM_THREADS, available_cpus())
     else:
-        num_threads = numba_config.NUMBA_NUM_THREADS
+        num_threads = min(numba_config.NUMBA_NUM_THREADS, available_cpus())
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
 
@@ -176,7 +177,7 @@ def main(args):
                 bgenfile=bgenfiles[i], chrom=None if chrom == 0 else chrom,
                 min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix,
                 ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
-                max_error=max_error,
+                max_error=max_error, num_threads=num_threads,
             )
 
 if __name__ == "__main__":

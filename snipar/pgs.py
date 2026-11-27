@@ -1,19 +1,71 @@
 from snipar.gtarray import gtarray
 import numpy as np
-from snipar.read import bed, bgen, get_gts_matrix
-from snipar.read.variants import NoMatchingVariantsError, bgen_variant_ids
-import h5py
+import pandas as pd
+from snipar.read import prepare_gts_matrix
+from snipar.read.variants import NoMatchingVariantsError
+from snipar.resources import plan_batches
 from snipar.utilities import *
 from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
 import numpy.ma as ma
 import snipar.slmm as slmm
-from pysnptools.snpreader import Bed
 import numdifftools as nd
 import warnings
-from pathlib import Path
 from contextlib import nullcontext
+import gzip
+from os import fsdecode, PathLike
+from pathlib import Path
+from snipar.read.family import IdIndex
 from snipar.pgs_am import *
+
+
+@njit(cache=True, nogil=True, parallel=True)
+def _add_score_block(dosages, mask, indices, weights, scales, sums, called):
+    """Center and score one tile using numeric buffers only."""
+    means = np.empty(indices.size)
+    n_rows, n_cols, _ = dosages.shape
+    for v in prange(indices.size):
+        variant = indices[v]
+        total = 0.
+        count = 0
+        for row in range(n_rows):
+            value = dosages[row, 0, variant]
+            if np.isfinite(value) and (mask is None or not mask[row, 0, variant]):
+                total += value
+                count += 1
+        means[v] = total / count if count else np.nan
+    # With Fortran-order genotype input each tile traverses contiguous sample
+    # ranges. Threads update disjoint output rows and reductions are ordered.
+    tile = 1024
+    for block in prange((n_rows + tile - 1) // tile):
+        first = block * tile
+        last = min(first + tile, n_rows)
+        for col in range(n_cols):
+            for v in range(indices.size):
+                if not np.isfinite(means[v]):
+                    continue
+                center = means[v] * scales[col]
+                variant, weight = indices[v], weights[v]
+                for row in range(first, last):
+                    value = dosages[row, col, variant]
+                    if np.isfinite(value) and (mask is None or not mask[row, col, variant]):
+                        sums[row, col] += (value - center) * weight
+                        called[row, col] = True
+
+
+def _score_batch(genotypes, indices, weights, cols, sums, called):
+    data = genotypes.gts
+    if genotypes.ndim == 2:
+        data = data[:, None, :]
+    mask = ma.getmask(data)
+    if np.ndim(mask) == 0:
+        if mask:
+            return
+        mask = None
+    scales = np.where(np.asarray(cols) == 'parental', 2, 1)
+    _add_score_block(data.data, mask, indices, weights, scales, sums, called)
+
+
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
 
@@ -56,100 +108,73 @@ class pgs(object):
         else:
             print('No zero weight SNPs found')
 
-    def compute(self, garray, cols=None):
-        """Compute polygenic score values from a given genotype array. Finds the SNPs in the genotype array
-        that have weights in the pgs and matching alleles, and computes the PGS based on these SNPs and the
-        weights after allele-matching.
-
-
-        Args:
-            garray : :class:`sbreg.gtarray`
-                genotype array to compute PGS values for
-            cols : :class:`numpy:numpy.array`
-                names to give the columns in the output gtarray
-
-        Returns:
-            pg : :class:`snipar.gtarray`
-                2d gtarray with PGS values. If a 3d gtarray is input, then each column corresponds to
-                the second dimension on the input gtarray (for example, individual, paternal, maternal PGS).
-                If a 2d gtarray is input, then there will be only one column in the output gtarray. The
-                names given in 'cols' are stored in 'sid' attribute of the output.
-
-        """
-        if not isinstance(garray, gtarray):
-            raise ValueError('Must be of gtarray class')
-        if garray.alleles is None:
-            raise ValueError('Alleles of genotype matrix must be provided')
-        weight_indices = np.fromiter((self.snp_dict.get(snp, -1) for snp in garray.sid),
-                                     dtype=np.intp, count=len(garray.sid))
-        variant_indices = np.flatnonzero(weight_indices >= 0)
-        if not variant_indices.size:
-            print('No overlap between PGS SNPs and genotype SNPs')
-            return None
-
-        weight_indices = weight_indices[variant_indices]
+    def _align_weights(self, ids, alleles):
+        weight_indices = np.fromiter((self.snp_dict.get(snp, -1) for snp in ids),
+                                     dtype=np.intp, count=len(ids))
+        variants = np.flatnonzero(weight_indices >= 0)
+        weight_indices = weight_indices[variants]
         score_alleles = self.alleles[weight_indices]
-        genotype_alleles = garray.alleles[variant_indices]
+        genotype_alleles = alleles[variants]
         forward = np.all(score_alleles == genotype_alleles, axis=1)
         reverse = np.all(score_alleles == genotype_alleles[:, ::-1], axis=1) & ~forward
         matched = forward | reverse
         if not np.all(matched):
             print(f'Removing {np.sum(~matched)} SNPs due to allele mismatch between genotypes and PGS alleles')
-        if not np.any(matched):
-            return None
+        return variants[matched], self.weights[weight_indices[matched]] * np.where(reverse[matched], -1, 1)
 
-        indices = variant_indices[matched]
-        weights = self.weights[weight_indices[matched]] * np.where(reverse[matched], -1, 1)
-        genotypes = garray.gts
-        n_cols = 1 if garray.ndim == 2 else genotypes.shape[1]
+    def compute(self, garray, cols=None):
+        """Calculate centered polygenic scores for each genotype column."""
+        if not isinstance(garray, gtarray):
+            raise ValueError('Must be of gtarray class')
+        if garray.alleles is None:
+            raise ValueError('Alleles of genotype matrix must be provided')
+        indices, weights = self._align_weights(garray.sid, garray.alleles)
+        if not indices.size:
+            print('No overlap between PGS SNPs and genotype SNPs')
+            return None
+        n_cols = 1 if garray.ndim == 2 else garray.shape[1]
         if cols is None:
             cols = ['proband'] + [f'relative_{i}' for i in range(1, n_cols)]
         cols = np.asarray(cols)
         if cols.shape != (n_cols,):
             raise ValueError('Provide one PGS column name per genotype column')
-
-        # Limit each working array to one generation. Missing genotypes
-        # contribute zero after centering by the proband allele dosage.
-        genotypes = genotypes[:, None, :] if garray.ndim == 2 else genotypes
-        if indices.size != genotypes.shape[-1]:
-            proband = genotypes[:, 0, indices]
-        else:
-            proband = genotypes[:, 0, :]
-        complete = not np.any(ma.getmask(genotypes))
-        means = proband.data.mean(axis=0) if complete else proband.mean(axis=0)
-        if complete:
-            score_mean = means @ weights
-        dtype = genotypes.dtype if garray.ndim == 3 and genotypes.dtype.kind == 'f' else np.float64
-        result = np.empty((genotypes.shape[0], n_cols), dtype=dtype)
-        for column, name in enumerate(cols):
-            if column == 0:
-                values = proband
-            elif indices.size == genotypes.shape[-1]:
-                values = genotypes[:, column, :]
-            else:
-                values = genotypes[:, column, indices]
-            scale = 2 if name == 'parental' else 1
-            if complete:
-                # Center the projected score, avoiding a second sample x SNP
-                # matrix and the full float64 cast used by mixed-dtype dot.
-                result[:, column] = np.einsum('ij,j->i', values.data, weights, dtype=float) - scale * score_mean
-            else:
-                result[:, column] = ma.dot(values - scale * means, weights).filled(np.nan)
-        return pgarray(result, garray.ids, sid=cols, fams=garray.fams,
+        sums = np.zeros((garray.shape[0], n_cols), order='F')
+        called = np.zeros(sums.shape, dtype=bool, order='F')
+        _score_batch(garray, indices, weights, cols, sums, called)
+        sums[~called] = np.nan
+        dtype = garray.dtype if garray.ndim == 3 and garray.dtype.kind == 'f' else np.float64
+        return pgarray(sums.astype(dtype, copy=False), garray.ids, sid=cols, fams=garray.fams,
                        par_status=garray.par_status, ped=garray.ped)
 
 
 def read_weights(weights, SNP='SNP', beta_col='b', A1='A1', A2='A2', sep=None):
-    table = np.loadtxt(weights, dtype=str, delimiter=sep, ndmin=2)
-    if table.shape[0] < 2:
-        raise ValueError('Weights file must contain a header and at least one variant')
-    header = table[0].tolist()
     columns = [SNP, beta_col, A1, A2]
+    is_path = isinstance(weights, (str, bytes, PathLike))
+    if is_path:
+        weights = fsdecode(weights)
+        # Inspect the header before pandas disambiguates duplicate names. Only
+        # materialize the required fields, even for wide summary-statistic files.
+        head = np.loadtxt(weights, dtype=str, delimiter=sep, ndmin=2, max_rows=1)
+        header = head[0].tolist() if head.size else []
+    else:
+        table = np.loadtxt(weights, dtype=str, delimiter=sep, ndmin=2)
+        header = table[0].tolist() if table.size else []
     if any(header.count(name) != 1 for name in columns):
         raise ValueError('Weight file must contain each required column exactly once: ' + ', '.join(columns))
-    snp, beta, a1, a2 = [header.index(name) for name in columns]
-    print(f'Read weights for {table.shape[0] - 1} variants')
-    return pgs(table[1:, snp], table[1:, beta].astype(float), table[1:, [a1, a2]])
+    if is_path:
+        frame = pd.read_csv(weights, sep=r'\s+' if sep is None else sep, usecols=columns,
+                            dtype={SNP: str, beta_col: float, A1: str, A2: str},
+                            comment='#', keep_default_na=False, float_precision='round_trip')
+        ids = frame[SNP].to_numpy(dtype=str)
+        effects = frame[beta_col].to_numpy()
+        alleles = frame[[A1, A2]].to_numpy(dtype=str)
+    else:
+        snp, beta, a1, a2 = [header.index(name) for name in columns]
+        ids, effects, alleles = table[1:, snp], table[1:, beta].astype(float), table[1:, [a1, a2]]
+    if not len(ids):
+        raise ValueError('Weights file must contain a header and at least one variant')
+    print(f'Read weights for {len(ids)} variants')
+    return pgs(ids, effects, alleles)
 
 
 def read_pgs(pgs_file):
@@ -174,7 +199,7 @@ def read_pgs(pgs_file):
                    par_status=par_status, ped=ped)
 
 
-def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None):
+def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None, num_threads=None):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
     Args:
@@ -202,51 +227,46 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
     if batch_size is not None and (int(batch_size) != batch_size or batch_size < 1):
         raise ValueError('PGS batch size must be a positive integer')
 
-    source = nullcontext(Bed(bedfile, count_A1=True)) if bedfile is not None else open_bgen(bgenfile, verbose=False)
-    matched = None
-    with source as observed:
-        snp_ids = observed.sid if bedfile is not None else bgen_variant_ids(observed)[0]
-        pgs_snp_set = set(pgs.snp_ids)
-        snps = np.array([snp for snp in snp_ids if snp in pgs_snp_set], dtype=str)
-        _, indices, counts = np.unique(snps, return_index=True, return_counts=True)
-        snps = snps[np.sort(indices[counts == 1])]
-        if not snps.size:
-            print('No unique variants in common between weights file and observed genotypes')
+    with prepare_gts_matrix(ped=ped, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
+                            sib=sib, compute_controls=compute_controls, verbose=verbose,
+                            num_threads=num_threads) as reader:
+        try:
+            matched = reader.match_variants(pgs.snp_ids, match_snp_ids=True)
+        except NoMatchingVariantsError as exc:
+            print(exc)
             return None
-        if par_gts_f is not None:
-            try:
-                with h5py.File(par_gts_f, 'r') as imputed:
-                    if bedfile is not None:
-                        matched = bed._match_variants(observed, imputed, Path(bedfile).with_suffix('.bim'), snps)
-                    else:
-                        matched = bgen._match_variants(observed, imputed, snps)
-            except NoMatchingVariantsError as exc:
-                print(exc)
-                return None
-            snps = matched.sid
-
-    n_snps = snps.size
-    batch_size = n_snps if batch_size is None else min(int(batch_size), n_snps)
-    scores = None
-    for start in range(0, n_snps, batch_size):
-        batch = slice(start, start + batch_size)
-        genotypes = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
-                                   ped=ped, snp_ids=snps[batch], sib=sib, compute_controls=compute_controls,
-                                   verbose=verbose and start == 0,
-                                   matched_variants=None if matched is None else matched.subset(batch))
-        for index, array in enumerate(genotypes if compute_controls else (genotypes,)):
-            cols = ['proband', 'sibling'] if sib else ['proband']
-            cols += ['paternal', 'maternal'] if array.shape[1] == len(cols) + 2 else ['parental']
-            score = pgs.compute(array, cols)
-            if score is None:
-                continue
-            if scores is None:
-                scores = [None] * (4 if compute_controls else 1)
-            scores[index] = score if scores[index] is None else scores[index].add(score)
-    if scores is None:
-        return None
-    if compute_controls and any(score is None for score in scores):
-        raise ValueError('No matching weighted variants for one or more control groups')
+        indices, weights = pgs._align_weights(matched.sid, matched.alleles)
+        if not indices.size:
+            return None
+        matched = matched.subset(indices)
+        # Account for each group accumulator, call mask, output and HDF5/BGEN
+        # scratch separately from the variant-dependent genotype buffers.
+        score_bytes = sum(n * k * 16 for n, k in reader.group_shapes)
+        _, width = plan_batches(len(weights), reader.bytes_per_variant, batch_size=batch_size,
+                                fixed_bytes=score_bytes + reader.fixed_read_bytes)
+        if verbose:
+            print(f'Computing PGS in blocks of up to {width} variants')
+        storage = []
+        for start in range(0, len(weights), width):
+            window = slice(start, start + width)
+            block = reader.read(matched.subset(window), order='F')
+            groups = block if compute_controls else (block,)
+            for i, matrix in enumerate(groups):
+                if i == len(storage):
+                    names = ['proband', 'sibling'] if sib else ['proband']
+                    names += ['paternal', 'maternal'] if matrix.shape[1] == len(names) + 2 else ['parental']
+                    shape = matrix.shape[:2]
+                    storage.append((np.zeros(shape, order='F'), np.zeros(shape, dtype=bool, order='F'),
+                                    np.asarray(names), matrix.ids, matrix.fams, matrix.par_status, matrix.ped))
+                sums, called, names, *_ = storage[i]
+                local = weights[window]
+                _score_batch(matrix, np.arange(local.size), local, names, sums, called)
+            del matrix, groups, block
+    scores = []
+    for sums, called, names, ids, fams, status, pedigree in storage:
+        sums[~called] = np.nan
+        scores.append(pgarray(sums.astype(np.float32), ids, sid=names, fams=fams,
+                              par_status=status, ped=pedigree))
     return scores if compute_controls else scores[0]
 
 
@@ -393,25 +413,44 @@ class pgarray(gtarray):
         self.gts = self.gts / sf
         return sf
 
-    def write(self, filename, scale=False):
+    def write(self, filename, scale=False, *, return_array=True):
         if scale:
             self.scale()
-        ####### Write PGS to file ########  
         if self.fams is None:
             raise ValueError('Family IDs are required to write a PGS file')
-        metadata = [self.fams, self.ids]
         header = ['FID', 'IID']
+        pedigree_rows = None
         if self.ped is not None and self.par_status is not None:
-            ped_dict = make_id_dict(self.ped, 1)
-            parent_ids = self.ped[[ped_dict[iid] for iid in self.ids], 2:4].astype(object)
-            parent_ids[self.par_status != 0] = 'NA'
-            metadata.extend(parent_ids.T)
+            pedigree_rows = IdIndex(self.ped[:, 1]).lookup(self.ids)
+            if np.any(pedigree_rows < 0):
+                raise ValueError('Some scored individuals are missing from the pedigree')
             header.extend(['FATHER_ID', 'MOTHER_ID'])
-        values = ma.asarray(self.gts, dtype=float).filled(np.nan)
-        pg_out = np.vstack((header + self.sid.tolist(), np.column_stack((*metadata, values))))
+        header.extend(self.sid.tolist())
+
+        def columns(rows):
+            metadata = [self.fams[rows], self.ids[rows]]
+            if pedigree_rows is not None:
+                parents = self.ped[pedigree_rows[rows], 2:4].astype(object)
+                parents[self.par_status[rows] != 0] = 'NA'
+                metadata.extend(parents.T)
+            values = ma.asarray(self.gts[rows], dtype=float).filled(np.nan)
+            return np.column_stack((*metadata, values))
+
         print('Writing PGS to ' + str(filename))
-        np.savetxt(filename, pg_out, fmt='%s')
-        return pg_out
+        if return_array:
+            output = np.vstack((header, columns(slice(None))))
+            np.savetxt(filename, output, fmt='%s')
+            return output
+        if hasattr(filename, 'write'):
+            handle = nullcontext(filename)
+        elif str(filename).endswith('.gz'):
+            handle = gzip.open(filename, 'wt')
+        else:
+            handle = open(filename, 'w')
+        with handle as stream:
+            stream.write(' '.join(header) + '\n')
+            for start in range(0, len(self.ids), 8192):
+                np.savetxt(stream, columns(slice(start, start + 8192)), fmt='%s')
     
     def compute_grandpar(self, r):
         # Check we have required information
@@ -672,12 +711,16 @@ def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse
     print(f'Sample size: {n}')
     if n <= X.shape[1] + 1:
         raise ValueError('Too few complete PGS and phenotype observations for this model')
-    ## Read GRM
-    id_dict = make_id_dict(pg.ids[no_NA])
-    varcomp_lst = make_grms(pg.fams[no_NA], ibdrel_path=ibdrel_path, id_dict=id_dict, keep=pg.ids[no_NA], sparse_thresh=sparse_thresh)
-    ## Define LMM
-    slmm_model = slmm.LinearMixedModel(response[no_NA],
-                    varcomp_arr_lst=varcomp_lst, covar_X=np.array(X[no_NA,:],dtype=float), add_intercept=True)
+    family_labels = pg.fams[no_NA]
+    sample_ids = pg.ids[no_NA]
+    components = []
+    if ibdrel_path is not None:
+        components = make_grms(family_labels, ibdrel_path=ibdrel_path,
+                               id_dict=make_id_dict(sample_ids), keep=sample_ids,
+                               sparse_thresh=sparse_thresh)
+    slmm_model = slmm.LinearMixedModel(response[no_NA], varcomp_arr_lst=components,
+                                       covar_X=X[no_NA], add_intercept=True,
+                                       family_labels=family_labels if ibdrel_path is None else None)
     # Optimize Lmm
     print('Optimizing linear mixed model')
     slmm_model.scipy_optimize()

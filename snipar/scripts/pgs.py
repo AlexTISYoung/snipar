@@ -37,6 +37,7 @@ from snipar.utilities import *
 from snipar.numrange import parseNumRange, NumRangeAction
 from numba import set_num_threads
 from numba import config as numba_config
+from snipar.resources import available_cpus
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
@@ -87,7 +88,7 @@ parser.add_argument('--missing_char',type=str,help='Missing value string in phen
 parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust imputed parental PGSs for assortative mating',default=False)
 parser.add_argument('--force_am_adj',action='store_true',help='Currently has no effect; the assortative mating score adjustment still requires an estimated correlation divided by its SE greater than 1.5.',default=False)
 parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
-parser.add_argument('--batch_size',type=int,help='Batch size for reading in SNPs (default 10000)',default=10000)
+parser.add_argument('--batch_size',type=int,help='Maximum SNPs per batch (default 10000). Reduced automatically when available memory is lower.',default=10000)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
@@ -97,9 +98,9 @@ def main(args):
     """
     # Set number of threads
     if args.threads is not None:
-        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
+        num_threads = min(args.threads, numba_config.NUMBA_NUM_THREADS, available_cpus())
     else:
-        num_threads = numba_config.NUMBA_NUM_THREADS
+        num_threads = min(numba_config.NUMBA_NUM_THREADS, available_cpus())
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
     if args.compute_controls and (args.imp is None or args.phenofile is not None):
@@ -156,7 +157,7 @@ def main(args):
                 print('Imputed genotypes file:', imputed)
             scores = pgs.compute(p, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=imputed, ped=ped,
                                  sib=args.fit_sib, compute_controls=args.compute_controls,
-                                 batch_size=args.batch_size)
+                                 batch_size=args.batch_size, num_threads=num_threads)
             if scores is not None:
                 if pg is None:
                     pg = scores
@@ -183,12 +184,12 @@ def main(args):
                 pg.compute_grandpar(r_am)
         ####### Write PGS to file ########
         if args.compute_controls:
-            pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs)
-            pg[1].write(args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs)
-            pg[2].write(args.out + '.pgs.control_maternal.txt', scale=args.scale_pgs)
-            pg[3].write(args.out + '.pgs.control_sibling.txt', scale=args.scale_pgs)
+            pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs, return_array=False)
+            pg[1].write(args.out + '.pgs.control_paternal.txt', scale=args.scale_pgs, return_array=False)
+            pg[2].write(args.out + '.pgs.control_maternal.txt', scale=args.scale_pgs, return_array=False)
+            pg[3].write(args.out + '.pgs.control_sibling.txt', scale=args.scale_pgs, return_array=False)
         else:
-            pg.write(args.out + '.pgs.txt', scale=args.scale_pgs)
+            pg.write(args.out + '.pgs.txt', scale=args.scale_pgs, return_array=False)
     elif args.pgs is not None:
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')

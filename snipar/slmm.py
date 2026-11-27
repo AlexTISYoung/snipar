@@ -1,8 +1,7 @@
 from operator import attrgetter
 from typing import Tuple, NamedTuple, Sequence
 from typing import Literal
-from itertools import product, combinations_with_replacement
-from collections import defaultdict
+from itertools import product
 
 import numpy as np
 import pandas as pd
@@ -11,6 +10,7 @@ from numpy.linalg import slogdet, solve
 from scipy.linalg import cho_factor, cho_solve, qr
 from scipy.sparse import csc_matrix, tril
 from scipy.sparse.linalg import splu, SuperLU, cg
+from numba import njit
 from snipar.types import FamLabels, SparseGRMRepr, Ids, IdDict
 from snipar.gtarray import gtarray
 
@@ -31,24 +31,10 @@ def build_sib_arr(fam_labels: FamLabels) -> SparseGRMRepr:
     Returns:
         SparseGRMRepr: sparse GRM representation.
     """
-    # logger.info('Building sibship arr...')
-    data = []
-    row_ind = []
-    col_ind = []
-
-    label_indices = defaultdict(list)
-    for l, f in enumerate(fam_labels):
-        label_indices[f].append(l)
-    # logger.info('Done creating label_indices. ' + str(len(label_indices)) + ' ' + str(int(n)))
-
-    for f, indices_lst in label_indices.items():
-        for pair in combinations_with_replacement(indices_lst, 2):
-            ind1, ind2 = max(pair[0], pair[1]), min(pair[0], pair[1])
-            data.append(1)
-            row_ind.append(ind1)
-            col_ind.append(ind2)
-    # logger.info(f'Done building sibship arr. nnz={len(data)}')
-    return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
+    partition = _FamilyPartition(fam_labels)
+    entries = (partition.sizes * (partition.sizes + 1) // 2).sum()
+    rows, columns = _family_coordinates(partition.rows, partition.offsets, entries)
+    return np.ones(entries, dtype=np.uint8), rows, columns
 
 
 def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
@@ -76,21 +62,32 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
         relcol = 'relatedness'
     else:
         raise ValueError('GRM should have PropIBD or relatedness column.')
-    table = pd.read_csv(ibdrel_path, sep=r'\s+', usecols=['ID1', 'ID2', relcol],
-                        dtype={'ID1': str, 'ID2': str}, keep_default_na=False)
-    subset = table[table['ID1'].isin(keep) & table['ID2'].isin(keep) & (table[relcol] > thres)]
-    invalid = subset[subset[relcol] > 0.8]
-    if not invalid.empty:
-        row = invalid.iloc[0]
-        raise ValueError(f"Impossible ibd relatedness {row[relcol]} for pair ({row['ID1']}, {row['ID2']}). MZ pairs should be removed.")
-    left = subset['ID1'].map(id_dict).to_numpy(dtype='uint32')
-    right = subset['ID2'].map(id_dict).to_numpy(dtype='uint32')
-    if np.any(left == right):
-        raise ValueError('GRM contains a self-pair; diagonal entries are added automatically.')
-    diagonal = np.array([id_dict[iid] for iid in keep], dtype='uint32')
-    return (np.concatenate((subset[relcol].to_numpy(dtype=float), np.ones(len(diagonal)))),
-            np.concatenate((np.maximum(left, right), diagonal)),
-            np.concatenate((np.minimum(left, right), diagonal)))
+    cohort = pd.Index(keep)
+    row_for_sample = np.fromiter((id_dict[iid] for iid in keep), dtype=np.uint32, count=len(keep))
+    values, rows, cols = [], [], []
+    with pd.read_csv(ibdrel_path, sep=r'\s+', usecols=['ID1', 'ID2', relcol],
+                     dtype={'ID1': str, 'ID2': str, relcol: float},
+                     keep_default_na=False, chunksize=250_000) as chunks:
+        for table in chunks:
+            r = table[relcol].to_numpy()
+            relevant = r > thres
+            r = r[relevant]
+            left = cohort.get_indexer(table.loc[relevant, 'ID1'])
+            right = cohort.get_indexer(table.loc[relevant, 'ID2'])
+            include = (left >= 0) & (right >= 0)
+            invalid = np.flatnonzero(include & (r > 0.8))
+            if invalid.size:
+                result = table.loc[relevant].iloc[invalid[0]]
+                raise ValueError(f"Impossible ibd relatedness {result[relcol]} for pair "
+                                 f"({result['ID1']}, {result['ID2']}). MZ pairs should be removed.")
+            left, right = row_for_sample[left[include]], row_for_sample[right[include]]
+            if np.any(left == right):
+                raise ValueError('GRM contains a self-pair; diagonal entries are added automatically.')
+            values.append(r[include])
+            rows.append(np.maximum(left, right))
+            cols.append(np.minimum(left, right))
+    return (np.concatenate((*values, np.ones(len(keep)))),
+            np.concatenate((*rows, row_for_sample)), np.concatenate((*cols, row_for_sample)))
 
 
 def build_grm_arr(grm_path: str, id_dict: IdDict,
@@ -174,6 +171,150 @@ def _precision_terms(lu, y, covariates):
     return precision_y - projected_z @ (covariates.T @ precision_y), (covariates, projected_z)
 
 
+class _FamilyPartition:
+    def __init__(self, labels):
+        labels = np.asarray(labels)
+        if labels.ndim != 1:
+            raise ValueError('Family labels must be one-dimensional')
+        self.codes, families = pd.factorize(labels, sort=False)
+        if np.any(self.codes < 0):
+            raise ValueError('Family labels must be nonmissing')
+        self.sizes = np.bincount(self.codes, minlength=len(families))
+        self.rows = np.argsort(self.codes, kind='stable')
+        self.offsets = np.concatenate(([0], np.cumsum(self.sizes)))
+
+
+@njit(cache=True, nogil=True)
+def _family_coordinates(rows, offsets, entries):
+    row_ind, col_ind = np.empty(entries, np.uint32), np.empty(entries, np.uint32)
+    entry = 0
+    for family in range(len(offsets) - 1):
+        start, end = offsets[family], offsets[family + 1]
+        for i in range(start, end):
+            for j in range(i, end):
+                row_ind[entry], col_ind[entry] = rows[j], rows[i]
+                entry += 1
+    return row_ind, col_ind
+
+
+@njit(cache=True, nogil=True)
+def _group_columns(values, codes, groups):
+    sums = np.zeros((groups, values.shape[1]))
+    for row in range(len(codes)):
+        code = codes[row]
+        if code >= 0:
+            for j in range(values.shape[1]):
+                sums[code, j] += values[row, j]
+    return sums
+
+
+@njit(cache=True, nogil=True)
+def _solve_family_covariance(rhs, rows, offsets, within_precision, mean_precision):
+    result = np.empty(rhs.shape)
+    for f in range(len(mean_precision)):
+        start, end = offsets[f], offsets[f + 1]
+        if end - start == 1:
+            row = rows[start]
+            for column in range(rhs.shape[1]):
+                result[row, column] = rhs[row, column] * mean_precision[f]
+            continue
+        for column in range(rhs.shape[1]):
+            total = 0.
+            for j in range(start, end):
+                total += rhs[rows[j], column]
+            mean = total / (end - start)
+            for j in range(start, end):
+                row = rows[j]
+                result[row, column] = (rhs[row, column] - mean) * within_precision + mean * mean_precision[f]
+    return result
+
+
+class _FamilyFactor:
+    """Exact inverse for a covariance with one shared effect per family."""
+
+    def __init__(self, partition, sibling, residual):
+        self.partition = partition
+        self.mean_variance = residual + sibling * partition.sizes
+        self.within_count = len(partition.rows) - len(partition.sizes)
+        self.residual = residual
+        if (self.within_count and residual <= 0) or np.any(self.mean_variance <= 0):
+            raise RuntimeError('Family covariance is singular')
+        self.within_precision = 1 / residual if self.within_count else 0.
+        self.mean_precision = 1 / self.mean_variance
+
+    def solve(self, rhs):
+        rhs = np.asarray(rhs, dtype=float)
+        if rhs.ndim == 1:
+            return self.solve(rhs[:, None])[:, 0]
+        return _solve_family_covariance(rhs, self.partition.rows, self.partition.offsets,
+                                        self.within_precision, self.mean_precision)
+
+    @property
+    def logdet(self):
+        within = self.within_count * np.log(self.residual) if self.within_count else 0.
+        return np.log(self.mean_variance).sum() + within
+
+
+@njit(cache=True, nogil=True)
+def _family_information(gts, rows, offsets, within_precision, mean_precision,
+                        precision_y, precision_z):
+    """Accumulate small SNP information matrices without solving for every genotype."""
+    _, p, n_loci = gts.shape
+    n_covariates = precision_z.shape[1]
+    information = np.zeros((n_loci, p, p))
+    scores = np.zeros((n_loci, p))
+    cross = np.zeros((n_loci, p, n_covariates))
+    family_sum = np.empty((p, n_loci))
+    for family in range(len(mean_precision)):
+        start, end = offsets[family], offsets[family + 1]
+        size = end - start
+        family_sum[:] = 0.
+        for j in range(start, end):
+            row = rows[j]
+            for a in range(p):
+                for locus in range(n_loci):
+                    value = np.float64(gts[row, a, locus])
+                    family_sum[a, locus] += value
+                    scores[locus, a] += value * precision_y[row]
+                    for c in range(n_covariates):
+                        cross[locus, a, c] += value * precision_z[row, c]
+        if size > 1:
+            family_sum /= size
+        for a in range(p):
+            for b in range(a + 1):
+                for locus in range(n_loci):
+                    mean_a, mean_b = family_sum[a, locus], family_sum[b, locus]
+                    value = size * mean_precision[family] * mean_a * mean_b
+                    if size > 1:
+                        within = 0.
+                        for j in range(start, end):
+                            row = rows[j]
+                            within += ((gts[row, a, locus] - mean_a)
+                                       * (gts[row, b, locus] - mean_b))
+                        value += within_precision * within
+                    information[locus, a, b] += value
+    for a in range(p):
+        for b in range(a):
+            information[:, b, a] = information[:, a, b]
+    return information, scores, cross
+
+
+def _identified_information(information, unadjusted_variance, n):
+    # Rank in correlation units, independent of predictor scale.
+    k = information.shape[1]
+    diagonal = np.diagonal(information, axis1=1, axis2=2)
+    tolerance = k * np.finfo(float).eps
+    projection_tolerance = max(n, k, 16) * np.finfo(float).eps
+    valid = np.flatnonzero(np.all(np.isfinite(information), axis=(1, 2)) &
+                           np.all(diagonal > projection_tolerance * unadjusted_variance, axis=1))
+    scales = np.sqrt(diagonal[valid])
+    normalized = information[valid] / scales[:, :, None] / scales[:, None, :]
+    identified = np.linalg.eigvalsh(normalized)[:, 0] > tolerance
+    scales = scales[identified]
+    covariance = np.linalg.inv(normalized[identified]) / scales[:, :, None] / scales[:, None, :]
+    return valid[identified], covariance
+
+
 def _fit_gls_batch(gts, lu, precision_y, projection, return_weights=False):
     """Fit individual SNPs using shared covariance and isolate unidentifiable loci."""
     n, k, loci = gts.shape
@@ -186,7 +327,9 @@ def _fit_gls_batch(gts, lu, precision_y, projection, return_weights=False):
     block_size = max(1, min(256, (32 * 1024 ** 2) // (8 * n * k)))
     for start in range(0, loci, block_size):
         block = gts[..., start:start + block_size]
-        x = block.reshape(n, -1).astype(float, copy=False)
+        # Fill the solver's column-major RHS directly, including strided SNP slices.
+        x = np.empty((n, k * block.shape[2]), dtype=float, order='F')
+        np.copyto(x.reshape(block.shape), block)
         precision_x = lu.solve(x)
         unadjusted_variance = np.einsum('ij,ij->j', x, precision_x).reshape(k, -1).T
         if projection is not None:
@@ -196,24 +339,33 @@ def _fit_gls_batch(gts, lu, precision_y, projection, return_weights=False):
         precision_x = precision_x.reshape(n, k, -1).transpose(2, 0, 1)
         information = x @ precision_x
         information = (information + information.transpose(0, 2, 1)) * 0.5
-        # Test rank in correlation units, so predictor scaling does not determine inclusion.
-        diagonal = np.diagonal(information, axis1=1, axis2=2)
-        tolerance = k * np.finfo(float).eps
-        projection_tolerance = max(n, k, 16) * np.finfo(float).eps
-        valid = np.flatnonzero(np.all(np.isfinite(information), axis=(1, 2)) &
-                               np.all(diagonal > projection_tolerance * unadjusted_variance, axis=1))
-        scales = np.sqrt(diagonal[valid])
-        normalized = information[valid] / scales[:, :, None] / scales[:, None, :]
-        identified = np.linalg.eigvalsh(normalized)[:, 0] > tolerance
-        valid = valid[identified]
-        normalized = normalized[identified]
-        scales = scales[identified]
-        vc = np.linalg.inv(normalized) / scales[:, :, None] / scales[:, None, :]
+        scores = x @ precision_y
+        valid, vc = _identified_information(information, unadjusted_variance, n)
         covariance[start + valid] = vc
-        alpha[start + valid] = (vc @ (x[valid] @ precision_y)[..., None])[..., 0]
+        alpha[start + valid] = (vc @ scores[valid, :, None])[..., 0]
         if return_weights:
             weights[:, start + valid] = np.einsum('lnk,lk->nl', precision_x[valid], vc[:, :, 0])
     return alpha, covariance, weights
+
+
+def _fit_family_gls(gts, factor, precision_y, precision_z, covariate_inverse):
+    n, p, loci = gts.shape
+    alpha = np.full((loci, p), np.nan)
+    covariance = np.full((loci, p, p), np.nan)
+    if n < p or not loci:
+        return alpha, covariance
+    partition = factor.partition
+    information, scores, cross = _family_information(
+        gts, partition.rows, partition.offsets, factor.within_precision,
+        factor.mean_precision, precision_y, precision_z,
+    )
+    unadjusted = np.diagonal(information, axis1=1, axis2=2).copy()
+    if precision_z.shape[1]:
+        information -= cross @ covariate_inverse @ cross.transpose(0, 2, 1)
+    valid, fitted = _identified_information(information, unadjusted, n)
+    covariance[valid] = fitted
+    alpha[valid] = (fitted @ scores[valid, :, None])[:, :, 0]
+    return alpha, covariance
 
 
 def _combine_direct_effects(effects, covariance):
@@ -242,7 +394,8 @@ class LinearMixedModel:
                  covar_X: np.ndarray = None,
                  add_intercept: bool = False,
                  add_jitter: bool = False,
-                 drop_collinear_covariates: bool = False) -> None:
+                 drop_collinear_covariates: bool = False, *,
+                 family_labels: np.ndarray | None = None, snp_solver: str = 'lu') -> None:
         """Initialize a LinearMixedModel instance.
 
         Args:
@@ -253,6 +406,11 @@ class LinearMixedModel:
             add_intercept: (bool): a boolean indicating whether to add intercept or not.
             add_jitter: (bool): a boolean indicating whether to add jitter to the diagonal of the covariance matrix or not.
             drop_collinear_covariates: (bool): reduce nuisance covariates to independent columns before fitting.
+            family_labels: represent the family covariance implicitly when no
+                sparse components are provided. For CG, supply the families
+                used to construct the preconditioner.
+            snp_solver: use sparse LU or sibship-preconditioned CG for SNP solves.
+                REML always uses the exact covariance determinant.
 
         Raises:
             ValueError: y should be a 1-d array.
@@ -286,12 +444,26 @@ class LinearMixedModel:
             self.Z = np.ones((self.n, 1))
         # self.logger.info(f'#individuals: {self.n}.')
             
-        self._varcomp_mats: Tuple[csc_matrix, ...] = \
-            tuple(self._build_sym_mat(data, row_ind, col_ind) for data, row_ind, col_ind in varcomp_arr_lst) \
-            + (
-                csc_matrix((np.ones(self.n), (np.arange(0, self.n), np.arange(0, self.n))), shape=(self.n, self.n)),
-            )
-        self.n_varcomps  = len(varcomp_arr_lst) + 1
+        if snp_solver not in ('lu', 'cg'):
+            raise ValueError("SNP solver must be 'lu' or 'cg'")
+        if family_labels is not None and len(family_labels) != self.n:
+            raise ValueError('Provide one family label per sample')
+        if snp_solver == 'cg' and family_labels is None:
+            raise ValueError('Sibship-preconditioned CG needs family labels')
+        self._family = None
+        self._snp_families = family_labels if snp_solver == 'cg' else None
+        if family_labels is not None and not len(varcomp_arr_lst):
+            self._family = _FamilyPartition(family_labels)
+            self._component_mats = None
+            self.n_varcomps = 2
+            if not self.has_covar:
+                self._family_y_sum = np.bincount(self._family.codes, weights=self.y)
+                group_means = self._family_y_sum / self._family.sizes
+                centered = self.y - group_means[self._family.codes]
+                self._family_y_within = centered @ centered
+        else:
+            self._component_mats = self._build_components(varcomp_arr_lst)
+            self.n_varcomps = len(varcomp_arr_lst) + 1
         self.y_var  = self.y.var()
         # self.logger.info(f'Phenotypic variance: {self.y_var}.')
         self.jitter = self.y_var / 1000.0 if add_jitter else 0.0
@@ -397,6 +569,22 @@ class LinearMixedModel:
         triu_mat = tril(tril_mat, k=-1, format='csc')
         return tril_mat + triu_mat.T
 
+    def _build_components(self, components):
+        return tuple(self._build_sym_mat(data, row_ind, col_ind)
+                     for data, row_ind, col_ind in components) + (
+            csc_matrix((np.ones(self.n), (np.arange(self.n), np.arange(self.n))),
+                       shape=(self.n, self.n)),
+        )
+
+    @property
+    def _varcomp_mats(self):
+        if self._component_mats is None:
+            partition = self._family
+            entries = (partition.sizes * (partition.sizes + 1) // 2).sum()
+            rows, cols = _family_coordinates(partition.rows, partition.offsets, entries)
+            self._component_mats = self._build_components(((np.ones(entries), rows, cols),))
+        return self._component_mats
+
     @property
     def varcomps(self) -> Tuple[float, ...]:
         """Return optimized variance components.
@@ -427,15 +615,16 @@ class LinearMixedModel:
         return V
 
     @cached_property_depends_on('_varcomps')
-    def V_lu(self) -> SuperLU:
+    def V_lu(self) -> SuperLU | _FamilyFactor:
         """Compute sparse LU factorization of V.
 
         Returns:
             SuperLU: wrapper object holding LU factorization of V
         """
-        # self.logger.debug('Calculating V_lu')
-        lu = splu(self.V)
-        return lu
+        if self._family is not None:
+            sibling, residual = self._varcomps
+            return _FamilyFactor(self._family, sibling, residual + self.jitter)
+        return splu(self.V)
 
     @cached_property_depends_on('_varcomps')
     def V_logdet(self) -> float:
@@ -444,7 +633,10 @@ class LinearMixedModel:
         Returns:
             float: log determinant of V
         """
-        return np.log(np.abs(self.V_lu.U.diagonal())).sum()
+        factor = self.V_lu
+        if isinstance(factor, _FamilyFactor):
+            return factor.logdet
+        return np.log(np.abs(factor.U.diagonal())).sum()
 
     @cached_property_depends_on('_varcomps')
     def Vinv_y(self) -> np.ndarray:
@@ -526,7 +718,8 @@ class LinearMixedModel:
         Returns:
             np.ndarray: 1-d array of gradient
         """
-        # self.logger.debug('Calculating grad...')
+        if self._family is not None:
+            return self._family_reml[1]
         P_y = self.P_attrs.P_y
         grad = -0.5 * np.array(
             [
@@ -542,7 +735,16 @@ class LinearMixedModel:
         Returns:
             np.ndarray: 2-d n_varcomps-by-n_varcomps array
         """
-        # self.logger.debug('Calculating hessian...')
+        if self._family is not None:
+            design = self.Z if self.has_covar else np.ones((self.n, 1))
+            py, projection = _precision_terms(self.V_lu, self.y, design)
+            sums = np.bincount(self._family.codes, weights=py)
+            effects = np.column_stack((sums[self._family.codes], py))
+            precision_effects = self.V_lu.solve(effects)
+            z, projected_z = projection
+            precision_effects -= projected_z @ (z.T @ precision_effects)
+            information = .5 * (effects.T @ precision_effects)
+            return information if self.has_covar else information / self.n
         hessian = np.empty((self.n_varcomps, self.n_varcomps))
         P_y = self.P_attrs.P_y
         for i in range(self.n_varcomps):
@@ -557,6 +759,8 @@ class LinearMixedModel:
         Returns:
             float: REML log likelihood
         """
+        if self._family is not None:
+            return self._family_reml[0]
         if self.has_covar:
             ZT_Vinv_Z = self.Z.T @ self.Vinv_Z
             xx_ = solve(ZT_Vinv_Z, self.Vinv_Z.T.dot(self.y)) # @ self.y
@@ -572,6 +776,43 @@ class LinearMixedModel:
             eT_Vinv_y = e @ self.Vinv_y
             logdet_eT_Vinv_e = np.log(np.ones(self.n) @ self.Vinv_e)
             return -0.5 * (self.V_logdet + logdet_eT_Vinv_e + yT_Vinv_y - eT_Vinv_y ** 2 / eT_Vinv_e) / self.n
+
+    @cached_property_depends_on('_varcomps')
+    def _family_reml(self):
+        factor = self.V_lu
+        partition, sizes, weight = self._family, self._family.sizes, factor.mean_precision
+        mean_trace = weight.sum() + factor.within_count * factor.within_precision
+        family_trace = sizes @ weight
+        if not self.has_covar:
+            totals, within = self._family_y_sum, self._family_y_within
+            mean = (weight @ totals) / family_trace
+            centered_sum = totals - sizes * mean
+            between = (centered_sum ** 2 / sizes) @ weight
+            likelihood = -.5 * (factor.logdet + np.log(family_trace)
+                               + between + factor.within_precision * within) / self.n
+            square_weight = np.square(weight)
+            quadratic = centered_sum ** 2 * square_weight
+            trace = np.array([family_trace - (sizes ** 2) @ square_weight / family_trace,
+                              mean_trace - sizes @ square_weight / family_trace])
+            quad = np.array([quadratic.sum(),
+                             np.sum(quadratic / sizes) + factor.within_precision ** 2 * within])
+            return likelihood, .5 * (quad - trace) / self.n
+
+        precision_z = factor.solve(self.Z)
+        information = self.Z.T @ precision_z
+        logdet_information = slogdet(information)[1]
+        inverse = np.linalg.inv(information)
+        precision_y = factor.solve(self.y)
+        py = precision_y - precision_z @ (inverse @ (self.Z.T @ precision_y))
+        grouped_z = np.column_stack([
+            np.bincount(partition.codes, weights=z) for z in precision_z.T
+        ])
+        grouped_y = np.bincount(partition.codes, weights=py)
+        trace = np.array([family_trace - np.trace(inverse @ (grouped_z.T @ grouped_z)),
+                          mean_trace - np.trace(inverse @ (precision_z.T @ precision_z))])
+        quad = np.array([grouped_y @ grouped_y, py @ py])
+        likelihood = -.5 * (factor.logdet + logdet_information + self.y @ py)
+        return likelihood, .5 * (quad - trace)
 
     def dense_reml_loglik(self, method: Literal['chol', 'cg'] = 'cg') -> float:
         """Evaluate the REML log likelihood using dense Cholesky or CG solves."""
@@ -658,12 +899,16 @@ class LinearMixedModel:
 
         def nll(components):
             self._varcomps = tuple(components)
+            if self._family is not None:
+                value, gradient = self._family_reml
+                return -value, -gradient
             return -self.reml_loglik
 
         minimum = yvar * 1e-5
         bounds = [(minimum, yvar)] * self.n_varcomps
         initial = self._varcomps
-        result = minimize(nll, x0=initial, method='L-BFGS-B', bounds=bounds)
+        result = minimize(nll, x0=initial, method='L-BFGS-B', bounds=bounds,
+                          jac=self._family is not None)
         if not result.success and self.n_varcomps > 2:
             # Keep the component array aligned with the inputs when a boundary term is dropped.
             eligible = np.flatnonzero(result.x[:-1] <= minimum * 1.01)
@@ -694,13 +939,47 @@ class LinearMixedModel:
             raise ValueError('Size of genotype matrix does not match phenotype.')
         if standard_gwas:
             gts = gts[:, :1, :]
-        precision_y, projection = self._snp_precision_terms
-        alpha, covariance, _ = _fit_gls_batch(gts, self.V_lu, precision_y, projection)
+        if self._family is None:
+            precision_y, projection = self._snp_precision_terms
+            alpha, covariance, _ = _fit_gls_batch(gts, self._snp_factor, precision_y, projection)
+        else:
+            alpha, covariance = _fit_family_gls(gts, self.V_lu, *self._family_snp_terms)
         return alpha, covariance, np.sqrt(np.diagonal(covariance, axis1=1, axis2=2))
 
     @cached_property_depends_on('_varcomps')
+    def _family_snp_terms(self):
+        factor = self.V_lu
+        precision_y = factor.solve(self.y)
+        if not self.has_covar:
+            return precision_y, np.empty((self.n, 0)), None
+        precision_z = factor.solve(self.Z)
+        inverse = np.linalg.pinv(self.Z.T @ precision_z, hermitian=True)
+        precision_y -= precision_z @ (inverse @ (self.Z.T @ precision_y))
+        return precision_y, precision_z, inverse
+
+    @cached_property_depends_on('_varcomps')
     def _snp_precision_terms(self):
-        return _precision_terms(self.V_lu, self.y, self.Z if self.has_covar else None)
+        return _precision_terms(self._snp_factor, self.y, self.Z if self.has_covar else None)
+
+    @cached_property_depends_on('_varcomps')
+    def _snp_factor(self):
+        if self._snp_families is not None and self._family is None:
+            from snipar.gwas_cg import SibshipCG
+
+            return SibshipCG(self.V, self._snp_families, fallback=True)
+        return self.V_lu
+
+    def _factor_for_rows(self, rows):
+        if self._family is not None:
+            sibling, residual = self._varcomps
+            partition = _FamilyPartition(self._family.codes[rows])
+            return _FamilyFactor(partition, sibling, residual + self.jitter)
+        covariance = self.V[rows, :][:, rows]
+        if self._snp_families is not None:
+            from snipar.gwas_cg import SibshipCG
+
+            return SibshipCG(covariance, np.asarray(self._snp_families)[rows], fallback=True)
+        return splu(covariance)
 
     def robust_est(self, G: gtarray, G_sib: gtarray):
         """Combine design-specific direct effects using their sampling covariance."""
@@ -737,7 +1016,7 @@ class LinearMixedModel:
                 cached = group_models[i]
                 if cached is None or not np.array_equal(rows, cached[0]):
                     covariates = self.Z[rows] if self.has_covar else np.ones((len(rows), 1))
-                    lu = splu(self.V[rows, :][:, rows])
+                    lu = self._factor_for_rows(rows)
                     precision_y, projection = _precision_terms(lu, self.y[rows], covariates)
                     cached = group_models[i] = (rows, lu, precision_y, projection)
                 _, lu, precision_y, projection = cached
@@ -746,7 +1025,12 @@ class LinearMixedModel:
                 estimates[i] = coef[0, 0]
                 weights[rows, i] = first_weights[:, 0]
             if np.all(np.isfinite(estimates)):
-                covariance = weights.T @ (self.V @ weights)
+                if self._family is None:
+                    covariance = weights.T @ (self.V @ weights)
+                else:
+                    sibling, residual = self._varcomps
+                    totals = _group_columns(weights, self._family.codes, len(self._family.sizes))
+                    covariance = (residual + self.jitter) * (weights.T @ weights) + sibling * (totals.T @ totals)
                 alpha[s], variance[s] = _combine_direct_effects(estimates, covariance)
         return alpha[:, None], variance[:, None, None], np.sqrt(variance[:, None])
 
@@ -775,13 +1059,7 @@ class LinearMixedModel:
         loci = gts.shape[2]
         trios = np.asarray(complete_trios_inds)
         siblings = np.asarray(sibs_inds)
-        cross_covariance = self.V[trios, :][:, siblings]
-        groups = []
-        for indices, predictors in ((trios, gts.shape[1]), (siblings, 2)):
-            covariates = self.Z[indices] if self.has_covar else np.ones((len(indices), 1))
-            lu = splu(self.V[indices, :][:, indices])
-            precision_y, projection = _precision_terms(lu, self.y[indices], covariates)
-            groups.append((indices, predictors, lu, precision_y, projection))
+        groups, cross_covariance = self._trio_group_factors(trios, siblings, gts.shape[1])
         alpha = np.full(loci, np.nan)
         variance = np.full(loci, np.nan)
         block_size = max(1, min(256, (32 * 1024 ** 2) // (8 * self.n * gts.shape[1])))
@@ -801,7 +1079,16 @@ class LinearMixedModel:
             alpha[block][only_sibs], variance[block][only_sibs] = estimates[1][only_sibs], b[only_sibs]
             both = np.flatnonzero(np.isfinite(a) & np.isfinite(b))
             a, b = a[both], b[both]
-            cross = np.einsum('ij,ij->j', weights[0][:, both], cross_covariance @ weights[1][:, both])
+            if self._family is None:
+                cross = np.einsum('ij,ij->j', weights[0][:, both], cross_covariance @ weights[1][:, both])
+            else:
+                first, second, n_shared = cross_covariance
+                sib_component = self._varcomps[0]
+                cross = np.zeros(len(both))
+                if n_shared and sib_component > 0:
+                    t_sum = _group_columns(weights[0], first, n_shared)
+                    s_sum = _group_columns(weights[1], second, n_shared)
+                    cross = sib_component * np.einsum('ij,ij->j', t_sum[:, both], s_sum[:, both])
             # Closed-form minimum-variance weights for a two-estimate meta-analysis.
             determinant = a * b - cross * cross
             denominator = a + b - 2 * cross
@@ -811,3 +1098,31 @@ class LinearMixedModel:
             alpha[start + combined] = w * estimates[0][combined] + (1 - w) * estimates[1][combined]
             variance[start + combined] = determinant[valid] / denominator[valid]
         return alpha[:, None], variance[:, None, None], np.sqrt(variance[:, None])
+
+    def _trio_group_factors(self, trios, siblings, predictors):
+        cached = self.__dict__.get('_last_trio_groups')
+        key = self._varcomps, predictors
+        if cached is not None:
+            previous, previous_trios, previous_sibs, result = cached
+            if previous == key and np.array_equal(previous_trios, trios) and np.array_equal(previous_sibs, siblings):
+                return result
+        groups = []
+        for indices, columns in ((trios.copy(), predictors), (siblings.copy(), 2)):
+            z = self.Z[indices] if self.has_covar else np.ones((len(indices), 1))
+            factor = self._factor_for_rows(indices)
+            py, projection = _precision_terms(factor, self.y[indices], z)
+            groups.append((indices, columns, factor, py, projection))
+        if self._family is None:
+            cross = self.V[trios, :][:, siblings]
+        else:
+            codes = self._family.codes
+            n_groups = len(self._family.sizes)
+            first, second = codes[trios], codes[siblings]
+            shared = np.flatnonzero((np.bincount(first, minlength=n_groups) > 0) &
+                                   (np.bincount(second, minlength=n_groups) > 0))
+            mapping = np.full(n_groups, -1, dtype=np.intp)
+            mapping[shared] = np.arange(len(shared))
+            cross = mapping[first], mapping[second], len(shared)
+        result = groups, cross
+        self._last_trio_groups = key, groups[0][0], groups[1][0], result
+        return result

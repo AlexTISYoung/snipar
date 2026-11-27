@@ -37,23 +37,40 @@ def bgen_variant_ids(reader):
 
 
 def _unique_ids(ids):
+    if ids.size < 2 or np.all(ids[1:] > ids[:-1]):
+        keep = (ids != '') & (ids != '.')
+        return ids[keep], np.flatnonzero(keep)
     values, indices, counts = np.unique(ids, return_index=True, return_counts=True)
     keep = (counts == 1) & (values != '') & (values != '.')
     return values[keep], indices[keep]
 
 
+def _intersect_sorted(a, b):
+    """Match sorted unique IDs without sorting a concatenated string array."""
+    if len(a) > len(b):
+        right, left = _intersect_sorted(b, a)
+        return left, right
+    pos = np.searchsorted(b, a)
+    possible = np.flatnonzero(pos < len(b))
+    left = possible[b[pos[possible]] == a[possible]]
+    return left, pos[left]
+
+
 def _match_ids(sid, imp_sid, aliases):
     observed_ids, observed_idx = _unique_ids(sid)
     imputed_ids, imputed_idx = _unique_ids(imp_sid)
-    _, obs, imp = np.intersect1d(observed_ids, imputed_ids, assume_unique=True, return_indices=True)
+    obs, imp = _intersect_sorted(observed_ids, imputed_ids)
     obs, imp = observed_idx[obs], imputed_idx[imp]
     if aliases is not None and obs.size < min(observed_idx.size, imputed_idx.size):
         # Phased BGEN imputation stores rsIDs. Only use an alias when neither
         # record has a competing primary ID match, including a duplicate ID.
         alias_ids, alias_idx = _unique_ids(aliases)
-        shared, ai, ii = np.intersect1d(alias_ids, imputed_ids, assume_unique=True, return_indices=True)
+        ai, ii = _intersect_sorted(alias_ids, imputed_ids)
+        shared = alias_ids[ai]
         rows = alias_idx[ai]
-        keep = np.isin(rows, observed_idx) & ~np.isin(shared, sid) & ~np.isin(sid[rows], imp_sid)
+        unique_observed = np.zeros(len(sid), dtype=bool)
+        unique_observed[observed_idx] = True
+        keep = unique_observed[rows] & ~np.isin(shared, sid) & ~np.isin(sid[rows], imp_sid)
         obs = np.concatenate((obs, rows[keep]))
         imp = np.concatenate((imp, imputed_idx[ii[keep]]))
     return obs, imp
@@ -84,8 +101,9 @@ def match_variants(sid, chromosome, pos, alleles, imputation, snp_ids=None, star
 
     if 'allele_ids' in columns:
         imputed_pairs = bim[:, columns.index('allele_ids')][imp]
-        forward = np.array([pair == a + ',' + b for pair, (a, b) in zip(imputed_pairs, alleles[obs])])
-        reverse = np.array([pair == b + ',' + a for pair, (a, b) in zip(imputed_pairs, alleles[obs])])
+        a, b = alleles[obs].T
+        forward = imputed_pairs == np.strings.add(np.strings.add(a, ','), b)
+        reverse = imputed_pairs == np.strings.add(np.strings.add(b, ','), a)
     elif 'allele1' in columns and 'allele2' in columns:
         a1 = bim[:, columns.index('allele1')][imp]
         a2 = bim[:, columns.index('allele2')][imp]

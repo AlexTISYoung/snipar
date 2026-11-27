@@ -4,6 +4,33 @@
 Command Line Scripts
 ====================
 
+Large datasets
+--------------
+
+GWAS, genotype export, scoring, IBD, and imputation size their work blocks
+from available memory. The planner also uses Linux cgroup limits and
+Slurm resource settings when present. Existing thread, process, and batch
+options provide upper bounds. Individual workers reuse sample and
+variant alignment across blocks. Imputation shares the detected CPU and
+memory allowance across chromosomes and includes flanking markers when
+sizing phased blocks.
+
+The family-only GWAS and quantitative PGS mixed models solve their
+sibship covariance directly. For GWAS with a general relationship matrix,
+``--snp-solver cg`` selects conjugate gradient with a sibship-block
+preconditioner and a checked solve residual. This option can help when
+sparse LU creates many new nonzeros during factorization. REML estimation
+with a general relationship matrix still uses its exact determinant.
+Supplying previously fitted variance components with ``--vc_list``
+skips that estimation step.
+
+IBD uses packed genotypes and traces sibling pairs in blocks. When
+needed, it places the packed genotypes and sampled LD data on scratch
+storage in the system temporary directory. The free space there can
+affect whether a large BGEN run fits. Matrix export and imputation write
+genotypes in tiles. Disk space for those outputs still scales with the
+number of samples or families times the number of retained variants.
+
 .. _snipar_example_data.py:
 
 snipar_example_data.py

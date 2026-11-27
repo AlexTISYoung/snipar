@@ -1,13 +1,17 @@
+from contextlib import ExitStack
 import gzip
-from numba import njit, prange
+from pathlib import Path
+from shutil import disk_usage
+from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from numba import get_num_threads, njit, prange
 from snipar.map import decode_map_from_pos, get_map_positions
 from snipar.ld import compute_ld_scores
 import numpy as np
-from snipar.read.bed import read_sibs_from_bed
-from snipar.read.bgen import read_sibs_from_bgen
-from snipar.utilities import make_id_dict
+from snipar.observed import allele_stats, open_observed
+from snipar.read.family import IdIndex
+from snipar.resources import plan_batches, get_memory_budget
 from snipar.utilities import outfile_name
-from snipar.utilities import open_bgen
 
 ####### Transition Matrix ######
 @njit
@@ -201,22 +205,44 @@ def _chromosome_hmm(freqs, genetic_map, weights, error_probs):
     return transitions, emissions
 
 
-@njit(cache=True, parallel=True)
+@njit(cache=True)
 def infer_ibd(sibpairs, gts, freqs, map, weights, error_probs):
-    n = gts.shape[1]
-    ibd = np.empty((len(sibpairs), n), dtype=np.int8)
-    if not n:
-        return ibd
+    """Return unsmoothed paths for an in-memory dosage matrix."""
+    if not gts.shape[1]:
+        return np.empty((len(sibpairs), 0), dtype=np.int8)
     transitions, emissions = _chromosome_hmm(freqs, map, weights, error_probs)
+    return _infer_prepared(sibpairs, gts, np.arange(gts.shape[1]), transitions, emissions, 0)
+
+
+@njit(inline='always')
+def _call_at(genotypes, row, column, layout):
+    if layout == 0:
+        value = genotypes[row, column]
+        return int(value) if np.isfinite(value) and value >= 0 else -1
+    if layout == 1:
+        call = (int(genotypes[row, column // 4]) >> (2 * (column % 4))) & 3
+        return -1 if call == 3 else int(call)
+    call = (int(genotypes[column, row // 4]) >> (2 * (row % 4))) & 3
+    return (2, -1, 1, 0)[call]
+
+
+@njit(cache=True, parallel=True)
+def _infer_prepared(sibpairs, gts, markers, transitions, emissions, layout):
+    n = markers.size
+    ibd = np.empty((len(sibpairs), n), dtype=np.int8)
     for i in prange(len(sibpairs)):
-        g1, g2 = gts[sibpairs[i, 0]], gts[sibpairs[i, 1]]
+        row1, row2 = sibpairs[i, 0], sibpairs[i, 1]
         previous = np.log(np.array([.25, .5, .25]))
         current = np.empty(3)
         pointers = np.empty((n, 3), dtype=np.int8)
-        if not (np.isnan(g1[0]) or np.isnan(g2[0])):
-            previous += emissions[0, int(g1[0]), int(g2[0])]
+        call1 = _call_at(gts, row1, markers[0], layout)
+        call2 = _call_at(gts, row2, markers[0], layout)
+        if min(call1, call2) >= 0:
+            previous += emissions[0, call1, call2]
         for marker in range(1, n):
-            observed = not (np.isnan(g1[marker]) or np.isnan(g2[marker]))
+            call1 = _call_at(gts, row1, markers[marker], layout)
+            call2 = _call_at(gts, row2, markers[marker], layout)
+            observed = min(call1, call2) >= 0
             for dest in range(3):
                 best = 0
                 maximum = previous[0] + transitions[marker, 0, dest]
@@ -227,7 +253,7 @@ def infer_ibd(sibpairs, gts, freqs, map, weights, error_probs):
                 pointers[marker, dest] = best
                 current[dest] = maximum
                 if observed:
-                    current[dest] += emissions[marker, int(g1[marker]), int(g2[marker]), dest]
+                    current[dest] += emissions[marker, call1, call2, dest]
             previous, current = current, previous
         state = np.argmax(previous)
         ibd[i, n - 1] = state
@@ -235,6 +261,19 @@ def infer_ibd(sibpairs, gts, freqs, map, weights, error_probs):
             state = pointers[marker, state]
             ibd[i, marker - 1] = state
     return ibd
+
+
+@njit(cache=True, parallel=True)
+def _pack_calls(values, out):
+    for row in prange(values.shape[0]):
+        for byte in range(out.shape[1]):
+            word = 0
+            for shift in range(min(4, values.shape[1] - 4 * byte)):
+                call = values[row, 4 * byte + shift]
+                code = int(call) if np.isfinite(call) and call >= 0 else 3
+                word |= code << (2 * shift)
+            out[row, byte] = word
+
 
 class segment(object):
     def __init__(self,start_index,end_index,start_bp,end_bp,start_snp,end_snp,length,state):
@@ -335,146 +374,160 @@ def write_segs_from_matrix(ibd, sibpairs, snps, pos, map, chrom, outfile, *, ret
             if i != len(sibpairs) - 1:
                 handle.write("\n")
 
-def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
-    if bedfile is None and bgenfile is None:
-        raise(ValueError('Must provide either bed file or bgenfile'))
-    if bedfile is not None and bgenfile is not None:
-        raise(ValueError('Provide either bed file or bgen file. Not both.'))
-    if bedfile is not None:
-        ## Read bed
-        print('Reading genotypes from ' + bedfile)
-        bimfile = bedfile.removesuffix(".bed") + '.bim'
-        # Determine chromosome
+def _workspace(stack, scratch, name, shape, dtype, memory, order='C'):
+    if np.prod(shape, dtype=np.int64) * np.dtype(dtype).itemsize <= memory:
+        return np.empty(shape, dtype=dtype, order=order)
+    result = np.memmap(scratch / name, mode='w+', dtype=dtype, shape=shape, order=order)
+    stack.callback(result._mmap.close)
+    return result
+
+
+def _ibd_map(source, chrom, positions, mapfile):
+    if mapfile is not None:
+        return get_map_positions(mapfile, SimpleNamespace(pos=positions))
+    if source.bed:
+        # Keep the map in float64. The BED reader exposes a float32 cM
+        # field, which can move a pair across the exact LD window boundary.
+        genetic_map = np.loadtxt(Path(source.reader.location).with_suffix('.bim'),
+                                 dtype=np.float64, usecols=2, ndmin=1)
+        if np.any(genetic_map != 0) and (len(genetic_map) == 1 or np.any(genetic_map != genetic_map[0])):
+            if (not np.isfinite(genetic_map).all() or genetic_map[0] < 0 or genetic_map[-1] > 5000
+                    or np.any(np.diff(genetic_map) < 0)):
+                raise ValueError('BIM genetic map must be finite, nondecreasing, and within [0, 5000] cM')
+            return genetic_map
+    return decode_map_from_pos(chrom, positions)
+
+
+def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
+                       snps, positions, genetic_map, min_length, chrom, outprefix, ibdmatrix,
+                       pair_batch):
+    with ExitStack() as stack:
+        output = stack.enter_context(gzip.open(outfile_name(outprefix, '.ibd.segments.gz', chrom),
+                                               'wt', compresslevel=3))
+        output.write(_SEGMENT_HEADER)
+        matrix = None
+        if ibdmatrix:
+            matrix = stack.enter_context(gzip.open(outfile_name(outprefix, '.ibdmatrix.gz', chrom),
+                                                   'wt', compresslevel=3))
+            matrix.write('sib1 sib2 ' + ' '.join(snps) + '\n')
+        for start in range(0, len(pairs), pair_batch):
+            end = min(start + pair_batch, len(pairs))
+            paths = _infer_prepared(row_pairs[start:end], genotypes, markers, transitions, emissions, layout)
+            for (id1, id2), path in zip(pairs[start:end], paths):
+                path, segments = smooth_segments(path, genetic_map, snps, positions, min_length)
+                output.writelines(seg.to_text(id1, id2, chrom) for seg in segments)
+                if matrix is not None:
+                    matrix.write(f'{id1} {id2} ' + ' '.join(path.astype(str)) + '\n')
+            del paths
+
+
+def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None,
+                  min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01,
+                  max_missing=5, max_error=0.01, num_threads=None):
+    """Stream observed markers and decode IBD in memory-bounded sibling-pair blocks."""
+    threads = get_num_threads() if num_threads is None else num_threads
+    # Marker decoding and Numba computation execute in separate phases.
+    with ExitStack() as stack:
+        source = stack.enter_context(open_observed(bedfile, bgenfile, num_threads=threads))
+        sids = source.sid
+        reader = source.reader
+        positions = reader.bp_position if source.bed else np.asarray(reader.positions)
         if chrom is None:
-            chrom = np.loadtxt(bimfile, usecols=0, dtype=str)
-            chrom = np.unique(chrom)
-            if chrom.shape[0] > 1:
-                raise (ValueError('More than 1 chromosome in input bedfile'))
+            chromosomes = np.unique(reader.chromosome if source.bed else reader.chromosomes)
+            if len(chromosomes) != 1:
+                raise ValueError('Provide observed genotypes for exactly one chromosome')
+            chrom = chromosomes[0] or 0
+        row_pairs = IdIndex(source.ids).lookup(sibpairs)
+        present = (row_pairs >= 0).all(axis=1)
+        if not np.any(present):
+            raise ValueError('No genotyped sibling pairs found')
+        pairs, row_pairs = sibpairs[present], row_pairs[present]
+        rows = np.unique(row_pairs)
+        n, m = len(rows), len(sids)
+        if not m:
+            raise ValueError('No observed variants on chromosome')
+        print(f'Inferring IBD for {len(pairs)} sibling pairs on chromosome {chrom}')
+        ld_rows = np.random.randint(0, n, size=min(n, 1000))
+        memory = get_memory_budget()
+        current_dir = Path(stack.enter_context(TemporaryDirectory(prefix='snipar-ibd-')))
+        packed_shape = (n, (m + 3) // 4)
+        packed_bytes, ld_bytes = n * packed_shape[1], 4 * len(ld_rows) * m
+        in_memory_packed = packed_bytes <= memory // 5
+        in_memory_ld = ld_bytes <= memory // 5
+        needed = (0 if in_memory_packed else packed_bytes) + (0 if in_memory_ld else ld_bytes)
+        layout = 1
+        available_disk = disk_usage(current_dir).free
+        if needed > available_disk:
+            if source.bed and (in_memory_ld or ld_bytes < available_disk):
+                # BED is already packed. This fallback rereads its variant-major
+                # pages during tracing but does not require extra genotype disk.
+                with open(reader.location, 'rb') as stream:
+                    if stream.read(3) != b'\x6c\x1b\x01':
+                        raise ValueError('IBD requires a variant-major PLINK BED file')
+                genotypes = np.memmap(reader.location, mode='r', dtype=np.uint8, offset=3,
+                                      shape=(m, (len(source.ids) + 3) // 4))
+                stack.callback(genotypes._mmap.close)
+                layout = 2
             else:
-                chrom = chrom[0]
-        # Read sibling genotypes from bed file
-        gts = read_sibs_from_bed(bedfile, sibpairs)
-        print('Inferring IBD for chromosome ' + str(chrom))
-    elif bgenfile is not None:
-        ## Read bed
-        print('Reading genotypes from ' + bgenfile)
-        # Determine chromosome
-        if chrom is None:
-            bgen = open_bgen(bgenfile,verbose=False)
-            chrom = bgen.chromosomes
-            chrom = np.unique(chrom)
-            if chrom.shape[0] > 1:
-                raise (ValueError('More than 1 chromosome in input bgenfile'))
-            else:
-                chrom = chrom[0]
-                if chrom=='':
-                    chrom = 0
-        # Read sibling genotypes from bed file
-        gts = read_sibs_from_bgen(bgenfile, sibpairs)
-        print('Inferring IBD for chromosome ' + str(chrom))
-    # Calculate allele frequencies
-    print('Calculating allele frequencies')
-    gts.compute_freqs()
-    # Check which sibling pairs have genotypes
-    sibpair_indices = np.zeros((sibpairs.shape), dtype=bool)
-    sibpair_indices[:, 0] = np.array([x in gts.id_dict for x in sibpairs[:, 0]])
-    sibpair_indices[:, 1] = np.array([x in gts.id_dict for x in sibpairs[:, 1]])
-    sibpairs = sibpairs[np.sum(sibpair_indices, axis=1) == 2, :]
-    if sibpairs.shape[0] == 0:
-        raise (ValueError('No genotyped sibling pairs found'))
-    print(str(np.sum(sibpairs.shape[0])) + ' sibpairs have genotypes')
-    # Find indices of sibpairs
-    sibpair_indices = np.zeros((sibpairs.shape), dtype=int)
-    sibpair_indices[:, 0] = np.array([gts.id_dict[x] for x in sibpairs[:, 0]])
-    sibpair_indices[:, 1] = np.array([gts.id_dict[x] for x in sibpairs[:, 1]])
-    # Filtering on MAF, LD score, and genotyping error
-    # Find error probabilities
-    p_error = np.zeros((gts.sid.shape[0]))
-    p_error[:] = error_prob
-    if error_probs is not None:
-        in_error_probs = np.array([x in error_probs.sid_dict for x in gts.sid])
-        error_index = np.array([error_probs.sid_dict[x] for x in gts.sid[in_error_probs]])
-        p_error[in_error_probs] = error_probs.error_ests[error_index]
-    gts.error_probs = p_error
-    # Filter
-    print('Before filtering on MAF, missingness, and genotyping error, there were ' + str(gts.shape[1]) + ' SNPs')
-    gts.filter_maf(min_maf)
-    gts.filter_missingness(max_missing)
-    gts.filter(gts.error_probs <= max_error)
-    if not gts.shape[1]:
-        raise ValueError("No SNPs remain after MAF, missingness and genotyping error filtering")
-    print('After filtering, there are ' + str(gts.shape[1]) + ' SNPs')
-    # Read map file
-    if mapfile is None and bedfile is not None:
-        print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
-        map = np.loadtxt(bimfile, usecols=2, ndmin=1)
-        map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str, ndmin=1))
-        # Check for NAs
-        if np.all(map == 0) or (map.size > 1 and np.var(map) == 0):
-            print('Map information not found in bim file.')
-            print('Using default map (decode sex averaged map on GRCh38 coordinates)')
-            gts.map = decode_map_from_pos(chrom, gts.pos)
-            pc_mapped = str(round(100*(1-np.mean(np.isnan(gts.map))),2))
-            print('Found map positions for '+str(pc_mapped)+'% of SNPs')
-            gts.filter(~np.isnan(gts.map))
+                raise OSError(f'IBD scratch needs {needed:,} bytes, with {available_disk:,} bytes available')
+        if layout == 1:
+            genotypes = _workspace(stack, current_dir, 'genotypes', packed_shape, np.uint8, memory // 5)
+            row_pairs = np.searchsorted(rows, row_pairs)
+        ld_genotypes = _workspace(stack, current_dir, 'ld', (len(ld_rows), m), np.float32,
+                                  memory // 5, order='F')
+        fixed = source.fixed_bytes + (packed_bytes if layout == 1 and in_memory_packed else 0)
+        fixed += ld_bytes if in_memory_ld else 0
+        _, variant_batch = plan_batches(m, n * (2 if source.bed else 24), fixed_bytes=fixed,
+                                        memory_limit=memory)
+        if layout == 1 and variant_batch < m:
+            if variant_batch < 4:
+                raise MemoryError('IBD packing needs enough memory to decode four variants')
+            variant_batch -= variant_batch % 4
+        freqs = np.empty(m)
+        missing = np.empty(m)
+        for start in range(0, m, variant_batch):
+            end = min(start + variant_batch, m)
+            values = source.read(rows, np.arange(start, end))
+            total, called = allele_stats(values)
+            freqs[start:end] = np.where(called > 0, total / np.maximum(2 * called, 1), np.nan)
+            missing[start:end] = 100 * (n - called) / n
+            sampled = values[ld_rows, :].astype(np.float32, copy=False)
+            sampled[sampled < 0] = np.nan
+            ld_genotypes[:, start:end] = sampled
+            if layout == 1:
+                _pack_calls(values, genotypes[:, start // 4:(end + 3) // 4])
+            del values, sampled
+        p_error = np.full(m, error_prob, dtype=float)
+        if error_probs is not None:
+            index = IdIndex(error_probs.sid).lookup(sids)
+            valid = index >= 0
+            p_error[valid] = error_probs.error_ests[index[valid]]
+        markers = np.flatnonzero((freqs > min_maf) & (freqs < 1 - min_maf)
+                                 & (missing <= max_missing) & (p_error <= max_error))
+        if not len(markers):
+            raise ValueError('No SNPs remain after MAF, missingness and genotyping error filtering')
+        if mapfile is None and source.bed:
+            genetic_map = _ibd_map(source, chrom, positions, None)[markers]
         else:
-            if not np.isfinite(map).all():
-                raise (ValueError('Map cannot have NAs'))
-            if np.min(map) < 0:
-                raise (ValueError('Map file cannot have negative values'))
-            # Check ordering
-            ordered_map = np.sort(map)
-            if np.array_equal(map, ordered_map):
-                pass
-            else:
-                raise (ValueError('Map not monotonic. Please make sure input is ordered correctly'))
-            # Check scale
-            if np.max(map) > 5000:
-                raise (ValueError('Maximum value of map too large'))
-            gts.filter(np.array([x in map_snp_dict for x in gts.sid]))
-            gts.map = map[[map_snp_dict[x] for x in gts.sid]]
-    elif mapfile is None and bgenfile is not None:
-        print('Map file not provided.')
-        print('Using default map (decode sex averaged map on GRCh38 coordinates)')
-        gts.map = decode_map_from_pos(chrom, gts.pos)
-        pc_mapped = 100*(1-np.mean(np.isnan(gts.map)))
-        if pc_mapped < 50:
-            print('Warning: map positions not found for the majority of SNPs. Consider providing a genetic map using --map')
-        print('Found map positions for '+str(round(pc_mapped,2))+'% of SNPs')
-        gts.filter(~np.isnan(gts.map))
-    else:
-        print('Reading map from ' + str(mapfile))
-        gts.map = get_map_positions(mapfile, gts)
-    if not gts.shape[1]:
-        raise ValueError("No SNPs have genetic map positions")
-    if np.any(np.diff(gts.map) < 0):
-        raise ValueError("SNPs must be in increasing genetic map order")
-    print('Read map')
-    # Weights
-    print('Computing LD weights')
-    ld_n = np.min([1000, gts.shape[0]])
-    ld_sample = np.random.randint(0, gts.shape[0], size=ld_n)
-    ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float64), gts.map, max_dist=1)
-    gts.weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
-    # IBD
-    print('Inferring IBD')
-    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float64), gts.freqs, gts.map, gts.weights, gts.error_probs)
-    ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
-    ## Write output
-    # Write segments
-    segs_outfile = outfile_name(outprefix,'.ibd.segments.gz', chrom)
-    print('Writing segments to ' + segs_outfile)
-    write_segs(sibpairs, allsegs, chrom, segs_outfile)
-    # Write matrix
-    if ibdmatrix:
-        outfile = outfile_name(outprefix,'.ibdmatrix.gz', chrom)
-        print('Writing matrix output to ' + str(outfile))
-        ibd = np.vstack(
-            (np.column_stack((np.array(['sib1', 'sib2']).reshape((1, 2)), gts.sid.reshape(1, gts.shape[1]))),
-             np.column_stack((sibpairs, ibd))))
-        np.savetxt(outfile, ibd, fmt='%s')
-    if ld_out:
-        ld_outfile = outfile_name(outprefix,'.l2.ldscore.gz', chrom)
-        print('Writing LD-scores to '+ld_outfile)
-        ld_out = np.vstack((np.array(['CHR', 'SNP', 'BP', 'L2']).reshape((1,4)),np.vstack((np.array([chrom for x in gts.sid]), gts.sid, gts.pos, ld)).T))
-        np.savetxt(ld_outfile, ld_out, fmt='%s')
+            genetic_map = _ibd_map(source, chrom, positions[markers], mapfile)
+        keep = np.isfinite(genetic_map)
+        markers, genetic_map = markers[keep], genetic_map[keep]
+        if not len(markers) or np.any(np.diff(genetic_map) < 0):
+            raise ValueError('SNPs must have increasing genetic map positions')
+        print('Computing LD weights')
+        # Keep the original variant-major LD cache on disk and pass the retained
+        # source column indices to the compiled kernel.
+        ld = compute_ld_scores(ld_genotypes, genetic_map, 1., markers)
+        weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
+        snps, pos = sids[markers], positions[markers]
+        transitions, emissions = _chromosome_hmm(freqs[markers], genetic_map, weights, p_error[markers])
+        _, pair_batch = plan_batches(len(pairs), len(markers) + 1, batch_size=10000,
+                                     fixed_bytes=threads * (3 * len(markers) + 128))
+        print(f'Tracing IBD in blocks of up to {pair_batch} sibling pairs')
+        _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
+                           snps, pos, genetic_map, min_length, chrom, outprefix, ibdmatrix, pair_batch)
+        if ld_out:
+            filename = outfile_name(outprefix, '.l2.ldscore.gz', chrom)
+            with gzip.open(filename, 'wt', compresslevel=3) as output:
+                output.write('CHR SNP BP L2\n')
+                output.writelines(f'{chrom} {sid} {bp} {score}\n' for sid, bp, score in zip(snps, pos, ld))

@@ -1,3 +1,5 @@
+from functools import cached_property
+
 import numpy as np
 import numpy.ma as ma
 from numba import njit
@@ -60,7 +62,6 @@ class gtarray(object):
             raise ValueError('Genotypes must be a 2- or 3-dimensional array')
         if garray.shape[0] == ids.shape[0]:
             self.ids = ids
-            self.id_dict = make_id_dict(ids)
         else:
             raise ValueError('Shape of genotypes and ids does not match')
         self.snp_index = self.ndim - 1
@@ -162,6 +163,11 @@ class gtarray(object):
         self.info = None
         self.variances = None
 
+    @cached_property
+    def id_dict(self):
+        """Look up individual IDs on demand, without indexing every genotype block."""
+        return make_id_dict(self.ids)
+
     def compute_freqs(self):
         """
         Computes the frequencies of the SNPs. Stored in self.freqs.
@@ -259,7 +265,7 @@ class gtarray(object):
             indices = np.array([self.id_dict[x] for x in keep_ids[in_ids]])
             self.gts = self.gts[indices]
             self.ids = self.ids[indices]
-            self.id_dict = make_id_dict(self.ids)
+            self.__dict__.pop('id_dict', None)
             self.shape = self.gts.shape
             if self.fams is not None:
                 self.fams = self.fams[indices]

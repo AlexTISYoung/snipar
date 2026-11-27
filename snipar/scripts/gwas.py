@@ -49,7 +49,10 @@ parser.add_argument('--no_sib_var', action='store_true', default=False, help='Do
 parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysis (No header).')
 parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batches across', default=1)
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.',default=1)
-parser.add_argument('--batch_size',type=int,help='Maximum SNPs per batch. For analyses using imputed parents, batches contain matched observed and imputed SNPs. Smaller batches use less memory.',default=None)
+parser.add_argument('--batch_size', type=int, default=None,
+                    help='Maximum SNPs per batch. The default selects a batch size from available memory.')
+parser.add_argument('--snp-solver', choices=('lu', 'cg'), default='lu',
+                    help='Use sparse LU or sibship-preconditioned CG for SNP regressions with a GRM.')
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
@@ -59,29 +62,28 @@ def main(args):
         args: list
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
-    import os, time
+    from snipar.resources import available_cpus, worker_environment
+
     if args.cpus < 1 or args.threads < 1:
         raise ValueError('--cpus and --threads must be positive integers')
     if args.batch_size is not None and args.batch_size < 1:
         raise ValueError('--batch_size must be a positive integer')
-    num_threads = args.threads
-    print('Number of threads for numpy: '+str(num_threads))
-    # export OMP_NUM_THREADS=...
-    os.environ['OMP_NUM_THREADS'] = str(num_threads)
-    # export OPENBLAS_NUM_THREADS=...
-    os.environ['OPENBLAS_NUM_THREADS'] = str(num_threads)
-    # export MKL_NUM_THREADS=...
-    os.environ['MKL_NUM_THREADS'] = str(num_threads)
-    # export VECLIB_MAXIMUM_THREADS=...
-    os.environ['VECLIB_MAXIMUM_THREADS'] = str(num_threads)
-    # export NUMEXPR_NUM_THREADS=...
-    os.environ['NUMEXPR_NUM_THREADS'] = str(num_threads)
+    threads = min(args.threads, available_cpus())
+    cpus = min(args.cpus, max(1, available_cpus() // threads))
+    with worker_environment(threads):
+        _main(args, cpus, threads)
+
+
+def _main(args, cpus, threads):
+    import os
+    import time
     import numpy as np
     from numba import set_num_threads
     from numba import config as numba_config
     import snipar.read as read
     import snipar.slmm as slmm
-    from snipar.gwas import process_chromosome
+    from snipar.gwas import _fit_model, process_chromosome
+    from snipar.resources import limit_native_threads
     from snipar.pedigree import get_sibpairs_from_ped
     from snipar.preprocess import remove_sibs
     from snipar.utilities import parse_obsfiles, parse_filelist, make_id_dict
@@ -118,14 +120,8 @@ def main(args):
         print('Fitting sibling and residual variance components')
     else:
         print('Fitting sibling, GRM, and residual variance components')
-    # Set number of threads for numba
-    if args.threads is not None:
-        num_threads = min([args.threads, numba_config.NUMBA_NUM_THREADS])
-    else:
-        num_threads = numba_config.NUMBA_NUM_THREADS
-    set_num_threads(num_threads)
-    print('Number of threads for numba: '+str(num_threads))
-    print('Number of processes: '+str(args.cpus))
+    set_num_threads(min(threads, numba_config.NUMBA_NUM_THREADS))
+    print(f'GWAS worker limit: {cpus} with up to {threads} native threads each')
     # Print where output written to
     if args.out == './':
         print(f'Output will be written to chr_@')
@@ -180,10 +176,12 @@ def main(args):
             print('WARNING: only the first four pedigree columns will be used.')
         if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
             ped = ped[1:]
-        _, ped = get_sibpairs_from_ped(ped[:, :4])
-        pedigrees = [(ped, None)] * len(chroms)
-    else:
-        pedigrees = [read.build_ped_from_par_gts(path) for path in pargts_list]
+        _, ped = get_sibpairs_from_ped(ped[:, :4], return_pairs=False)
+    def pedigree_for(index):
+        # Read at most one chromosome's pedigree at a time.
+        if args.imp is None:
+            return ped, None
+        return read.build_ped_from_par_gts(pargts_list[index])
     if args.robust:
         print('== The robust estimator will be used.')
     elif args.sib_diff:
@@ -196,23 +194,19 @@ def main(args):
         print('== The Young estimator will be used.')
 
     observed_files = bedfiles if args.bed is not None else bgenfiles
-    ids = y.ids
-    trios_by_chromosome = []
-    for observed, (ped, imp_fams) in zip(observed_files, pedigrees):
-        trios = None
+    ids = read._exclude_duplicate_twins(y.ids, args.grm)
+    for index, observed in enumerate(observed_files):
+        chromosome_ped, imp_fams = pedigree_for(index)
         if args.sib_diff:
-            ids, fam_labels = read.get_ids_with_sibs(observed, ped, ids, ibdrel_path=args.grm)
+            ids, fam_labels = read.get_ids_with_sibs(observed, chromosome_ped, ids)
         elif trios_sibs and not args.impute_unrel:
-            ids, fam_labels, genotype_indices = read.get_ids_with_trios_sibs(
-                observed, ped, ids, ibdrel_path=args.grm, return_info=True)
-            trios = ids[np.all(genotype_indices >= 0, axis=1)]
+            ids, fam_labels, _ = read.get_ids_with_trios_sibs(observed, chromosome_ped, ids)
         else:
             if trios_sibs:
-                ids = remove_sibs(ped, observed, ids)
-            ids, fam_labels = read.get_ids_with_par(observed, ped, imp_fams, ids,
-                                                     sib=args.fit_sib, include_unrel=args.impute_unrel,
-                                                     ibdrel_path=args.grm)
-        trios_by_chromosome.append(trios)
+                ids = remove_sibs(chromosome_ped, observed, ids)
+            ids, fam_labels = read.get_ids_with_par(observed, chromosome_ped, imp_fams, ids,
+                                                     sib=args.fit_sib, include_unrel=args.impute_unrel)
+    del chromosome_ped, imp_fams
     trios_sibs = trios_sibs and not args.impute_unrel
     print(f'Using {len(ids)} individuals eligible on all chromosomes.')
     # Read GRM if provided 
@@ -233,47 +227,35 @@ def main(args):
         covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
         covariates.filter_ids(y.ids)
 
-    # Build sparse silbship array if fitting sib variance component
-    if not args.no_sib_var:
-        sib_data, sib_row_ind, sib_col_ind = slmm.build_sib_arr(fam_labels)
-    # Set variance components
-    if not args.no_grm_var and not args.no_sib_var:
-        varcomp_lst = (
-            (grm_data, grm_row_ind, grm_col_ind),
-            (sib_data, sib_row_ind, sib_col_ind),
-        )
-    elif not args.no_grm_var:
-        varcomp_lst = (
-            (grm_data, grm_row_ind, grm_col_ind),
-        )
-    elif not args.no_sib_var:
-        varcomp_lst = (
-            (sib_data, sib_row_ind, sib_col_ind),
-        )
-    if args.vc_list:
-        varcomps = tuple(args.vc_list)
-        if len(varcomps) != len(varcomp_lst) + 1:
-            raise ValueError(f'Supplied varcomps length {len(varcomps)} does not match the number of variance components.')
-    else:
-        varcomps = None
-    # Fit the null model on the same ordered cohort used for the SNP regressions.
-    model = slmm.LinearMixedModel(y.gts.data.reshape(-1), varcomps=varcomps,
-                                  varcomp_arr_lst=varcomp_lst,
-                                  covar_X=None if covariates is None else covariates.gts.data,
-                                  add_intercept=covariates is not None, drop_collinear_covariates=True)
-    if not varcomps:
-        print(f'Optimizing variance components...')
-        # print('Nonzero entries: ', model.V.nnz, 'Number of individuals: ', model.n, 'density: ', model.V.nnz / model.n / model.n)
-        start = time.time()
-        model.scipy_optimize()
-        print(f'Time used for variance component estimation: {time.time() - start:.2f}s')
-    else:
+    family_only = args.no_grm_var and not args.no_sib_var
+    varcomp_lst = () if args.no_grm_var else ((grm_data, grm_row_ind, grm_col_ind),)
+    if not family_only and not args.no_sib_var:
+        varcomp_lst += (slmm.build_sib_arr(fam_labels),)
+    family_labels = fam_labels if family_only or args.snp_solver == 'cg' else None
+    if args.vc_list is not None:
+        sigmas = tuple(args.vc_list)
+        if len(sigmas) != len(varcomp_lst) + 1 + family_only:
+            raise ValueError(f'Supplied varcomps length {len(sigmas)} does not match the number of variance components.')
+        if not all(np.isfinite(value) and value >= 0 for value in sigmas):
+            raise ValueError('Variance components must be finite and nonnegative.')
         print('Variance components supplied.')
+    else:
+        # Fit the null on the same ordered cohort used for SNP regressions.
+        model = slmm.LinearMixedModel(y.gts.data.reshape(-1), varcomp_arr_lst=varcomp_lst,
+                                     covar_X=None if covariates is None else covariates.gts.data,
+                                     add_intercept=covariates is not None, drop_collinear_covariates=True,
+                                     family_labels=fam_labels if family_only else None)
+        print('Optimizing variance components...')
+        start = time.perf_counter()
+        with limit_native_threads(threads):
+            model.scipy_optimize()
+        print(f'Time used for variance component estimation: {time.perf_counter() - start:.2f}s')
+        sigmas = model.varcomps
+        del model
     if args.vc_out:
-        np.savetxt(f'{args.vc_out}', np.array(model.varcomps))
+        np.savetxt(args.vc_out, np.asarray(sigmas))
         print(f'Variance components saved to {args.vc_out}.')
-    ## Print variance components
-    varcomps = list(i for i in model.varcomps)
+    varcomps = sigmas
     vcomp_index=0
     if not args.no_grm_var:
         print(f'GRM variance component: {varcomps[vcomp_index]:.3f}')
@@ -290,7 +272,13 @@ def main(args):
         print(f'Implied sibling correlation: {(0.5*varcomps[0] + varcomps[1]) / np.sum(varcomps):.3f}')
     else:
         print(f'Implied sibling correlation: {0.5*varcomps[0] / np.sum(varcomps):.3f}')
-    sigmas = model.varcomps
+    # Every chromosome uses the same phenotype, covariance and fixed effects.
+    # Share one reusable model for in-process SNP regressions.
+    inference_model = None
+    if cpus == 1 or (family_only and args.bed is not None and not args.robust and not trios_sibs):
+        inference_model = _fit_model(y.gts.data.reshape(-1), varcomp_lst, sigmas,
+                                     None if covariates is None else covariates.gts.data,
+                                     family_labels, False, args.snp_solver)
     ######### Process chromosomes ###########
     start = time.time()
     for i in range(chroms.shape[0]):
@@ -304,16 +292,17 @@ def main(args):
             print('Estimating SNP effects for chromosome '+str(chroms[i]))
         else:
             print('Estimating SNP effects')
-        ped, imp_fams = pedigrees[i]
-        trios_only = trios_sibs and np.all(np.isin(y.ids, trios_by_chromosome[i]))
+        chromosome_ped, imp_fams = pedigree_for(i)
         process_chromosome(chroms[i], y, varcomp_lst,
-                           ped, imp_fams, sigmas, args.out, covariates, 
+                           chromosome_ped, imp_fams, sigmas, args.out, covariates,
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],
                            par_gts_f=pargts_list[i], fit_sib=args.fit_sib, sib_diff=args.sib_diff, parsum=args.parsum, standard_gwas=False,
-                           impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs, trios_only=trios_only,
+                           impute_unrel=args.impute_unrel, robust=args.robust, trios_sibs=trios_sibs,
                            max_missing=args.max_missing, min_maf=args.min_maf,  
-                           no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=args.cpus, add_jitter=False,
-                           debug=False,batch_size=args.batch_size)
+                           no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=cpus, add_jitter=False,
+                           batch_size=args.batch_size, threads=threads, family_labels=family_labels,
+                           solver=args.snp_solver, inference_model=inference_model)
+        del chromosome_ped, imp_fams
     print(f'Time used: {time.time() - start:.2f}s')
 
 if __name__ == "__main__":

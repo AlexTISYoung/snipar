@@ -1,5 +1,4 @@
 import snipar.preprocess as preprocess
-from pysnptools.snpreader import Bed
 from snipar.utilities import open_bgen
 import snipar.read.bed as bed
 import snipar.read.bgen as bgen
@@ -9,7 +8,17 @@ import numpy as np
 import pandas as pd
 from snipar.utilities import make_id_dict
 from typing import Tuple
-from contextlib import nullcontext
+from contextlib import contextmanager, ExitStack
+from functools import cached_property
+
+from bed_reader import open_bed
+from numba import config, get_num_threads, set_num_threads
+
+from snipar.gtarray import gtarray
+from snipar.read.family import IdIndex, _sample_plan, _assemble, _assemble_parallel, _read_imputed
+from snipar.read.variants import MatchedVariants, NoMatchingVariantsError, bgen_variant_ids
+from snipar.read.variants import match_variants as align_imputed_variants
+from snipar.read.variants import observed_variant_indices
 
 def build_ped_from_par_gts(par_gts_f, *, include_controls=False):
     """Read the pedigree and family-row identifiers stored with imputed genotypes."""
@@ -52,56 +61,268 @@ def get_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts
             to missing, the father has been set to missing, and both parents have been set to missing.
 
     """
-    if ped is None and par_gts_f is None:
-        raise ValueError('Must provide a pedigree or an imputed parental genotypes file')
+    with prepare_gts_matrix(ped=ped, imp_fams=imp_fams, bedfile=bedfile, bgenfile=bgenfile,
+                            par_gts_f=par_gts_f, ids=ids, parsum=parsum, sib=sib, sib_diff=sib_diff,
+                            compute_controls=compute_controls, include_unrel=include_unrel, robust=robust,
+                            trios_sibs=trios_sibs, verbose=verbose or print_sample_info) as reader:
+        variants = matched_variants
+        if variants is None:
+            variants = reader.match_variants(snp_ids, match_snp_ids=match_snp_ids)
+        return reader.read(variants)
+
+
+@contextmanager
+def prepare_gts_matrix(ped=None, imp_fams=None, bedfile=None, bgenfile=None, par_gts_f=None,
+                       ids=None, parsum=False, sib=False, sib_diff=False, compute_controls=False,
+                       include_unrel=False, robust=False, trios_sibs=False, verbose=False,
+                       num_threads=None, sample_plans=None, *, _split_pedigree=True):
+    """Open a chromosome and reuse its sample and variant alignments across reads.
+
+    Call ``match_variants`` once and pass slices of its result to ``read``.
+    Independent workers for the same chromosome can share ``sample_plans`` and
+    open their own file handles. Plans refer to row positions on these files.
+    """
     if (bedfile is None) == (bgenfile is None):
         raise ValueError('Must provide exactly one BED or BGEN file')
-    genotype_path = bedfile if bedfile is not None else bgenfile
-    reader = bed if bedfile is not None else bgen
+    if num_threads is not None and num_threads < 1:
+        raise ValueError('Genotype reader threads must be positive')
+    if sum((sib, sib_diff, trios_sibs)) > 1:
+        raise ValueError('Select one sibling or combined trio-and-sibling family design')
+    with ExitStack() as stack:
+        source = par_gts_f
+        if source is not None and not isinstance(source, h5py.Group):
+            source = stack.enter_context(h5py.File(source, 'r'))
+        if bedfile is not None:
+            filename = str(bedfile)
+            if not filename.lower().endswith('.bed'):
+                filename += '.bed'
+            observed = stack.enter_context(open_bed(
+                filename, count_A1=True, num_threads=num_threads,
+                iid_count=None if sample_plans is None else sample_plans[0].file_n_observed,
+            ))
+        else:
+            filename = None
+            observed = stack.enter_context(open_bgen(bgenfile, verbose=verbose))
+        plan_args = (ped, imp_fams, ids, compute_controls, _split_pedigree)
+        plan_options = dict(parsum=parsum, sib=sib, sib_diff=sib_diff, include_unrel=include_unrel,
+                            trios_sibs=trios_sibs, verbose=verbose)
+        yield _PreparedFamilyReader(observed, source, sample_plans, plan_args, plan_options,
+                                    filename, robust, num_threads)
 
-    with (nullcontext() if par_gts_f is None else h5py.File(par_gts_f, 'r')) as source:
+
+class _PreparedFamilyReader:
+    def __init__(self, observed, imputed, plans, plan_args, options, bedfile, robust, num_threads):
+        self._observed, self._imputation = observed, imputed
+        self._plans, self._plan_args, self._plan_options = plans, plan_args, options
+        self._bedfile = bedfile
+        self._is_bed = bedfile is not None
+        self._robust, self._num_threads = robust, num_threads
+        sib_diff, trios_sibs = options['sib_diff'], options['trios_sibs']
+        if plans is not None:
+            sib_diff, trios_sibs = plans[0].sib_diff, plans[0].trios_sibs
+        self._uses_imputation = imputed is not None and not (sib_diff or trios_sibs)
+        if robust and not self._uses_imputation:
+            raise ValueError('Observed parental allele counts require accompanying imputation files')
+
+    @cached_property
+    def _planning(self):
+        ped, imp_fams, ids, compute_controls, split_pedigree = self._plan_args
+        if self._plans is not None:
+            return self._plans, [ped] * len(self._plans)
+        source = self._imputation
         if ped is None or compute_controls:
             if source is None:
-                raise ValueError('Control genotypes require an imputation file with control families')
+                reason = 'Control genotypes require an imputation file with control families' if compute_controls else (
+                    'Must provide a pedigree or an imputed parental genotypes file')
+                raise ValueError(reason)
             ped = source['pedigree'].asstr(encoding='utf-8')[1:].astype(str)
-        if imp_fams is None and source is not None and not sib_diff:
+        if not self._uses_imputation:
+            imp_fams = None
+        elif imp_fams is None:
             imp_fams = source['families'].asstr(encoding='utf-8')[:].astype(str)
+        pedigrees = [ped]
+        if split_pedigree:
+            noncontrols = ~np.char.startswith(ped[:, 0], '_')
+            if not noncontrols.all():
+                pedigrees[0] = ped[noncontrols]
+            if compute_controls:
+                for prefix in ('_p_', '_m_', '_o_'):
+                    group = np.char.startswith(ped[:, 0], prefix)
+                    if not np.any(group):
+                        raise ValueError('Imputation file must contain paternal, maternal, and both-parent control families')
+                    pedigrees.append(ped[group])
+        observed_ids = (bed._read_iids(self._bedfile, self._observed) if self._is_bed
+                        else np.asarray(self._observed.samples, dtype=str))
+        lookup = IdIndex(observed_ids)
+        plans = tuple(_sample_plan(group, observed_ids, lookup, imp_fams, ids, **self._plan_options)
+                      for group in pedigrees)
+        return plans, pedigrees
 
-        groups = [~np.char.startswith(ped[:, 0], '_')]
-        if compute_controls:
-            controls = [np.char.startswith(ped[:, 0], prefix) for prefix in ('_p_', '_m_', '_o_')]
-            if not all(np.any(group) for group in controls):
-                raise ValueError('Imputation file must contain paternal, maternal, and both-parent control families')
-            groups.extend(controls)
-        matrices = [
-            reader.get_gts_matrix_given_ped(
-                ped[group], imp_fams, genotype_path, par_gts_f=source, snp_ids=snp_ids,
-                ids=ids, sib=sib, sib_diff=sib_diff, parsum=parsum, include_unrel=include_unrel,
-                robust=robust, trios_sibs=trios_sibs, match_snp_ids=match_snp_ids,
-                matched_variants=matched_variants, verbose=verbose, print_sample_info=print_sample_info,
-            )
-            for group in groups
-        ]
-    return matrices if compute_controls else matrices[0]
+    @property
+    def sample_plans(self):
+        return self._planning[0]
+
+    @cached_property
+    def group_shapes(self):
+        return tuple((len(p.ids), p.n_components) for p in self.sample_plans)
+
+    @property
+    def n_samples(self):
+        return self.group_shapes[0][0]
+
+    @property
+    def n_components(self):
+        return self.group_shapes[0][1]
+
+    @cached_property
+    def n_observed(self):
+        return max(len(p.observed) for p in self.sample_plans)
+
+    @cached_property
+    def n_imputed(self):
+        return max(len(p.imputed) for p in self.sample_plans)
+
+    @property
+    def parsum(self):
+        return self.sample_plans[0].parsum
+
+    @cached_property
+    def bytes_per_variant(self):
+        # Retained group matrices, masks, decoding buffers, and robust-count
+        # conversion. The group inputs are read one at a time.
+        decode_bytes = 1 if self._is_bed else 24
+        retained = sum(n * (5 * k + (2 if self._robust else 0)) for n, k in self.group_shapes)
+        return retained + max(len(p.observed) * decode_bytes + len(p.imputed) * (8 if self._robust else 4)
+                              + (4 * len(p.ids) if self._robust else 0) for p in self.sample_plans)
+
+    @cached_property
+    def fixed_read_bytes(self):
+        size = (8 << 20) if self._uses_imputation else 0
+        if not self._is_bed:
+            reader = self._observed
+            n_file = reader.nsamples if hasattr(reader, 'nsamples') else len(reader.samples)
+            size += 32 * n_file * (self._num_threads or 1)
+        return size
+
+    @cached_property
+    def _imputed_gts(self):
+        return self._imputation['imputed_par_gts'] if self._uses_imputation else None
+
+    @cached_property
+    def _num_al(self):
+        return self._imputation['num_observed_parental_alleles'] if self._robust else None
+
+    @cached_property
+    def _metadata(self):
+        source = self._observed
+        if self._is_bed:
+            sid, aliases = source.sid, None
+            chrom = source.chromosome
+            try:
+                chrom = np.where(chrom == 'X', '23', chrom)
+                for label, code in (('Y', '24'), ('XY', '25'), ('MT', '26')):
+                    chrom = np.where(chrom == label, code, chrom)
+                chrom = chrom.astype(float).astype(int)
+            except ValueError:
+                chrom = source.chromosome
+            positions = source.bp_position
+            alleles = np.column_stack((source.allele_1, source.allele_2))
+        else:
+            sid, aliases = bgen_variant_ids(source)
+            sid = sid.copy()
+            aliases = None if aliases is None else aliases.copy()
+            chrom, positions = np.array(source.chromosomes), np.array(source.positions)
+            alleles = np.array([pair.split(',') for pair in source.allele_ids])
+        indices = np.arange(len(sid), dtype=np.intp)
+        false = np.broadcast_to(False, len(sid))
+        absent = np.broadcast_to(-1, len(sid))
+        return MatchedVariants(chrom, sid, positions, alleles, false, absent, indices), aliases
+
+    @property
+    def observed_variants(self):
+        """Full observed metadata, including duplicate IDs, in file order."""
+        return self._metadata[0]
+
+    def match_variants(self, snp_ids=None, *, match_snp_ids=False, start=0, end=None):
+        observed = self.observed_variants
+        if self._uses_imputation:
+            return align_imputed_variants(observed.sid, observed.chromosome, observed.pos, observed.alleles,
+                                          self._imputation, snp_ids, start, end, self._metadata[1])
+        rows = observed_variant_indices(observed.sid, snp_ids, match_snp_ids)
+        if not rows.size:
+            raise NoMatchingVariantsError('No SNPs found in observed genotypes')
+        return observed.subset(rows)
+
+    def _read_group(self, variants, plan, pedigree, order):
+        n_variants = len(variants.sid)
+        samples = plan.observed
+        if samples[-1] - samples[0] + 1 == len(samples):
+            samples = slice(int(samples[0]), int(samples[-1]) + 1)
+        if self._is_bed:
+            observed = self._observed.read((samples, variants.observed), dtype=np.int8, order=order)
+        else:
+            observed = bgen._first_allele_dosage(self._observed, samples, variants.observed,
+                                                num_threads=self._num_threads, order=order)
+        imputed = np.empty((0, n_variants), np.float32)
+        if plan.imputed.size:
+            if self._imputed_gts is None or np.any(variants.imputed < 0):
+                raise ValueError('Selected variants have no aligned imputed genotypes')
+            imputed = _read_imputed(self._imputed_gts, plan.imputed, variants.imputed)
+        num_al = _read_imputed(self._num_al, plan.imputed, variants.imputed) if self._robust else imputed[:0]
+        counts = np.empty((len(plan.ids) if self._robust else 0, n_variants), np.float32)
+        output = np.empty((len(plan.ids), plan.n_components, n_variants), np.float32, order=order)
+        params = (output, observed, imputed, plan.genotype_rows, plan.parent_status, plan.sibling_members,
+                  plan.member_offsets, plan.sibling_targets, plan.target_offsets, plan.parsum and not plan.trios_sibs,
+                  plan.sib, plan.sib_diff, plan.trios_sibs, variants.flipped, self._robust, counts, num_al)
+        if self._num_threads is not None and self._num_threads > 1 and output.size >= 1_000_000:
+            previous = get_num_threads()
+            set_num_threads(min(self._num_threads, config.NUMBA_NUM_THREADS))
+            try:
+                _assemble_parallel(*params)
+            finally:
+                set_num_threads(previous)
+        else:
+            _assemble(*params)
+        result = gtarray(output, plan.ids, variants.sid, chrom=variants.chromosome, pos=variants.pos,
+                         alleles=variants.alleles, fams=plan.fams, ped=pedigree,
+                         par_status=None if plan.sib_diff else plan.parent_status,
+                         num_obs_par_al=counts.astype(np.float16) if self._robust else None)
+        if plan.trios_sibs:
+            result.complete_trios_inds = np.arange(plan.trio_count)
+            result.sibs_inds = np.arange(plan.trio_count, len(plan.ids))
+        return result
+
+    def read(self, variants, *, order='C'):
+        """Build family-genotype matrices for a block of matched variants."""
+        plans, pedigrees = self._planning
+        results = [self._read_group(variants, plan, ped, order) for plan, ped in zip(plans, pedigrees)]
+        return results[0] if len(results) == 1 else results
 
 
 def _exclude_duplicate_twins(ids, ibdrel_path):
     if ibdrel_path is None:
         return ids
-    king = pd.read_csv(ibdrel_path, sep='\t', usecols=['ID1', 'InfType'],
-                       dtype=str, keep_default_na=False)
-    remove = king.loc[king['InfType'] == 'Dup/MZ', 'ID1']
-    keep = ~np.isin(ids, remove)
-    if len(remove):
-        print(f'WARNING: {len(remove)} pairs of Duplicates or MZ twins in pedigree. '
-              f'Removed {np.count_nonzero(~keep)} individuals.')
+    remove = set()
+    n_pairs = 0
+    with pd.read_csv(ibdrel_path, sep='\t', usecols=['ID1', 'InfType'], dtype=str,
+                     keep_default_na=False, chunksize=200_000) as chunks:
+        for chunk in chunks:
+            pairs = chunk.loc[chunk['InfType'] == 'Dup/MZ', 'ID1']
+            n_pairs += len(pairs)
+            remove.update(pairs)
+    if not n_pairs:
+        return ids
+    keep = ~np.isin(ids, list(remove))
+    print(f'WARNING: {n_pairs} pairs of Duplicates or MZ twins in pedigree. '
+          f'Removed {np.count_nonzero(~keep)} individuals.')
     return ids[keep]
 
 
 def _observed_ids(filename):
     filename = str(filename)
     if filename.endswith('.bed'):
-        return Bed(filename, count_A1=True).iid[:, 1]
+        with open_bed(filename, count_A1=True) as reader:
+            return bed._read_iids(filename, reader)
     if filename.endswith('.bgen'):
         with open_bgen(filename) as reader:
             return np.array(reader.samples, dtype=str)
@@ -141,19 +362,19 @@ def get_ids_with_par(gts_f: str,
     """
     gts_ids = _observed_ids(gts_f)
     ids = _exclude_duplicate_twins(gts_ids if ids is None else np.asarray(ids), ibdrel_path)
-    ids, observed_indices, imp_indices, _ = preprocess.get_indices_given_ped(
-        ped, gts_ids, imp_fams=imp_fams, ids=ids, sib=sib, include_unrel=include_unrel,
-    )
-    gts_ids = gts_ids[observed_indices]
+    if return_info:
+        ids, observed_indices, imp_indices, _ = preprocess.get_indices_given_ped(
+            ped, gts_ids, imp_fams=imp_fams, ids=ids, sib=sib, include_unrel=include_unrel,
+        )
+        gts_id_dict = make_id_dict(gts_ids[observed_indices])
+        if imp_fams is not None:
+            imp_fams = imp_fams[imp_indices]
+        par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams)
+    else:
+        ids, fam_labels, par_status, _ = _sample_plan(
+            ped, gts_ids, IdIndex(gts_ids), imp_fams, ids, sib=sib, include_unrel=include_unrel, select_only=True,
+        )
 
-
-
-    if imp_fams is not None:
-        imp_fams = imp_fams[imp_indices]
-    gts_id_dict = make_id_dict(gts_ids)
-
-    # Find indices in reduced data
-    par_status, gt_indices, fam_labels = preprocess.find_par_gts(ids, ped, gts_id_dict, imp_fams)
     fam_labels = _fill_unrelated_labels(fam_labels)
 
     missing = np.count_nonzero(par_status < 0, axis=1)
@@ -187,6 +408,11 @@ def get_ids_with_sibs(gts_f: str,
     """
     gts_ids = _observed_ids(gts_f)
     ids = _exclude_duplicate_twins(gts_ids if ids is None else np.asarray(ids), ibdrel_path)
+    if not return_info:
+        ids, fam_labels, _, _ = _sample_plan(ped, gts_ids, IdIndex(gts_ids), None, ids,
+                                              sib_diff=True, select_only=True)
+        print(f'Using {len(ids)} samples for the sib-difference estimator')
+        return ids, _fill_unrelated_labels(fam_labels)
     ids, observed_indices = preprocess.get_indices_given_ped_sibs(ped, gts_ids, ids=ids, verbose=False)
     gts_ids = gts_ids[observed_indices]
 
@@ -207,9 +433,7 @@ def get_ids_with_sibs(gts_f: str,
     fam_labels = _fill_unrelated_labels(fam_labels[none_missing])
 
     print(f'Using {len(ids)} samples for the sib-difference estimator')
-    if return_info:
-        return ids, fam_labels, gt_indices
-    return ids, fam_labels
+    return ids, fam_labels, gt_indices
 
 def get_ids_with_trios_sibs(gts_f: str,
                             ped: np.ndarray, 
@@ -220,16 +444,16 @@ def get_ids_with_trios_sibs(gts_f: str,
     """
     gts_ids = _observed_ids(gts_f)
     ids = _exclude_duplicate_twins(gts_ids if ids is None else np.asarray(ids), ibdrel_path)
-    ids, observed_indices, _, sibs_indices = preprocess.get_indices_given_ped_trios_sibs(
+    if not return_info:
+        ids, fam_labels, _, n_trios = _sample_plan(
+            ped, gts_ids, IdIndex(gts_ids), None, ids, trios_sibs=True, verbose=True, select_only=True,
+        )
+        return ids, _fill_unrelated_labels(fam_labels), n_trios == len(ids)
+    ids, observed_indices, _, _ = preprocess.get_indices_given_ped_trios_sibs(
         ped, gts_ids, ids=ids, verbose=False,
     )
     gts_ids = gts_ids[observed_indices]
 
-
-    if sibs_indices.shape[0] == 0:
-        trios_only = True # used to decide dimension of output
-    else:
-        trios_only = False
 
     gts_id_dict = make_id_dict(gts_ids)
 
@@ -246,9 +470,7 @@ def get_ids_with_trios_sibs(gts_f: str,
     ids = ids[none_missing]
     fam_labels = _fill_unrelated_labels(fam_labels[none_missing])
 
-    if return_info:
-        return ids, fam_labels, gt_indices
-    return ids, fam_labels, trios_only
+    return ids, fam_labels, gt_indices
     
 def get_ids_with_trios(gts_f: str,
                        ped: np.ndarray, 

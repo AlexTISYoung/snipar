@@ -25,22 +25,27 @@ Results:
         
 """
 import logging
-from snipar.imputation.preprocess_data import *
-from snipar.imputation.impute_from_sibs import *
+from snipar.imputation.preprocess_data import (
+    ImputationGenotypes, frequency_model_aic, prepare_data, prepare_gts,
+)
+from snipar.imputation.impute_from_sibs import ImputationFamilies, impute
 from snipar.pedigree import create_pedigree
 from snipar.utilities import parse_obsfiles
 import argparse
 import h5py
-import random
+import numpy as np
 import pandas as pd
 import os
-from multiprocessing import Pool
+import psutil
+from multiprocessing import get_context
 from time import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from snipar.utilities import get_parser_doc
 from snipar.numrange import parseNumRange, NumRangeAction
-random.seed(1567924)
+from snipar.resources import (
+    MIB, available_cpus, get_memory_budget, limit_native_threads, plan_batches, worker_environment,
+)
 
 _MARKER_ROWS = {"bim_values"}
 _MARKER_COLUMNS = {"imputed_par_gts", "num_observed_parental_alleles", "maf_coefs"}
@@ -52,49 +57,103 @@ _MARKER_VECTORS = {
 }
 
 
-def _merge_chunks(chunks, filename, variant_count, compression, compression_opts):
-    """Copy each retained marker span directly into the destination datasets."""
-    bim_width = 0
-    for name, _, _ in chunks:
-        with h5py.File(name, "r") as data:
-            bim_width = max(bim_width, data["bim_values"].dtype.itemsize)
+def _write_block(file, values, first, stop, total, bim_dtype, compression, compression_opts):
+    """Append retained SNPs in bounded row tiles to the final HDF5 layout."""
+    for key, source in values.items():
+        if key in _MARKER_COLUMNS:
+            axis = 1
+        elif key in _MARKER_ROWS or key in _MARKER_VECTORS:
+            axis = 0
+        else:
+            if key not in file:
+                file[key] = source
+            continue
+        source = np.asarray(source)
+        if key not in file:
+            shape = list(source.shape)
+            shape[axis] = total
+            if key in {"imputed_par_gts", "num_observed_parental_alleles"}:
+                columns = min(128, source.shape[1])
+                max_rows = max(1, MIB // (2 * columns))
+                row_chunks = (shape[0] + max_rows - 1) // max_rows
+                rows = (shape[0] + row_chunks - 1) // row_chunks
+                file.create_dataset(key, shape, dtype="float16", chunks=(rows, columns),
+                                    compression=compression, compression_opts=compression_opts)
+            else:
+                dtype = bim_dtype if key == "bim_values" else source.dtype
+                file.create_dataset(key, shape, dtype=dtype)
+        dest = file[key]
+        if axis == 0:
+            dest[first:stop] = source
+        else:
+            # Ask NumPy to round results to float16 before passing them to
+            # HDF5, the same conversion used by the original direct writer.
+            rows = max(1, 8 * MIB // max(1, source.shape[1] * dest.dtype.itemsize))
+            for start in range(0, len(source), rows):
+                end = min(start + rows, len(source))
+                dest[start:end, first:stop] = np.ascontiguousarray(source[start:end], dtype=dest.dtype)
 
-    with h5py.File(filename, "w") as out:
-        cursor = 0
-        for name, selected, offset in chunks:
-            with h5py.File(name, "r") as data:
-                stop = cursor + selected.stop - selected.start
-                for key, src in data.items():
-                    if key in _MARKER_COLUMNS:
-                        axis = 1
-                    elif key in _MARKER_ROWS or key in _MARKER_VECTORS:
-                        axis = 0
-                    else:
-                        if key not in out:
-                            out[key] = src[()]
-                        continue
-                    if key not in out:
-                        shape = list(src.shape)
-                        shape[axis] = variant_count
-                        if key == "maf_coefs":
-                            out.create_dataset(key, shape, dtype=src.dtype,
-                                               maxshape=(None, variant_count), fillvalue=np.nan)
-                        elif key in {"imputed_par_gts", "num_observed_parental_alleles"}:
-                            out.create_dataset(key, shape, dtype=src.dtype, chunks=True,
-                                               compression=compression, compression_opts=compression_opts)
-                        else:
-                            dtype = f"S{bim_width}" if key == "bim_values" else src.dtype
-                            out.create_dataset(key, shape, dtype=dtype)
-                    dest = out[key]
-                    if axis == 1:
-                        if key == "maf_coefs" and src.shape[0] > dest.shape[0]:
-                            dest.resize(src.shape[0], axis=0)
-                        dest[:src.shape[0], cursor:stop] = src[:, selected]
-                    elif key == "non_duplicates":
-                        dest[cursor:stop] = src[selected] + offset
-                    else:
-                        dest[cursor:stop] = src[selected]
-                cursor = stop
+
+def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chunks, budget):
+    """Plan core and phase-context memory, with independent BGEN decoder tiles."""
+    samples = reader.n_samples
+    with_phases = reader.bgen is not None
+    if with_phases:
+        # The probability decoder can need two full-sample arrays per
+        # thread, independently of the retained sample subset.
+        all_samples = len(reader.bgen.samples)
+        decoder_bytes = max(1, 40 * all_samples)
+        reader.read_threads = min(threads, max(1, budget // (decoder_bytes * 8)))
+        reader.probability_bytes = min(128 * MIB, max(16 * samples, budget // 16))
+        fixed_decode = decoder_bytes * reader.read_threads + reader.probability_bytes
+        # Two haplotypes, a dosage, and at most 100 neighbouring SNPs
+        # are retained. The core output and PC fit exclude the halo.
+        phased_work_per_marker = 4 * samples
+        pairs = max(1, max_sibs * (max_sibs - 1) // 2)
+        phased_work_per_marker += 16 * threads * (pairs + max_sibs)
+        halo_bytes = min(marker_count - 1, 100) * phased_work_per_marker
+    else:
+        fixed_decode = 0
+        phased_work_per_marker = 0
+        halo_bytes = 0
+    # Float64 imputed dosages and float32 observed-allele counts are
+    # rounded into HDF5 with a small, independent staging buffer.
+    marker_bytes = max(1, 12 * family_count + 4 * samples + 64 * threads + phased_work_per_marker)
+    if reader.matched_pcs is not None:
+        marker_bytes += 72 * samples
+    _, width = plan_batches(marker_count, marker_bytes, batch_size=(marker_count + chunks - 1) // chunks,
+                            fixed_bytes=16 * MIB + fixed_decode + halo_bytes, memory_limit=budget)
+    return width
+
+
+def _select_pc_model(genotypes, markers, width):
+    """Choose one PC model for all blocks without holding the AIC sample in RAM."""
+    sample = markers[np.linspace(0, len(markers) - 1, min(1000, len(markers)), dtype=int)]
+    aic = np.zeros(genotypes.matched_pcs.shape[1] + 1)
+    count = 0
+    for start in range(0, len(sample), width):
+        _, dosages = genotypes.read_calls(sample[start:start + width], include_phased=False)
+        if not genotypes.pc_present.all():
+            dosages = dosages[genotypes.pc_present]
+        scores, terms = frequency_model_aic(dosages, genotypes.matched_pcs)
+        aic += scores
+        count += terms
+    chosen = int(np.argmin(aic + count * 2 * np.arange(1, len(aic) + 1)))
+    genotypes.matched_pcs = genotypes.matched_pcs[:, :chosen]
+
+
+def _run_chromosome(pedigree, pcs, pc_ids, args):
+    with limit_native_threads(1):
+        return run_imputation(dict(args, pedigree=pedigree, pcs=pcs, pc_ids=pc_ids))
+
+
+def _init_chromosomes(pedigree, pcs, pc_ids):
+    global _chromosome_inputs
+    _chromosome_inputs = pedigree, pcs, pc_ids
+
+
+def _run_chromosome_worker(args):
+    return _run_chromosome(*_chromosome_inputs, args)
 
 
 def run_imputation(data):
@@ -150,10 +209,10 @@ def run_imputation(data):
                     Address of a fam file containing positions of SNPs if the address is different from Fam file of genotypes.
 
                 threads: int, optional
-                    Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.
+                    Maximum OpenMP threads for this chromosome. The default uses the available CPU allowance.
 
                 chunks: int
-                    Number of chunks load data in(each process).
+                    Minimum number of variant blocks. The memory budget can require more blocks.
 
                 output_compression: str, optional
                     Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
@@ -195,64 +254,74 @@ def run_imputation(data):
     chromosome = data.get("chromosome")
     pedigree_nan = data.get("pedigree_nan")
     silent_progress = data.get("silent_progress")
-    logging.info("processing " + str(phased_address) + "," + str(unphased_address))
-    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
-    if chunks < 1:
-        raise ValueError("chunks must be positive")
+    logging.info("Processing %s, %s", phased_address, unphased_address)
+    if chunks < 1 or (threads is not None and threads < 1):
+        raise ValueError("chunks and threads must be positive")
+    threads = min(threads or available_cpus(), available_cpus())
+    sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(
+        pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam,
+        control, chromosome=chromosome, pedigree_nan=pedigree_nan,
+    )
     if sibships.empty:
         raise ValueError("No families have the required sibling or parental genotypes for imputation")
+    threads = min(threads, len(sibships))
     start_time = time()
     start = 0 if start is None else start
     end = len(bim) if end is None else end
     if not 0 <= start < end <= len(bim):
         raise ValueError("Imputation requires 0 <= start < end <= number of SNPs")
+    markers = np.flatnonzero(~bim["id"].duplicated().to_numpy())
+    markers = markers[(markers >= start) & (markers < end)]
+    if not len(markers):
+        raise ValueError("No unique SNPs in the requested slice")
+    bim_dtype = bim.iloc[markers].to_numpy().astype("S").dtype
+    output = Path(f"{output_address}.hdf5")
 
-    def run_slice(first, last, out, compression=None, options=None, marker_indices=None):
-        phased, dosages, ids, pos, freqs, metadata = prepare_gts(
-            phased_address, unphased_address, bim, pedigree_output, ped_ids,
-            chromosomes, first, last, pcs, pc_ids, find_optimal_pc,
-            marker_indices=marker_indices,
-        )
-        impute(sibships, ids, phased, dosages, ibd, pos, metadata, str(chromosomes),
-               freqs, out, threads=threads, output_compression=compression,
-               output_compression_opts=options, silent_progress=silent_progress,
-               use_backup=use_backup)
+    with ImputationGenotypes(phased_address, unphased_address, bim, ped_ids, pcs, pc_ids,
+                             read_threads=threads) as genotypes:
+        prepared = ImputationFamilies(sibships, genotypes.id_rows, ibd, genotypes.n_samples)
+        genotypes.id_rows = None
+        del ibd, ped_ids
+        budget = get_memory_budget()
+        if data.get("worker_budget") is not None:
+            budget = min(budget, data["worker_budget"] - psutil.Process().memory_info().rss)
+        budget = max(0, budget)
+        width = _plan_imputation(genotypes, len(markers), len(sibships),
+                                 int(sibships["sib_count"].max()), threads, chunks, budget)
+        count = max(min(chunks, len(markers)), (len(markers) + width - 1) // width)
+        boundaries = np.linspace(0, len(markers), count + 1, dtype=int)
+        logging.info("Using %d variant blocks (%d SNPs maximum, %.0f MiB budget, %d threads)",
+                     count, width, budget / MIB, threads)
+        if find_optimal_pc and genotypes.matched_pcs is not None:
+            _select_pc_model(genotypes, markers, width)
 
-    if chunks == 1:
-        run_slice(start, end, output_address, output_compression, output_compression_opts)
-    else:
-        _, markers = np.unique(bim["id"], return_index=True)
-        markers.sort()
-        markers = markers[(markers >= start) & (markers < end)]
-        if not len(markers):
-            raise ValueError("No unique SNPs in the requested slice")
-        if find_optimal_pc and pcs is not None:
-            sample = markers[np.linspace(0, len(markers) - 1, min(1000, len(markers)), dtype=int)]
-            *_, model = prepare_gts(phased_address, unphased_address, bim, pedigree_output,
-                                    ped_ids, chromosomes, start, end, pcs, pc_ids,
-                                    find_optimal_pc=True, marker_indices=sample)
-            pcs = pcs[:, :model["maf_x"].shape[1] - 1]
-            find_optimal_pc = False
-        # The phased IBD calculation uses a window of 50 unique markers on
-        # either side. Include that context at each internal chunk boundary.
+        # The phased rolling IBD comparison uses 50 unique markers on
+        # either side. Every internal block includes this context.
         half_window = 50 if phased_address else 0
-        boundaries = np.linspace(0, len(markers), min(chunks, len(markers)) + 1, dtype=int)
-        output = Path(f"{output_address}.hdf5")
         with TemporaryDirectory(prefix=".snipar-impute-", dir=output.parent) as directory:
-            files = []
-            for i, (first, last) in enumerate(zip(boundaries[:-1], boundaries[1:])):
-                logging.info("imputing chunk %d/%d ...", i + 1, len(boundaries) - 1)
-                first_read = max(0, first - half_window)
-                last_read = min(len(markers), last + half_window)
-                chunk_start = int(markers[first_read])
-                chunk_end = int(markers[last_read - 1]) + 1
-                address = str(Path(directory) / f"chunk{i}")
-                run_slice(chunk_start, chunk_end, address, marker_indices=markers[first_read:last_read])
-                selected = slice(first - first_read, last - first_read)
-                files.append((f"{address}.hdf5", selected, chunk_start - start))
-            merged = Path(directory) / "merged.hdf5"
-            _merge_chunks(files, merged, len(markers), output_compression, output_compression_opts)
-            os.replace(merged, output)
+            temporary_output = Path(directory) / "output.hdf5"
+            with h5py.File(temporary_output, "w") as file:
+                for i, (first, stop) in enumerate(zip(boundaries[:-1], boundaries[1:]), 1):
+                    first_read = max(0, first - half_window)
+                    stop_read = min(len(markers), stop + half_window)
+                    retained = slice(first - first_read, stop - first_read)
+                    if count > 1:
+                        logging.info("Imputing variant block %d/%d", i, count)
+                    phased, dosages, _, pos, freqs, metadata = prepare_gts(
+                        phased_address, unphased_address, bim, pedigree_output, None,
+                        chromosomes, start, end, marker_indices=markers[first_read:stop_read],
+                        prepared=genotypes, retained=retained,
+                    )
+                    impute(sibships, None, phased, dosages, None, pos, metadata, str(chromosomes),
+                           freqs, threads=threads, silent_progress=silent_progress or count > 1,
+                           use_backup=use_backup, prepared=prepared, return_genotypes=False,
+                           output_start=retained.start, output_stop=retained.stop)
+                    del phased, dosages, freqs
+                    _write_block(file, metadata, first, stop, len(markers), bim_dtype,
+                                 output_compression, output_compression_opts)
+                    # Do not carry the completed genotype planes into the next read.
+                    del metadata
+            os.replace(temporary_output, output)
     return time() - start_time
 
 #does the imputation and writes the results
@@ -330,22 +399,33 @@ def main(args):
         if len(chromosomes) > 1 and "@" not in args.out:
             return f"{args.out}{chrom}"
         return none_tansform(args.out, "@", str(chrom))
-    inputs = [{"pedigree": pedigree,
-            "control":args.c,
+    if args.processes < 1 or (args.threads is not None and args.threads < 1):
+        raise ValueError("processes and threads must be positive")
+    cpu_count = available_cpus()
+    budget = get_memory_budget()
+    # Subprocesses share neither Python metadata nor native scratch under
+    # spawn. Give each a bounded share, including the cost of its metadata.
+    fixed_per_worker = 256 * MIB + len(pedigree) * 1024
+    if pcs is not None:
+        fixed_per_worker += 2 * pcs.nbytes
+    if args.bgen:
+        fixed_per_worker += 550 * len(pedigree)
+    processes = min(args.processes, len(chromosomes), cpu_count, max(1, budget // fixed_per_worker))
+    threads = min(args.threads or cpu_count, max(1, cpu_count // processes))
+    inputs = [{"control":args.c,
             "use_backup":args.use_backup,
             "phased_address": none_tansform(args.bgen, "@", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "@", str(chromosome)),
             "ibd_address": none_tansform(args.ibd, "@", str(chromosome)),            
             "ibd_is_king": args.ibd_is_king,
-            "pcs": pcs,
-            "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
             "output_address":output_for_chromosome(chromosome),
             "start": args.start,
             "end": args.end,
             "bim": none_tansform(args.bim, "@", str(chromosome)),
             "fam": none_tansform(args.fam, "@", str(chromosome)),
-            "threads": args.threads,
+            "threads": threads,
+            "worker_budget": budget // processes if processes > 1 else None,
             "chunks": args.chunks,
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
@@ -354,18 +434,17 @@ def main(args):
             'silent_progress':args.silent_progress
             }
             for chromosome in chromosomes]
-    #TODO output more information about the imputation inside the hdf5 filehf
-    if args.processes > 1:
-        with Pool(args.processes) as pool:
-            logging.info("staring process pool")        
-            consumed_time = pool.map(run_imputation, inputs)
-            logging.info("imputation time: "+str(np.sum(consumed_time)))
+    start_time = time()
+    logging.info("Allocating %d chromosome processes and %d threads per process", processes, threads)
+    if processes > 1:
+        with worker_environment(1), get_context("spawn").Pool(
+            processes, initializer=_init_chromosomes, initargs=(pedigree, pcs, pc_ids),
+        ) as pool:
+            pool.map(_run_chromosome_worker, inputs, chunksize=1)
     else:
-        start_time = time()
-        for args in inputs:
-            run_imputation(args)
-        end_time = time()
-        logging.info(f"imputation time: {end_time-start_time}")
+        for job in inputs:
+            _run_chromosome(pedigree, pcs, pc_ids, job)
+    logging.info("Imputation time: %.2f seconds", time() - start_time)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c',
@@ -443,16 +522,16 @@ parser.add_argument('-find_optimal_pc',
                     help='It will use Akaike information criterion to find the optimal number of PCs to use for MAF estimation.')
 parser.add_argument('--threads',
                     type=int,
-                    default=1, 
-                    help='Number of the threads to be used. This should not exceed number of the available cores. The default number of the threads is one.')
+                    default=None,
+                    help='Maximum OpenMP threads per chromosome. By default use the available CPU allowance.')
 parser.add_argument('--processes',
                     type=int,
                     default=1,
-                    help='Number of processes for imputation chromosomes. Each chromosome is done on one process.')
+                    help='Maximum concurrent chromosomes, subject to available CPU and memory.')
 parser.add_argument('--chunks',
                     type=int,
                     default=1,
-                    help='Number of chunks load data in(each process).')
+                    help='Minimum number of variant blocks per chromosome. Available memory may require more blocks.')
 parser.add_argument('--output_compression',
                     type=str,
                     default=None,
