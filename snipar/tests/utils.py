@@ -3,11 +3,11 @@ import logging
 import unittest
 import os
 import warnings
+from tempfile import TemporaryDirectory
 
 tests_root = os.path.dirname(__file__)
-output_root = os.path.join(tests_root, "tmp")
-if not os.path.exists(output_root):
-    os.mkdir(output_root)
+_test_directory = TemporaryDirectory(prefix="snipar-tests-")
+output_root = _test_directory.name
 
 class SniparTest(unittest.TestCase):
     p_value_threshold = 0.01
