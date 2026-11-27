@@ -8,6 +8,9 @@ recursive-include docs *.txt
 recursive-include snipar util_data/**
 recursive-include snipar tests/test_data/*
 recursive-include snipar example/example_data/*
+# Intermediate datasets for generating the fixtures do not run in installed tests.
+recursive-exclude snipar/tests/test_data sample[12].bgen* sample1_2.bed sample1_2.bim sample1_2.fam
+recursive-exclude snipar/tests/test_data sample_parent[12].* sample_sib[12].* sample_father[12].* sample_mother[12].*
 prune docs/_build
 recursive-include snipar *.pyx *.pxd
 global-exclude __pycache__ *.py[cod] *.cpp .DS_Store
