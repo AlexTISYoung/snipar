@@ -20,7 +20,7 @@ Results:
 import argparse
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.docgen import get_parser_doc
-from snipar.vcf_cli import add_vcf_options, with_vcf
+from snipar.genotype_cli import add_vcf_options, with_genotypes
 ######### Command line arguments #########
 parser = argparse.ArgumentParser(add_help=True)
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
@@ -53,10 +53,10 @@ parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.
 parser.add_argument('--batch_size', type=int, default=None,
                     help='Maximum SNPs per batch. The default selects a batch size from available memory.')
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
-add_vcf_options(parser)
+add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_vcf()
+@with_genotypes()
 def main(args):
     """Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

@@ -46,13 +46,18 @@ class BgenFile:
 
     @cached_property
     def allele_ids(self):
-        return np.asarray([",".join(self._reader[i].alleles) for i in range(len(self._reader))])
+        return self.read_allele_ids(range(len(self._reader)))
 
-    def variant_metadata(self):
+    def read_allele_ids(self, variants):
+        return np.asarray([",".join(self._reader[int(i)].alleles) for i in variants])
+
+    def variant_metadata(self, variants=None):
         """Read the identifying fields without decompressing genotype probabilities."""
         records = []
-        for i in range(len(self._reader)):
-            variant = self._reader[i]
+        if variants is None:
+            variants = range(len(self._reader))
+        for i in variants:
+            variant = self._reader[int(i)]
             alleles = variant.alleles
             # Offset of the genotype block after the variable-length BGEN identifier fields.
             strings = (variant.varid, variant.rsid, variant.chrom, *alleles)

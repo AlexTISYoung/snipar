@@ -32,10 +32,12 @@ When the ``bgen-reader`` backend needs an index for genotypes in a read-only
 directory, it uses a per-user cache. Set ``BGEN_READER_CACHE_HOME`` to choose
 a writable cache directory, for example on a compute cluster.
 
-The *snipar* :ref:`workflow <workflow>` has only been tested with high-quality genotype information on bi-allelic variants. 
-We recommend first filtering your observed genotypes to keep only bi-allelic variants with INFO/R-square>0.99 
-(if using genotypes imputed from a reference panel) and Hardy-Weinberg Equilibrium P-value>1e-6. 
-Using low-quality SNPs may result in bias in the imputed parental genotypes and direct effect estimates and is not recommended. 
+The *snipar* :ref:`workflow <workflow>` has been tested with high-quality
+genotypes on biallelic variants. SNIPar defaults to a minimum quality score
+of 0.99 in annotated VCFs and in BGEN with ``--bgen-quality``. See the
+:doc:`command-line reference <scripts>` for the available fields and overrides.
+For Hardy–Weinberg equilibrium filtering, retain variants with P > 1e-6
+before supplying the genotype files.
 
 For per-chromosome files, use a numeric wildcard such as
 ``--bgen /path/to/haplotypes/chr_@`` or ``--vcf /path/to/genotypes/chr_@.vcf.gz``.

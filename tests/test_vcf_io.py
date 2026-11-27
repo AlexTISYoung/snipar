@@ -12,8 +12,8 @@ from snipar.utilities import open_bgen
 from snipar.vcf import convert_vcf
 
 
-def _vcf(records, samples=('S1', 'S2', 'S3', 'S4', 'S5'), version='4.2'):
-    header = (f'##fileformat=VCFv{version}\n##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+def _vcf(records, samples=('S1', 'S2', 'S3', 'S4', 'S5'), version='4.2', info_headers=''):
+    header = (f'##fileformat=VCFv{version}\n{info_headers}##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
               '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t')
     return (header + '\t'.join(samples) + '\n' + '\n'.join('\t'.join(row) for row in records) + '\n').encode()
 
@@ -93,6 +93,91 @@ def test_vcf_filters_sites_before_decoding_and_maf_after_sample_selection(tmp_pa
         np.testing.assert_array_equal(calls.iid, ['S1', 'S5'])
         np.testing.assert_array_equal(calls.sid, ['subset_common'])
         np.testing.assert_array_equal(calls.read()[:, 0], [1, 2])
+
+
+def test_vcf_info_quality_filters_before_genotype_decoding(tmp_path):
+    source = tmp_path / 'calls.vcf'
+    kept = ('boundary', 'last_field')
+    scores = [
+        ('boundary', 'R2=.8;DR2=6e-1;AF=.3'),
+        ('last_field', 'AF=.5;DR2=0.999;R2=0.9'),
+        ('low', 'R2=.7;DR2=.9'),
+        ('one_low', 'R2=.9;DR2=.2'),
+        ('prefix_match', 'OTHER_R2=.9;DR2=.9'),
+        ('wrong_case', 'r2=.9;DR2=.9'),
+        ('missing', 'DR2=.9'),
+        ('flag', 'R2;DR2=.9'),
+        ('missing_value', 'R2=.;DR2=.9'),
+        ('nan', 'R2=NaN;DR2=.9'),
+        ('infinite', 'R2=inf;DR2=.9'),
+        ('nonscalar', 'R2=.9,1;DR2=.9'),
+        ('malformed', 'R2=0_.9;DR2=.9'),
+        ('duplicate', 'R2=.9;DR2=.9;R2=.2'),
+        ('maf', 'R2=.9;DR2=.9;AF=.05'),
+    ]
+    records = [('1', str(pos), sid, 'A', 'G', '.', 'PASS', info, 'GT',
+                *(['0|1', '0|0'] if sid in kept else ['bad', 'bad']))
+               for pos, (sid, info) in enumerate(scores, 1)]
+    source.write_bytes(_vcf(records, samples=('S1', 'S2')))
+    result = convert_vcf(source, tmp_path / 'filtered', min_quality={'R2': .8, 'DR2': .6}, min_info_maf=.2)
+    assert result.n_records == len(records)
+    assert result.n_quality_removed == len(records) - len(kept) - 1
+    assert dict(result.quality_filters) == {'R2': .8, 'DR2': .6}
+    with open_bed(result.bed + '.bed') as reader:
+        np.testing.assert_array_equal(reader.sid, kept)
+        np.testing.assert_array_equal(reader.read(), [[1, 1], [2, 2]])
+
+
+def test_vcf_auto_quality_uses_declared_metric_and_can_be_overridden(tmp_path):
+    source = tmp_path / 'calls.vcf'
+    source.write_bytes(_vcf([
+        ('1', '1', 'equivalent', 'A', 'G', '.', 'PASS', 'INFO=.99;DR2=.3', 'GT', '0|0', '0|1'),
+        ('1', '2', 'low', 'A', 'G', '.', 'PASS', 'DR2=1;INFO=.98', 'GT', '0|1', '0|1'),
+        ('1', '3', 'missing', 'A', 'G', '.', 'PASS', 'DR2=1', 'GT', '0|1', '0|0'),
+    ], samples=('S1', 'S2'), info_headers=(
+        '##INFO=<ID=DR2,Number=A,Type=Float,Description="Dosage R2">\n'
+        '##INFO=<ID=INFO,Description="A quality score, with comma",Number=1,Type=Float>\n'
+    )))
+    for name, options, expected, expected_filters in [
+        ('default', {}, ['equivalent'], {'INFO': .99}),
+        ('override', {'min_quality': {'DR2': .9}}, ['low', 'missing'], {'DR2': .9}),
+        ('disabled', {'min_quality': {}}, ['equivalent', 'low', 'missing'], {}),
+    ]:
+        result = convert_vcf(source, tmp_path / name, **options)
+        assert dict(result.quality_filters) == expected_filters
+        with open_bed(result.bed + '.bed') as reader:
+            np.testing.assert_array_equal(reader.sid, expected)
+
+
+def test_vcf_auto_quality_is_selected_per_file_from_scalar_numeric_fields(tmp_path):
+    (tmp_path / 'chr_1.vcf').write_bytes(_vcf([
+        ('1', '1', 'low', 'A', 'G', '.', 'PASS', 'Rsq=.5', 'GT', 'bad', 'bad'),
+        ('1', '2', 'high', 'A', 'G', '.', 'PASS', 'Rsq=1', 'GT', '0|1', '0|0'),
+    ], samples=('S1', 'S2'), info_headers='##INFO=<ID=Rsq,Number=A,Type=Float,Description="Dosage R2">\n'))
+    (tmp_path / 'chr_2.vcf').write_bytes(_vcf([
+        ('2', '1', 'no_metric', 'A', 'G', '.', 'PASS', 'INFO=label', 'GT', '0|0', '0|1'),
+    ], samples=('S1', 'S2'), info_headers=(
+        '##INFO=<ID=INFO,Number=1,Type=String,Description="A label">\n'
+        '##INFO=<ID=DR2,Number=R,Type=Float,Description="Values per allele">\n'
+    )))
+    result = convert_vcf(tmp_path / 'chr_@.vcf', tmp_path / 'output')
+    assert result.quality_filters == (('Rsq', .99),)
+    assert result.n_quality_removed == 1
+    for chrom, expected in [(1, 'high'), (2, 'no_metric')]:
+        with open_bed(result.bed.replace('@', str(chrom)) + '.bed') as reader:
+            np.testing.assert_array_equal(reader.sid, [expected])
+
+
+@pytest.mark.parametrize('filter_, message', [
+    ({'INFO/DR2': .9}, 'Invalid VCF INFO quality tag'),
+    ({'R2': np.inf}, 'must be a finite number'),
+    ({'R2': np.nan}, 'must be a finite number'),
+    ({'R2': 'NA'}, 'must be a finite number'),
+    ([('R2', .9)], 'must map INFO tags'),
+])
+def test_vcf_rejects_invalid_info_quality_options_before_reading(tmp_path, filter_, message):
+    with pytest.raises(ValueError, match=message):
+        convert_vcf(tmp_path / 'absent.vcf', tmp_path / 'output', min_quality=filter_)
 
 
 @pytest.mark.parametrize('calls,reason', [

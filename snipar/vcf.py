@@ -1,16 +1,24 @@
 """Stream VCF hard calls into bounded, random-access genotype files."""
 
+from collections.abc import Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 import gzip
 import math
 from pathlib import Path
+import re
 import struct
 from tempfile import TemporaryDirectory
 import zlib
 
 import numpy as np
 from numba import njit
+
+from snipar.variant_quality import DEFAULT_MIN_QUALITY as DEFAULT_VARIANT_QUALITY, QUALITY_FIELDS
+
+
+_INFO_ATTRIBUTES = re.compile(rb'(?:^|,)\s*([A-Za-z0-9_.-]+)=\s*("(?:\\.|[^"\\])*"|[^,]+)')
+_QUALITY_RANK = {field.encode(): index for index, field in enumerate(QUALITY_FIELDS)}
 
 
 @dataclass(frozen=True)
@@ -22,6 +30,8 @@ class VCFConversion:
     n_variants: int
     n_records: int
     phase_fallback: str | None = None
+    quality_filters: tuple[tuple[str, float], ...] = ()
+    n_quality_removed: int = 0
 
 
 def _vcf_files(source, chromosomes):
@@ -57,9 +67,21 @@ def _vcf_lines(source):
             yield file
 
 
-def _sample_header(lines, source):
+def _sample_header(lines, source, *, detect_quality=False):
+    quality_tag = None
+    quality_rank = len(_QUALITY_RANK)
     for line in lines:
         if line.startswith(b'##'):
+            if detect_quality and quality_rank and line.startswith(b'##INFO=<'):
+                attributes = {key: value.strip() for key, value in
+                              _INFO_ATTRIBUTES.findall(line[8:].rstrip().removesuffix(b'>'))}
+                tag = attributes.get(b'ID', b'')
+                rank = _QUALITY_RANK.get(tag.upper(), len(_QUALITY_RANK))
+                # Number=A is also a scalar because we keep biallelic sites.
+                if (rank < quality_rank and attributes.get(b'Number') in (b'1', b'A') and
+                        attributes.get(b'Type') in (b'Float', b'Integer')):
+                    quality_tag = tag.decode()
+                    quality_rank = rank
             continue
         fields = line.rstrip(b'\r\n').split(b'\t')
         if fields[:9] != [b'#CHROM', b'POS', b'ID', b'REF', b'ALT', b'QUAL', b'FILTER', b'INFO', b'FORMAT']:
@@ -69,7 +91,7 @@ def _sample_header(lines, source):
             not sample or any(char <= 32 for char in sample) for sample in samples
         ):
             raise ValueError(f'VCF sample IDs must be nonempty, unique and contain no whitespace: {source}')
-        return samples
+        return samples, quality_tag
     raise ValueError(f'VCF has no valid genotype header: {source}')
 
 
@@ -105,6 +127,55 @@ def _info_maf(info):
     if freq is not None and 0 <= freq <= 1:
         return min(freq, 1 - freq)
     return None
+
+
+def _info_quality_searches(min_quality):
+    """Prepare delimiter-aware searches once for the requested INFO tags."""
+    if min_quality is None:
+        return ()
+    if not isinstance(min_quality, Mapping):
+        raise ValueError('VCF quality filters must map INFO tags to minimum scores')
+    searches = []
+    for tag, minimum in min_quality.items():
+        if not isinstance(tag, str) or not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', tag):
+            raise ValueError(f'Invalid VCF INFO quality tag: {tag!r}')
+        try:
+            minimum = float(minimum)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(f'VCF INFO minimum for {tag} must be a finite number') from error
+        if not math.isfinite(minimum):
+            raise ValueError(f'VCF INFO minimum for {tag} must be a finite number')
+        prefix = tag.encode() + b'='
+        searches.append((prefix, b';' + prefix, minimum))
+    return tuple(searches)
+
+
+def _passes_info_quality(info, searches):
+    # A handful of requested scores should not require parsing or allocating
+    # every annotation in the record. Check delimiters rather than substrings.
+    for prefix, delimited, minimum in searches:
+        start = len(prefix)
+        if not info.startswith(prefix):
+            position = info.find(delimited)
+            if position < 0:
+                return False
+            start += position + 1
+        end = info.find(b';', start)
+        if end < 0:
+            value = info[start:]
+        else:
+            if info.find(delimited, end) >= 0:
+                return False
+            value = info[start:end]
+        if b'_' in value or value != value.strip():
+            return False
+        try:
+            score = float(value)
+        except ValueError:
+            return False
+        if not math.isfinite(score) or score < minimum:
+            return False
+    return True
 
 
 @njit(cache=True, inline='always')
@@ -307,7 +378,7 @@ class _PhasedWriter:
 
 
 def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_ids=None,
-                variant_ids=None, min_maf=0, min_info_maf=0, pass_only=False,
+                variant_ids=None, min_maf=0, min_info_maf=0, min_quality=None, pass_only=False,
                 split_chromosomes=False):
     """Convert plain, gzip or BGZF VCF into per-autosome analysis files.
 
@@ -320,12 +391,17 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
     ``min_maf`` uses called alleles of the selected samples. The independent,
     opt-in ``min_info_maf`` filter uses the input's INFO/AC and INFO/AN or
     INFO/AF population. Sites with missing or invalid metadata stay eligible.
+    ``min_quality`` maps case-sensitive INFO tags to inclusive minimum scores.
+    Variants must have a finite scalar score for each requested tag and meet all
+    thresholds. By default, apply a 0.99 cutoff when a recognized numeric
+    quality tag is declared in the file header. An empty mapping disables it.
     Site and ID filters run before even scanning the sample fields.
     """
     if output not in {'bed', 'auto', 'phased'}:
         raise ValueError('VCF output must be bed, auto or phased')
     if not (0 <= min_maf <= .5 and 0 <= min_info_maf <= .5):
         raise ValueError('VCF minimum allele frequencies must be in [0, 0.5]')
+    requested_quality = _info_quality_searches(min_quality)
     requested_chroms = tuple(dict.fromkeys(range(1, 23) if chromosomes is None else map(int, chromosomes)))
     if not requested_chroms or any(chrom not in range(1, 23) for chrom in requested_chroms):
         raise ValueError('VCF input supports autosomes 1 through 22')
@@ -338,14 +414,19 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
     bed, bgen, phase_sets_by_chrom = {}, {}, {}
     phase_possible, saw_phase = output != 'bed', False
     phase_fallback = None
-    n_records, n_variants = 0, 0
+    applied_quality = {}
+    n_records = n_variants = n_quality_removed = 0
 
     with TemporaryDirectory(dir=destination) as work, ExitStack() as stack:
         work = Path(work)
         phased_handles = stack.enter_context(ExitStack())
         for expected_chrom, source_file in _vcf_files(source, requested_chroms):
             with _vcf_lines(source_file) as lines:
-                header = _sample_header(lines, source_file)
+                header, auto_quality_tag = _sample_header(lines, source_file, detect_quality=min_quality is None)
+                quality_searches = (requested_quality if auto_quality_tag is None else
+                                    _info_quality_searches({auto_quality_tag: DEFAULT_VARIANT_QUALITY}))
+                for prefix, _, minimum in quality_searches:
+                    applied_quality[prefix[:-1].decode()] = minimum
                 selected = (header if requested_samples is None else
                             tuple(sample for sample in header if sample in requested_samples))
                 if samples is None:
@@ -381,6 +462,9 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
                     if sid == b'.' or not sid:
                         sid = b':'.join((contig, position, ref, alt))
                     if requested_variants is not None and sid not in requested_variants:
+                        continue
+                    if quality_searches and not _passes_info_quality(info, quality_searches):
+                        n_quality_removed += 1
                         continue
                     if min_info_maf:
                         maf = _info_maf(info)
@@ -439,6 +523,9 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
                     n_variants += 1
 
         if not n_variants:
+            if n_quality_removed:
+                raise ValueError('No biallelic diploid VCF variants remain after filtering '
+                                 f'({n_quality_removed:,} failed INFO quality thresholds)')
             raise ValueError('No biallelic diploid VCF variants remain after filtering')
         use_bgen = phase_possible and (output == 'phased' or saw_phase)
         for writer in bgen.values():
@@ -461,4 +548,5 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
             original.rename(target)
     prefix = str(destination / ('chr_@' if split_chromosomes else 'genotypes'))
     return VCFConversion(None if use_bgen else prefix, prefix if use_bgen else None,
-                         chroms, len(samples), n_variants, n_records, phase_fallback)
+                         chroms, len(samples), n_variants, n_records, phase_fallback,
+                         tuple(applied_quality.items()), n_quality_removed)

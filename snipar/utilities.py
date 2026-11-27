@@ -11,6 +11,7 @@ from os import path
 from typing import Tuple
 
 from snipar.docgen import get_parser_doc
+from snipar.bgen_filter import BGEN_SUBSET_SUFFIX, open_bgen_subset
 
 def make_id_dict(x,col=0):
     """
@@ -254,7 +255,13 @@ class _bgen:
 
 
 def open_bgen(filename: str, verbose: bool = False):
-    """Wrapper of bgen_reader.open_bgen that checks if sample ids make sense."""
+    """Open BGEN genotypes or a temporary SNIPar variant selection."""
+    if os.fsdecode(filename).endswith(BGEN_SUBSET_SUFFIX):
+        return open_bgen_subset(filename, _open_bgen, verbose=verbose)
+    return _open_bgen(filename, verbose=verbose)
+
+
+def _open_bgen(filename, verbose=False):
     try:
         import bgen_reader
     except ModuleNotFoundError as exc:

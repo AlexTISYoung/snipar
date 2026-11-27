@@ -27,7 +27,7 @@ from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
 from snipar.numrange import parseNumRange, NumRangeAction
-from snipar.vcf_cli import add_vcf_options, with_vcf
+from snipar.genotype_cli import add_vcf_options, with_genotypes
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',
                     type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
@@ -67,10 +67,10 @@ parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
 parser.add_argument('--batches',type=int,help='Number of batches to split the data (by sibpair) into for IBD inference. Useful for large datasets.',default=1)
-add_vcf_options(parser)
+add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_vcf()
+@with_genotypes()
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

@@ -31,7 +31,7 @@ from snipar.imputation.preprocess_data import (
 from snipar.imputation.impute_from_sibs import ImputationFamilies, impute
 from snipar.pedigree import create_pedigree
 from snipar.utilities import parse_obsfiles
-from snipar.vcf_cli import add_vcf_options, with_vcf
+from snipar.genotype_cli import add_vcf_options, with_genotypes
 import argparse
 import h5py
 import numpy as np
@@ -327,7 +327,7 @@ def run_imputation(data):
     return time() - start_time
 
 #does the imputation and writes the results
-@with_vcf(output='auto')
+@with_genotypes(output='auto')
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -547,7 +547,7 @@ parser.add_argument('--pedigree_nan',
                     type=str,
                     default='0',
                     help='The value representing NaN in the pedigreee.')
-add_vcf_options(parser)
+add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')

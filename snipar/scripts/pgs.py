@@ -38,7 +38,7 @@ from snipar.numrange import parseNumRange, NumRangeAction
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.resources import available_cpus
-from snipar.vcf_cli import add_vcf_options, vcf_inputs
+from snipar.genotype_cli import add_vcf_options, genotype_inputs
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
@@ -90,7 +90,7 @@ parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust impute
 parser.add_argument('--force_am_adj',action='store_true',help='Currently has no effect; the assortative mating score adjustment still requires an estimated correlation divided by its SE greater than 1.5.',default=False)
 parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
 parser.add_argument('--batch_size',type=int,help='Maximum SNPs per batch (default 10000). Reduced automatically when available memory is lower.',default=10000)
-add_vcf_options(parser)
+add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
 
@@ -108,7 +108,7 @@ def main(args):
         if args.weights is None:
             raise ValueError('--vcf requires --weights when computing a PGS')
         weights = _read_score_weights(args)
-    with vcf_inputs(args, variant_ids=None if weights is None else weights.snp_dict) as resolved:
+    with genotype_inputs(args, variant_ids=None if weights is None else weights.snp_dict) as resolved:
         return _main(resolved, weights)
 
 

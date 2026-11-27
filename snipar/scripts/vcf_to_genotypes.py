@@ -6,7 +6,7 @@ from pathlib import Path
 
 from snipar.docgen import get_parser_doc
 from snipar.numrange import NumRangeAction, parseNumRange
-from snipar.vcf_cli import add_vcf_filters, prepare_vcf, read_id_list
+from snipar.genotype_cli import add_quality_options, add_vcf_filters, prepare_vcf, read_id_list
 
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -18,6 +18,7 @@ parser.add_argument('--samples', type=Path, help='Keep sample IDs listed one per
 parser.add_argument('--chr_range', type=parseNumRange, nargs='*', action=NumRangeAction,
                     help='Chromosomes to keep. Supply a range or individual chromosome numbers.')
 add_vcf_filters(parser)
+add_quality_options(parser)
 __doc__ += '\n\nArgs:\n' + get_parser_doc(parser)
 
 

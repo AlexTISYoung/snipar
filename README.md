@@ -77,7 +77,7 @@ And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutori
 | BGEN | `--bgen` | Phased or unphased BGEN prefix, with a `.sample` file when sample IDs are external |
 | VCF | `--vcf` | Phased or unphased diploid, biallelic autosomal `GT` calls in plain, gzip, or BGZF files |
 
-Parental imputation uses chromosome-wide phase from BGEN or VCF when available. [Input file reference](https://snipar.readthedocs.io/en/latest/input%20files.html#observed-genotypes) · [Phased VCF tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#using-the-phased-vcf)
+Parental imputation uses chromosome-wide phase from BGEN or VCF when available. VCFs with a recognized quality tag and BGENs with `--bgen-quality` use a default variant quality cutoff of 0.99. [Input file reference](https://snipar.readthedocs.io/en/latest/input%20files.html#observed-genotypes) · [Phased VCF tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#using-the-phased-vcf)
 
 # Installing Using pip
 

@@ -57,6 +57,41 @@ use hard calls with posterior probability above 0.99, treating uncertain
 calls as missing. Use uniformly phased or uniformly unphased diploid,
 biallelic BGEN files for those commands.
 
+Imputation quality filters
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default variant quality cutoff is 0.99, inclusive. For each VCF, SNIPar
+selects the first available numeric INFO tag from ``INFO``, ``R2``, ``RSQ``,
+``DR2``, and ``IMPINFO`` in that order, ignoring case when choosing the tag.
+VCFs without a recognized tag and BGENs without a quality table can be read
+without this filter.
+
+Use ``--min-quality FIELD=MIN`` to choose a field and threshold. Giving just
+the field, as in ``--min-quality R2``, uses 0.99. Repeat the option to require
+every threshold. Explicit names must match the tag or table column exactly.
+Missing, nonnumeric, nonfinite, and nonscalar values fail an active filter.
+Use ``--no-quality-filter`` to disable automatic filtering.
+
+For BGEN, supply ``--bgen-quality FILE`` with a whitespace-delimited table
+containing a variant ID column and one or more numeric quality columns. A
+headered table can be compressed with gzip. SNIPar also accepts the
+headerless eight-column UK Biobank MFI format. Use
+``--bgen-quality-id COLUMN`` to specify a custom ID column. The table must
+have unique IDs. SNIPar matches the BGEN variant ID first, then a unique
+rsID when the variant ID is absent from the table. A variant without a
+matching row is excluded. For separate chromosome tables, put ``@`` in both
+the BGEN prefix and the quality filename.
+
+VCF filtering runs before genotype parsing. BGEN filtering uses an index
+into the original file, so excluded genotype blocks are not decoded for the
+analysis and the genotypes do not need a second copy on disk. For imputation,
+apply BGEN quality filters with BGEN as the only variant input.
+
+.. code-block:: sh
+
+   gwas.py phenotype.txt --vcf chr22.vcf.gz --min-quality R2=.95 --pedigree pedigree.txt --out results
+   gwas.py phenotype.txt --bgen chr_@ --bgen-quality ukb_mfi_chr@.txt --pedigree pedigree.txt --out results
+
 Filtering large VCFs
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -283,6 +318,10 @@ Args:
     ``--vcf-variants``, ``--vcf-pass-only``, ``--vcf-min-info-maf``, ``--vcf-min-maf``
         Filter VCF records before computing LD scores. See the VCF input
         section above for the filter definitions.
+
+    ``--min-quality``, ``--no-quality-filter``
+        Choose a VCF quality field and minimum or disable the automatic
+        0.99 cutoff. See the imputation quality filters above.
 
     ``--ld_wind``, ``--ld-wind`` : float, default=1
         LD window in centimorgans when computing scores from genotypes.

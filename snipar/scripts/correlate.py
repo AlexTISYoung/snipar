@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from snipar.vcf_cli import add_vcf_options, vcf_inputs
+from snipar.genotype_cli import add_vcf_options, genotype_inputs
 
 
 ALIASES = {
@@ -659,7 +659,7 @@ def main(argv=None):
         set_num_threads(num_threads)
         print("Number of threads: " + str(num_threads), flush=True)
     try:
-        with vcf_inputs(args, chromosomes=parse_chromosomes(args.chr_range)) as resolved:
+        with genotype_inputs(args, chromosomes=parse_chromosomes(args.chr_range)) as resolved:
             effects, sampling, ldscores, blocks, names, metadata = prepare_inputs(resolved)
         print_filter_summary(metadata)
         print("Fitting {} mode ({} effects).".format(metadata["mode"], args.effect_scale), flush=True)

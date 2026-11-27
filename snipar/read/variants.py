@@ -29,6 +29,8 @@ class MatchedVariants(NamedTuple):
 
 def bgen_variant_ids(reader):
     """Choose the SNPIDs used in output, falling back to rsIDs for placeholder SNPIDs."""
+    if hasattr(reader, 'analysis_variant_ids'):
+        return reader.analysis_variant_ids
     sid = np.asarray(reader.ids)
     rsid = np.asarray(reader.rsids)
     if sid.size and np.all(sid == sid[0]) and (sid.size > 1 or sid[0] in ('', '.')):

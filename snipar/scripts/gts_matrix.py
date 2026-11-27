@@ -17,7 +17,7 @@ import h5py
 import snipar.read as read
 import numpy as np
 from snipar.utilities import encode_str_array, outfile_name, parse_filelist, parse_obsfiles
-from snipar.vcf_cli import add_vcf_options, with_vcf
+from snipar.genotype_cli import add_vcf_options, with_genotypes
 from snipar.docgen import get_parser_doc
 from numba import set_num_threads
 from numba import config as numba_config
@@ -140,10 +140,10 @@ parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect fr
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
 parser.add_argument('--threads',type=int,help='Number of threads to use. Uses all available by default.',default=None)
 parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
-add_vcf_options(parser)
+add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 # Set number of threads
-@with_vcf()
+@with_genotypes()
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

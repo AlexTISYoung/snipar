@@ -155,3 +155,43 @@ def test_gls_skips_roundoff_scale_collinearity_within_a_batch():
     valid, covariance = _identified_information(information, np.diagonal(information, axis1=1, axis2=2), 24)
     np.testing.assert_array_equal(valid, [0])
     np.testing.assert_allclose(covariance[0], np.linalg.inv(stable), rtol=1e-14)
+
+
+def test_gwas_quality_filters_match_input_subset(family_inputs, tmp_path):
+    root, vcf, _ = family_inputs
+    annotated = tmp_path / 'annotated.vcf.gz'
+    scores = tmp_path / 'quality.tsv'
+    selected = set()
+    with gzip.open(vcf, 'rt') as original, gzip.open(annotated, 'wt') as target, scores.open('w') as table:
+        target.write(next(original))
+        target.write('##INFO=<ID=R2,Number=1,Type=Float,Description="Imputation quality">\n')
+        target.write(next(original))
+        table.write('ID\tINFO\n')
+        for i, line in enumerate(original):
+            fields = line.split('\t', 8)
+            keep = i % 3 != 1
+            score = '.99' if keep else '.9899'
+            if keep:
+                selected.add(fields[2])
+            table.write(f'{fields[2]}\t{score}\n')
+            fields[7] = f'R2={score}'
+            target.write('\t'.join(fields))
+
+    bed = convert_vcf(vcf, tmp_path / 'bed', variant_ids=selected).bed
+    bgen = convert_vcf(vcf, tmp_path / 'bgen', output='phased').bgen
+    common = [str(root / 'phenotype.txt'), '--imp', str(root / 'parents'), '--vc_list', '.4', '.6',
+              '--threads', '1', '--cpus', '2', '--batch_size', '8']
+    for name, options in {
+        'bed': ['--bed', bed],
+        'vcf': ['--vcf', str(annotated)],
+        'bgen': ['--bgen', bgen, '--bgen-quality', str(scores)],
+    }.items():
+        gwas.main(gwas.parser.parse_args([*common, *options, '--out', str(tmp_path / name)]))
+
+    with h5py.File(tmp_path / 'bed.sumstats.hdf5') as expected:
+        assert set(expected['bim'].asstr()[:, 1]) == selected
+        for name in ('vcf', 'bgen'):
+            with h5py.File(tmp_path / f'{name}.sumstats.hdf5') as actual:
+                np.testing.assert_array_equal(actual['bim'][:], expected['bim'][:])
+                for field in ('estimate', 'estimate_ses', 'estimate_covariance', 'freqs'):
+                    np.testing.assert_allclose(actual[field][:], expected[field][:], rtol=1e-7)

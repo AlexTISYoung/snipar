@@ -29,7 +29,7 @@ from snipar.utilities import *
 from snipar.simulate import *
 from pysnptools.snpreader import SnpData,Bed
 from snipar.numrange import parseNumRange, NumRangeAction
-from snipar.vcf_cli import add_vcf_options, with_vcf
+from snipar.genotype_cli import add_vcf_options, with_genotypes
 parser = argparse.ArgumentParser()
 parser.add_argument('n_causal',type=int,help='Number of causal loci')
 parser.add_argument('h2',type=float,help='Heritability due to direct effects in first generation',default=None)
@@ -61,10 +61,10 @@ parser.add_argument('--selection_nfam', type=int, default=None,
 parser.add_argument('--save_par_gts',action='store_true',help='Save the genotypes of the parents of the final generation',default=False)
 parser.add_argument('--impute',action='store_true',help='Impute parental genotypes from phased sibling genotypes & IBD',default=False)
 parser.add_argument('--unphased_impute',action='store_true',help='Impute parental genotypes from unphased sibling genotypes & IBD',default=False)
-add_vcf_options(parser, phased_only=True)
+add_vcf_options(parser, phased_only=True, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_vcf(output='phased')
+@with_genotypes(output='phased')
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
