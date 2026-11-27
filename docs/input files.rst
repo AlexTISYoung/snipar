@@ -28,6 +28,10 @@ when phase information can be used (see Young et al. 2022 [ref]).
 If one has phased genotypes in another format (for example VCF), then these can be converted
 to phased .bgen format using QCTOOL (https://www.well.ox.ac.uk/~gav/qctool_v2/documentation/examples/converting.html).
 
+When the ``bgen-reader`` backend needs an index for genotypes in a read-only
+directory, it uses a per-user cache. Set ``BGEN_READER_CACHE_HOME`` to choose
+a writable cache directory, for example on a compute cluster.
+
 The *snipar* :ref:`workflow <workflow>` has only been tested with high-quality genotype information on bi-allelic variants. 
 We recommend first filtering your observed genotypes to keep only bi-allelic variants with INFO/R-square>0.99 
 (if using genotypes imputed from a reference panel) and Hardy-Weinberg Equilibrium P-value>1e-6. 

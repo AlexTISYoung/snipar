@@ -1,3 +1,7 @@
+import errno
+import hashlib
+import os
+from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional, Union
 from pathlib import Path
 import numpy as np
@@ -129,18 +133,89 @@ def read_oxford_sample(filename):
     return samples["ID_2"].to_numpy()
 
 
+def _legacy_bgen(filename, *, lazy=False, allow_complex=False, verbose=False):
+    """Use bgen-reader's alternate index path when the adjacent index cannot be written."""
+    import bgen_reader
+    from bgen_reader._environment import BGEN_READER_CACHE_HOME
+
+    source = Path(filename).resolve()
+    suffix = '.complex.metadata2.mmm' if allow_complex else '.metadata2.mmm'
+    if lazy:
+        suffix = '.metafile'
+
+    def read(index):
+        if lazy:
+            return bgen_reader.read_bgen(source, metafile_filepath=index, verbose=verbose)
+        return bgen_reader.open_bgen(source, metadata_filepath=index, allow_complex=allow_complex, verbose=verbose)
+
+    stat = source.stat()
+
+    def current(index):
+        try:
+            return index.stat().st_mtime_ns >= stat.st_mtime_ns
+        except FileNotFoundError:
+            return False
+
+    def open_at(index):
+        if current(index):
+            return read(index)
+        # bgen-reader uses a fixed temporary filename. Publish a completed
+        # index from a private directory when multiple workers build at once.
+        with TemporaryDirectory(dir=index.parent) as directory:
+            temporary = Path(directory) / 'index'
+            if lazy:
+                bgen_reader.create_metafile(source, temporary, verbose=verbose)
+            else:
+                read(temporary).close()
+            if temporary.stat().st_mtime_ns < stat.st_mtime_ns:
+                os.utime(temporary, ns=(stat.st_mtime_ns, stat.st_mtime_ns))
+            try:
+                temporary.replace(index)
+            except PermissionError:
+                # Windows can keep an index published by another worker mapped.
+                if not current(index):
+                    raise
+        if lazy:
+            # Mirror bgen-reader's invalidation after replacing a .metafile.
+            from bgen_reader import _genotype, _metafile
+            for module in (_genotype, _metafile):
+                with module.lock:
+                    module.cache.clear()
+        return read(index)
+
+    try:
+        return open_at(source.with_name(source.name + suffix))
+    except OSError as error:
+        if error.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise
+
+    # Version the key so an updated input never replaces another reader's
+    # mapped index. Full paths distinguish identically named chromosomes.
+    identity = os.fsencode(source) + f'\0{stat.st_size}:{stat.st_mtime_ns}'.encode()
+    key = hashlib.sha256(identity).hexdigest()
+    return open_at(BGEN_READER_CACHE_HOME.resolve() / 'metafile' / (key + suffix))
+
+
+def _checked_bgen_sample(filename, nsamples):
+    samples = read_oxford_sample(filename)
+    if len(samples) != nsamples:
+        raise ValueError('sample file length and bgen file length do not match.')
+    return samples
+
+
 class _bgen:
     """Simple wrapper class of bgen_reader.open_bgen that controls access to sample ids."""
     def __init__(self, 
                  filepath: Union[str, Path],
                  samples_filepath: Optional[Union[str, Path]] = None,
                  allow_complex: bool = False,
-                 verbose: bool = True,):
-        from bgen_reader import open_bgen as legacy_open
-        self._bgen = legacy_open(filepath, allow_complex=allow_complex, verbose=verbose)
-        self._samples = self._read_sample(samples_filepath)
-        if self._bgen.samples.shape[0] != self._samples.shape[0]:
-            raise ValueError('sample file length and bgen file length do not match.')
+                 verbose: bool = True, reader=None):
+        self._bgen = reader if reader is not None else _legacy_bgen(filepath, verbose=verbose, allow_complex=allow_complex)
+        try:
+            self._samples = _checked_bgen_sample(samples_filepath, self._bgen.nsamples)
+        except BaseException:
+            self._bgen.close()
+            raise
     
     @property
     def samples(self) -> np.ndarray:
@@ -150,8 +225,11 @@ class _bgen:
         """Access to attributes other than sample ids."""
         return getattr(self._bgen, name)
     
-    def _read_sample(self, samples_filepath: str) -> np.ndarray:
-        return read_oxford_sample(samples_filepath)
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._bgen.close()
 
 
 def open_bgen(filename: str, verbose: bool = False):
@@ -163,13 +241,11 @@ def open_bgen(filename: str, verbose: bool = False):
             raise
         from snipar.bgen_io import BgenFile
         return BgenFile(filename)
-    bgen = bgen_reader.open_bgen(filename, verbose=verbose)
+    bgen = _legacy_bgen(filename, verbose=verbose)
     if bgen.samples[0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
         samples_filepath = Path(filename).with_suffix('.sample')
-        if not path.exists(samples_filepath):
-            raise FileNotFoundError(f'{samples_filepath} does not exist.')
-        bgen = _bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
+        bgen = _bgen(filename, samples_filepath=samples_filepath, reader=bgen)
     return bgen
 
 
@@ -182,12 +258,11 @@ def read_bgen(filename: str, verbose: bool = False) -> Dict:
             raise
         raise ImportError("The lazy read_bgen API requires snipar[legacy-bgen]. "
                           "Use open_bgen for array access.") from exc
-    bgen = bgen_reader.read_bgen(filename, verbose=verbose)
+    bgen = _legacy_bgen(filename, lazy=True, verbose=verbose)
     if bgen['samples'][0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
         samples_filepath = Path(filename).with_suffix('.sample')
         if not path.exists(samples_filepath):
             raise FileNotFoundError(f'{samples_filepath} does not exist.')
-        bgen = bgen_reader.read_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
-        bgen['samples'] = read_oxford_sample(samples_filepath)
+        bgen['samples'] = _checked_bgen_sample(samples_filepath, len(bgen['samples']))
     return bgen
