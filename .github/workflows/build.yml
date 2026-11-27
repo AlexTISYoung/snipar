@@ -132,6 +132,24 @@ jobs:
           python -m pip install pytest twine dist/snipar-*-cp311-*-manylinux*x86_64.whl
           python -m twine check --strict dist/*
           python -m pip check
+      - name: Summarize distributions and check release storage
+        env:
+          INDEX_HOST: ${{ github.event_name == 'push' && github.ref_type == 'tag' && (startsWith(github.ref_name, 'v__') && 'test.pypi.org' || 'pypi.org') || '' }}
+          PYPI_PROJECT_LIMIT_BYTES: ${{ vars.PYPI_PROJECT_LIMIT_BYTES }}
+          TESTPYPI_PROJECT_LIMIT_BYTES: ${{ vars.TESTPYPI_PROJECT_LIMIT_BYTES }}
+          INDEX_JSON: ${{ runner.temp }}/snipar-index.json
+        run: |
+          if [[ -n "$INDEX_HOST" ]]; then
+            status=$(curl --silent --show-error --retry 3 --connect-timeout 15 --max-time 60 \
+              --header 'Accept: application/vnd.pypi.simple.v1+json' --output "$INDEX_JSON" \
+              --write-out '%{http_code}' "https://$INDEX_HOST/simple/snipar/")
+            case "$status" in
+              200) ;;
+              404) echo '{"files":[]}' > "$INDEX_JSON" ;;
+              *) echo "Package index returned HTTP $status" >&2; exit 1 ;;
+            esac
+          fi
+          python .github/scripts/check_distribution_size.py
       - name: Run native unit and example tests from the installation
         working-directory: ${{ runner.temp }}
         run: python -m unittest -f snipar.tests
@@ -171,4 +189,5 @@ jobs:
           path: dist
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
+          skip-existing: true
           repository-url: ${{ startsWith(github.ref_name, 'v__') && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
