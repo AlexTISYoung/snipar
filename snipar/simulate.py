@@ -616,7 +616,7 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
                 delta_p, delta_m, Y_p, Y_m = compute_phenotype(haps, causal, a, 1 - h2)
                 delta_p, delta_m, Y_p, Y_m = delta_p[father_indices], delta_m[mother_indices], Y_p[father_indices], Y_m[mother_indices]
             else:
-                delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[mother_indices]
+                delta_p, delta_m = G_males[father_indices], G_females[mother_indices]
             # Compute phenotypes
             print('Computing phenotypes')
             if np.abs(beta_vert) > 0 and a_count>0:
@@ -666,6 +666,8 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
             print('Matching assortatively')
             father_indices, mother_indices = am_indices(Y_males, Y_females, r_y)
             print('Parental phenotypic correlation: '+str(round(np.corrcoef(Y_males[father_indices],Y_females[mother_indices])[0,1],4)))
+        # Save the phenotypes used for this mating before computing the offspring.
+        Y_p, Y_m = Y_males[father_indices], Y_females[mother_indices]
         # Generate haplotypes of new generation
         haps = new_haps
         new_haps = []
@@ -687,7 +689,7 @@ def forward_sim(haps, maps, ngen_random, ngen_am, unlinked, n_causal, h2, v_indi
             delta_p, delta_m, Y_p, Y_m = compute_phenotype(haps, causal, a, 1 - h2)
             delta_p, delta_m, Y_p, Y_m = delta_p[father_indices], delta_m[mother_indices], Y_p[father_indices], Y_m[mother_indices]
         else:
-            delta_p, delta_m, Y_p, Y_m = G_males[father_indices], G_females[mother_indices], Y_males[father_indices], Y_females[mother_indices]
+            delta_p, delta_m = G_males[father_indices], G_females[mother_indices]
         # Compute phenotypes
         print('Computing phenotypes')
         if np.abs(beta_vert) > 0 and a_count>0:
@@ -763,7 +765,7 @@ def impute_from_sibs_phased(g1,g2,ibd,f):
 
 @njit(parallel=True)
 def impute_all_fams(gts,freqs,ibd):
-    imp = np.zeros((gts.shape[0],gts.shape[2]),dtype=np.float_)
+    imp = np.zeros((gts.shape[0],gts.shape[2]),dtype=np.float64)
     for i in prange(gts.shape[0]):
         for j in range(gts.shape[2]):
             imp[i,j] = impute_from_sibs(gts[i,0,j],gts[i,1,j],ibd[i,j],freqs[j])

@@ -45,6 +45,8 @@ The pedigree file (pedigree.txt) contains the pedigree for all simulated generat
 FID, IID, FATHER_ID, MOTHER_ID, SEX, PHENO, FATHER_PHENO, MOTHER_PHENO, DIRECT, FATHER_DIRECT, MOTHER_DIRECT.
 The FID and IID columns are the family and individual IDs, respectively. The FATHER_ID and MOTHER_ID columns are the IDs of the parents of the individual.
 The FATHER_PHENO and MOTHER_PHENO columns are the phenotype values of the parents, and the DIRECT, FATHER_DIRECT, and MOTHER_DIRECT columns are the direct genetic effect components of the individual, father, and mother, respectively.
+
+For simulations produced by version 0.0.23 or earlier with indirect genetic effects, you can recover parental phenotypes for recorded parents by matching ``FATHER_ID`` and ``MOTHER_ID`` to ``IID`` and reading ``PHENO`` from those rows.
 The FIDs follow the format ``generation_family``, and the IIDs follow the format ``generation_family_individual``.
 So if you look at the end of pedigree.txt (e.g. using ``tail pedigree.txt``), you should see
 the FID of the last line as ``21_2999``, and the IID of the last line as ``21_2999_1``.
