@@ -31,6 +31,7 @@ from snipar.imputation.preprocess_data import (
 from snipar.imputation.impute_from_sibs import ImputationFamilies, impute
 from snipar.pedigree import create_pedigree
 from snipar.utilities import parse_obsfiles
+from snipar.vcf_cli import add_vcf_options, with_vcf
 import argparse
 import h5py
 import numpy as np
@@ -97,8 +98,7 @@ def _write_block(file, values, first, stop, total, bim_dtype, compression, compr
 def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chunks, budget):
     """Plan core and phase-context memory, with independent BGEN decoder tiles."""
     samples = reader.n_samples
-    with_phases = reader.bgen is not None
-    if with_phases:
+    if reader.bgen is not None:
         # The probability decoder can need two full-sample arrays per
         # thread, independently of the retained sample subset.
         all_samples = len(reader.bgen.samples)
@@ -106,6 +106,9 @@ def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chun
         reader.read_threads = min(threads, max(1, budget // (decoder_bytes * 8)))
         reader.probability_bytes = min(128 * MIB, max(16 * samples, budget // 16))
         fixed_decode = decoder_bytes * reader.read_threads + reader.probability_bytes
+    else:
+        fixed_decode = 0
+    if reader.with_phases:
         # Two haplotypes, a dosage, and at most 100 neighbouring SNPs
         # are retained. The core output and PC fit exclude the halo.
         phased_work_per_marker = 4 * samples
@@ -113,7 +116,6 @@ def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chun
         phased_work_per_marker += 16 * threads * (pairs + max_sibs)
         halo_bytes = min(marker_count - 1, 100) * phased_work_per_marker
     else:
-        fixed_decode = 0
         phased_work_per_marker = 0
         halo_bytes = 0
     # Float64 imputed dosages and float32 observed-allele counts are
@@ -173,7 +175,7 @@ def run_imputation(data):
                     Whether it should use backup imputation where there is no ibd information available.
 
                 phased_address: str, optional
-                    Address of the bed file (does not include '.bgen'). Only one of unphased_address and phased_address is necessary.
+                    Address of the phased or unphased BGEN file (does not include '.bgen').
                 
                 unphased_address: str, optional
                     Address of the bed file (does not include '.bed'). Only one of unphased_address and phased_address is necessary.
@@ -297,7 +299,7 @@ def run_imputation(data):
 
         # The phased rolling IBD comparison uses 50 unique markers on
         # either side. Every internal block includes this context.
-        half_window = 50 if phased_address else 0
+        half_window = 50 if genotypes.with_phases else 0
         with TemporaryDirectory(prefix=".snipar-impute-", dir=output.parent) as directory:
             temporary_output = Path(directory) / "output.hdf5"
             with h5py.File(temporary_output, "w") as file:
@@ -325,6 +327,7 @@ def run_imputation(data):
     return time() - start_time
 
 #does the imputation and writes the results
+@with_vcf(output='auto')
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -463,7 +466,7 @@ parser.add_argument('--ibd_is_king',
                     action='store_true',
                     help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
 parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
+                    type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
 parser.add_argument('--bed',
                     type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome(chr_range is an optional parameters for this script).')
 parser.add_argument('--chr_range',
@@ -544,6 +547,7 @@ parser.add_argument('--pedigree_nan',
                     type=str,
                     default='0',
                     help='The value representing NaN in the pedigreee.')
+add_vcf_options(parser)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s')

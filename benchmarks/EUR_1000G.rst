@@ -1,0 +1,170 @@
+1000 Genomes EUR chromosome 22 benchmark
+=========================================
+
+The input is the `IGSR 30× expanded 1000 Genomes call set
+<https://www.internationalgenome.org/data-portal/data-collections/1000genomes_30x/>`_
+on GRCh38. Among the 633 EUR samples, the published pedigrees contain 107
+complete trios and no families with multiple genotyped full siblings. The
+benchmark therefore pairs 280 pedigree-independent founders within their
+reported populations and simulates three offspring in each of 140 families
+using recombination on the `SHAPEIT GRCh38 map
+<https://github.com/odelaneau/shapeit/blob/c34d4db3e99a2f7e23deb727671ae260901a5886/resources/maps/b38/chr22.b38.gmap.gz>`_.
+It includes 47 complete trios with siblings, 47 sibships with one parent
+genotyped, 46 sibships with neither parent genotyped, and 20 unrelated EUR
+samples. The input contains 581 genotyped samples and 440 simulated
+phenotypes. Founder haplotypes and their linkage disequilibrium come from
+the public call set. Offspring, phenotypes, and parental masking are simulated.
+
+The scripts infer IBD, impute missing parents with inferred IBD, fit a
+family-only GWAS with estimated variance components, compute scores using
+the known simulated effects, and fit the one- and two-generation score
+models. The score analysis tests recovery with fixed simulation weights.
+It is a performance and correctness exercise for one chromosome.
+
+Whole-chromosome timings
+------------------------
+
+The 445,701,977-byte source archive contains 1,066,557 records. The
+EUR subset has 925,730 biallelic SNPs. In the observed family cohort,
+683,345 were monomorphic and 788,835 had MAF below 1%, including the
+monomorphic sites. The benchmark retained 136,895 SNPs, including
+445 used to simulate the trait and construct the fixed PGS.
+
+Times are wall seconds on Apple Silicon with Python 3.12, four native
+threads and one GWAS worker. The totals include genotype preparation for
+each command and exclude the original download and fixture generation.
+RSS is the highest sampled main-process value across the five steps.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Input
+     - IBD
+     - Imputation
+     - GWAS
+     - Score calculation
+     - Score analysis
+     - Total
+     - Peak RSS (MiB)
+   * - BED
+     - 7.07
+     - 5.32
+     - 7.66
+     - 1.92
+     - 1.52
+     - 23.49
+     - 996
+   * - Phased VCF
+     - 10.17
+     - 19.53
+     - 10.38
+     - 2.23
+     - 1.42
+     - 43.73
+     - 892
+   * - Unphased VCF
+     - 8.84
+     - 7.47
+     - 9.78
+     - 2.25
+     - 1.45
+     - 29.79
+     - 969
+   * - Unphased BGEN
+     - 16.40
+     - 13.81
+     - 18.20
+     - 2.65
+     - 1.44
+     - 52.49
+     - 700
+
+All four inputs produced the same 1,484 IBD segments across 420 sibling
+pairs. The inferred states agreed with known transmissions at 98.95% of
+57,495,847 covered pair-marker observations. The BED run imputed 93
+families and produced 134,888 finite direct SNP estimates. The centered
+proband PGS agreed with an independent calculation to within ``1.7e-6``
+across all 467 scored individuals. Streaming BGEN hard calls reduced the
+unphased BGEN IBD stage from 913 to 398 MiB and from 17.86 to 16.40 seconds.
+
+On the 17–25 Mb slice, phased VCF reduced missing-parent dosage RMSE
+from 0.211 to 0.192 for one missing parent and from 0.137 to 0.131
+for mean dosage with both parents missing. On the full chromosome,
+unphased VCF and BGEN agreed exactly at matching allele orientation.
+Reversing the counted allele exposed the existing asymmetric float16
+rounding of imputed dosages. The largest dosage difference after flipping
+was 0.00049 copies, and 14 out of 134,888 direct estimates differed by
+more than 0.01. The largest differences were at rare, poorly conditioned
+SNPs with large standard errors. The maximum direct Z-score difference
+was 0.029 in that format comparison.
+
+Performance changes
+-------------------
+
+The baseline for the 8 Mb BED run is commit ``2b25117``. On 28,964
+markers the five stages took 41.77 seconds before and 10.54 seconds
+after the changes. IBD dropped from 29.64 to 2.52 seconds and peak IBD
+RSS from 406 to 263 MiB. With the same LD sample, IBD segments agreed
+exactly. A direct test of the kernel on the same genotype panel reduced
+its genotype buffer from 67.31 to 6.95 MB and took 0.44 seconds including
+packing, compared with 33.06 seconds for the float implementation. LD
+scores were identical. The packed kernel counts alleles and pairwise
+valid calls using native population counts.
+
+The original EUR VCF slice had 188,996 biallelic SNPs and 633 samples.
+At MAF 1%, 28,437 sites passed. Screening INFO allele counts before
+decoding calls reduced preparation from a median of 3.14 to 1.49
+seconds over three warm repetitions, with byte-identical BED, BIM and
+FAM output. This filter uses the annotation cohort, which matched the
+exact genotype MAF cohort in this comparison.
+
+The estimator matrix uses a companion slice with 24 singleton duos so the
+robust estimator can identify the two one-parent designs. It tests the
+default imputed model, observed trio/sibling meta-analysis, sibling
+differences, unrelated imputation with or without parental imputation,
+the robust estimator, parental sums, sibling effects, and sparse GRM
+with and without a separate sibship effect. The sparse GRM averages
+each sibling pair's local IBD sharing with the pedigree expectation.
+
+Reproduction
+------------
+
+Use an installed SNIPar environment. For a source checkout, build its
+native imputation extension and put the checkout on ``PYTHONPATH``.
+The links below identify the exact data and map used.
+
+.. code-block:: sh
+
+   curl -fL 'https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/working/20220422_3202_phased_SNV_INDEL_SV/1kGP_high_coverage_Illumina.chr22.filtered.SNV_INDEL_SV_phased_panel.vcf.gz' -o chr22.vcf.gz
+   curl -fL 'https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/20130606_g1k_3202_samples_ped_population.txt' -o pedigree_population.txt
+   curl -fL 'https://raw.githubusercontent.com/odelaneau/shapeit/c34d4db3e99a2f7e23deb727671ae260901a5886/resources/maps/b38/chr22.b38.gmap.gz' -o chr22.map.gz
+   python benchmarks/prepare_1000g_eur.py chr22.vcf.gz pedigree_population.txt chr22.map.gz region --start 17000000 --end 25000000
+   python benchmarks/profile_1000g_eur.py region timed-bed --bed 'region/chr_@' --threads 4 --profile
+   python benchmarks/profile_1000g_eur.py region timed-phased-vcf --vcf region/chr_22.vcf.gz --threads 4
+   python benchmarks/profile_1000g_eur.py region timed-unphased-vcf --vcf region/unphased/chr_22.vcf.gz --threads 4
+   python benchmarks/bed_to_unphased_bgen.py region/chr_22.bed region/unphased/chr_22.bgen
+   python benchmarks/profile_1000g_eur.py region timed-unphased-bgen --bgen 'region/unphased/chr_@' --threads 4
+   python benchmarks/validate_1000g_eur.py region --ibd timed-bed/run_1/ibd_22.ibd.segments.gz --imputation timed-bed/run_1/imputed_22.hdf5 --pgs timed-bed/run_1/scores.pgs.txt
+   python benchmarks/prepare_1000g_eur.py chr22.vcf.gz pedigree_population.txt chr22.map.gz region-mixed --start 17000000 --end 25000000 --singleton-duos
+   python benchmarks/profile_1000g_eur.py region-mixed timed-modes --bed 'region-mixed/chr_@' --threads 4 --gwas-modes
+
+The optional BGEN fixture writer uses the ``bgen`` package. To prepare the
+full chromosome, omit ``--start`` and ``--end``. The profiling driver saves
+one log per stage, wall time, sampled peak RSS, and output checks. It fixes
+the random LD sample in IBD so that baseline and updated output can be
+compared directly. ``--profile`` records a separate instrumented pass.
+The source archive's SHA-256 is
+``91aeaf0d1e805cf4223c5cbf12e22afc28db1709054c42bd668337219f8fddcc``.
+
+The VCF prefilter can be measured on the original EUR subset written by
+the preparation script. Its INFO counts are recalculated for the EUR
+samples, so early and exact call-based filters can be compared on identical
+cohorts. Keep both outputs and compare the BED, BIM, and FAM files.
+
+.. code-block:: sh
+
+   vcf_to_genotypes.py region/eur.chr_22.vcf.gz exact --vcf-min-maf .01
+   vcf_to_genotypes.py region/eur.chr_22.vcf.gz early --vcf-min-maf .01 --vcf-min-info-maf .01
+   cmp exact/genotypes.bed early/genotypes.bed
+   cmp exact/genotypes.bim early/genotypes.bim
+   cmp exact/genotypes.fam early/genotypes.fam

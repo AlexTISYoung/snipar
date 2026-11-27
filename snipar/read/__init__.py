@@ -302,9 +302,12 @@ class _PreparedFamilyReader:
 def _exclude_duplicate_twins(ids, ibdrel_path):
     if ibdrel_path is None:
         return ids
+    with open(ibdrel_path) as source:
+        if 'InfType' not in source.readline().split():
+            return ids
     remove = set()
     n_pairs = 0
-    with pd.read_csv(ibdrel_path, sep='\t', usecols=['ID1', 'InfType'], dtype=str,
+    with pd.read_csv(ibdrel_path, sep=r'\s+', usecols=['ID1', 'InfType'], dtype=str,
                      keep_default_na=False, chunksize=200_000) as chunks:
         for chunk in chunks:
             pairs = chunk.loc[chunk['InfType'] == 'Dup/MZ', 'ID1']

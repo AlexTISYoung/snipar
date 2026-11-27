@@ -23,7 +23,7 @@ def test_fresh_process_cross_entry_point_cache(first, tmp_path):
     source_root = tmp_path / 'source'
     library = source_root / 'snipar'
     library.mkdir(parents=True)
-    for name in ('__init__.py', 'coherent.py', 'coherent_kernels.py'):
+    for name in ('__init__.py', 'coherent.py', 'coherent_kernels.py', 'vcf_cli.py'):
         shutil.copy2(ROOT / name, library / name)
     scripts = source_root / 'bin'
     scripts.mkdir()

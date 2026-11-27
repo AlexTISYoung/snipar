@@ -1,11 +1,14 @@
 """Bounded reads for commands that operate on raw observed genotypes."""
 
 from contextlib import contextmanager
+from functools import cached_property
 
 import numpy as np
 from bed_reader import open_bed
 from numba import njit, prange
 
+from snipar.config import nan_integer
+from snipar.read.bgen import _first_allele_dosage, bgen_is_phased, read_hard_calls
 from snipar.read.variants import bgen_variant_ids
 from snipar.utilities import open_bgen
 
@@ -19,22 +22,18 @@ class _Observation:
         self.sid = np.asarray(reader.sid if bed else bgen_variant_ids(reader)[0])
         self.fixed_bytes = 0 if bed else 32 * len(self.ids) * (threads or 1)
 
-    def read(self, samples, variants):
+    @cached_property
+    def phased(self):
+        return bgen_is_phased(self.reader, 0)
+
+    def read(self, samples, variants, *, require_calls=False):
         if self.bed:
             return self.reader.read(index=(samples, variants), dtype='int8', order='F',
                                     num_threads=self.threads)
-        try:
-            # bgen-reader's native library uses worker-local decode buffers.
-            probabilities = self.reader.read((samples, variants), dtype=np.float32, num_threads=self.threads)
-        except TypeError as error:
-            if 'num_threads' not in str(error):
-                raise
-            probabilities = self.reader.read((samples, variants), dtype=np.float32)
-        if probabilities.shape[2] == 4:
-            return probabilities[..., 0] + probabilities[..., 2]
-        if probabilities.shape[2] == 3:
-            return 2 * probabilities[..., 0] + probabilities[..., 1]
-        raise ValueError('Expected diploid, biallelic BGEN genotypes')
+        if require_calls:
+            return read_hard_calls(self.reader, samples, variants, self.phased, nan_integer,
+                                   num_threads=self.threads)
+        return _first_allele_dosage(self.reader, samples, variants, num_threads=self.threads)
 
 
 @contextmanager

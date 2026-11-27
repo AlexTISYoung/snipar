@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from numba import get_num_threads, njit, prange
 from snipar.map import decode_map_from_pos, get_map_positions
-from snipar.ld import compute_ld_scores
+from snipar.ld import compute_ld_scores_packed, pack_ld_hardcalls
 import numpy as np
 from snipar.observed import allele_stats, open_observed
 from snipar.read.family import IdIndex
@@ -451,7 +451,9 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         memory = get_memory_budget()
         current_dir = Path(stack.enter_context(TemporaryDirectory(prefix='snipar-ibd-')))
         packed_shape = (n, (m + 3) // 4)
-        packed_bytes, ld_bytes = n * packed_shape[1], 4 * len(ld_rows) * m
+        ld_shape = (m, 3, (len(ld_rows) + 63) // 64)
+        packed_bytes = n * packed_shape[1]
+        ld_bytes = np.prod(ld_shape, dtype=np.int64) * np.dtype(np.uint64).itemsize
         in_memory_packed = packed_bytes <= memory // 5
         in_memory_ld = ld_bytes <= memory // 5
         needed = (0 if in_memory_packed else packed_bytes) + (0 if in_memory_ld else ld_bytes)
@@ -473,8 +475,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         if layout == 1:
             genotypes = _workspace(stack, current_dir, 'genotypes', packed_shape, np.uint8, memory // 5)
             row_pairs = np.searchsorted(rows, row_pairs)
-        ld_genotypes = _workspace(stack, current_dir, 'ld', (len(ld_rows), m), np.float32,
-                                  memory // 5, order='F')
+        ld_genotypes = _workspace(stack, current_dir, 'ld', ld_shape, np.uint64, memory // 5)
         fixed = source.fixed_bytes + (packed_bytes if layout == 1 and in_memory_packed else 0)
         fixed += ld_bytes if in_memory_ld else 0
         _, variant_batch = plan_batches(m, n * (2 if source.bed else 24), fixed_bytes=fixed,
@@ -487,16 +488,14 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         missing = np.empty(m)
         for start in range(0, m, variant_batch):
             end = min(start + variant_batch, m)
-            values = source.read(rows, np.arange(start, end))
+            values = source.read(rows, np.arange(start, end), require_calls=True)
             total, called = allele_stats(values)
             freqs[start:end] = np.where(called > 0, total / np.maximum(2 * called, 1), np.nan)
             missing[start:end] = 100 * (n - called) / n
-            sampled = values[ld_rows, :].astype(np.float32, copy=False)
-            sampled[sampled < 0] = np.nan
-            ld_genotypes[:, start:end] = sampled
+            pack_ld_hardcalls(values[ld_rows, :], ld_genotypes[start:end])
             if layout == 1:
                 _pack_calls(values, genotypes[:, start // 4:(end + 3) // 4])
-            del values, sampled
+            del values
         p_error = np.full(m, error_prob, dtype=float)
         if error_probs is not None:
             index = IdIndex(error_probs.sid).lookup(sids)
@@ -517,7 +516,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         print('Computing LD weights')
         # Keep the original variant-major LD cache on disk and pass the retained
         # source column indices to the compiled kernel.
-        ld = compute_ld_scores(ld_genotypes, genetic_map, 1., markers)
+        ld = compute_ld_scores_packed(ld_genotypes, genetic_map, 1., markers)
         weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
         snps, pos = sids[markers], positions[markers]
         transitions, emissions = _chromosome_hmm(freqs[markers], genetic_map, weights, p_error[markers])

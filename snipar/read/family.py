@@ -142,7 +142,10 @@ def _sample_plan(ped, observed_ids, observed_index, imp_fams, ids, *, parsum=Fal
             detail = ' The unified estimator cannot be performed due to collinearity.' if include_unrel else ''
             raise ValueError('No individuals with phenotype observations and complete observed/imputed '
                              f'genotype observations.{detail}')
-        eligible = (rows[:, 0] >= 0) if include_unrel else complete
+        eligible = complete
+        if include_unrel:
+            # The linear unrelated estimator predicts both parental dosages.
+            eligible = eligible | ((rows[:, 0] >= 0) & (statuses < 0).all(axis=1))
         if sib:
             eligible &= with_sibling
         cohort = np.flatnonzero(eligible)

@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from snipar.vcf_cli import add_vcf_options, vcf_inputs
+
 
 ALIASES = {
     "SNP": ["SNP", "snp", "rsid", "RSID", "ID"],
@@ -79,8 +81,9 @@ def build_parser():
                         help="Chromosomes as integers/ranges, e.g. 1-22 or 1 3-5; @ defaults to available 1-22.")
     parser.add_argument("--ldscores", help="LDSC text/gzip file or prefix without .l2.ldscore.gz; @ is supported.")
     parser.add_argument("--bed", help="PLINK .bed file or prefix for computing LD scores; @ or # expands to chromosomes.")
+    add_vcf_options(parser)
     parser.add_argument("--ld_wind", "--ld-wind", type=float, default=1.0,
-                        help="Window in cM for computing LD scores from --bed.")
+                        help="Window in cM for computing LD scores from BED or VCF genotypes.")
     parser.add_argument("--ld_out", "--ld-out", help="Prefix for computed per-chromosome LDSC files.")
     parser.add_argument("--threads", type=int, default=None,
                         help="Numba thread count for LD computation; defaults to all available.")
@@ -626,12 +629,13 @@ def main(argv=None):
         vars(args).update(vars(argv))
     else:
         args = parser.parse_args(argv)
-    if args.ld_weight == "inverse" and args.ldscores is None and args.bed is None:
-        parser.error("provide --ldscores or --bed, or explicitly choose --ld-weight none")
-    if args.ld_weight == "none" and (args.ldscores is not None or args.bed is not None):
-        parser.error("--ldscores/--bed and --ld-weight none are mutually exclusive")
-    if args.ldscores is not None and args.bed is not None:
-        parser.error("provide only one of --ldscores and --bed")
+    sources = sum(value is not None for value in (args.ldscores, args.bed, args.vcf))
+    if args.ld_weight == "inverse" and not sources:
+        parser.error("provide --ldscores, --bed or --vcf, or explicitly choose --ld-weight none")
+    if args.ld_weight == "none" and sources:
+        parser.error("LD score inputs and --ld-weight none are mutually exclusive")
+    if sources > 1:
+        parser.error("provide only one of --ldscores, --bed and --vcf")
     if not np.isfinite(args.ld_wind) or args.ld_wind <= 0:
         parser.error("--ld_wind must be finite and positive")
     if args.threads is not None and args.threads < 1:
@@ -655,7 +659,8 @@ def main(argv=None):
         set_num_threads(num_threads)
         print("Number of threads: " + str(num_threads), flush=True)
     try:
-        effects, sampling, ldscores, blocks, names, metadata = prepare_inputs(args)
+        with vcf_inputs(args, chromosomes=parse_chromosomes(args.chr_range)) as resolved:
+            effects, sampling, ldscores, blocks, names, metadata = prepare_inputs(resolved)
         print_filter_summary(metadata)
         print("Fitting {} mode ({} effects).".format(metadata["mode"], args.effect_scale), flush=True)
         if metadata["mode"] in ("parental", "average"):

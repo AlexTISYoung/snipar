@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Infers identity-by-descent (IBD) segments shared between full-siblings.
 
-Minimally: the script requires observed sibling genotypes in either .bed or .bgen format, along with information
+The script requires observed sibling genotypes in BED, BGEN or VCF format, along with information
 on the relations present in the dataset, which can be provided using a pedigree file or the results
 of KING kinship inference along with age and sex information (from which a pedigree can be constructed).
 
@@ -27,9 +27,10 @@ from snipar.errors import estimate_genotyping_error_rate
 from snipar.utilities import *
 from snipar.pedigree import *
 from snipar.numrange import parseNumRange, NumRangeAction
+from snipar.vcf_cli import add_vcf_options, with_vcf
 parser = argparse.ArgumentParser()
 parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+                    type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
 parser.add_argument('--bed',
                     type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
 parser.add_argument('--chr_range',
@@ -66,7 +67,10 @@ parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
 parser.add_argument('--batches',type=int,help='Number of batches to split the data (by sibpair) into for IBD inference. Useful for large datasets.',default=1)
+add_vcf_options(parser)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
+
+@with_vcf()
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

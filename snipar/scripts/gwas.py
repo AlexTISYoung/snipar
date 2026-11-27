@@ -20,10 +20,11 @@ Results:
 import argparse
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.docgen import get_parser_doc
+from snipar.vcf_cli import add_vcf_options, with_vcf
 ######### Command line arguments #########
 parser = argparse.ArgumentParser(add_help=True)
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
-parser.add_argument('--bgen', type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+parser.add_argument('--bgen', type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
 parser.add_argument('--bed', type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
 parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
@@ -43,7 +44,7 @@ parser.add_argument('--phen_index',type=int,help='If the phenotype file contains
 parser.add_argument('--missing_char',type=str,help='Missing value string in phenotype file (default NA)', default='NA')
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
 parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
-parser.add_argument('--vc_out', type=str, help='Prefix of output filename for variance component array (without .npy).')
+parser.add_argument('--vc_out', type=str, help='Path to a text file for the variance components.')
 parser.add_argument('--vc_list', type=float, nargs='+', default=None, help='Pass in variance components as a list of floats.')
 parser.add_argument('--no_sib_var', action='store_true', default=False, help='Do not fit sibling variance component. Not recommended for family-GWAS.')
 parser.add_argument('--keep', default=None, type=str, help='Filename of IDs to be kept for analysis (No header).')
@@ -52,8 +53,10 @@ parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.
 parser.add_argument('--batch_size', type=int, default=None,
                     help='Maximum SNPs per batch. The default selects a batch size from available memory.')
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
+add_vcf_options(parser)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
+@with_vcf()
 def main(args):
     """Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

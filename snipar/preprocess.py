@@ -40,7 +40,7 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, incl
                 'No individuals with phenotype observations and complete observed/imputed genotype observations')
         # print(str(N) + ' individuals with phenotype observations and complete observed/imputed genotype observations')
     else:
-        none_missing = gt_indices[:, 0] >= 0
+        none_missing = (gt_indices[:, 0] >= 0) & ((par_status >= 0).all(axis=1) | (par_status < 0).all(axis=1))
         if np.sum(np.min(gt_indices, axis=1) >= 0) == 0:
             raise ValueError(
                 'No individuals with phenotype observations and complete observed/imputed genotype observations. The unified estimator cannot be performed due to collinearity.')

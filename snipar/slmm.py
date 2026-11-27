@@ -303,15 +303,21 @@ def _identified_information(information, unadjusted_variance, n):
     # Rank in correlation units, independent of predictor scale.
     k = information.shape[1]
     diagonal = np.diagonal(information, axis1=1, axis2=2)
-    tolerance = k * np.finfo(float).eps
     projection_tolerance = max(n, k, 16) * np.finfo(float).eps
     valid = np.flatnonzero(np.all(np.isfinite(information), axis=(1, 2)) &
                            np.all(diagonal > projection_tolerance * unadjusted_variance, axis=1))
     scales = np.sqrt(diagonal[valid])
     normalized = information[valid] / scales[:, :, None] / scales[:, None, :]
-    identified = np.linalg.eigvalsh(normalized)[:, 0] > tolerance
+    # Use one symmetric decomposition to assess rank and invert. A nearly
+    # singular projected matrix can pass a separate eigenvalue test and then
+    # fail a general inverse because the two routines round differently.
+    normalized = (normalized + normalized.transpose(0, 2, 1)) * .5
+    spectrum, basis = np.linalg.eigh(normalized)
+    identified = spectrum[:, 0] > projection_tolerance * np.maximum(1., spectrum[:, -1])
+    basis = basis[identified]
     scales = scales[identified]
-    covariance = np.linalg.inv(normalized[identified]) / scales[:, :, None] / scales[:, None, :]
+    inverse = (basis / spectrum[identified, None, :]) @ basis.transpose(0, 2, 1)
+    covariance = inverse / scales[:, :, None] / scales[:, None, :]
     return valid[identified], covariance
 
 

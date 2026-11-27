@@ -44,7 +44,7 @@ instead, supply one chromosome per BED/BIM/FAM file set. For example,
 The LD window defaults to 1 cM. This example also saves the scores to
 ``ld_chr1.l2.ldscore.gz``, etc. Both ``@`` and ``#`` are accepted in BED
 and LD output prefixes. To give every SNP equal LD weight, use
-``--ld-weight none`` in place of ``--ldscores`` or ``--bed``. The fit still
+``--ld-weight none`` in place of ``--ldscores``, ``--bed``, or ``--vcf``. The fit still
 uses the sampling precision of each SNP.
 
 .. _correlation_inputs:

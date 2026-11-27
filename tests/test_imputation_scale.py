@@ -14,7 +14,7 @@ from snipar.scripts import impute as impute_script
 
 
 def test_imputation_memory_plan_budgets_core_markers_and_halo():
-    reader = SimpleNamespace(n_samples=1_000_000, bgen=SimpleNamespace(samples=range(1_000_000)),
+    reader = SimpleNamespace(n_samples=1_000_000, bgen=SimpleNamespace(samples=range(1_000_000)), with_phases=True,
                              matched_pcs=None)
     budget = 2_048 * MIB
     width = impute_script._plan_imputation(reader, 100_000, 500_000, 5, 8, 1, budget)
@@ -23,6 +23,8 @@ def test_imputation_memory_plan_budgets_core_markers_and_halo():
     assert 16_000_000 <= reader.probability_bytes <= 128 * MIB
     with pytest.raises(MemoryError, match="minimum workspace"):
         impute_script._plan_imputation(reader, 100_000, 500_000, 5, 8, 1, 64 * MIB)
+    reader.with_phases = False
+    assert impute_script._plan_imputation(reader, 100_000, 500_000, 5, 8, 1, budget) > width
 
 
 def test_small_budget_reuses_chromosome_plan_and_output_matches(tmp_path, monkeypatch):
@@ -111,7 +113,7 @@ def test_bgen_reads_probability_tiles_and_preserves_missing_calls(monkeypatch):
         return np.asfortranarray(probabilities[samples][:, variants], dtype=dtype)
 
     monkeypatch.setattr(preprocess_data, "open_bgen",
-                        lambda *_, **__: SimpleNamespace(samples=ids, read=read))
+                        lambda *_, **__: SimpleNamespace(samples=ids, phased=[True], read=read))
     bim = pd.DataFrame({"id": list("abcde"), "coordinate": range(1, 6)})
     with preprocess_data.ImputationGenotypes("sample", None, bim, set(ids.astype("S")),
                                              probability_bytes=16 * len(ids) * 2) as genotypes:

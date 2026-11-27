@@ -125,7 +125,8 @@ def test_mixed_imputation_aligns_bgen_rows_markers_alleles_and_pcs(tmp_path, mon
     calls = desired[[2, 0, 1]][:, [1, 0]].copy()
     calls[:, 0] = 1 - calls[:, 0]
     probs = np.stack([calls[..., 0], 1 - calls[..., 0], calls[..., 1], 1 - calls[..., 1]], axis=2)
-    bgen = SimpleNamespace(samples=ids[[2, 0, 1]], rsids=np.array(["b", "a"]),
+    bgen = SimpleNamespace(samples=ids[[2, 0, 1]], ids=np.array(["b", "a"]), rsids=np.array(["b", "a"]),
+                           phased=[True, True],
                            positions=np.array([20, 10]), allele_ids=np.array(["G,A", "A,G"]),
                            read=lambda indexes, dtype: probs[indexes[0]][:, indexes[1]].astype(dtype))
     monkeypatch.setattr(preprocess_data, "open_bgen", lambda *args, **kwargs: bgen)

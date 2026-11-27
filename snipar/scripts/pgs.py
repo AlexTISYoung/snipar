@@ -38,11 +38,12 @@ from snipar.numrange import parseNumRange, NumRangeAction
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.resources import available_cpus
+from snipar.vcf_cli import add_vcf_options, vcf_inputs
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
 parser.add_argument('--bgen',
-                    type=str,help='Address of the phased genotypes in .bgen format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
+                    type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
 parser.add_argument('--bed',
                     type=str,help='Address of the unphased genotypes in .bed format. If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range for each chromosome (chr_range is an optional parameters for this script).')
 parser.add_argument('--imp', type=str, help='Address of hdf5 files with imputed parental genotypes (without .hdf5 suffix). If there is a @ in the address, @ is replaced by the chromosome numbers in the range of chr_range (chr_range is an optional parameters for this script).', default = None)
@@ -89,8 +90,29 @@ parser.add_argument('--no_am_adj',action='store_true',help='Do not adjust impute
 parser.add_argument('--force_am_adj',action='store_true',help='Currently has no effect; the assortative mating score adjustment still requires an estimated correlation divided by its SE greater than 1.5.',default=False)
 parser.add_argument('--threads',type=int,help='Number of threads to use',default=1)
 parser.add_argument('--batch_size',type=int,help='Maximum SNPs per batch (default 10000). Reduced automatically when available memory is lower.',default=10000)
+add_vcf_options(parser)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
+
+
+def _read_score_weights(args):
+    print('Computing PGS from weights file')
+    weights = pgs.read_weights(args.weights, SNP=args.SNP, beta_col=args.beta_col,
+                               A1=args.A1, A2=args.A2, sep=args.sep)
+    weights.remove_zeros()
+    return weights
+
+
 def main(args):
+    weights = None
+    if getattr(args, 'vcf', None) is not None:
+        if args.weights is None:
+            raise ValueError('--vcf requires --weights when computing a PGS')
+        weights = _read_score_weights(args)
+    with vcf_inputs(args, variant_ids=None if weights is None else weights.snp_dict) as resolved:
+        return _main(resolved, weights)
+
+
+def _main(args, weights):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
         args: list
@@ -110,11 +132,7 @@ def main(args):
             raise ValueError('Weights provided but no observed genotypes provided')
         if args.bed is not None and args.bgen is not None:
             raise ValueError('Provide only one of --bedfiles and --bgenfiles')
-        print('Computing PGS from weights file')
-        ####### Read PGS #######
-        p = pgs.read_weights(args.weights, SNP=args.SNP, beta_col = args.beta_col, A1=args.A1, A2=args.A2, sep=args.sep)
-        # Remove zeros
-        p.remove_zeros()
+        p = _read_score_weights(args) if weights is None else weights
 
         ###### Compute PGS ########
         # Find observed and imputed files

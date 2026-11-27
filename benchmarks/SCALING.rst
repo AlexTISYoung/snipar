@@ -1,6 +1,9 @@
 Scaling workloads
 =================
 
+See `the 1000 Genomes EUR benchmark <EUR_1000G.rst>`_ for an end-to-end
+comparison of BED, VCF and unphased BGEN on real founder haplotypes.
+
 The comparison baseline is ``6ac422c`` on ``development/audit-performance``.
 Timings below use Python 3.12 on Apple Silicon and generated BED datasets.
 Peak RSS refers to the measured process. The data sizes distinguish genotype

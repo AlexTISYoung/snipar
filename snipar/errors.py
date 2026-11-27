@@ -75,7 +75,7 @@ def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
         maf_keep = np.empty(m, dtype=bool)
         for start in range(0, m, batch):
             end = min(start + batch, m)
-            genotypes = source.read(samples, np.arange(start, end))
+            genotypes = source.read(samples, np.arange(start, end), require_calls=True)
             total, observed = allele_stats(genotypes)
             freqs = total / np.maximum(2 * observed, 1)
             maf_keep[start:end] = (freqs > min_maf) & (freqs < 1 - min_maf)

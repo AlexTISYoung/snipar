@@ -69,7 +69,8 @@ setup(name='snipar',
       scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/pgs.R',
                'snipar/scripts/impute.py', 'snipar/scripts/ibd.py', 'snipar/scripts/correlate.py',
                'snipar/example/snipar_example_data.py', 'snipar/scripts/simulate.py',
-               'snipar/scripts/gts_matrix.py', 'snipar/scripts/make_rdr_grms.py'],
+               'snipar/scripts/gts_matrix.py', 'snipar/scripts/make_rdr_grms.py',
+               'snipar/scripts/vcf_to_genotypes.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha

@@ -28,6 +28,64 @@ affect whether a large BGEN run fits. Matrix export and imputation write
 genotypes in tiles. Disk space for those outputs still scales with the
 number of samples or families times the number of retained variants.
 
+VCF and BGEN input
+------------------
+
+``ibd.py``, ``impute.py``, ``gwas.py``, ``gts_matrix.py``, and ``pgs.py``
+accept ``--vcf FILE`` in place of the observed BED or BGEN input.
+``correlate.py`` accepts it for computing LD scores. Plain VCF, gzip, and
+BGZF are supported. Supply one file with one or more autosomes or use
+``@`` in the path for chromosome-specific files. ``--chr_range`` limits
+which chromosomes are read into the prepared files.
+
+SNIPar reads diploid, biallelic ``GT`` calls and retains both SNPs and
+non-symbolic indels. It skips multiallelic, symbolic, and non-autosomal
+records. Missing or partially called genotypes produce missing calls.
+Records without IDs receive ``CHROM:POS:REF:ALT`` identifiers, with numeric
+chromosomes. The REF allele is the first allele in prepared files.
+
+Imputation uses phase when retained genotypes have a consistent phase frame
+for each sample and chromosome. It uses the unphased algorithm for unphased
+heterozygotes or when phase sets differ within a sample and chromosome.
+``simulate.py`` requires phased founder haplotypes and accepts phased VCF
+through ``--vcf``. The other commands use allele dosages from the VCF calls.
+
+Phased and unphased BGEN are supported for family genotype analysis. The
+dosage for an unphased BGEN genotype is the expected first-allele count
+from its genotype probabilities. IBD inference and parental imputation
+use hard calls with posterior probability above 0.99, treating uncertain
+calls as missing. Use uniformly phased or uniformly unphased diploid,
+biallelic BGEN files for those commands.
+
+Filtering large VCFs
+~~~~~~~~~~~~~~~~~~~~
+
+SNIPar streams VCF inputs and checks chromosome, variant ID, and site
+metadata before decoding genotypes. ``pgs.py`` automatically skips variants
+outside the nonzero weights. Use ``--vcf-variants FILE`` for an explicit
+variant inclusion list, with one ID per line, or ``--vcf-pass-only`` to
+require a PASS record.
+
+``--vcf-min-info-maf`` screens on the allele counts (``INFO/AC`` and
+``INFO/AN``) or frequency (``INFO/AF``) reported in the input. Sites with no
+usable annotation are still considered. ``--vcf-min-maf`` computes the
+frequency from the called genotypes before writing the prepared files.
+These opt-in filters use the annotation cohort or the selected VCF samples.
+An analysis cohort can have different allele frequencies, and its own
+``--min_maf`` rules still apply.
+
+An analysis command writes a temporary seekable BED or phased BGEN, then
+removes it when the command finishes. Available scratch space and VCF
+decompression can affect performance. Prepare commonly reused input once
+with ``vcf_to_genotypes.py`` and pass the reported BED or BGEN prefix to
+subsequent commands. Use ``--format auto`` to preserve consistent phase or
+``--format phased`` to require it.
+
+.. code-block:: sh
+
+   vcf_to_genotypes.py chr22.vcf.gz prepared --chr_range 22 --vcf-min-info-maf .01 --format auto
+   gwas.py phenotype.txt --vcf chr22.vcf.gz --pedigree pedigree.txt --out results
+
 .. _snipar_example_data.py:
 
 snipar_example_data.py
@@ -44,15 +102,24 @@ impute.py
 .. _impute.py:
 .. automodule:: snipar.scripts.impute
 
+vcf_to_genotypes.py
+-------------------
+.. automodule:: snipar.scripts.vcf_to_genotypes
+
 gwas.py
 -------
 .. _gwas.py:
 .. automodule:: snipar.scripts.gwas
 
+``--impute_unrel`` adds individuals with neither observed nor imputed
+parental genotypes to the complete-parent analysis cohort. A singleton
+with one available parent needs an imputation for the other parent to
+enter this model.
+
 gts_matrix.py
 -------------
 Writes family genotype arrays with proband and parental dosages and, with
-``--fit_sib``, sibling dosages. It accepts the same BED or BGEN prefixes and
+``--fit_sib``, sibling dosages. It accepts the same BED, BGEN, or VCF inputs and
 imputation or pedigree inputs as the scoring command.
 
     ``gts_matrix.py --bed chr_@ --imp chr_@ --out genotypes``
@@ -207,11 +274,15 @@ Args:
         estimates, standard errors, and a sampling correlation or covariance
         for every pair. See :ref:`correlation_inputs` for the required columns.
 
-    ``--ldscores``, ``--bed``, ``--ld-weight``
+    ``--ldscores``, ``--bed``, ``--vcf``, ``--ld-weight``
         Supply an LDSC score file or prefix with ``--ldscores``, or compute
-        scores from chromosome-specific PLINK files with ``--bed``. Either
-        route uses inverse LD-score weighting by default. Alternatively pass
+        scores from chromosome-specific PLINK files or a VCF. These inputs
+        use inverse LD-score weighting by default. Alternatively pass
         ``--ld-weight none`` alone to give all SNPs equal LD weight.
+
+    ``--vcf-variants``, ``--vcf-pass-only``, ``--vcf-min-info-maf``, ``--vcf-min-maf``
+        Filter VCF records before computing LD scores. See the VCF input
+        section above for the filter definitions.
 
     ``--ld_wind``, ``--ld-wind`` : float, default=1
         LD window in centimorgans when computing scores from genotypes.

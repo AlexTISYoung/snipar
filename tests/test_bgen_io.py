@@ -1,17 +1,23 @@
 """Check the installed BGEN backend against the packaged PLINK genotypes."""
 
+import gzip
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 from unittest.mock import Mock
+import zlib
 
+import h5py
 import numpy as np
+import pandas as pd
 import pytest
-from pysnptools.snpreader import Bed
+from pysnptools.snpreader import Bed, SnpData
 
 from snipar import example
+from snipar.config import nan_integer
 from snipar.utilities import open_bgen, read_oxford_sample
 
 
@@ -55,6 +61,140 @@ def test_native_bgen_metadata():
         np.testing.assert_array_equal(metadata.allele_ids, reader.allele_ids)
         np.testing.assert_array_equal(reader.read((slice(0, 3), [3, 0])),
                                       reader.read((np.array([0, 1, 2]), [0, 3]))[:, ::-1])
+
+
+def _write_bgen(filename, samples, variants):
+    """Write tiny Layout 2 rows with exact eight-bit probabilities."""
+    def string(value, length="H"):
+        field = value.encode("ascii")
+        return struct.pack("<" + length, len(field)) + field
+
+    ids = b"".join(string(sample) for sample in samples)
+    sample_block = struct.pack("<II", len(ids) + 8, len(samples)) + ids
+    flags = (1 << 31) | (2 << 2) | 1
+    with filename.open("wb") as bgen:
+        bgen.write(struct.pack("<IIII4sI", 20 + len(sample_block), 20, len(variants), len(samples), b"bgen", flags))
+        bgen.write(sample_block)
+        for index, (phased, ploidy, probabilities) in enumerate(variants, 1):
+            bgen.write(string(f"id{index}") + string(f"rs{index}") + string("1"))
+            bgen.write(struct.pack("<IH", index * 100, 2) + string("A", "I") + string("G", "I"))
+            copy_numbers = [value & 63 for value in ploidy]
+            payload = struct.pack("<IHBB", len(samples), 2, min(copy_numbers), max(copy_numbers))
+            payload += bytes(ploidy) + bytes((phased, 8)) + bytes(probabilities)
+            block = zlib.compress(payload)
+            bgen.write(struct.pack("<II", len(block) + 4, len(payload)) + block)
+
+
+@pytest.fixture
+def unphased_bgen(tmp_path):
+    filename = tmp_path / "calls.bgen"
+    ids = np.array(["child0", "father0", "child1", "father1"])
+    # Each sample stores P(AA), P(AG), and implies P(GG) from one minus their sum.
+    _write_bgen(filename, ids, [
+        (0, [2, 2, 2, 2], [0, 254, 255, 0, 0, 0, 0, 255]),
+        (0, [2, 2, 130, 2], [50, 153, 0, 255, 0, 0, 0, 0]),
+        (0, [2, 2, 2, 2], [255, 0, 0, 255, 0, 255, 255, 0]),
+    ])
+    expected_calls = np.array([[1, nan_integer, 2], [2, 1, 1],
+                               [0, nan_integer, 1], [1, 0, 2]], dtype=np.int8)
+    expected_doses = expected_calls.astype(np.float32)
+    expected_doses[0, 0] = 254 / 255
+    expected_doses[0, 1] = 253 / 255
+    expected_doses[2, 1] = np.nan
+    return filename, ids, expected_calls, expected_doses
+
+
+@pytest.fixture(params=["default", "native"])
+def bgen_backend(request, monkeypatch):
+    if request.param == "native":
+        pytest.importorskip("bgen")
+        from snipar import observed
+        from snipar.bgen_io import BgenFile
+        from snipar.imputation import preprocess_data
+
+        def open_native(filename, verbose=False):
+            return BgenFile(filename)
+
+        monkeypatch.setattr(observed, "open_bgen", open_native)
+        monkeypatch.setattr(preprocess_data, "open_bgen", open_native)
+
+
+def test_unphased_bgen_expected_dosage_and_confident_calls(unphased_bgen, bgen_backend):
+    from snipar.observed import open_observed
+
+    filename, _, calls, doses = unphased_bgen
+    samples, variants = [3, 0, 2, 2], [2, 0, 1, 0]
+    with open_observed(bgenfile=filename, num_threads=2) as reader:
+        np.testing.assert_allclose(reader.read(samples, variants), doses[np.ix_(samples, variants)], rtol=1e-6)
+        np.testing.assert_array_equal(reader.read(samples, variants, require_calls=True), calls[np.ix_(samples, variants)])
+
+
+@pytest.mark.parametrize("layout", ["mixed phase", "triploid"])
+def test_hard_calls_validate_each_bgen_variant(tmp_path, bgen_backend, layout):
+    from snipar.observed import open_observed
+
+    filename = tmp_path / "layout.bgen"
+    plain = (0, [2, 2], [0, 255, 0, 255])
+    if layout == "mixed phase":
+        # The legacy metadata probes rows 0, 1, 3, and misses the phase of row 2.
+        variants = [plain, plain, (1, [2, 2], [255, 0, 0, 255]), plain]
+        error = "consistently phased or unphased"
+    else:
+        variants = [(0, [3, 2], [0, 0, 255, 0, 255])]
+        error = "diploid, biallelic"
+    _write_bgen(filename, ["a", "b"], variants)
+    with open_observed(bgenfile=filename, num_threads=2) as reader:
+        with pytest.raises(ValueError, match=error):
+            reader.read(np.arange(2), np.arange(len(variants)), require_calls=True)
+        if layout == "triploid":
+            with pytest.raises(ValueError, match=error):
+                reader.read(np.arange(2), np.arange(len(variants)))
+        else:
+            np.testing.assert_array_equal(reader.read(np.arange(2), np.arange(len(variants))), 1)
+
+
+def test_unphased_bgen_imputation_matches_bed(unphased_bgen, bgen_backend, tmp_path):
+    from snipar.scripts import impute
+
+    filename, ids, calls, _ = unphased_bgen
+    fids = np.repeat(["family0", "family1"], 2)
+    pedigree = tmp_path / "pedigree.txt"
+    pd.DataFrame({"FID": fids[::2], "IID": ids[::2], "FATHER_ID": ids[1::2], "MOTHER_ID": "0"}).to_csv(
+        pedigree, sep="\t", index=False)
+    bed = tmp_path / "plink"
+    genotypes = np.where(calls == nan_integer, np.nan, calls)
+    Bed.write(str(bed), SnpData(iid=np.column_stack((fids, ids)), sid=["rs1", "rs2", "rs3"],
+                               pos=[[1, 0, 100], [1, 0, 200], [1, 0, 300]], val=genotypes), count_A1=True)
+    args = ["--pedigree", str(pedigree), "--threads", "2", "--chunks", "2", "-silent_progress"]
+    for mode, source in (("bgen", filename.with_suffix("")), ("bed", bed)):
+        impute.main(impute.parser.parse_args([*args, "--" + mode, str(source), "--out", str(tmp_path / mode)]))
+    with h5py.File(tmp_path / "bgen.hdf5") as bgen, h5py.File(tmp_path / "bed.hdf5") as bed:
+        for key in ("families", "standard_f", "imputed_par_gts", "num_observed_parental_alleles"):
+            np.testing.assert_array_equal(bgen[key][:], bed[key][:], err_msg=key)
+
+
+def test_unphased_bgen_ibd_matches_bed(unphased_bgen, bgen_backend, tmp_path):
+    from snipar.ibd import infer_ibd_chr
+
+    filename, ids, calls, _ = unphased_bgen
+    bed = tmp_path / "plink"
+    genotypes = np.where(calls == nan_integer, np.nan, calls)
+    Bed.write(str(bed), SnpData(iid=np.column_stack((ids, ids)), sid=["id1", "id2", "id3"],
+                               pos=[[1, 0, 100], [1, 0, 200], [1, 0, 300]], val=genotypes), count_A1=True)
+    genetic_map = tmp_path / "map.txt"
+    genetic_map.write_text("pposition gposition\n100 .1\n200 .2\n300 .3\n")
+    pairs = ids.reshape(-1, 2)
+    state = np.random.get_state()
+    try:
+        for label, source in (("bgen", {"bgenfile": filename}), ("bed", {"bedfile": bed.with_suffix(".bed")})):
+            np.random.seed(17)
+            infer_ibd_chr(pairs, .001, None, str(tmp_path / label), chrom=1, mapfile=genetic_map,
+                          max_missing=50, ibdmatrix=True, num_threads=2, **source)
+    finally:
+        np.random.set_state(state)
+    for suffix in (".ibd.segments.gz", ".ibdmatrix.gz"):
+        with gzip.open(tmp_path / ("bgen_chr_1" + suffix), "rt") as bgen, gzip.open(tmp_path / ("bed_chr_1" + suffix), "rt") as bed:
+            assert bgen.read() == bed.read()
 
 
 def test_oxford_sample_preserves_individual_ids(tmp_path):

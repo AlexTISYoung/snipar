@@ -17,7 +17,6 @@ Functions
 """
 from array import array
 from contextlib import nullcontext
-from inspect import signature
 from itertools import chain
 import logging
 import pandas as pd
@@ -25,6 +24,7 @@ import numpy as np
 from pysnptools.snpreader import Bed
 from snipar.utilities import open_bgen, read_bgen
 from snipar.config import nan_integer
+from snipar.read.bgen import bgen_is_phased, hard_calls, read_diploid_probabilities
 from tqdm import tqdm
 
 class Person:
@@ -228,7 +228,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             The pedigree table. It contains 'FID', 'IID', 'FATHER_ID' and, 'MOTHER_ID' columns.
         
         phased_address : str
-            Address of the phased bgen file (does not include '.bgen'). Only one of unphased_address and phased_address is necessary.
+            Address of the phased or unphased BGEN file (does not include '.bgen').
 
         unphased_address : str
             Address of the bed file (does not include '.bed'). Only one of unphased_address and phased_address is necessary.
@@ -312,9 +312,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
                 }, copy=True)
             else:
                 bim = read_bgen(bim_address)["variants"].compute()
+            variant_ids = np.where(np.isin(reader.rsids, ("", ".")), reader.ids, reader.rsids)
             ids = np.array(reader.samples)
         bim = bim.rename(columns={"chrom": "Chr", "pos": "coordinate"})
-        bim["id"] = bim["rsid"]
+        bim["id"] = variant_ids
         bim["Chr"] = chromosome
         if fam_address != bim_address:
             with open_bgen(fam_address) as reader:
@@ -518,6 +519,7 @@ class ImputationGenotypes:
                  *, read_threads=1, probability_bytes=128 * 1024**2):
         self.bed = Bed(unphased_address + ".bed", count_A1=True) if unphased_address else None
         self.bgen = None
+        self.with_phases = False
         self.n_samples = 0
         self.read_threads = read_threads
         self.probability_bytes = probability_bytes
@@ -550,7 +552,6 @@ class ImputationGenotypes:
             raise
 
     def _prepare_bgen(self, bim, genotype_ids):
-        self.threaded_bgen = "num_threads" in signature(self.bgen.read).parameters
         if self.bed is None:
             self.bgen_indices = self.sample_indices
             self.bgen_output_rows = np.arange(self.n_samples, dtype=np.intp)
@@ -563,7 +564,8 @@ class ImputationGenotypes:
                                dtype=np.intp, count=self.n_samples)
             self.bgen_output_rows = np.flatnonzero(rows >= 0)
             self.bgen_indices = rows[self.bgen_output_rows]
-            variants = {(sid, bp): i for i, (sid, bp) in enumerate(zip(self.bgen.rsids, self.bgen.positions))}
+            variant_ids = np.where(np.isin(self.bgen.rsids, ("", ".")), self.bgen.ids, self.bgen.rsids)
+            variants = {(sid, bp): i for i, (sid, bp) in enumerate(zip(variant_ids, self.bgen.positions))}
             self.bgen_markers = np.fromiter((variants.get((sid, bp), -1)
                                             for sid, bp in zip(bim["id"], bim["coordinate"])),
                                            dtype=np.intp, count=len(bim))
@@ -579,6 +581,9 @@ class ImputationGenotypes:
             self.alleles_match[valid] = reverse | np.fromiter(
                 (pair == f"{a},{b}" for pair, a, b in zip(alleles, first, second)), dtype=bool, count=len(alleles),
             )
+        self.with_phases = bgen_is_phased(self.bgen, 0)
+        if self.bed is not None and not self.with_phases:
+            raise ValueError('When BED and BGEN are both provided, the BGEN must be phased')
 
     def read_calls(self, markers, *, include_phased=True):
         phased = None
@@ -595,10 +600,9 @@ class ImputationGenotypes:
                 raise ValueError("The BED and BGEN datasets must contain the same SNP IDs and positions")
             if not self.alleles_match[markers].all():
                 raise ValueError("The BED and BGEN datasets disagree on SNP alleles")
-            if include_phased:
+            if include_phased and self.with_phases:
                 phased = np.empty((self.n_samples, len(markers), 2), dtype=np.int8)
-            from_phases = dosages is None
-            if from_phases:
+            if dosages is None:
                 dosages = np.empty((self.n_samples, len(markers)), dtype=np.int8)
             # Expand probabilities in small tiles, including when the phase
             # window requires many more markers than the retained output.
@@ -606,19 +610,27 @@ class ImputationGenotypes:
             for start in range(0, len(markers), tile):
                 stop = min(len(markers), start + tile)
                 selected = markers[start:stop]
+                probs = None
                 if len(self.bgen_indices):
-                    options = {"num_threads": min(self.read_threads, len(selected))} if self.threaded_bgen else {}
-                    probs = self.bgen.read((self.bgen_indices, self.bgen_markers[selected]), np.float32, **options)
+                    probs = read_diploid_probabilities(self.bgen, self.bgen_indices, self.bgen_markers[selected],
+                                                       self.with_phases, num_threads=self.read_threads)
+                output = dosages[:, start:stop]
+                if not self.with_phases:
+                    if probs is not None:
+                        hard_calls(probs, False, nan_integer, out=output)
+                    else:
+                        output.fill(nan_integer)
+                    del probs
+                    continue
+                if probs is not None:
                     calls = decode_phased_genotypes(probs, self.n_samples, self.bgen_output_rows,
                                                     self.flipped[selected])
-                    # Release tile probabilities before the next decoder read.
-                    del probs
                 else:
                     calls = np.full((self.n_samples, len(selected), 2), nan_integer, dtype=np.int8)
+                del probs
                 if phased is not None:
                     phased[:, start:stop, :] = calls
-                if from_phases:
-                    output = dosages[:, start:stop]
+                if self.bed is None:
                     np.add(calls[:, :, 0], calls[:, :, 1], out=output)
                     output[output < 0] = nan_integer
         return phased, dosages

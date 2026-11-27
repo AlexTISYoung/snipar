@@ -63,7 +63,10 @@ class BgenFile:
         return pd.DataFrame.from_records(records, columns=["id", "rsid", "chrom", "pos",
                                                            "nalleles", "allele_ids", "vaddr"])
 
-    def read(self, index=None, dtype=np.float64):
+    def is_phased(self, index):
+        return self._reader[int(index)].is_phased
+
+    def read(self, index=None, dtype=np.float64, *, expected_phased=None):
         """Decompress only the requested variants, retaining sample order and duplicates."""
         sample_index, variant_index = (None, None) if index is None else index
         if sample_index is None:
@@ -83,12 +86,22 @@ class BgenFile:
         if not nvariants:
             raise ValueError("BGEN file has no variants")
         first = int(variants[0]) if len(variants) else 0
-        probs = self._reader[first].probabilities
+        def probabilities(index):
+            variant = self._reader[int(index)]
+            if expected_phased is not None:
+                if variant.is_phased != expected_phased:
+                    raise ValueError('BGEN hard calls require a consistently phased or unphased file')
+                if len(variant.alleles) != 2 or np.any(variant.ploidy[sample_index] != 2):
+                    raise ValueError('Expected diploid, biallelic BGEN genotypes')
+                return variant.probabilities[:, :4 if expected_phased else 3]
+            return variant.probabilities
+
+        probs = probabilities(first)
         result = np.empty((sample_count, len(variants), probs.shape[1]), dtype=dtype, order="F")
         previous = first
         for column, i in enumerate(variants):
             if i != previous:
-                probs = self._reader[int(i)].probabilities
+                probs = probabilities(i)
                 previous = i
             if probs.shape[1] != result.shape[2]:
                 raise ValueError("Selected BGEN variants have different probability dimensions")
@@ -117,14 +130,15 @@ class BgenFile:
             if variant == previous:
                 result[:] = output[:, column - 1]
                 continue
-            probabilities = self._reader[int(variant)].probabilities
-            if probabilities.shape[1] == 4:
+            record = self._reader[int(variant)]
+            if len(record.alleles) != 2 or np.any(record.ploidy[samples] != 2):
+                raise ValueError('Expected diploid, biallelic BGEN genotypes')
+            probabilities = record.probabilities
+            if record.is_phased:
                 np.add(probabilities[samples, 0], probabilities[samples, 2], out=result, dtype=np.float32)
-            elif probabilities.shape[1] == 3:
+            else:
                 np.multiply(probabilities[samples, 0], 2, out=result, dtype=np.float32)
                 np.add(result, probabilities[samples, 1], out=result, dtype=np.float32)
-            else:
-                raise ValueError('Expected diploid, biallelic BGEN genotypes')
             previous = variant
         return output
 
