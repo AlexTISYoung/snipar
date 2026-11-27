@@ -7,6 +7,7 @@ from bed_reader import open_bed
 import numpy as np
 import pytest
 
+from snipar.example.snipar_example_data import load_example_data
 from snipar.utilities import open_bgen
 from snipar.vcf import convert_vcf
 
@@ -22,6 +23,22 @@ def _bgzf(payload):
     data = compressor.compress(payload) + compressor.flush()
     prefix = b'\x1f\x8b\x08\x04\x00\x00\x00\x00\x00\xff\x06\x00BC\x02\x00'
     return prefix + struct.pack('<H', 25 + len(data)) + data + struct.pack('<II', zlib.crc32(payload), len(payload))
+
+
+def test_bundled_example_vcf_matches_the_bgen_haplotypes(tmp_path):
+    data = tmp_path / 'example_data'
+    load_example_data(data)
+    converted = convert_vcf(data / 'chr_1.vcf.gz', tmp_path / 'phased', output='phased')
+    assert converted.chromosomes == (1,)
+    with open_bgen(data / 'chr_1.bgen') as original, open_bgen(converted.bgen + '.bgen') as phased:
+        np.testing.assert_array_equal(phased.samples, original.samples)
+        np.testing.assert_array_equal(phased.rsids, original.rsids)
+        np.testing.assert_array_equal(phased.positions, original.positions)
+        np.testing.assert_array_equal(phased.allele_ids, original.allele_ids)
+        for start in range(0, original.nvariants, 64):
+            tile = (slice(None), slice(start, start + 64))
+            np.testing.assert_array_equal(phased.read(tile, dtype=np.float32),
+                                          original.read(tile, dtype=np.float32))
 
 
 @pytest.mark.parametrize('compression', ['none', 'gzip', 'bgzf'])

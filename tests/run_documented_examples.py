@@ -79,7 +79,7 @@ def tutorial(root):
         shutil.copytree(example, root / branch)
     primary = [lines[1]]
     for line in lines[2:]:
-        if line.startswith("ibd.py ") and "--pedigree " in line:
+        if line.startswith("ibd.py ") and "--bed " in line and "--pedigree " in line:
             primary.append(f"(cd ../pedigree && {line})")
         elif "--bgen " in line:
             primary.append(f"(cd ../bgen && {line})")
@@ -91,11 +91,13 @@ def tutorial(root):
     for branch in (example, root / "bgen", root / "pedigree"):
         assert (branch / "chr_1.ibd.segments.gz").stat().st_size > 0
         assert len(table(branch / "chr_1.l2.ldscore.gz")) == 1000
-    for branch in (example, root / "bgen"):
-        with h5py.File(branch / "chr_1.hdf5") as h5:
+    assert (example / "chr_1_vcf.ibd.segments.gz").stat().st_size > 0
+    assert len(table(example / "chr_1_vcf.l2.ldscore.gz")) == 1000
+    for path in (example / "chr_1.hdf5", root / "bgen" / "chr_1.hdf5", example / "chr_1_vcf.hdf5"):
+        with h5py.File(path) as h5:
             gts = h5["imputed_par_gts"][:]
             assert gts.shape == (2000, 1000) and np.isfinite(gts).all()
-    check_gwas(example, ["chr_1_young"])
+    check_gwas(example, ["chr_1_young", "chr_1_vcf_young"])
     check_gwas(root / "bgen", ["chr_1_young", "chr_1_unified", "chr_1_robust", "sibs_chr_1",
                                "trios_sibs_chr_1", "trios_sibs_singletons_chr_1"])
     est = table(example / "effect_corrs.txt", index_col=0)

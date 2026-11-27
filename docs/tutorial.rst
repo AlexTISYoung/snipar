@@ -33,8 +33,10 @@ pairwise correlations between the direct, paternal, and maternal effects are 0.5
 
 The genotype data has been simulated so that there are 3000 independent families, where 1000 have two siblings but no parents genotyped,
 1000 have one parent genotyped and a 50% chance of having a genotyped sibling, and the final 1000 have both parents genotyped and a 50%
-chance of having a genotyped sibling. The example data includes :ref:`observed genotype data <observed genotypes>` formatted in both PLINK .bed format (chr_1.bed) and phased genotype
-data in .bgen format (chr_1.bgen with associated sample file chr_1.sample). The folder also contains partial data—for example, chr_1_trios_sibs.bgen, which includes individuals with 
+chance of having a genotyped sibling. The example :ref:`observed genotypes <observed genotypes>` are provided as PLINK BED (``chr_1.bed``),
+phased BGEN (``chr_1.bgen`` and ``chr_1.sample``), and BGZF-compressed phased VCF (``chr_1.vcf.gz``).
+The VCF contains the same haplotypes, sample IDs, and SNP IDs as the BGEN.
+The folder also contains partial data such as chr_1_trios_sibs.bgen, which includes individuals with
 complete parental genotypes as well as individuals without parents but with siblings. This allows users to apply various estimators to different types of data.
 
 Inferring IBD between siblings
@@ -107,6 +109,19 @@ To perform imputation from the phased .bgen file in example_data/, use the follo
 
 As with the ibd.py script, the impute.py script can use a user input :ref:`pedigree file <pedigree>` (with the *--pedigree* argument) rather than the *--king* and *--agesex* arguments.
 
+Using the phased VCF
+~~~~~~~~~~~~~~~~~~~~
+
+You can use ``chr_1.vcf.gz`` for both IBD inference and phased parental imputation.
+Use the example genetic map and pedigree, and give the VCF outputs their own prefix.
+
+    ``ibd.py --vcf chr_@.vcf.gz --pedigree pedigree.txt --map genetic_map.txt --out chr_@_vcf --threads 4 --ld_out``
+
+    ``impute.py --vcf chr_@.vcf.gz --ibd chr_@_vcf.ibd --pedigree pedigree.txt --out chr_@_vcf --threads 4``
+
+The IBD segments are saved to ``chr_1_vcf.ibd.segments.gz`` and the imputed
+parental genotypes to ``chr_1_vcf.hdf5``.
+
 Family-based GWAS with imputed parental genotypes
 -------------------------------------------------
 
@@ -127,6 +142,10 @@ The 'sibling variance component' output is the phenotypic variance explained by 
 To use the .bgen file instead, use this command:
 
     ``gwas.py phenotype.txt --bgen chr_@ --imp chr_@ --cpus 1 --out chr_@_young``
+
+To run the same design with the VCF and its imputed parental genotypes, use
+
+    ``gwas.py phenotype.txt --vcf chr_@.vcf.gz --imp chr_@_vcf --cpus 1 --out chr_@_vcf_young``
 
 The gwas.py script enables the use of different regression designs described in Guan et al. (https://www.nature.com/articles/s41588-025-02118-0).
 For the homogeneous ancestry samples typically used in GWAS, you can increase statistical power for estimation of direct genetic effects by inclusion

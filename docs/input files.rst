@@ -21,12 +21,12 @@ Observed genotypes
 ------------------
 .. _observed genotypes:
 
-Observed genotypes can be provided either in PLINK .bed format or in phased .bgen format. 
-(Unphased .bgen format is not currently supported).
-Phased .bgen files are the recommended input since the imputation is more accurate 
-when phase information can be used (see Young et al. 2022 [ref]).
-If one has phased genotypes in another format (for example VCF), then these can be converted
-to phased .bgen format using QCTOOL (https://www.well.ox.ac.uk/~gav/qctool_v2/documentation/examples/converting.html).
+Supply observed genotypes as PLINK BED, phased or unphased BGEN, or phased
+or unphased VCF. Use ``--vcf`` with a plain, gzip-compressed, or BGZF-compressed
+VCF containing diploid, biallelic autosomal ``GT`` calls. Parental imputation
+can use chromosome-wide phase from BGEN or VCF to improve accuracy.
+The :doc:`command-line reference <scripts>` describes VCF filtering and phase
+requirements, and the :ref:`tutorial <tutorial>` uses the bundled ``chr_1.vcf.gz``.
 
 When the ``bgen-reader`` backend needs an index for genotypes in a read-only
 directory, it uses a per-user cache. Set ``BGEN_READER_CACHE_HOME`` to choose
@@ -37,10 +37,10 @@ We recommend first filtering your observed genotypes to keep only bi-allelic var
 (if using genotypes imputed from a reference panel) and Hardy-Weinberg Equilibrium P-value>1e-6. 
 Using low-quality SNPs may result in bias in the imputed parental genotypes and direct effect estimates and is not recommended. 
 
-Observed genotypes should be split into separate files for each chromosome in the autosome (*snipar* does not support sex-chromosomes).
-For example, if you have phased genotypes in .bgen format in a directory /path/to/haplotypes/ so that the genotypes for each chromosome
-are in /path/to/haplotypes/chr_1.bgen, /path/to/haplotypes/chr_2.bgen, ..., /path/to/haplotypes/chr_22.bgen, then this can be specified to
-*snipar* scripts with '--bgen /path/to/haplotypes/chr_@', where @ is interpreted as a numerical wildcard character. 
+For per-chromosome files, use a numeric wildcard such as
+``--bgen /path/to/haplotypes/chr_@`` or ``--vcf /path/to/genotypes/chr_@.vcf.gz``.
+You can also supply a single VCF with multiple autosomes and use ``--chr_range``
+to select chromosomes.
 
 Pedigree 
 ---------

@@ -22,14 +22,14 @@
 - **Family PGS analyses**: `pgs.py` computes family scores from observed or imputed genotypes and fits linear mixed models for quantitative traits. It also supports adjustment for assortative mating. For a binary trait, `pgs.R` fits logistic mixed models using the same score file. Both workflows report the direct-to-population PGS coefficient ratio and its standard error. See the [Python PGS guide](https://snipar.readthedocs.io/en/latest/pgs.html) and [R PGS guide](https://snipar.readthedocs.io/en/latest/pgs_binary.html).
 - **Imputation of missing parental genotypes**: For samples with at least one genotyped sibling and/or parent, but without both parents' genotypes available, *snipar* can impute missing parental genotypes according to Mendelian laws (Mendelian Imputation) and use these to increase power for family-GWAS and PGS analyses. See [Tutorial: imputing-missing-parental-genotypes](https://snipar.readthedocs.io/en/latest/tutorial.html#imputing-missing-parental-genotypes)
 - **Identity-by-descent (IBD) segments shared by siblings**: *snipar* implements a hidden markov model (HMM) to accurately infer identity-by-descent segments shared between siblings. The output of this is needed for imputation of missing parental genotypes from siblings. See [Tutorial: inferring IBD between siblings](https://snipar.readthedocs.io/en/latest/tutorial.html#inferring-ibd-between-siblings)
-- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating. The phenotype on which assortment occurs can include indirect genetic effects from parents. Users can input phased haplotypes for the starting generation or artificial haplotypes can be simulated. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html). The simulator also supports stabilizing selection on breeder phenotypes over multiple generations. See [Simulating stabilizing selection](https://snipar.readthedocs.io/en/latest/simulation.html#simulating-stabilizing-selection).
+- **Multi-generational forward simulation with indirect genetic effects and assortative mating**: *snipar* includes a simulation module that performs forward simulation of multiple generations undergoing random and/or assortative mating. The phenotype on which assortment occurs can include indirect genetic effects from parents. The simulator can generate founder haplotypes or read phased haplotypes from BGEN or VCF. Output includes a multigenerational pedigree with phenotype values, direct and indirect genetic component values, and plink formatted genotypes for the final two generations along with imputed parental genotypes. See [Simulation Exercise](https://snipar.readthedocs.io/en/latest/simulation.html). The simulator also supports stabilizing selection on breeder phenotypes over multiple generations. See [Simulating stabilizing selection](https://snipar.readthedocs.io/en/latest/simulation.html#simulating-stabilizing-selection).
 - **Correlations between GWAS effects**: `correlate.py` fits a joint covariance matrix for direct effects and non-transmitted coefficients (NTCs) using their per-SNP sampling covariance. It derives population effects as direct effects plus average NTCs. The results include the direct–population and direct–NTC correlations and the population-to-direct standard deviation ratio, with genomic block jackknife standard errors. See the [correlation guide and output tables](https://snipar.readthedocs.io/en/latest/correlate.html).
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/AlexTISYoung/snipar/HEAD/docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
 </p>
 
-The above illustrates an end-to-end workflow for performing family-GWAS in *snipar*, an example of which is given in the [Tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html). Not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information. Also: imputation for parent-offspring pairs can proceed without IBD inference. 
+Family GWAS and PGS analyses can use observed genotypes and a pedigree. SNIPar accepts PLINK BED, phased or unphased BGEN, and phased or unphased VCF. Parent-offspring imputation can proceed without IBD inference. [End-to-end tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html)
 
 # Publications
 
@@ -69,6 +69,22 @@ It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
 And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
+## Working with VCF files
+
+Use `--vcf` with `ibd.py`, `impute.py`, `gwas.py`, `pgs.py`, and `gts_matrix.py`. `correlate.py` accepts VCF for LD scores, and `simulate.py` accepts phased founder VCF. The reader uses diploid, biallelic autosomal `GT` calls from plain, gzip-compressed, or BGZF-compressed VCF. Supply one VCF or use a chromosome pattern such as `chr_@.vcf.gz`. Parental imputation uses consistent chromosome-wide phase when available. [Genotype input reference](https://snipar.readthedocs.io/en/latest/scripts.html#vcf-and-bgen-input)
+
+The bundled example includes `chr_1.vcf.gz`, with the same haplotypes as the example BGEN. Try a family GWAS using the observed genotypes and pedigree.
+
+```sh
+snipar_example_data.py --dest example_data
+cd example_data
+gwas.py phenotype.txt --vcf chr_1.vcf.gz --pedigree pedigree.txt --out vcf_gwas
+```
+
+The tutorial also shows how to infer IBD, impute missing parents using phase, and pass the resulting imputation to GWAS. [Phased VCF tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#using-the-phased-vcf)
+
+For large VCFs, `--vcf-variants` selects variant IDs and `--vcf-min-info-maf` filters by the input's annotated allele frequencies before decoding genotypes. The annotation cohort may differ from the analysis cohort. Use `vcf_to_genotypes.py --format auto` to prepare reusable BED or phased BGEN files for repeated analyses. [VCF filters](https://snipar.readthedocs.io/en/latest/scripts.html#filtering-large-vcfs)
+
 ## GWAS effect correlations and family PGS analyses
 
 After [installing snipar](#installing-using-pip), run these examples from the directory containing your input files.
@@ -103,7 +119,7 @@ Install the published release with the Python interpreter in that environment.
 
 > `python -m pip install snipar`
 
-The Python tools install together. To run the binary-trait command `pgs.R`, also install R and its `lme4` package. In a Conda environment you can install both with one command.
+The Python tools install together and include the VCF reader. To run the binary-trait command `pgs.R`, also install R and its `lme4` package. In a Conda environment you can install both with one command.
 
 > `conda install -c conda-forge r-base r-lme4`
 
