@@ -64,7 +64,10 @@ setup(name='snipar',
       license='MIT',
       include_package_data=True,
       package_data={'': ['*.pxd', '*.pyx']},
-      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/pgs.R', 'snipar/scripts/impute.py', 'snipar/scripts/ibd.py','snipar/scripts/correlate.py','snipar/example/snipar_example_data.py','snipar/scripts/simulate.py'],
+      scripts=['snipar/scripts/gwas.py', 'snipar/scripts/pgs.py', 'snipar/scripts/pgs.R',
+               'snipar/scripts/impute.py', 'snipar/scripts/ibd.py', 'snipar/scripts/correlate.py',
+               'snipar/example/snipar_example_data.py', 'snipar/scripts/simulate.py',
+               'snipar/scripts/gts_matrix.py', 'snipar/scripts/make_rdr_grms.py'],
       classifiers=[
             # How mature is this project? Common values are
             #   3 - Alpha

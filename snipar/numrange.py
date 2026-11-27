@@ -1,17 +1,19 @@
-import argparse, re
+import argparse
+import re
+
 def parseNumRange(string):
     """reads either a int or a range"""
-    match_range = re.match(r' *(\d+) *- *(\d+) *', string)
-    match_list = re.match(r' *(\d+) *', string)
-    if match_range:
-        start = int(match_range.group(1))
-        end = int(match_range.group(2))
-        result = [str(n) for n in range(start, end+1)]
-    elif match_list:
-        result = match_list.group(0)
-    else:
-        raise Exception(f"{string} is neither a range of the form x-y nor a list of integers of the form x y z")
-    return result
+    match = re.fullmatch(r"\s*(\d+)(?:\s*-\s*(\d+))?\s*", string)
+    if match is None:
+        raise argparse.ArgumentTypeError(f"invalid integer or range: {string}")
+    start = match[1]
+    if match[2] is None:
+        return start
+    end = int(match[2])
+    if end < int(start):
+        raise argparse.ArgumentTypeError(f"range must be in ascending order: {string}")
+    return [str(n) for n in range(int(start), end + 1)]
+
 
 class NumRangeAction(argparse.Action):
     """flattens and sorts the resulting num range. also removes duplicates"""

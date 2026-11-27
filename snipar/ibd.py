@@ -1,6 +1,6 @@
 import gzip
 from numba import njit, prange
-from snipar.map import *
+from snipar.map import decode_map_from_pos, get_map_positions
 from snipar.ld import compute_ld_scores
 import numpy as np
 from snipar.read.bed import read_sibs_from_bed
@@ -50,12 +50,10 @@ def p_ibd_1(f):
         P : :class:`~numpy:numpy.array`
             matrix of probabilities
     """
-    fmatrix = np.array([[0.0,1.0,0.0],[1.0,1.0,2.0],[0.0,2.0,3.0]])
-    minus_fmatrix = np.array([[3.0,2.0,0.0],[2.0,1.0,1.0],[0.0,1.0,0.0]])
-    P = np.exp(fmatrix*np.log(f)+minus_fmatrix*np.log(1-f))
-    P[0,2] = 0
-    P[2,0] = 0
-    return P
+    q = 1 - f
+    return np.array([[q**3, f*q*q, 0.0],
+                     [f*q*q, f*q, f*f*q],
+                     [0.0, f*f*q, f**3]])
 
 @njit
 def p_ibd_2(f):
@@ -128,6 +126,8 @@ def make_dynamic(g1, g2, freqs, map, weights, error_probs):
     """
     state_matrix = np.zeros((3, g1.shape[0]), dtype=np.float64)
     pointers = np.zeros((3, g1.shape[0]), dtype=np.int8)
+    if not g1.size:
+        return state_matrix, pointers
     # Check for nans
     not_nan = np.logical_not(np.logical_or(np.isnan(g1), np.isnan(g2)))
     # Initialise
@@ -160,18 +160,80 @@ def viterbi(state_matrix,pointers):
             integer vector giving the Viterbi path through the IBD states
     """
     path = np.zeros(state_matrix.shape[1],dtype=np.int8)
+    if not path.size:
+        return path
     path[path.shape[0]-1] = np.argmax(state_matrix[:, state_matrix.shape[1]-1])
     for i in range(1,path.shape[0]):
         path[path.shape[0]-(i+1)] = pointers[path[path.shape[0]-i], path.shape[0]-i]
     return path
 
-@njit(parallel=True)
+@njit(cache=True)
+def _chromosome_hmm(freqs, genetic_map, weights, error_probs):
+    n = len(freqs)
+    transitions = np.empty((n, 3, 3))
+    emissions = np.empty((n, 3, 3, 3))
+    for marker in range(n):
+        if marker:
+            transitions[marker] = transition_matrix(genetic_map[marker] - genetic_map[marker - 1])
+        f = freqs[marker]
+        q = 1 - f
+        e = error_probs[marker]
+        # Conditional on the shared haplotype's allele, the unshared alleles
+        # of the two siblings are independent draws from the population.
+        error = np.array([[1-e, e/2, 0], [e, 1-e, e], [0, e/2, 1-e]])
+        for x in range(3):
+            x0 = q * error[x, 0] + f * error[x, 1]
+            x1 = q * error[x, 1] + f * error[x, 2]
+            for y in range(3):
+                y0 = q * error[y, 0] + f * error[y, 1]
+                y1 = q * error[y, 1] + f * error[y, 2]
+                if weights[marker] == 0:
+                    emissions[marker, x, y] = 0
+                    continue
+                probabilities = (
+                    (q*x0 + f*x1) * (q*y0 + f*y1),
+                    q*x0*y0 + f*x1*y1,
+                    q*q*error[x, 0]*error[y, 0] + 2*q*f*error[x, 1]*error[y, 1]
+                    + f*f*error[x, 2]*error[y, 2],
+                )
+                for state in range(3):
+                    emissions[marker, x, y, state] = weights[marker] * np.log(probabilities[state])
+    return transitions, emissions
+
+
+@njit(cache=True, parallel=True)
 def infer_ibd(sibpairs, gts, freqs, map, weights, error_probs):
-    ibd = np.zeros((sibpairs.shape[0], gts.shape[1]), dtype=np.int8)
-    for i in prange(sibpairs.shape[0]):
-        sibpair = sibpairs[i, :]
-        state_matrix, pointers = make_dynamic(gts[sibpair[0], :], gts[sibpair[1], :], freqs, map, weights, error_probs)
-        ibd[i, ...] = viterbi(state_matrix, pointers)
+    n = gts.shape[1]
+    ibd = np.empty((len(sibpairs), n), dtype=np.int8)
+    if not n:
+        return ibd
+    transitions, emissions = _chromosome_hmm(freqs, map, weights, error_probs)
+    for i in prange(len(sibpairs)):
+        g1, g2 = gts[sibpairs[i, 0]], gts[sibpairs[i, 1]]
+        previous = np.log(np.array([.25, .5, .25]))
+        current = np.empty(3)
+        pointers = np.empty((n, 3), dtype=np.int8)
+        if not (np.isnan(g1[0]) or np.isnan(g2[0])):
+            previous += emissions[0, int(g1[0]), int(g2[0])]
+        for marker in range(1, n):
+            observed = not (np.isnan(g1[marker]) or np.isnan(g2[marker]))
+            for dest in range(3):
+                best = 0
+                maximum = previous[0] + transitions[marker, 0, dest]
+                for source in range(1, 3):
+                    probability = previous[source] + transitions[marker, source, dest]
+                    if probability > maximum:
+                        best, maximum = source, probability
+                pointers[marker, dest] = best
+                current[dest] = maximum
+                if observed:
+                    current[dest] += emissions[marker, int(g1[marker]), int(g2[marker]), dest]
+            previous, current = current, previous
+        state = np.argmax(previous)
+        ibd[i, n - 1] = state
+        for marker in range(n - 1, 0, -1):
+            state = pointers[marker, state]
+            ibd[i, marker - 1] = state
     return ibd
 
 class segment(object):
@@ -191,48 +253,38 @@ class segment(object):
         else:
             return seg_txt+'\n'
 
-def find_segments(path,map,snps,pos):
+def find_segments(path, map, snps, pos):
+    if not len(path):
+        return []
+    changes = np.flatnonzero(path[1:] != path[:-1]) + 1
+    boundaries = np.concatenate(([0], changes, [len(path)]))
     segments = []
-    ibd_start = path[0]
-    ibd_start_index = 0
-    for i in range(1,path.shape[0]):
-        if not path[i] == ibd_start:
-            segments.append(segment(ibd_start_index,i,
-                                    pos[ibd_start_index],pos[i-1],
-                                    snps[ibd_start_index],snps[i-1],
-                                    map[i-1]-map[ibd_start_index],ibd_start))
-            ibd_start_index = i
-            ibd_start = path[i]
-    segments.append(segment(ibd_start_index,i,
-                            pos[ibd_start_index],pos[i],
-                            snps[ibd_start_index],snps[i],
-                            map[i]-map[ibd_start_index],ibd_start))
+    for start, end in zip(boundaries[:-1], boundaries[1:]):
+        last = end - 1
+        segments.append(segment(start, end, pos[start], pos[last], snps[start], snps[last],
+                                map[last] - map[start], path[start]))
     return segments
 
-def smooth_segments(path,map,snps,pos,min_length):
-    # Smooth path
-    segments = find_segments(path,map,snps,pos)
-    if len(segments)>1:
-        for i in range(len(segments)):
-            if segments[i].length < min_length:
-                if i==0:
-                    if segments[i].start == segments[i].end:
-                        path[segments[i].start] = segments[i+1].state
-                    else:
-                        path[segments[i].start:segments[i].end] = segments[i+1].state
-                elif i<(len(segments)-1):
-                    if segments[i-1].state == segments[i+1].state:
-                        if segments[i].start == segments[i].end:
-                            path[segments[i].start] = segments[i+1].state
-                        else:
-                            path[segments[i].start:segments[i].end] = segments[i+1].state
-                else:
-                    if segments[i].start == segments[i].end:
-                        path[segments[i].start] = segments[i-1].state
-                    else:
-                        path[segments[i].start:segments[i].end] = segments[i - 1].state
-        segments = find_segments(path,map,snps,pos)
-    return path, segments
+def smooth_segments(path, map, snps, pos, min_length):
+    segments = find_segments(path, map, snps, pos)
+    if len(segments) <= 1:
+        return path, segments
+    changed = False
+    for i, current in enumerate(segments):
+        if current.length >= min_length:
+            continue
+        if i == 0:
+            replacement = segments[1].state
+        elif i == len(segments) - 1:
+            replacement = segments[i - 1].state
+        elif segments[i - 1].state == segments[i + 1].state:
+            replacement = segments[i - 1].state
+        else:
+            continue
+        # Segment indices are half-open, physical coordinates remain inclusive.
+        path[current.start:current.end] = replacement
+        changed = True
+    return path, find_segments(path, map, snps, pos) if changed else segments
 
 def smooth_ibd(ibd,map,snps,pos,min_length):
     allsegs = []
@@ -242,28 +294,46 @@ def smooth_ibd(ibd,map,snps,pos,min_length):
         allsegs.append(segments)
     return ibd, allsegs
 
-def write_segs(sibpairs,allsegs,chr,outfile):
-    seg_out = gzip.open(outfile,'wb')
-    # Header
-    seg_out.write('ID1\tID2\tIBDType\tChr\tstart_coordinate\tstop_coordinate\tstartSNP\tstopSNP\tlength\n'.encode())
-    # Write segment lines
-    for i in range(0,sibpairs.shape[0]):
-        nseg = len(allsegs[i])
-        for j in range(nseg):
-            if i == (sibpairs.shape[0]-1) and j == (nseg-1):
-                seg_out.write(allsegs[i][j].to_text(sibpairs[i, 0], sibpairs[i, 1], chr, end=True).encode())
-            else:
-                seg_out.write(allsegs[i][j].to_text(sibpairs[i, 0], sibpairs[i, 1], chr, end=False).encode())
-    seg_out.close()
+_SEGMENT_HEADER = "ID1\tID2\tIBDType\tChr\tstart_coordinate\tstop_coordinate\tstartSNP\tstopSNP\tlength\n"
 
-def write_segs_from_matrix(ibd,sibpairs,snps,pos,map,chrom,outfile):
-    # Get segments
-    allsegs = []
-    for i in range(sibpairs.shape[0]):
-        allsegs.append(find_segments(ibd[i,:],map,snps,pos))
-    # Write segments
-    write_segs(sibpairs,allsegs,chrom,outfile)
-    return allsegs
+
+def write_segs(sibpairs, allsegs, chr, outfile):
+    with gzip.open(outfile, "wt", compresslevel=3) as handle:
+        handle.write(_SEGMENT_HEADER)
+        for i, ((id1, id2), segments) in enumerate(zip(sibpairs, allsegs)):
+            lines = [s.to_text(id1, id2, chr, end=True) for s in segments]
+            if lines:
+                handle.write("\n".join(lines))
+                if i != len(sibpairs) - 1:
+                    handle.write("\n")
+
+
+def write_segs_from_matrix(ibd, sibpairs, snps, pos, map, chrom, outfile, *, return_segments=True):
+    if return_segments:
+        allsegs = [find_segments(path, map, snps, pos) for path in ibd]
+        write_segs(sibpairs, allsegs, chrom, outfile)
+        return allsegs
+    # Simulated chromosomes can contain millions of short segments. Stream
+    # one sibling pair at a time for callers that only need the file.
+    snps, positions = list(snps), [str(p) for p in pos]
+    with gzip.open(outfile, "wt", compresslevel=3) as handle:
+        handle.write(_SEGMENT_HEADER)
+        for i, ((id1, id2), path) in enumerate(zip(sibpairs, ibd)):
+            if not len(path):
+                continue
+            changes = np.flatnonzero(path[1:] != path[:-1]) + 1
+            starts = np.concatenate(([0], changes))
+            ends = np.concatenate((changes - 1, [len(path) - 1]))
+            states = path[starts].tolist()
+            lengths = (map[ends] - map[starts]).tolist()
+            prefix = f"{id1}\t{id2}\t"
+            lines = [
+                f"{prefix}{state}\t{chrom}\t{positions[a]}\t{positions[b]}\t{snps[a]}\t{snps[b]}\t{length}"
+                for a, b, state, length in zip(starts.tolist(), ends.tolist(), states, lengths)
+            ]
+            handle.write("\n".join(lines))
+            if i != len(sibpairs) - 1:
+                handle.write("\n")
 
 def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None, min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01, max_missing=5, max_error=0.01):
     if bedfile is None and bgenfile is None:
@@ -273,7 +343,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     if bedfile is not None:
         ## Read bed
         print('Reading genotypes from ' + bedfile)
-        bimfile = bedfile.split('.bed')[0] + '.bim'
+        bimfile = bedfile.removesuffix(".bed") + '.bim'
         # Determine chromosome
         if chrom is None:
             chrom = np.loadtxt(bimfile, usecols=0, dtype=str)
@@ -330,15 +400,17 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     print('Before filtering on MAF, missingness, and genotyping error, there were ' + str(gts.shape[1]) + ' SNPs')
     gts.filter_maf(min_maf)
     gts.filter_missingness(max_missing)
-    gts.filter(gts.error_probs < max_error)
+    gts.filter(gts.error_probs <= max_error)
+    if not gts.shape[1]:
+        raise ValueError("No SNPs remain after MAF, missingness and genotyping error filtering")
     print('After filtering, there are ' + str(gts.shape[1]) + ' SNPs')
     # Read map file
     if mapfile is None and bedfile is not None:
         print('Separate genetic map not provided, so attempting to read map from ' + bimfile)
-        map = np.loadtxt(bimfile, usecols=2)
-        map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str))
+        map = np.loadtxt(bimfile, usecols=2, ndmin=1)
+        map_snp_dict = make_id_dict(np.loadtxt(bimfile, usecols=1, dtype=str, ndmin=1))
         # Check for NAs
-        if np.var(map) == 0:
+        if np.all(map == 0) or (map.size > 1 and np.var(map) == 0):
             print('Map information not found in bim file.')
             print('Using default map (decode sex averaged map on GRCh38 coordinates)')
             gts.map = decode_map_from_pos(chrom, gts.pos)
@@ -346,7 +418,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
             print('Found map positions for '+str(pc_mapped)+'% of SNPs')
             gts.filter(~np.isnan(gts.map))
         else:
-            if np.sum(np.isnan(map)) > 0:
+            if not np.isfinite(map).all():
                 raise (ValueError('Map cannot have NAs'))
             if np.min(map) < 0:
                 raise (ValueError('Map file cannot have negative values'))
@@ -363,7 +435,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
             gts.map = map[[map_snp_dict[x] for x in gts.sid]]
     elif mapfile is None and bgenfile is not None:
         print('Map file not provided.')
-        print('Using default map (decode sex averaged map on Hg19 coordinates)')
+        print('Using default map (decode sex averaged map on GRCh38 coordinates)')
         gts.map = decode_map_from_pos(chrom, gts.pos)
         pc_mapped = 100*(1-np.mean(np.isnan(gts.map)))
         if pc_mapped < 50:
@@ -373,13 +445,17 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     else:
         print('Reading map from ' + str(mapfile))
         gts.map = get_map_positions(mapfile, gts)
+    if not gts.shape[1]:
+        raise ValueError("No SNPs have genetic map positions")
+    if np.any(np.diff(gts.map) < 0):
+        raise ValueError("SNPs must be in increasing genetic map order")
     print('Read map')
     # Weights
     print('Computing LD weights')
     ld_n = np.min([1000, gts.shape[0]])
     ld_sample = np.random.randint(0, gts.shape[0], size=ld_n)
     ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float64), gts.map, max_dist=1)
-    gts.weights = np.power(ld, -1)
+    gts.weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
     # IBD
     print('Inferring IBD')
     ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float64), gts.freqs, gts.map, gts.weights, gts.error_probs)

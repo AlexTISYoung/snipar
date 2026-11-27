@@ -8,7 +8,7 @@
 # uncertainty from estimating the variance component.  The observed joint
 # Hessian supplies the bread; stacked family scores supply the sandwich meat.
 
-laplace_family_loglik <- function(parameters, X, y, family_index) {
+laplace_family_loglik <- function(parameters, X, y, family_index, return_scores = FALSE) {
     theta <- parameters[[1L]]
     beta <- parameters[-1L]
     eta_fixed <- as.numeric(X %*% beta)
@@ -38,7 +38,47 @@ laplace_family_loglik <- function(parameters, X, y, family_index) {
     curvature <- 1 + theta^2 * family_sum(probability * (1 - probability))
     # log(1 + exp(eta)), evaluated without overflow.
     log_normalizer <- pmax(eta, 0) + log1p(exp(-abs(eta)))
-    family_sum(y * eta - log_normalizer) - 0.5 * u^2 - 0.5 * log(curvature)
+    loglik <- family_sum(y * eta - log_normalizer) - 0.5 * u^2 - 0.5 * log(curvature)
+    if (!return_scores) return(loglik)
+
+    # The conditional mode satisfies u = theta * sum(y - p). Implicit
+    # differentiation gives its coefficient and theta derivatives. The
+    # derivative of u cancels from the conditional log-likelihood but remains
+    # in the Laplace log-determinant correction.
+    residual <- y - probability
+    weight <- probability * (1 - probability)
+    weight_derivative <- weight * (1 - 2 * probability)
+    score_sum <- family_sum(residual)
+    weight_sum <- family_sum(weight)
+    tilt_sum <- family_sum(weight_derivative)
+    du_beta <- -theta * rowsum(X * weight, family_index) / curvature
+    du_theta <- (score_sum - theta * u * weight_sum) / curvature
+    score_beta <- rowsum(X * residual, family_index) -
+        (.5 * theta^2 / curvature) *
+        (rowsum(X * weight_derivative, family_index) + (theta * tilt_sum) * du_beta)
+    score_theta <- u * score_sum -
+        (2 * theta * weight_sum + theta^2 * (u + theta * du_theta) * tilt_sum) /
+        (2 * curvature)
+    list(loglik = loglik, scores = cbind(theta = score_theta, score_beta))
+}
+
+
+laplace_family_information <- function(parameters, X, y, family_index, keep) {
+    # Central differences of the analytical gradient need two evaluations
+    # per parameter, versus a quadratic number of deviance evaluations.
+    information <- matrix(NA_real_, nrow = length(keep), ncol = length(keep))
+    for (column in seq_along(keep)) {
+        index <- keep[[column]]
+        step <- .Machine$double.eps^(1 / 3) * (1 + abs(parameters[[index]]))
+        upper <- lower <- parameters
+        upper[[index]] <- upper[[index]] + step
+        lower[[index]] <- lower[[index]] - step
+        score_upper <- laplace_family_loglik(upper, X, y, family_index, return_scores = TRUE)$scores
+        score_lower <- laplace_family_loglik(lower, X, y, family_index, return_scores = TRUE)$scores
+        information[, column] <- colSums(score_lower[, keep, drop = FALSE] -
+                                        score_upper[, keep, drop = FALSE]) / (2 * step)
+    }
+    (information + t(information)) / 2
 }
 
 
@@ -69,7 +109,8 @@ logistic_family_influence <- function(fit, term = "proband") {
     if (n_families < 3L) stop("At least three independent families are required")
     if (!(term %in% colnames(X))) stop("Coefficient not found: ", term)
     parameters <- c(theta, lme4::fixef(fit))
-    loglik <- laplace_family_loglik(parameters, X, y, family_index)
+    derivative <- laplace_family_loglik(parameters, X, y, family_index, return_scores = TRUE)
+    loglik <- derivative$loglik
     fitted_loglik <- as.numeric(logLik(fit))
     discrepancy <- sum(loglik) - fitted_loglik
     if (abs(discrepancy) > max(1e-5, length(y) * 1e-7)) {
@@ -77,26 +118,13 @@ logistic_family_influence <- function(fit, term = "proband") {
     }
     boundary <- as.numeric(theta) <= 1e-4
     keep <- if (boundary) seq.int(2L, length(parameters)) else seq_along(parameters)
-    scores <- matrix(NA_real_, nrow = n_families, ncol = length(keep))
-    for (column in seq_along(keep)) {
-        index <- keep[[column]]
-        step <- .Machine$double.eps^(1 / 3) * (1 + abs(parameters[[index]]))
-        upper <- lower <- parameters
-        upper[[index]] <- upper[[index]] + step
-        lower[[index]] <- lower[[index]] - step
-        scores[, column] <- (
-            laplace_family_loglik(upper, X, y, family_index) -
-                laplace_family_loglik(lower, X, y, family_index)
-        ) / (2 * step)
-    }
-    hessian <- fit@optinfo$derivs$Hessian
-    if (is.null(hessian) || !all(dim(hessian) == length(parameters))) {
-        stop("The joint lme4 Hessian for theta and fixed effects is unavailable")
-    }
-    # lme4 stores the Hessian of -2 log L, not -log L.
-    information <- hessian[keep, keep, drop = FALSE] / 2
+    scores <- derivative$scores[, keep, drop = FALSE]
+    information <- laplace_family_information(parameters, X, y, family_index, keep)
     inverse_information <- chol2inv(chol(information))
     coefficient_indices <- match(seq_len(ncol(X)) + 1L, keep)
+    selected_term <- match(term, colnames(X))
+    model_se <- sqrt(inverse_information[coefficient_indices[selected_term],
+                                        coefficient_indices[selected_term]])
     scaled_score <- colSums(scores) / sqrt(diag(information))
     if (max(abs(scaled_score)) > 0.05) {
         stop("Laplace score is not sufficiently close to zero at fitted parameters: ",
@@ -117,7 +145,7 @@ logistic_family_influence <- function(fit, term = "proband") {
         influence = influence,
         influences = influences,
         estimate = as.numeric(lme4::fixef(fit)[[term]]),
-        model_se = sqrt(as.matrix(vcov(fit))[term, term]),
+        model_se = model_se,
         n = length(y),
         response = y,
         row_names = rownames(model.frame(fit)),
@@ -134,7 +162,7 @@ logistic_family_influence <- function(fit, term = "proband") {
             pirls_tolerance = unname(fit@devcomp$cmp[["tolPwrss"]]),
             max_scaled_score = max(abs(scaled_score)),
             hessian_condition = kappa(information),
-            model_based_se = sqrt(as.matrix(vcov(fit))[term, term]),
+            model_based_se = model_se,
             stringsAsFactors = FALSE
         )
     )
@@ -427,7 +455,7 @@ fit_pgs_binary_model <- function(analysis, terms, maxfun, generation) {
             # PIRLS stops at 1e-9, even when the conditional modes are accurate.
             # Tighten the fit so its objective agrees with the family scores;
             # retain the independent likelihood and score checks above.
-            calc.derivs = TRUE, tolPwrss = 1e-12, check.conv.singular = "ignore"
+            calc.derivs = FALSE, tolPwrss = 1e-12, check.conv.singular = "ignore"
         )
     )
     optimizer_code <- fit@optinfo$conv$opt

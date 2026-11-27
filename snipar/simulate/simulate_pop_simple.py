@@ -7,24 +7,13 @@ def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
 
 def simulate_sibs(father,mother, blocksize=200):
-    # Compute blocks without recombination
-    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
-    blocksizes = np.zeros((n_blocks),dtype=int)
-    for i in range(n_blocks-1):
-        blocksizes[i] = blocksize
-    blocksizes[n_blocks-1] = father.shape[0]-np.sum(blocksizes)
-    meioses = [[np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)],
-               [np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)]]
-    for i in range(2):
-        for j in range(2):
-            block_start=0
-            for k in range(n_blocks):
-                block_end = block_start+blocksizes[k]
-                meioses[i][j][block_start:block_end] = np.random.binomial(1,0.5)
-                block_start = block_end
+    nsnp = father.shape[0]
+    n_blocks = (nsnp + blocksize - 1) // blocksize
+    meioses = np.repeat(np.random.randint(0, 2, (2, 2, n_blocks)),
+                        blocksize, axis=2)[:, :, :nsnp]
     ibd = np.array(meioses[0][0]==meioses[1][0],dtype=np.int8)+np.array(meioses[0][1]==meioses[1][1],dtype=np.int8)
     gts = np.zeros((2,father.shape[0],2),dtype=np.int8)
-    snp_index = np.array([x for x in range(0, father.shape[0])])
+    snp_index = np.arange(father.shape[0])
     for i in range(0,2):
         gts[i, :, 0] = father[snp_index,meioses[i][0]]
         gts[i, :, 1] = mother[snp_index, meioses[i][1]]
@@ -57,7 +46,7 @@ parser.add_argument('n_one_parent',type=int,help='Number of families to observe 
 parser.add_argument('p_sib_missing',type=float,help='Probability that one sibling is missing')
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
 parser.add_argument('--blocksize',type=int,help='Size of blocks without recombination (number of SNPs)', default=None)
-parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default="")
+parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default=1)
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -73,6 +62,11 @@ if args.blocksize is None:
     blocksize = nsnp
 else:
     blocksize = args.blocksize
+
+if nsnp < 3 or nfam < 1 or blocksize < 1:
+    parser.error("Require at least three SNPs, one family and a positive block size")
+if min(n_sib_only, n_one_parent) < 0 or n_sib_only + n_one_parent > nfam:
+    parser.error("The requested missing-parent groups must fit within the number of families")
 
 father_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
 mother_gts = np.zeros((nfam,nsnp,2),dtype=np.int8)
@@ -174,7 +168,7 @@ for i in range(0,nfam):
                 start_snps.append(f'{chrom}_rs'+str(j))
                 ibd_type.append(ibd[i,j])
     if init_ibd>0:
-        end_snps.append(f'{chrom}_rs'+str(j))
+        end_snps.append(f'{chrom}_rs'+str(ibd.shape[1] - 2))
     # Write to file
     nseg = len(start_snps)
     if nseg>0:
@@ -184,7 +178,6 @@ for i in range(0,nfam):
 king_out.close()
 
 ## Write full haps file
-haps_out = open(outprefix+'.haps','w')
 haps_matrix = np.zeros((nsnp,2*(2+fsize)*nfam),dtype=np.int8)
 nhaps = 0
 for i in range(0,nfam):
@@ -214,10 +207,9 @@ np.savetxt(args.outprefix+'.haps',haps_out,fmt='%s')
 # Save segs in snipar format
 sibpairs = np.column_stack(([str(x)+'_0' for x in range(nfam)],
                             [str(x)+'_1' for x in range(nfam)]))
-segs = write_segs_from_matrix(ibd, sibpairs, [f'{chrom}_rs'+str(x) for x in range(nsnp)], 
-                                [f"{chrom*nsnp+x}" for x in range(nsnp)], 
-                                np.arange(0,1,1/float(nsnp)), chrom,
-                                args.outprefix+'.chr_'+str(chrom)+'.ibd.segments.gz')
+write_segs_from_matrix(ibd, sibpairs, [f"{chrom}_rs{x}" for x in range(nsnp)],
+                      chrom * nsnp + np.arange(nsnp), np.arange(nsnp) / nsnp, chrom,
+                      args.outprefix + f".chr_{chrom}.ibd.segments.gz", return_segments=False)
 
 # Write sample file
 sample_out = open(outprefix+'.sample','w')
@@ -271,8 +263,8 @@ for i in range(n_sib_only+n_one_parent,nfam):
 remove.close()
 
 # Remove from KING Kinship file
-remove = np.loadtxt(outprefix+'_remove.txt',dtype=str)
-remove_dict = make_id_dict(remove,1)
+with open(outprefix + "_remove.txt") as handle:
+    remove_dict = {line.split()[1] for line in handle}
 kin = np.loadtxt(args.outprefix+'.king.kin0',dtype=str,delimiter='\t')
 in_remove = np.logical_or(np.array([x in remove_dict for x in kin[:,1]]),
                           np.array([x in remove_dict for x in kin[:,3]]))
@@ -281,7 +273,7 @@ np.savetxt(args.outprefix+'.king.kin0',kin,fmt='%s',delimiter='\t')
 
 # Write map file
 ppos = [f"{chrom*nsnp+x}" for x in range(nsnp)]
-gpos = np.arange(0,1,1/float(nsnp))
+gpos = np.arange(nsnp) / nsnp
 map = np.vstack((np.array(['pposition','gposition']),
                  np.vstack((ppos,gpos)).T))
 np.savetxt(args.outprefix+'.genetic_map.txt',map,fmt='%s')

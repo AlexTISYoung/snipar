@@ -426,6 +426,33 @@ check_cli <- function() {
     cat("PASS: CLI covariates, string IDs, matched samples, all covariance files, parental sums and sibling effects\n")
 }
 
+
+check_family_derivatives <- function() {
+    set.seed(20261127L)
+    sizes <- c(1L, 3L, 2L, 1L, 6L, 2L, 2L, 4L)
+    n <- sum(sizes)
+    family_index <- sample(rep(seq_along(sizes), sizes))
+    X <- cbind(1, matrix(rnorm(n * 4), nrow = n))
+    y <- rbinom(n, 1, .55)
+    for (theta in c(0, .35, 1.7)) {
+        parameters <- c(theta, -.25, .45, -.6, .9, -.35)
+        likelihood <- function(par) laplace_family_loglik(par, X, y, family_index)
+        analytical <- laplace_family_loglik(parameters, X, y, family_index, return_scores = TRUE)
+        assert_close(analytical$scores, numDeriv::jacobian(likelihood, parameters),
+                     3e-7, "Analytical scores by family")
+        for (keep in list(seq_along(parameters), seq_along(parameters)[-1])) {
+            # A larger initial step prevents cancellation in the numerical
+            # reference when the random-intercept SD is exactly zero.
+            numerical <- numDeriv::hessian(function(par) -sum(likelihood(par)), parameters,
+                                            method.args = list(eps = .001, d = .03))
+            actual <- laplace_family_information(parameters, X, y, family_index, keep)
+            assert_close(actual, numerical[keep, keep, drop = FALSE],
+                         3e-7, "Observed information from analytical scores")
+        }
+    }
+}
+
+check_family_derivatives()
 check_parser_guards()
 check_table_width()
 check_numerics()

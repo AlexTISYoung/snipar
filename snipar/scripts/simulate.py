@@ -73,45 +73,44 @@ def main(args):
             raise ValueError('Selection requires positive --n_stabilizing, --selection_variance and --nfam')
         if args.n_random or args.n_am or args.v_indir or args.beta_vert:
             raise ValueError('Selection currently supports direct effects only, without additional random/assortative generations')
+        if args.selection_nfam is not None and args.selection_nfam < args.nfam:
+            raise ValueError("The selection breeding pool must contain at least --nfam pairs")
         if args.bgen and args.selection_nfam is not None:
             raise ValueError('The breeding pool is determined by the input haplotypes when using --bgen')
         stabilizing_selection_weights(np.zeros(1), args.selection_variance, args.selection_optimum)
     elif args.selection_variance is not None or args.selection_nfam is not None:
         raise ValueError('Selection parameters require --n_stabilizing')
-    if args.beta_vert > 0:
-        if args.v_indir >0:
-            raise(ValueError('Cannot simulate both indirect effects and vertical transmission separately. Choose one'))
-        if args.beta_vert > np.power(2*(1+args.r_par),-0.5):
-            raise(ValueError('Vertical transmission parameter would lead to infinite variance. Reduce to below 1/sqrt(2(1+r_par))'))
+    if args.n_causal < 1 or (args.nfam is not None and args.nfam < 1):
+        raise ValueError("Number of causal loci and families must be positive")
+    if args.n_random < 0 or args.n_am < 0:
+        raise ValueError("Numbers of mating generations must be non-negative")
+    if args.r_par is None and args.n_am:
+        raise ValueError("Must specify parental phenotypic correlation for assortative mating")
+    if args.r_par is not None and not -1 <= args.r_par <= 1:
+        raise ValueError("Parental correlation must be between -1 and 1")
+    if not 0 <= args.h2 <= 1:
+        raise ValueError("Heritability must be between 0 and 1")
+    if not np.isfinite(args.beta_vert):
+        raise ValueError("Vertical transmission coefficient must be finite")
+    if args.beta_vert:
+        if args.v_indir:
+            raise ValueError("Cannot simulate both indirect effects and vertical transmission separately. Choose one")
+        parental_correlation = args.r_par if args.n_am else 0
+        if 2 * (1 + parental_correlation) * args.beta_vert**2 >= 1:
+            raise ValueError("Vertical transmission parameter would lead to infinite variance.")
         if args.n_random == 0:
-            print('Adding an additional initial generation of random-mating in order to initialize vertical transmission model')
+            print("Adding an additional initial generation of random-mating in order to initialize vertical transmission model")
             args.n_random = 1
-    print('Simulating an initial generation by random-mating')
-    print('Followed by '+str(args.n_random)+' generations of random-mating')
-    print('Followed by '+str(args.n_am)+' generations of assortative mating')
-    # Check parental correlation
-    if args.n_am > 0:
-        if args.r_par is not None:
-            if (args.r_par**2) <= 1:
-                r_y = args.r_par
-            else:
-                raise(ValueError('Parental correlation must be between -1 and 1'))
-        else:
-            raise(ValueError('Must specify parental phenotypic correlation for assortative mating'))
-    # Check heritability
-    if 0 <= args.h2 <= 1:
-        h2 = args.h2
-    else:
-        raise(ValueError('Heritability must be between 0 and 1'))
-    # Check v_indirect
-    if not args.v_indir==0:
+    print("Simulating an initial generation by random-mating")
+    print(f"Followed by {args.n_random} generations of random-mating")
+    print(f"Followed by {args.n_am} generations of assortative mating")
+    if not np.isfinite(args.v_indir) or args.v_indir < 0:
+        raise ValueError("Indirect genetic variance must be finite and non-negative")
+    if args.v_indir:
         if args.r_dir_indir is None:
-            raise(ValueError('Must specify correlation between direct and indirect genetic effects'))
-        else:
-            if (args.r_dir_indir**2) > 1:
-                raise(ValueError('Correlation between direct and indirect effects must be between -1 and 1'))
-        if args.v_indir < 0:
-            raise(ValueError('Heritability must be between 0 and 1'))
+            raise ValueError("Must specify correlation between direct and indirect genetic effects")
+        if not -1 <= args.r_dir_indir <= 1:
+            raise ValueError("Correlation between direct and indirect effects must be between -1 and 1")
 
     #### Obtain haplotypes for base generation ###
     if args.bgen is None:
@@ -125,7 +124,7 @@ def main(args):
             n_breeding, args.n_causal, maf=args.maf, min_maf=args.min_maf)
     else:
         unlinked = False
-        haps, maps, snp_ids, alleles, positions, chroms = haps_from_bgen(args.bgen, args.chr_range)
+        haps, maps, snp_ids, alleles, positions, chroms = haps_from_bgen(args.bgen, args.chr_range, None if selection else args.nfam)
     ######################## Perform simulation ##################
     if selection:
         new_haps, haps, father_indices, mother_indices, ibd, ped, a, V, selection_metadata = forward_sim_stabilizing_selection(
@@ -212,9 +211,9 @@ def main(args):
         # Segments
         if not args.unphased_impute:
             ibd[i] = np.sum(ibd[i],axis=2)
-        segs = write_segs_from_matrix(ibd[i], sibpairs,
+        write_segs_from_matrix(ibd[i], sibpairs,
                                     snp_ids[i], positions[i],maps[i],chroms[i],
-                                    args.outprefix+'chr_'+str(chroms[i])+'.segments.gz')
+                                    args.outprefix+'chr_'+str(chroms[i])+'.segments.gz', return_segments=False)
     header = 'SNP A1 A2 direct ' + ('direct_v1' if args.v_indir == 0 else 'indirect')
     with open(args.outprefix+'causal_effects.txt', 'w') as output:
         output.write(header + '\n')

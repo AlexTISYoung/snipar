@@ -162,3 +162,17 @@ def test_legacy_external_sample_validated_by_both_readers(tmp_path):
     with pytest.raises(FileNotFoundError):
         _bgen(filename, tmp_path / "missing.sample", reader=opened)
     opened.close.assert_called_once_with()
+
+
+def test_legacy_rebuilds_unreadable_metadata_with_current_mtime(tmp_path):
+    pytest.importorskip('bgen_reader')
+    filename = tmp_path / 'chr.bgen'
+    shutil.copyfile(DATA / 'chr_1.bgen', filename)
+    index = filename.with_name(filename.name + '.metadata2.mmm')
+    index.write_bytes(b'partial metadata mmap')
+    newer = filename.stat().st_mtime_ns + 2_000_000_000
+    os.utime(index, ns=(newer, newer))
+    with open_bgen(filename) as reader:
+        assert reader.rsids[0] == '1_rs0'
+        assert reader.read(([0], [0])).shape == (1, 1, 4)
+    assert index.stat().st_size > 1000

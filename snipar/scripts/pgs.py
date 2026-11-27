@@ -51,14 +51,15 @@ parser.add_argument('--chr_range',
                     action=NumRangeAction,
                     help='Chromosomes for score computation. Supply ranges in x-y format or individual chromosome numbers.', default=None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
-parser.add_argument('--weights',type=str,help='Location of the PGS allele weights', default = None)
+score_input = parser.add_mutually_exclusive_group(required=True)
+score_input.add_argument('--weights',type=str,help='Location of the PGS allele weights', default=None)
 parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='SNP')
 parser.add_argument('--beta_col',type=str,help='Name of column with betas/weights for each SNP',default='b')
 parser.add_argument('--A1',type=str,help='Name of column with allele beta/weights are given with respect to',default='A1')
 parser.add_argument('--A2',type=str,help='Name of column with alternative allele',default='A2')
 parser.add_argument('--sep',type=str,help='Column separator in weights file (default: whitespace).',default=None)
 parser.add_argument('--phenofile',type=str,help='Location of the phenotype file',default = None)
-parser.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
+score_input.add_argument('--pgs', type=str, help='Location of the pre-computed PGS file', default=None)
 parser.add_argument('--covar',type=str,help='Path to file with covariates: plain text file with columns FID, IID, covar1, covar2, ..', default=None)
 parser.add_argument('--fit_sib', action='store_true', default=False, help='Fit indirect effects from siblings')
 parser.add_argument('--parsum',action='store_true',default = False, help='Use the sum of maternal and paternal PGS in the regression (useful when imputed from sibling data alone)')
@@ -101,6 +102,8 @@ def main(args):
         num_threads = numba_config.NUMBA_NUM_THREADS
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
+    if args.compute_controls and (args.imp is None or args.phenofile is not None):
+        raise ValueError('Use --compute_controls with imputed genotypes and analyse the resulting PGS files separately')
     if args.weights is not None:
         if args.bed is None and args.bgen is None:
             raise ValueError('Weights provided but no observed genotypes provided')
@@ -137,42 +140,32 @@ def main(args):
             if args.pedigree is None:
                 raise(ValueError('Must provide pedigree if not providing imputed parental genotypes'))
             print('Reading pedigree from '+str(args.pedigree))
-            ped = np.loadtxt(args.pedigree,dtype=str)
+            ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
             if ped.shape[1] < 4:
                 raise(ValueError('Not enough columns in pedigree file'))
             elif ped.shape[1] > 4:
                 print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+                ped = ped[:, :4]
         else:
             ped = None
         print('Computing PGS')
-        if args.bed is not None:
-            print('Observed genotypes file: '+bedfiles[0])
-        if args.bgen is not None:
-            print('Observed genotypes file: '+bgenfiles[0])
-        if args.imp is not None:
-            print('Imputed genotypes file: '+pargts_list[0])
-        pg = pgs.compute(p, bedfile=bedfiles[0], bgenfile=bgenfiles[0], par_gts_f=pargts_list[0], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
-        for i in range(1,chroms.shape[0]):
-            if args.bed is not None:
-                print('Observed genotypes file: '+bedfiles[i])
-            if args.bgen is not None:
-                print('Observed genotypes file: '+bgenfiles[i])
-            if args.imp is not None:
-                print('Imputed genotypes file: '+pargts_list[i])
-            if args.compute_controls:
-                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
-                if pg_i[0] is not None:
-                    if pg is None:
-                        pg = pg_i
-                    else:
-                        pg = [pg[x].add(pg_i[x]) for x in range(0, len(pg))]
-            else:
-                pg_i = pgs.compute(p, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i], ped=ped, sib=args.fit_sib, compute_controls=args.compute_controls, batch_size=args.batch_size)
-                if pg_i is not None:
-                    if pg is not None:
-                        pg = pg.add(pg_i)
-                    else:
-                        pg = pg_i
+        pg = None
+        for bedfile, bgenfile, imputed in zip(bedfiles, bgenfiles, pargts_list):
+            print('Observed genotypes file:', bedfile if bedfile is not None else bgenfile)
+            if imputed is not None:
+                print('Imputed genotypes file:', imputed)
+            scores = pgs.compute(p, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=imputed, ped=ped,
+                                 sib=args.fit_sib, compute_controls=args.compute_controls,
+                                 batch_size=args.batch_size)
+            if scores is not None:
+                if pg is None:
+                    pg = scores
+                elif args.compute_controls:
+                    pg = [total.add(part) for total, part in zip(pg, scores)]
+                else:
+                    pg = pg.add(scores)
+        if pg is None:
+            raise ValueError('No weighted SNPs with matching alleles in the genotype inputs')
         print('PGS computed')
         ####### Assortative mating adjustment #######
         if not args.no_am_adj:
@@ -200,11 +193,6 @@ def main(args):
         if args.phenofile is None:
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
-        pg = pgs.read_pgs(args.pgs)
-        if not args.parsum:
-            if 'parental' in pg.sid and 'paternal' not in pg.sid:
-                print('Using sum of paternal and maternal PGS as no paternal & maternal PGS values found')
-                args.parsum = True
         pg = pgs.read_pgs(args.pgs)
         if not args.parsum:
             if 'parental' in pg.sid and 'paternal' not in pg.sid:

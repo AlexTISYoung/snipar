@@ -20,10 +20,7 @@ def get_indices_given_ped(ped, gts_ids, imp_fams=None, ids=None, sib=False, incl
         ids = gts_ids
     # Find individuals with genotyped siblings
     if sib:
-        # Look in full genotype sample in case some genotyped sibs are not in ids
-        # if sib_diff:
-        #     all_sibs = True
-        ids = gts_ids
+        # Genotyped siblings can be outside the requested phenotype cohort.
         ids = find_individuals_with_sibs(ids, ped, gts_ids, return_ids_only=True)
         if verbose:
             print('Found ' + str(ids.shape[0]) + ' individuals with genotyped siblings')
@@ -229,7 +226,8 @@ def remove_sibs(ped, gts_f, ids, verbose=True):
     if sibs_indices.shape[0] > 0:
         print(f"{sibs_indices.shape[0]} individuals have no complete parental genotypes, but have sib genotypes. The power of the unified estimator can be increased by adding imputed parental genotypes.")
     # Take those that can be used
-    mask = np.array([i not in sibs_indices for i in range(len(ids))])
+    mask = np.ones(len(ids), dtype=bool)
+    mask[sibs_indices] = False
     ids = ids[mask]
     return ids
 
@@ -368,25 +366,24 @@ def get_fam_means(ids,ped,gts,gts_ids,remove_proband = True, return_famsizes = F
     ids, ids_fams, gts_fams = find_individuals_with_sibs(ids, ped, gts_ids)
     fams = np.unique(ids_fams)
     fams_dict = make_id_dict(fams)
-    # Compute sums of genotypes in each family
-    fam_sums = np.zeros((fams.shape[0],gts.shape[1]),dtype=gts.dtype)
-    fam_counts = np.zeros((fams.shape[0]),dtype=int)
-    for i in range(0,fams.shape[0]):
-        fam_indices = np.where(gts_fams==fams[i])[0]
-        fam_sums[i,:] = np.sum(gts[fam_indices,:],axis=0)
-        fam_counts[i] = fam_indices.shape[0]
-    # Place in vector corresponding to IDs
+    family_rows = [[] for _ in fams]
+    for row, family in enumerate(gts_fams):
+        index = fams_dict.get(family)
+        if index is not None:
+            family_rows[index].append(row)
+    fam_counts = np.array([len(rows) for rows in family_rows], dtype=int)
+    fam_sums = np.empty((len(fams), gts.shape[1]), dtype=gts.dtype)
+    for i, rows in enumerate(family_rows):
+        fam_sums[i] = np.sum(gts[rows], axis=0)
+    selected = np.array([fams_dict[family] for family in ids_fams], dtype=int)
+    G_sib = fam_sums[selected].astype(np.float32)
+    counts = fam_counts[selected]
     if remove_proband:
         gts_id_dict = make_id_dict(gts_ids)
-    G_sib = np.zeros((ids.shape[0],gts.shape[1]),dtype = np.float32)
-    for i in range(0,ids.shape[0]):
-        fam_index = fams_dict[ids_fams[i]]
-        G_sib[i,:] = fam_sums[fam_index,:]
-        n_i = fam_counts[fam_index]
-        if remove_proband:
-            G_sib[i,:] = G_sib[i,:] - gts[gts_id_dict[ids[i]],:]
-            n_i = n_i-1
-        G_sib[i,:] = G_sib[i,:]/float(n_i)
+        indices = np.array([gts_id_dict[iid] for iid in ids], dtype=int)
+        G_sib -= gts[indices]
+        counts = counts - 1
+    G_sib /= counts[:, None]
     if return_famsizes:
         return [gtarray(G_sib, ids),fam_counts,fam_sums]
     else:

@@ -1,6 +1,3 @@
-import gzip
-# import logging
-from functools import lru_cache
 from operator import attrgetter
 from typing import Tuple, NamedTuple, Sequence
 from typing import Literal
@@ -9,15 +6,14 @@ from collections import defaultdict
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize, OptimizeResult
-from numpy.linalg import slogdet, solve, inv
-from scipy.linalg import cho_factor, cho_solve
+from scipy.optimize import minimize
+from numpy.linalg import slogdet, solve
+from scipy.linalg import cho_factor, cho_solve, qr
 from scipy.sparse import csc_matrix, tril
-from scipy.sparse.linalg import splu, SuperLU, spsolve, cg
+from scipy.sparse.linalg import splu, SuperLU, cg
 from snipar.types import FamLabels, SparseGRMRepr, Ids, IdDict
 from snipar.gtarray import gtarray
 
-# logger = logging.getLogger(__name__)
 
 
 
@@ -43,8 +39,6 @@ def build_sib_arr(fam_labels: FamLabels) -> SparseGRMRepr:
     label_indices = defaultdict(list)
     for l, f in enumerate(fam_labels):
         label_indices[f].append(l)
-    f = lambda lst: len(lst) * (len(lst) + 1) / 2
-    n = sum(map(f, label_indices.values()))
     # logger.info('Done creating label_indices. ' + str(len(label_indices)) + ' ' + str(int(n)))
 
     for f, indices_lst in label_indices.items():
@@ -72,13 +66,9 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
     Returns:
         SparseGRMRepr: sparse GRM representation.
     """
-    # Determine delimiter and read header
-    with open(ibdrel_path, 'r') as file:
-        first_line = file.readline()
-        delimiter = '\t' if '\t' in first_line else ' '  
-        header = first_line.split(delimiter)
-        header[-1] = header[-1].strip()  # Remove newline character
-    if not 'ID1' in header and 'ID2' in header:
+    with open(ibdrel_path) as grm:
+        header = grm.readline().split()
+    if not {'ID1', 'ID2'}.issubset(header):
         raise ValueError('GRM should have ID1 and ID2 columns.')
     if 'PropIBD' in header:
         relcol = 'PropIBD'
@@ -86,78 +76,46 @@ def build_ibdrel_arr(ibdrel_path: str, id_dict: IdDict,
         relcol = 'relatedness'
     else:
         raise ValueError('GRM should have PropIBD or relatedness column.')
-    king = pd.read_csv(ibdrel_path,
-                       sep=delimiter)[['ID1', 'ID2',relcol]]
-    king['ID1'] = king['ID1'].astype(str)
-    king['ID2'] = king['ID2'].astype(str)
-
-    # filter out IDs that are not in keep
-    # logger.info('Filtering...')
-    king = king.query('ID1 in @keep & ID2 in @keep & PropIBD > @thres')
-    king = king.reset_index(drop=True)
-    n = king.shape[0]
-    # the additional len(keep) entries are for diagonal terms
-    data = np.zeros(n + len(keep))
-    row_ind = np.zeros(n + len(keep), dtype=int)
-    col_ind = np.zeros(n + len(keep), dtype=int)
-    for row in king.itertuples():
-        id1 = row.ID1
-        id2 = row.ID2
-        if row.PropIBD > 0.8:
-            raise ValueError(f'Impossible ibd relatedness {row.PropIBD} for pair ({id1}, {id2}). MZ pairs should be removed.')
-        ind1, ind2 = id_dict[id1], id_dict[id2]
-        ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
-        # data[row.Index] = 0. if ignore_sib and row.InfType == 'FS' else row.PropIBD # if row.PropIBD > thres else 0.
-        data[row.Index] = row.PropIBD # if row.PropIBD > thres else 0.
-        if ind1 == ind2: raise RuntimeError('ind1 and ind2 cannot equal')
-        # data[row.Index] = min(0.5, row.PropIBD) # if row.PropIBD > thres else 0.
-        row_ind[row.Index] = ind1
-        col_ind[row.Index] = ind2
-    for i in range(len(keep)):
-        data[n + i] = 1.
-        row_ind[n + i] = i
-        col_ind[n + i] = i
-    # logger.info('Done building ibd arr.')
-    return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
+    table = pd.read_csv(ibdrel_path, sep=r'\s+', usecols=['ID1', 'ID2', relcol],
+                        dtype={'ID1': str, 'ID2': str}, keep_default_na=False)
+    subset = table[table['ID1'].isin(keep) & table['ID2'].isin(keep) & (table[relcol] > thres)]
+    invalid = subset[subset[relcol] > 0.8]
+    if not invalid.empty:
+        row = invalid.iloc[0]
+        raise ValueError(f"Impossible ibd relatedness {row[relcol]} for pair ({row['ID1']}, {row['ID2']}). MZ pairs should be removed.")
+    left = subset['ID1'].map(id_dict).to_numpy(dtype='uint32')
+    right = subset['ID2'].map(id_dict).to_numpy(dtype='uint32')
+    if np.any(left == right):
+        raise ValueError('GRM contains a self-pair; diagonal entries are added automatically.')
+    diagonal = np.array([id_dict[iid] for iid in keep], dtype='uint32')
+    return (np.concatenate((subset[relcol].to_numpy(dtype=float), np.ones(len(diagonal)))),
+            np.concatenate((np.maximum(left, right), diagonal)),
+            np.concatenate((np.minimum(left, right), diagonal)))
 
 
 def build_grm_arr(grm_path: str, id_dict: IdDict,
                   thres: float) -> SparseGRMRepr:
     """Build GRM data array and corresponding indices.
     """
-    gcta_id = dict()
-
-    row_n = 1  # index starts from 1 in gcta grm output
-    with open(f'{grm_path}.grm.id', 'r') as f:
-        for line in f:
-            id = line.strip().split('\t')[1]
-            gcta_id[row_n] = id
-            row_n += 1
-    n = len(id_dict)
-    # grm_arr = np.full(int(n * (n + 1) / 2), np.nan)
-    data = []
-    row_ind = []
-    col_ind = []
-
-    # logger.info('Building grm...')
-    with gzip.open(f'{grm_path}.grm.gz', 'rt') as f:
-        for line in f:
-            id1, id2, _, gr = line.strip().split('\t')
-            gr_: float = float(gr)
-            if gr_ < thres:
-                # ignore relatedness coeffs less than thres
-                continue
-            id1, id2 = gcta_id[int(id1)], gcta_id[int(id2)]
-            if id1 not in id_dict or id2 not in id_dict:
-                # ignore individuals that are not in id_dict
-                continue
-            ind1, ind2 = id_dict[id1], id_dict[id2]
-            ind1, ind2 = max(ind1, ind2), min(ind1, ind2)
-            data.append(gr_)
-            row_ind.append(ind1)
-            col_ind.append(ind2)
-    # logger.info(f'Done building grm. nnz={len(data)}')
-    return np.array(data), np.array(row_ind, dtype='uint32'), np.array(col_ind, dtype='uint32')
+    grm_ids = np.loadtxt(f'{grm_path}.grm.id', dtype=str, usecols=1, ndmin=1)
+    # GRM indices are one-based. Preserve -1 as the marker for off-cohort IDs.
+    index = np.full(grm_ids.size + 1, -1, dtype=np.int64)
+    index[1:] = [id_dict.get(iid, -1) for iid in grm_ids]
+    arrays = ([], [], [])
+    with pd.read_csv(f'{grm_path}.grm.gz', sep=r'\s+', header=None, usecols=[0, 1, 3],
+                     dtype={0: np.int64, 1: np.int64, 3: np.float64}, chunksize=250_000) as chunks:
+        for chunk in chunks:
+            relevant = chunk[3].to_numpy() >= thres
+            ids = chunk.loc[relevant, [0, 1]].to_numpy()
+            if np.any(ids < 1) or np.any(ids >= len(index)):
+                raise ValueError('GCTA GRM index lies outside the .grm.id file')
+            row, col = index[ids].T
+            valid = (row >= 0) & (col >= 0)
+            arrays[0].append(chunk[3].to_numpy()[relevant][valid])
+            arrays[1].append(np.maximum(row[valid], col[valid]).astype('uint32'))
+            arrays[2].append(np.minimum(row[valid], col[valid]).astype('uint32'))
+    return tuple(np.concatenate(chunks) if chunks else np.empty(0, dtype)
+                 for chunks, dtype in zip(arrays, ('float64', 'uint32', 'uint32')))
 
 
 def match_grm_ids(ids: Ids,
@@ -167,21 +125,18 @@ def match_grm_ids(ids: Ids,
                   ) -> Tuple[np.ndarray, np.ndarray]:
     """Match ids with GRM individual ids.
     """
-    orig_ids = pd.DataFrame({'ids': ids, 'fam_labels': fam_labels})
     if grm_source == 'gcta':
-        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep=r'\s+', names=[
-                              '_', 'ids_'], dtype={'_': str, 'ids_': str})[['ids_']]
+        grm_ids = np.loadtxt(f'{grm_path}.grm.id', dtype=str, usecols=1, ndmin=1)
     elif grm_source == 'ibdrel':
-        grm_ids = pd.read_csv(grm_path,
-                              sep='\t')[['ID1', 'ID2']]
-        id1 = grm_ids['ID1'].to_numpy(dtype=str)
-        id2 = grm_ids['ID2'].to_numpy(dtype=str)
-        grm_ids = pd.DataFrame({'ids_': np.union1d(id1, id2)})
+        pairs = pd.read_csv(grm_path, sep=r'\s+', usecols=['ID1', 'ID2'],
+                            dtype=str, keep_default_na=False)
+        grm_ids = np.unique(pairs.to_numpy().ravel())
     else:
         raise ValueError('Incorrect source.')
-    orig_ids = orig_ids.merge(grm_ids, how='inner',
-                              left_on='ids', right_on='ids_')
-    return orig_ids['ids'].to_numpy(), orig_ids['fam_labels'].to_numpy()
+    common = np.isin(ids, grm_ids)
+    if not np.any(common):
+        raise ValueError('No analysis individuals are present in the GRM.')
+    return ids[common], fam_labels[common]
 
 
 class GradHessComponents(NamedTuple):
@@ -189,16 +144,88 @@ class GradHessComponents(NamedTuple):
     P_varcomp_mats: Tuple[np.ndarray, ...]
 
 
-# cache class attribute calculation dependent on another attribute
-# https://stackoverflow.com/questions/48262273/python-bookkeeping-dependencies-in-cached-attributes-that-might-change#answer-48264126
 def cached_property_depends_on(*args):
     attrs = attrgetter(*args)
+
     def decorator(func):
-        _cache = lru_cache(maxsize=None)(lambda self, _: func(self))
-        def _with_tracked(self):
-            return _cache(self, attrs(self))
-        return property(_with_tracked, doc=func.__doc__)
+        name = f'_cached_{func.__name__}'
+
+        def get(self):
+            key = attrs(self)
+            cached = self.__dict__.get(name)
+            if cached is None or cached[0] != key:
+                cached = self.__dict__[name] = (key, func(self))
+            return cached[1]
+
+        return property(get, doc=func.__doc__)
+
     return decorator
+
+
+def _precision_terms(lu, y, covariates):
+    """Precompute the covariate projection in inverse covariance geometry."""
+    precision_y = lu.solve(np.asarray(y, dtype=float))
+    if covariates is None or not covariates.shape[1]:
+        return precision_y, None
+    covariates = np.asarray(covariates, dtype=float)
+    precision_z = lu.solve(covariates)
+    # A covariate may be constant or absent within a particular sample group.
+    projected_z = precision_z @ np.linalg.pinv(covariates.T @ precision_z, hermitian=True)
+    return precision_y - projected_z @ (covariates.T @ precision_y), (covariates, projected_z)
+
+
+def _fit_gls_batch(gts, lu, precision_y, projection, return_weights=False):
+    """Fit individual SNPs using shared covariance and isolate unidentifiable loci."""
+    n, k, loci = gts.shape
+    alpha = np.full((loci, k), np.nan)
+    covariance = np.full((loci, k, k), np.nan)
+    weights = np.full((n, loci), np.nan) if return_weights else None
+    if n < k or not loci:
+        return alpha, covariance, weights
+    # Limit the work arrays for the multi-right-hand-side SuperLU solve.
+    block_size = max(1, min(256, (32 * 1024 ** 2) // (8 * n * k)))
+    for start in range(0, loci, block_size):
+        block = gts[..., start:start + block_size]
+        x = block.reshape(n, -1).astype(float, copy=False)
+        precision_x = lu.solve(x)
+        unadjusted_variance = np.einsum('ij,ij->j', x, precision_x).reshape(k, -1).T
+        if projection is not None:
+            z, projected_z = projection
+            precision_x -= projected_z @ (z.T @ precision_x)
+        x = x.reshape(n, k, -1).transpose(2, 1, 0)
+        precision_x = precision_x.reshape(n, k, -1).transpose(2, 0, 1)
+        information = x @ precision_x
+        information = (information + information.transpose(0, 2, 1)) * 0.5
+        # Test rank in correlation units, so predictor scaling does not determine inclusion.
+        diagonal = np.diagonal(information, axis1=1, axis2=2)
+        tolerance = k * np.finfo(float).eps
+        projection_tolerance = max(n, k, 16) * np.finfo(float).eps
+        valid = np.flatnonzero(np.all(np.isfinite(information), axis=(1, 2)) &
+                               np.all(diagonal > projection_tolerance * unadjusted_variance, axis=1))
+        scales = np.sqrt(diagonal[valid])
+        normalized = information[valid] / scales[:, :, None] / scales[:, None, :]
+        identified = np.linalg.eigvalsh(normalized)[:, 0] > tolerance
+        valid = valid[identified]
+        normalized = normalized[identified]
+        scales = scales[identified]
+        vc = np.linalg.inv(normalized) / scales[:, :, None] / scales[:, None, :]
+        covariance[start + valid] = vc
+        alpha[start + valid] = (vc @ (x[valid] @ precision_y)[..., None])[..., 0]
+        if return_weights:
+            weights[:, start + valid] = np.einsum('lnk,lk->nl', precision_x[valid], vc[:, :, 0])
+    return alpha, covariance, weights
+
+
+def _combine_direct_effects(effects, covariance):
+    """Minimum-variance combination of direct-effect estimates with a common target."""
+    try:
+        weights = solve(covariance, np.ones(len(effects)))
+    except np.linalg.LinAlgError:
+        return np.nan, np.nan
+    total = weights.sum()
+    if total <= 0 or not np.isfinite(total):
+        return np.nan, np.nan
+    return weights @ effects / total, 1 / total
 
 
 class LinearMixedModel:
@@ -214,7 +241,8 @@ class LinearMixedModel:
                  varcomps: Sequence[float] = None,
                  covar_X: np.ndarray = None,
                  add_intercept: bool = False,
-                 add_jitter: bool = False) -> None:
+                 add_jitter: bool = False,
+                 drop_collinear_covariates: bool = False) -> None:
         """Initialize a LinearMixedModel instance.
 
         Args:
@@ -224,6 +252,7 @@ class LinearMixedModel:
             covar_X (np.ndarray, optional): 2-d array holding fixed covariates. Defaults to None.
             add_intercept: (bool): a boolean indicating whether to add intercept or not.
             add_jitter: (bool): a boolean indicating whether to add jitter to the diagonal of the covariance matrix or not.
+            drop_collinear_covariates: (bool): reduce nuisance covariates to independent columns before fitting.
 
         Raises:
             ValueError: y should be a 1-d array.
@@ -232,23 +261,29 @@ class LinearMixedModel:
         """
         if y.ndim != 1:
             raise ValueError('y should be a 1-d array.')
-        self.y = y
+        self.y = np.asarray(y, dtype=float)
         self.n = len(y)
-        self.has_covar  = False
+        self.has_covar = add_intercept or covar_X is not None
         if covar_X is not None:
+            covar_X = np.asarray(covar_X, dtype=float)
             # logger.info('has covar')
             if covar_X.ndim == 1:
-                covar_X = covar_X.reshape((self.n,1))
-            if covar_X.ndim > 2:
+                covar_X = covar_X[:, None]
+            if covar_X.ndim != 2:
                 raise ValueError('covar_X should be a 1-d or 2-d array.')
             if covar_X.shape[0] != y.shape[0]:
                 raise ValueError(
                     f'Dimensions of y and covar_X do not match ({y.shape} and {covar_X.shape}).')
             self.Z  = np.hstack((np.ones((self.n, 1),dtype=covar_X.dtype), covar_X)) if add_intercept else covar_X
-            self.has_covar = True
-        else:
-            pass
-            # self.logger.info('no covar')
+            if drop_collinear_covariates and self.Z.shape[1]:
+                _, triangular, pivot = qr(self.Z, mode='economic', pivoting=True)
+                diagonal = np.abs(np.diag(triangular))
+                tolerance = diagonal.max(initial=0) * max(self.Z.shape) * np.finfo(float).eps
+                independent = np.sort(pivot[:np.count_nonzero(diagonal > tolerance)])
+                self.Z = self.Z[:, independent]
+            self.has_covar = self.Z.shape[1] > 0
+        elif add_intercept:
+            self.Z = np.ones((self.n, 1))
         # self.logger.info(f'#individuals: {self.n}.')
             
         self._varcomp_mats: Tuple[csc_matrix, ...] = \
@@ -264,7 +299,9 @@ class LinearMixedModel:
             if len(varcomps) != self.n_varcomps:
                 raise ValueError('varcomps and varcomps_arr_lst must have the same length.')
             # _varcomps should be tuple for cached_dependent_property to work
-            self._varcomps = tuple(varcomps)
+            self._varcomps = tuple(float(value) for value in varcomps)
+            if not all(np.isfinite(value) and value >= 0 for value in self._varcomps):
+                raise ValueError('Variance components must be finite and nonnegative.')
             self.optimized = True
         else:
             self._varcomps = tuple(
@@ -300,10 +337,7 @@ class LinearMixedModel:
         Returns:
             np.ndarray: 3-d dense array.
         """
-        out  = __class__._empty_solver_result(sps_mat, dense_mat)
-        for i in range(dense_mat.shape[0]):
-            out[i, :, :] = spsolve(sps_mat, dense_mat[i, :, :])
-        return out
+        return __class__.sp_solve_dense3d_lu(sps_mat, dense_mat)
 
     @staticmethod
     def sp_solve_dense3d_lu(sps_mat: csc_matrix,
@@ -324,8 +358,7 @@ class LinearMixedModel:
         out = __class__._empty_solver_result(sps_mat, dense_mat)
         lu = splu(sps_mat)
         for i in range(dense_mat.shape[0]):
-            for j in range(dense_mat.shape[-1]):
-                out[i, :, j] = lu.solve(dense_mat[i, :, j])
+            out[i, :, :] = lu.solve(np.asarray(dense_mat[i], dtype=float))
         return out
     
     @staticmethod
@@ -386,7 +419,7 @@ class LinearMixedModel:
             csc_matrix: V in sparse csc format
         """
         # self.logger.debug('Calculating V...')
-        varcomps = np.array(self._varcomps)
+        varcomps = np.array(self._varcomps, dtype=float)
         varcomps[-1] += self.jitter
         V: csc_matrix = sum(
             varcomps[i] * self._varcomp_mats[i] for i in range(self.n_varcomps)
@@ -411,10 +444,7 @@ class LinearMixedModel:
         Returns:
             float: log determinant of V
         """
-        diag_l = self.V_lu.L.diagonal()
-        diag_u = self.V_lu.U.diagonal()
-        V_logdet = np.log(diag_l).sum() + np.log(diag_u).sum()
-        return V_logdet
+        return np.log(np.abs(self.V_lu.U.diagonal())).sum()
 
     @cached_property_depends_on('_varcomps')
     def Vinv_y(self) -> np.ndarray:
@@ -444,10 +474,7 @@ class LinearMixedModel:
         n, c = dense_mat.shape
         if n != self.n:
             raise ValueError(f'Input dims do not match: {self.n} and {n}.')
-        out = np.empty((self.n, c))
-        for i in range(c):
-            out[:, i] = self.V_lu.solve(dense_mat[:, i])
-        return out
+        return self.V_lu.solve(np.asarray(dense_mat, dtype=float))
 
     @cached_property_depends_on('_varcomps')
     def Vinv_Z(self):
@@ -472,7 +499,7 @@ class LinearMixedModel:
             Tuple[csc_matrix, ...]: a tuple holding all Vinv_varcomp_mat
         """
         # self.logger.debug('Calculating V_inv_varcomp_mats...')
-        return tuple(self.Vinv_mat(self._varcomp_mats[i]) for i in range(self.n_varcomps))
+        return tuple(self.Vinv_mat(matrix.toarray()) for matrix in self._varcomp_mats)
 
     @cached_property_depends_on('_varcomps')
     def P_attrs(self) -> GradHessComponents:
@@ -489,7 +516,7 @@ class LinearMixedModel:
                 self.Vinv_e, self.Vinv_e) / (np.ones(self.n) @ self.Vinv_e)
         P_y = self.Vinv_y - P_comp @ self.y
         P_varcomp_mats = tuple(
-            (self.Vinv_varcomp_mats[i] - P_comp @ self._varcomp_mats[i]).A for i in range(self.n_varcomps))
+            self.Vinv_varcomp_mats[i] - P_comp @ self._varcomp_mats[i] for i in range(self.n_varcomps))
         return GradHessComponents(P_y=P_y, P_varcomp_mats=P_varcomp_mats)
 
     @cached_property_depends_on('_varcomps')
@@ -506,7 +533,7 @@ class LinearMixedModel:
                 P_mat.diagonal().sum() - self.y @ P_mat @ P_y for P_mat in self.P_attrs.P_varcomp_mats
             ]
         )
-        return grad
+        return grad if self.has_covar else grad / self.n
 
     @cached_property_depends_on('_varcomps')
     def hessian(self) -> np.ndarray:
@@ -521,7 +548,7 @@ class LinearMixedModel:
         for i in range(self.n_varcomps):
             for j in range(self.n_varcomps):
                 hessian[i, j] = self.y @ self.P_attrs.P_varcomp_mats[i] @ self.P_attrs.P_varcomp_mats[j] @ P_y
-        return 0.5 * hessian
+        return 0.5 * hessian if self.has_covar else 0.5 * hessian / self.n
 
     @cached_property_depends_on('_varcomps')
     def reml_loglik(self) -> float:
@@ -546,82 +573,56 @@ class LinearMixedModel:
             logdet_eT_Vinv_e = np.log(np.ones(self.n) @ self.Vinv_e)
             return -0.5 * (self.V_logdet + logdet_eT_Vinv_e + yT_Vinv_y - eT_Vinv_y ** 2 / eT_Vinv_e) / self.n
 
-    # TODO: add support for covariates; current version doesn't allow controlling for covariates
-    # TODO: check sparsity of V and apply dense version if not sparse enough
     def dense_reml_loglik(self, method: Literal['chol', 'cg'] = 'cg') -> float:
-        """Dense version of reml_loglik
-
-        Args:
-            method (Literal['chol', 'cg'], optional): a string specifying method for computing V inverse. Defaults to 'cg'.
-
-        Raises:
-            RuntimeError: Conjugate gradient did not converge
-            RuntimeError: Illegal input for conjugate gradient
-
-        Returns:
-            float: REML log likelihood
-        """
-        varcomps = np.array(self._varcomps)
-        varcomps[-1] += self.jitter
-        V: csc_matrix = sum(
-            varcomps[i] * self._varcomp_mats[i] for i in range(self.n_varcomps)
-        )
-        V_ = V.toarray()
+        """Evaluate the REML log likelihood using dense Cholesky or CG solves."""
+        design = self.Z if self.has_covar else np.ones((self.n, 1))
+        V = self.V.toarray()
+        rhs = np.column_stack((self.y, design))
         if method == 'chol':
-            del V
-        _, logdet_V = slogdet(V_)
-        e = np.ones(self.n)
-        if method == 'chol':
-            c, low = cho_factor(V_)
-            Vinv_y = cho_solve((c, low), self.y)
-            Vinv_e = cho_solve((c, low), e)
+            factor = cho_factor(V)
+            logdet_V = 2 * np.log(np.diag(factor[0])).sum()
+            precision = cho_solve(factor, rhs)
         elif method == 'cg':
-            Vinv_y, info1 = cg(V, self.y, atol='legacy')
-            if info1 == 0:
-                pass
-            elif info1 > 0:
-                self.logger.warning('Conjugate gradient did not converge.')
-            elif info1 < 1:
-                raise RuntimeError(
-                    'Illegal input or breakdown for conjugate gradient.')
-            Vinv_e, info2 = cg(V, e, atol='legacy')
-            if info2 == 0:
-                pass
-            elif info2 > 0:
-                self.logger.warning('Conjugate gradient did not converge.')
-            elif info2 < 1:
-                raise RuntimeError(
-                    'Illegal input or breakdown for conjugate gradient.')
-        y_T_V_inv_y = self.y @ Vinv_y
-        e_T_V_inv_e = e @ Vinv_e
-        e_T_V_inv_y = e @ Vinv_y
-        logdet_e_T_V_inv_e = np.log(e_T_V_inv_e)
-        return -0.5 * (logdet_V + logdet_e_T_V_inv_e + y_T_V_inv_y - e_T_V_inv_y ** 2 / e_T_V_inv_e)
+            _, logdet_V = slogdet(V)
+            precision = np.empty_like(rhs)
+            for i, column in enumerate(rhs.T):
+                precision[:, i], status = cg(self.V, column, atol=0, rtol=1e-10)
+                if status != 0:
+                    raise RuntimeError(f'Conjugate gradient failed with status {status}.')
+        else:
+            raise ValueError(f'Unknown REML solver {method!r}')
+        precision_y, precision_design = precision[:, 0], precision[:, 1:]
+        information = design.T @ precision_design
+        _, logdet_information = slogdet(information)
+        projection = precision_y - precision_design @ solve(information, design.T @ precision_y)
+        likelihood = -0.5 * (logdet_V + logdet_information + self.y @ projection)
+        return likelihood if self.has_covar else likelihood / self.n
 
     def grid_search_reml(self) -> None:
         """Perform grid search on variance component parameters.
         """
         if self.optimized:
-            self.logger.warning('Variance components are already optimized.')
             print('WARNING: variance components are already optimized.')
-        # reserve jitter for sibma_sib
-        upper = np.var(self.y) - self.jitter
-        step = upper / 100.
+        upper = self.y_var - self.jitter
+        if not np.isfinite(upper) or upper <= 0:
+            raise ValueError('Variance component estimation requires a nonconstant, finite phenotype.')
         max_loglik = float('-inf')
-        max_sigma = (0.,)
-        # logging.info('Starting grid search...')
-        i = 1
-        possible_values = np.arange(0.0, upper + step, step)
+        max_sigma = None
+        possible_values = np.linspace(0, upper, 101)
         for sigma in product(possible_values, repeat=self.n_varcomps - 1):
             if sum(sigma) > upper:
                 continue
             self._varcomps = sigma + (upper - sum(sigma),)
-            # logging.info(f'{i}: {self.reml_loglik}')
-            i += 1
-            if self.reml_loglik > max_loglik:
-                max_loglik = self.reml_loglik
+            try:
+                likelihood = self.reml_loglik
+            except RuntimeError:
+                # A zero residual component may make the covariance singular.
+                continue
+            if likelihood > max_loglik:
+                max_loglik = likelihood
                 max_sigma = self._varcomps
-        # logging.info('Finished grid search.')
+        if max_sigma is None:
+            raise ValueError('No estimable variance components on the REML grid.')
         self._varcomps = max_sigma
         self.optimized = True
 
@@ -631,84 +632,55 @@ class LinearMixedModel:
         if self.optimized:
             # self.logger.warning('Variance components are already optimized.')
             print('WARNING: variance components are already optimized.')
-        ll_ = float('inf')
-        max_ll = float('-inf')
-        iter = 1
-        # self.logger.info('Starting AI-REML...')
-        while True:
-            # self.logger.info(f'Iter: {iter}\tloglik: {self.reml_loglik}')
-            if abs(self.reml_loglik - ll_) < 1e-4:
+        previous = -np.inf
+        best_likelihood = -np.inf
+        best_components = self._varcomps
+        for _ in range(50):
+            likelihood = self.reml_loglik
+            if likelihood > best_likelihood:
+                best_likelihood, best_components = likelihood, self._varcomps
+            if abs(likelihood - previous) < 1e-4:
                 break
-            if iter > 50:
-                self._varcomps = max_sigma
-            ll_ = self.reml_loglik
-            sigma = np.array(
-                self._varcomps) + solve(self.hessian, self.grad)
-            sigma[sigma <= 0.] = self.y.var() * 1e-5
-            self._varcomps = tuple(sigma)
-            iter += 1
-            if ll_ > max_ll:
-                max_ll = ll_
-                max_sigma = self._varcomps
+            previous = likelihood
+            step = solve(self.hessian, self.grad)
+            self._varcomps = tuple(np.maximum(np.asarray(self._varcomps) + step, self.y_var * 1e-5))
+        self._varcomps = best_components
         self.optimized = True
-        # logger.info('Finished AI-REML.')
 
     def scipy_optimize(self) -> None:
         """Perform LBFGS-B to optimize variance components.
         """
         if self.optimized:
-            # self.logger.warning('Variance components are already optimized.')
             print('WARNING: variance components are already optimized.')
-        # self.logger.info('Starting LBFGS-B...')
-        yvar = self.y.var()
-        def nll(x):
-            self._varcomps = tuple(x)
-            return -1 * self.reml_loglik
-        # def c(x):
-        #     self.logger.info(inspect.currentframe().f_back.f_locals)  
-        def callbackF(Xi):
-            print(Xi, nll(Xi))
-        res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), # options={'gtol': 1e-5, 'eps': 1e-5},
-                                    method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)])
-                                    # callback=callbackF)
-        __varcomp_mats = self._varcomp_mats
-        if not res.success:
-            if self.n_varcomps == 2:
-                raise ValueError(f'Scipy minimize failed: {res.message}')
-            else:
-                # self.logger.warning(f'Scipy minimize failed: {res.message}. Trying a reduced model...')
-                print(f'WARNING: Scipy minimize failed: {res.message}. Trying a reduced model...')
-                self.n_varcomps -= 1
-                if (0.00001 * self.y_var >= res.x[0] or res.x[0] >= self.y_var) and \
-                    (0.00001 * self.y_var >= res.x[1] or res.x[1] >= self.y_var):
-                    raise ValueError(f'Scipy minimize failed: {res.message}).')
-                elif 0.00001 * self.y_var >= res.x[0] or res.x[0] >= self.y_var:
-                    # self.logger.warning(f'Dropping variance component 0: {res.x[0]}, and re-estimate...')
-                    print(f'WARNING: dropping variance component 0: {res.x[0]}, and re-estimate...')
-                    self._varcomp_mats = __varcomp_mats[1:]
-                    self._varcomps = tuple(
-                        self.y_var / self.n_varcomps for _ in range(self.n_varcomps))
-                    res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), # options={'gtol': 1e-5, 'eps': 1e-5},
-                                                method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],
-                                                callback=callbackF)
-                    if not res.success:
-                        raise ValueError(f'Scipy minimize failed: {res.message}') 
-                elif 0.00001 * self.y_var >= res.x[1] or res.x[1] >= self.y_var:
-                    # self.logger.warning(f'Dropping variance component 1: {res.x[1]}, and re-estimate...')
-                    print(f'WARNING: dropping variance component 1: {res.x[1]}, and re-estimate...')
-                    self._varcomp_mats = __varcomp_mats[::2]
-                    self._varcomps = tuple(
-                        self.y_var / self.n_varcomps for _ in range(self.n_varcomps))
-                    res: OptimizeResult = minimize(nll, x0=np.array(self._varcomps), # options={'gtol': 1e-5, 'eps': 1e-5},
-                                                method='L-BFGS-B', bounds=[(0.00001 * yvar, yvar) for i in range(self.n_varcomps)],
-                                                callback=callbackF)
-                    if not res.success:
-                        raise ValueError(f'Scipy minimize failed: {res.message}')
-                else: raise RuntimeError()
+        yvar = self.y_var
+        if not np.isfinite(yvar) or yvar <= 0:
+            raise ValueError('Variance component estimation requires a nonconstant, finite phenotype.')
+
+        def nll(components):
+            self._varcomps = tuple(components)
+            return -self.reml_loglik
+
+        minimum = yvar * 1e-5
+        bounds = [(minimum, yvar)] * self.n_varcomps
+        initial = self._varcomps
+        result = minimize(nll, x0=initial, method='L-BFGS-B', bounds=bounds)
+        if not result.success and self.n_varcomps > 2:
+            # Keep the component array aligned with the inputs when a boundary term is dropped.
+            eligible = np.flatnonzero(result.x[:-1] <= minimum * 1.01)
+            for index in eligible:
+                retry_bounds = bounds.copy()
+                retry_bounds[index] = (0., 0.)
+                candidate = minimize(nll, x0=result.x, method='L-BFGS-B', bounds=retry_bounds)
+                if candidate.success:
+                    print(f'WARNING: variance component {index} was fixed at zero.')
+                    result = candidate
+                    break
+        if not result.success:
+            self._varcomps = initial
+            raise ValueError(f'Scipy minimize failed: {result.message}')
+        self._varcomps = tuple(result.x)
         self.optimized = True
-        self._varcomps = tuple(res.x)
-        # self.logger.info(f'Finished LBFGS-B. # of Likelihood evaluations: {res.nfev}')
-    
+
     def fit_snps_eff(self, gts: np.ndarray, standard_gwas: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Perform repeated OLS to estimate SNP effects and sampling variance-covariance.
 
@@ -718,194 +690,75 @@ class LinearMixedModel:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
         """
+        if gts.ndim != 3 or gts.shape[0] != self.n:
+            raise ValueError('Size of genotype matrix does not match phenotype.')
         if standard_gwas:
-            gts = gts[:, 0:1, :]
-        # np.testing.assert_array_almost_equal(gts[:, 1, :], gts[:, 2, :])
-        n, k, l = gts.shape
-        if n != self.n:
-            raise ValueError(f'Size of genotype matrix does not match pheno: {n},{self.n}.')
-        if self.has_covar:
-            gts_ = gts.reshape((gts.shape[0], int(k * l)))
-            M_X = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
-            X_ = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
-            y = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
-            Vinv_X = self.sp_solve_dense3d_lu(self.V, X_)
-            XT_Vinv_X = np.einsum('...ij,...ik', X_, Vinv_X)
-            XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
-            alpha = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov = np.linalg.inv(XT_Vinv_X)
-        else:
-            gts = gts.transpose(2, 0, 1)
-            Vinv_X = self.sp_solve_dense3d_lu(self.V, gts)
-            XT_Vinv_X = np.einsum('...ij,...ik', gts, Vinv_X)
-            XT_Vinv_y = np.einsum('...ij,i', gts, self.Vinv_y)
-            alpha = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)
-            alpha_cov = np.linalg.inv(XT_Vinv_X)
+            gts = gts[:, :1, :]
+        precision_y, projection = self._snp_precision_terms
+        alpha, covariance, _ = _fit_gls_batch(gts, self.V_lu, precision_y, projection)
+        return alpha, covariance, np.sqrt(np.diagonal(covariance, axis1=1, axis2=2))
 
-        alpha_ses: np.ndarray = np.sqrt(
-            np.diagonal(alpha_cov, axis1=1, axis2=2))
-        return alpha, alpha_cov, alpha_ses
-    
+    @cached_property_depends_on('_varcomps')
+    def _snp_precision_terms(self):
+        return _precision_terms(self.V_lu, self.y, self.Z if self.has_covar else None)
+
     def robust_est(self, G: gtarray, G_sib: gtarray):
-        num_obs_par_al = G.num_obs_par_al
+        """Combine design-specific direct effects using their sampling covariance."""
+        if G.shape[0] != self.n or not np.array_equal(G.sid, G_sib.sid):
+            raise ValueError('Genotype matrices must match the phenotype and SNPs.')
+        alpha = np.full(G.shape[-1], np.nan)
+        variance = np.full_like(alpha, np.nan)
+        num_observed = G.num_obs_par_al
         par_status = G.par_status
-        ped = G.ped
-        X = G.gts.data
-        X_sib = G_sib.gts.data
-        n, k, l = G.shape
-        assert n == self.n
-        assert l == G_sib.shape[2]
-
-        alpha = np.full((l,1), fill_value=np.nan)
-        alpha_ses = np.full((l,1), fill_value=np.nan)
-        alpha_cov = np.full((l,1,1), fill_value=np.nan)
-        ct = 0
-        for s in range(l):
-            if np.isnan(num_obs_par_al[:, s]).all():
-                ct += 1
+        sibling_rows = np.array([G_sib.id_dict.get(iid, -1) for iid in G.ids])
+        both_imputed = np.all(par_status == 1, axis=1)
+        observed_father = par_status[:, 0] == 0
+        observed_mother = par_status[:, 1] == 0
+        group_models = [None] * 4
+        for s in range(G.shape[-1]):
+            observed = num_observed[:, s]
+            three = observed == 3
+            groups = [np.flatnonzero(mask) for mask in (
+                observed == 4, three & both_imputed,
+                three & observed_father, three & observed_mother)]
+            if any(not len(group) for group in groups):
                 continue
-            notnan = np.isfinite(num_obs_par_al[:, s])
-            both = (num_obs_par_al[:, s] == 4) * notnan
-            pat = (num_obs_par_al[:, s] == 3) * (par_status[:, 0] == 0) * notnan
-            mat = (num_obs_par_al[:, s] == 3) * (par_status[:, 1] == 0)  * notnan
-            one = (num_obs_par_al[:, s] == 3) * ((par_status[:, 0] == 1) & (par_status[:, 1] == 1)) * notnan
-            if both.sum() == 0 or one.sum() == 0 or pat.sum() == 0 or mat.sum() == 0:
-                ct += 1
-                # TODO: handle the case where one or more groups are missing
+            both, one, paternal, maternal = groups
+            if np.any(sibling_rows[one] < 0):
                 continue
-            X_both = X[both, :, s]
-            X_pat = X[pat, :, s]
-            X_pat[:, 2] = X_pat[:, 0] - X_pat[:, 2] // 1 # see np.divmod or np.modf
-            X_mat = X[mat, :, s]
-            X_mat[:, 1] = X_mat[:, 0] - X_mat[:, 1] // 1
-            # TODO: check G_sib.ids in G.ids
-            idx_one = [G_sib.id_dict[i] for i in G.ids[one]]
-            X_one = X_sib[idx_one, :, s]
-
-            y_both = self.y[both]
-            y_pat = self.y[pat]
-            y_mat = self.y[mat]
-            y_one = self.y[one]
-            V_both = self.V[both, :][:, both]
-            V_pat = self.V[pat, :][:, pat]
-            V_mat = self.V[mat, :][:, mat]
-            V_one = self.V[one, :][:, one]
-
-            V_both_one = self.V[both, :][:, one]
-            V_both_pat = self.V[both, :][:, pat]
-            V_both_mat = self.V[both, :][:, mat]
-            V_one_pat = self.V[one, :][:, pat]
-            V_one_mat = self.V[one, :][:, mat]
-            V_pat_mat = self.V[pat, :][:, mat]
-
-            
-            if self.has_covar:
-                X_both -= self.Z[both] @ solve(self.Z[both].T @ self.Z[both], self.Z[both].T.dot(X_both))
-                y_both -= self.Z[both] @ solve(self.Z[both].T @ self.Z[both], self.Z[both].T.dot(y_both))
-
-                X_pat -= self.Z[pat] @ solve(self.Z[pat].T @ self.Z[pat], self.Z[pat].T.dot(X_pat))
-                y_pat -= self.Z[pat] @ solve(self.Z[pat].T @ self.Z[pat], self.Z[pat].T.dot(y_pat))
-
-                X_mat -= self.Z[mat] @ solve(self.Z[mat].T @ self.Z[mat], self.Z[mat].T.dot(X_mat))
-                y_mat -= self.Z[mat] @ solve(self.Z[mat].T @ self.Z[mat], self.Z[mat].T.dot(y_mat))
-
-                X_one -= self.Z[one] @ solve(self.Z[one].T @ self.Z[one], self.Z[one].T.dot(X_one))
-                y_one -= self.Z[one] @ solve(self.Z[one].T @ self.Z[one], self.Z[one].T.dot(y_one))
-
-
-            X_both -= np.mean(X_both, axis=0)
-            X_pat -= np.mean(X_pat, axis=0)
-            X_mat -= np.mean(X_mat, axis=0)
-            X_one -= np.mean(X_one, axis=0)
-            y_both -= y_both.mean()
-            y_pat -= y_pat.mean()
-            y_mat -= y_mat.mean()
-            y_one -= y_one.mean()
-            
-            try:
-                Vinv_X_both = spsolve(V_both, X_both)
-                XT_Vinv_X_both = X_both.T @ Vinv_X_both
-                XT_Vinv_y_both = Vinv_X_both.T @ y_both
-                alpha_both = solve(XT_Vinv_X_both, XT_Vinv_y_both)[0]
-                alpha_cov_both = np.linalg.inv(XT_Vinv_X_both)[0,0]
-
-                Vinv_X_one = spsolve(V_one, X_one)
-                XT_Vinv_X_one = X_one.T @ Vinv_X_one
-                XT_Vinv_y_one = Vinv_X_one.T @ y_one
-                alpha_one = solve(XT_Vinv_X_one, XT_Vinv_y_one)[0]
-                alpha_cov_one = np.linalg.inv(XT_Vinv_X_one)[0,0]
-
-                Vinv_X_mat = spsolve(V_mat, X_mat)
-                XT_Vinv_X_mat = X_mat.T @ Vinv_X_mat
-                XT_Vinv_y_mat = Vinv_X_mat.T @ y_mat
-                alpha_mat = solve(XT_Vinv_X_mat, XT_Vinv_y_mat)[0]
-                alpha_cov_mat = np.linalg.inv(XT_Vinv_X_mat)[0,0]
-
-                Vinv_X_pat = spsolve(V_pat, X_pat)
-                XT_Vinv_X_pat = X_pat.T @ Vinv_X_pat
-                XT_Vinv_y_pat = Vinv_X_pat.T @ y_pat
-                alpha_pat = solve(XT_Vinv_X_pat, XT_Vinv_y_pat)[0]
-                alpha_cov_pat = np.linalg.inv(XT_Vinv_X_pat)[0,0]
-            except np.linalg.LinAlgError:
-                continue
-            
-
-            cov_both_one = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_one @ Vinv_X_one[:, 0] * alpha_cov_one
-            cov_both_pat = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_pat @ Vinv_X_pat[:, 0] * alpha_cov_pat
-            cov_both_mat = alpha_cov_both * Vinv_X_both[:, 0].T @ V_both_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
-
-            cov_one_mat = alpha_cov_one * Vinv_X_one[:, 0].T @ V_one_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
-            cov_one_pat = alpha_cov_one * Vinv_X_one[:, 0].T @ V_one_pat @ Vinv_X_pat[:, 0] * alpha_cov_pat
-            cov_pat_mat = alpha_cov_pat * Vinv_X_pat[:, 0].T @ V_pat_mat @ Vinv_X_mat[:, 0] * alpha_cov_mat
-
-            S = np.block(
-                [[alpha_cov_both, cov_both_one, cov_both_pat, cov_both_mat],
-                [cov_both_one.T, alpha_cov_one, cov_one_pat, cov_one_mat],
-                [cov_both_pat.T, cov_one_pat.T, alpha_cov_pat, cov_pat_mat],
-                [cov_both_mat.T, cov_one_mat.T, cov_pat_mat.T, alpha_cov_mat]]
-            )
-
-            A = np.ones(4)
-            robust_var = np.power(A @ solve(S, A), -1)
-            alpha[s,0] = robust_var * (A @ solve(S, np.array([alpha_both, alpha_one, alpha_pat, alpha_mat])))
-            alpha_cov[s,0,0] = robust_var
-            alpha_ses[s,0] = robust_var ** 0.5
-        return alpha, alpha_cov, alpha_ses
+            x_pat = G.gts.data[paternal, :, s].copy()
+            x_mat = G.gts.data[maternal, :, s].copy()
+            x_pat[:, 2] = x_pat[:, 0] - np.floor(x_pat[:, 2])
+            x_mat[:, 1] = x_mat[:, 0] - np.floor(x_mat[:, 1])
+            matrices = (G.gts.data[both, :, s], G_sib.gts.data[sibling_rows[one], :, s], x_pat, x_mat)
+            estimates = np.empty(4)
+            weights = np.zeros((self.n, 4))
+            for i, (rows, design) in enumerate(zip(groups, matrices)):
+                cached = group_models[i]
+                if cached is None or not np.array_equal(rows, cached[0]):
+                    covariates = self.Z[rows] if self.has_covar else np.ones((len(rows), 1))
+                    lu = splu(self.V[rows, :][:, rows])
+                    precision_y, projection = _precision_terms(lu, self.y[rows], covariates)
+                    cached = group_models[i] = (rows, lu, precision_y, projection)
+                _, lu, precision_y, projection = cached
+                coef, _, first_weights = _fit_gls_batch(
+                    design[..., None], lu, precision_y, projection, return_weights=True)
+                estimates[i] = coef[0, 0]
+                weights[rows, i] = first_weights[:, 0]
+            if np.all(np.isfinite(estimates)):
+                covariance = weights.T @ (self.V @ weights)
+                alpha[s], variance[s] = _combine_direct_effects(estimates, covariance)
+        return alpha[:, None], variance[:, None, None], np.sqrt(variance[:, None])
 
     def sib_diff_est(self, gts: np.ndarray):
         """
         Perform the sib-difference estimator
         """
-        n, k, l = gts.shape
-        if k != 2:
+        if gts.ndim != 3 or gts.shape[1] != 2:
             raise ValueError('Second dimension of the genotype matrix for the sib-difference estimator should be of size 2.')
-        if n != self.n:
-            raise ValueError(f'Size of genotype matrix does not match pheno: {n},{self.n}.')
-        alpha = np.full((l,1), fill_value=np.nan)
-        alpha_ses = np.full((l,1), fill_value=np.nan)
-        alpha_cov = np.full((l,1,1), fill_value=np.nan)
-        if self.has_covar:
-            gts_ = gts.reshape((gts.shape[0], int(k * l)))
-            M_X = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
-            X_ = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
-            y = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
-            Vinv_X = self.sp_solve_dense3d_lu(self.V, X_)
-            XT_Vinv_X = np.einsum('...ij,...ik', X_, Vinv_X)
-            XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
-            alpha[:, 0] = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)[:, 0]
-            alpha_cov[:, 0, 0] = np.linalg.inv(XT_Vinv_X)[:, 0, 0]
+        alpha, covariance, ses = self.fit_snps_eff(gts)
+        return alpha[:, :1], covariance[:, :1, :1], ses[:, :1]
 
-        else:
-            gts_ = gts.transpose(2, 0, 1)
-            Vinv_X = self.sp_solve_dense3d_lu(self.V, gts_)
-            XT_Vinv_X = np.einsum('...ij,...ik', gts_, Vinv_X)
-            XT_Vinv_y = np.einsum('...ij,i', gts_, self.Vinv_y)
-            alpha[:, 0] = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)[:,0]
-            alpha_cov[:, 0, 0] = np.linalg.inv(XT_Vinv_X)[:,0,0]
-        alpha_ses[:, 0] = np.sqrt(
-            alpha_cov)[:, 0, 0]
-        return alpha, alpha_cov, alpha_ses
-    
     def trios_sibs_est(self, gts: np.ndarray,
                        complete_trios_inds: np.ndarray,
                        sibs_inds: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -917,61 +770,44 @@ class LinearMixedModel:
         Returns:
             Tuple[np.ndarray, np.ndarray, np.ndarray]: 3 arrays of SNP effects, covarinaces and standard errors.
         """
-        n, k, l = gts.shape
-        assert n == self.n
-        if self.has_covar:
-            gts_ = gts.reshape((gts.shape[0], int(k * l)))
-            M_X = gts_ - self.Z.dot(solve(self.Z.T @ self.Z, self.Z.T.dot(gts_)))
-            X = M_X.reshape((gts_.shape[0], k, l)).transpose(2, 0, 1)
-            y = self.y - self.Z @ solve(self.Z.T @ self.Z, self.Z.T.dot(self.y))
-        else:
-            X = gts.transpose(2, 0, 1)
-            # y = self.y - self.y.mean()
-            y = self.y
-
-        alpha = np.full((l,1), fill_value=np.nan)
-        alpha_ses = np.full((l,1), fill_value=np.nan)
-        alpha_cov = np.full((l,1,1), fill_value=np.nan)
-        ct = 0
-
-        X_trios = X[:, complete_trios_inds, :]
-        X_sibs = X[:, sibs_inds, :2]
-        y_trios = y[complete_trios_inds]
-        y_sibs = y[sibs_inds]
-        V_trios = self.V[complete_trios_inds, :][:, complete_trios_inds]
-        V_sibs = self.V[sibs_inds, :][:, sibs_inds]
-        V_trios_sibs = self.V[complete_trios_inds, :][:, sibs_inds]
-
-        X_trios -= X_trios.mean(axis=1, keepdims=True)
-        X_sibs -= X_sibs.mean(axis=1, keepdims=True)
-
-        y_trios -= y_trios.mean()
-        y_sibs -= y_sibs.mean()
-        
-        Vinv_X_trios = self.sp_solve_dense3d_lu(V_trios, X_trios)
-        XT_Vinv_X_trios = np.einsum('...ij,...ik', X_trios, Vinv_X_trios)
-        XT_Vinv_y_trios = np.einsum('...ij,i', Vinv_X_trios, y_trios)
-        alpha_trios = _solve_snp_effects(XT_Vinv_X_trios, XT_Vinv_y_trios)[:, 0]
-        alpha_cov_trios = np.linalg.inv(XT_Vinv_X_trios)[:, 0, 0]
-
-        Vinv_X_sibs = self.sp_solve_dense3d_lu(V_sibs, X_sibs)
-        XT_Vinv_X_sibs = np.einsum('...ij,...ik', X_sibs, Vinv_X_sibs)
-        XT_Vinv_y_sibs = np.einsum('...ij,i', Vinv_X_sibs, y_sibs)
-        alpha_sibs = _solve_snp_effects(XT_Vinv_X_sibs, XT_Vinv_y_sibs)[:, 0]
-        alpha_cov_sibs = np.linalg.inv(XT_Vinv_X_sibs)[:, 0, 0]
-        # numpy cannot do the following einsum
-        # print(np.einsum('ji,ik->jk', Vinv_X_trios[:, :, 0], V_trios_sibs))
-        for i in range(l):
-            cov_trios_sibs = alpha_cov_trios[i] * Vinv_X_trios[i, :, 0].T @ V_trios_sibs @ Vinv_X_sibs[i, :, 0] * alpha_cov_sibs[i]
-
-            S = np.block(
-                [[alpha_cov_trios[i], cov_trios_sibs],
-                [cov_trios_sibs.T, alpha_cov_sibs[i]]]
-            )
-
-            A = np.ones(2)
-            robust_var = np.power(A @ solve(S, A), -1)
-            alpha[i, 0] = robust_var * (A @ solve(S, np.array([alpha_trios[i], alpha_sibs[i]])))
-            alpha_cov[i, 0, 0] = robust_var
-            alpha_ses[i, 0] = robust_var ** 0.5
-        return alpha, alpha_cov, alpha_ses
+        if gts.ndim != 3 or gts.shape[0] != self.n:
+            raise ValueError('Size of genotype matrix does not match phenotype.')
+        loci = gts.shape[2]
+        trios = np.asarray(complete_trios_inds)
+        siblings = np.asarray(sibs_inds)
+        cross_covariance = self.V[trios, :][:, siblings]
+        groups = []
+        for indices, predictors in ((trios, gts.shape[1]), (siblings, 2)):
+            covariates = self.Z[indices] if self.has_covar else np.ones((len(indices), 1))
+            lu = splu(self.V[indices, :][:, indices])
+            precision_y, projection = _precision_terms(lu, self.y[indices], covariates)
+            groups.append((indices, predictors, lu, precision_y, projection))
+        alpha = np.full(loci, np.nan)
+        variance = np.full(loci, np.nan)
+        block_size = max(1, min(256, (32 * 1024 ** 2) // (8 * self.n * gts.shape[1])))
+        for start in range(0, loci, block_size):
+            block = slice(start, start + block_size)
+            estimates, variances, weights = [], [], []
+            for indices, predictors, lu, precision_y, projection in groups:
+                coef, covariance, first_weights = _fit_gls_batch(
+                    gts[indices, :predictors, block], lu, precision_y, projection, return_weights=True)
+                estimates.append(coef[:, 0])
+                variances.append(covariance[:, 0, 0])
+                weights.append(first_weights)
+            a, b = variances
+            only_trios = np.isfinite(a) & ~np.isfinite(b)
+            only_sibs = ~np.isfinite(a) & np.isfinite(b)
+            alpha[block][only_trios], variance[block][only_trios] = estimates[0][only_trios], a[only_trios]
+            alpha[block][only_sibs], variance[block][only_sibs] = estimates[1][only_sibs], b[only_sibs]
+            both = np.flatnonzero(np.isfinite(a) & np.isfinite(b))
+            a, b = a[both], b[both]
+            cross = np.einsum('ij,ij->j', weights[0][:, both], cross_covariance @ weights[1][:, both])
+            # Closed-form minimum-variance weights for a two-estimate meta-analysis.
+            determinant = a * b - cross * cross
+            denominator = a + b - 2 * cross
+            valid = (determinant > 0) & (denominator > 0)
+            combined = both[valid]
+            w = (b[valid] - cross[valid]) / denominator[valid]
+            alpha[start + combined] = w * estimates[0][combined] + (1 - w) * estimates[1][combined]
+            variance[start + combined] = determinant[valid] / denominator[valid]
+        return alpha[:, None], variance[:, None, None], np.sqrt(variance[:, None])

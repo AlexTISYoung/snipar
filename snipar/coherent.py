@@ -131,8 +131,8 @@ def psd_gls(information, rhs, p):
 
 
 def _validate(effects, sampling_covariance, ldscores):
-    y = np.asarray(np.ma.filled(effects, np.nan), dtype=float)
-    s = np.asarray(np.ma.filled(sampling_covariance, np.nan), dtype=float)
+    y = np.ma.asarray(effects, dtype=float).filled(np.nan)
+    s = np.ma.asarray(sampling_covariance, dtype=float).filled(np.nan)
     if y.ndim != 2 or y.shape[1] not in (2, 3) or y.shape[0] < 2:
         raise ValueError('effects must have shape (n,2) or (n,3), with at least two SNPs')
     n, p = y.shape
@@ -147,7 +147,7 @@ def _validate(effects, sampling_covariance, ldscores):
     eigenvalues = np.linalg.eigvalsh(s)
     if np.any(eigenvalues[:, 0] <= 1e-12 * eigenvalues[:, -1]) or np.any(eigenvalues[:, -1] <= 0):
         raise ValueError('sampling covariance matrices must be positive definite and numerically nonsingular; use a nonredundant effect basis')
-    ld = np.ones(n) if ldscores is None else np.asarray(np.ma.filled(ldscores, np.nan), dtype=float)
+    ld = np.ones(n) if ldscores is None else np.ma.asarray(ldscores, dtype=float).filled(np.nan)
     if ld.shape != (n,) or not np.all(np.isfinite(ld)) or np.any(ld <= 0):
         raise ValueError('LD scores must be a finite, positive vector of length n')
     return y, s, ld
@@ -209,6 +209,42 @@ def fit_covariance(effects, sampling_covariance, ldscores=None, max_iter=100,
                                      chunk_size=chunk_size, initial=initial)
 
 
+def _homogeneous_covariance(moment, scale, cholesky):
+    """Exact Gaussian fit for a common, positive definite sampling matrix.
+
+    Whiten by the sampling covariance. Then the total covariance has
+    eigenvalues at least one, and the likelihood is minimized by using the
+    empirical moment's eigenvectors and clipping its eigenvalues at one.
+    """
+    whitened = np.linalg.solve(cholesky, moment)
+    whitened = np.linalg.solve(cholesky, whitened.T).T
+    eigenvalues, vectors = np.linalg.eigh((whitened + whitened.T) / 2)
+    signal = np.maximum(eigenvalues - 1, 0)
+    loadings = cholesky @ vectors
+    covariance = (loadings * signal) @ loadings.T
+    total = np.maximum(eigenvalues, 1)
+    scaled = covariance / np.outer(scale, scale)
+    eig = np.linalg.eigvalsh(scaled)
+    return covariance, {
+        'iterations': 1, 'converged': True, 'relative_score_step': 0.,
+        'linear_algebra_backend': 'homogeneous_closed_form',
+        'scaled_objective': float(.5 * (np.sum(np.log(total) + eigenvalues / total)
+                                         + 2 * np.sum(np.log(np.diag(cholesky) / scale)))),
+        'boundary': bool(eig[0] <= 1e-8 * max(eig[-1], 1e-12)),
+        'min_scaled_eigenvalue': float(eig[0]),
+    }
+
+
+def _leave_one_block_out(totals):
+    # Add disjoint slices to preserve the remaining mass when a single block
+    # dominates the total. This also avoids an O(n_blocks^2) reduction.
+    zero = np.zeros_like(totals[:1])
+    before = np.concatenate((zero, np.cumsum(totals[:-1], axis=0)))
+    after = np.concatenate((np.cumsum(totals[:0:-1], axis=0)[::-1], zero))
+    return before + after
+
+
+
 def _fit_covariance_validated(y, s, ld, max_iter=100, tol=1e-7,
                               chunk_size=20000, initial=None):
     """Private fit for arrays already checked by _validate; subsets stay valid."""
@@ -218,6 +254,15 @@ def _fit_covariance_validated(y, s, ld, max_iter=100, tol=1e-7,
         raise ValueError('chunk_size must be a positive integer')
     chunk_size = int(chunk_size)
     scale = np.sqrt(np.mean(y * y + np.diagonal(s, axis1=1, axis2=2), axis=0))
+    if initial is not None:
+        initial = np.asarray(initial, dtype=float)
+        p = y.shape[1]
+        if initial.shape != (p, p) or not np.all(np.isfinite(initial)):
+            raise ValueError('initial must be a finite (p,p) covariance matrix')
+    if np.all(s == s[0]):
+        weight = 1 / ld
+        moment = np.einsum('n,ni,nj->ij', weight / weight.sum(), y, y)
+        return _homogeneous_covariance(moment, scale, np.linalg.cholesky(s[0]))
     outer_scale = np.outer(scale, scale)
     y = y / scale
     s = s / outer_scale
@@ -229,9 +274,6 @@ def _fit_covariance_validated(y, s, ld, max_iter=100, tol=1e-7,
                - np.einsum('n,nij->ij', weight, s)) / weight.sum()
         sigma = _project_psd(raw)
     else:
-        initial = np.asarray(initial, dtype=float)
-        if initial.shape != (p, p) or not np.all(np.isfinite(initial)):
-            raise ValueError('initial must be a finite (p,p) covariance matrix')
         sigma = _project_psd(initial / outer_scale)
     criterion = _criterion(y, s, weight, sigma, chunk_size)
     for iteration in range(1, int(max_iter) + 1):
@@ -350,6 +392,18 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
     delete_values = np.empty((b, len(metric_names)))
     boundary_deletes = 0
     delete_iterations = []
+    homogeneous_refit = jackknife == 'refit' and diagnostics['linear_algebra_backend'] == 'homogeneous_closed_form'
+    if homogeneous_refit:
+        i, j = _pairs(p)
+        weight = 1 / ld
+        totals = np.column_stack([np.bincount(block_ids, weights=weight * y[:, a] * y[:, c])
+                                  for a, c in zip(i, j)])
+        mass = _leave_one_block_out(np.bincount(block_ids, weights=weight))
+        moments = _leave_one_block_out(totals) / mass[:, None]
+        second = np.column_stack([np.bincount(block_ids, weights=y[:, a] ** 2) for a in range(p)])
+        n_delete = n - np.bincount(block_ids)
+        scales = np.sqrt(_leave_one_block_out(second) / n_delete[:, None] + np.diag(s[0]))
+        cholesky = np.linalg.cholesky(s[0])
     if jackknife == 'frozen':
         # Use a fixed diagonal change of units for well-conditioned cone solves.
         scale = np.sqrt(np.mean(y * y + np.diagonal(s, axis1=1, axis2=2), axis=0))
@@ -359,11 +413,15 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
         total_info, total_rhs = block_info.sum(axis=0), block_rhs.sum(axis=0)
     for block in range(b):
         if jackknife == 'refit':
-            keep = block_ids != block
-            try:
-                deleted, detail = _fit_covariance_validated(y[keep], s[keep], ld[keep], initial=covariance, **options)
-            except RuntimeError as exc:
-                raise RuntimeError('Jackknife block %s failed: %s' % (block_labels[block], exc)) from exc
+            if homogeneous_refit:
+                deleted, detail = _homogeneous_covariance(
+                    _matrix(moments[block], p), scales[block], cholesky)
+            else:
+                keep = block_ids != block
+                try:
+                    deleted, detail = _fit_covariance_validated(y[keep], s[keep], ld[keep], initial=covariance, **options)
+                except RuntimeError as exc:
+                    raise RuntimeError('Jackknife block %s failed: %s' % (block_labels[block], exc)) from exc
             delete_iterations.append(detail['iterations'])
             boundary_deletes += int(detail['boundary'])
         else:
@@ -415,10 +473,10 @@ def fit_coherent(effects, sampling_covariance, ldscores=None, n_blocks=200,
     for start in range(0, n, chunk_size):
         sl = slice(start, min(start + chunk_size, n))
         products = (y[sl, i] * y[sl, j] - s[sl, i, j]) * scalar[sl, None]
-        for block in np.unique(block_ids[sl]):
-            common_totals[block] += products[block_ids[sl] == block].sum(axis=0)
+        for k in range(len(i)):
+            common_totals[:, k] += np.bincount(block_ids[sl], weights=products[:, k], minlength=b)
     common_moments = common_totals.sum(axis=0)
-    common_delete = (common_moments - common_totals) / (1 - common_mass[:, None])
+    common_delete = _leave_one_block_out(common_totals) / _leave_one_block_out(common_mass)[:, None]
     common_sampling_covariance = _jackknife_covariance(common_delete)
     common_covariance = _matrix(common_moments, p)
     min_eigenvalue = float(np.linalg.eigvalsh(common_covariance)[0])

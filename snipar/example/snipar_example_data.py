@@ -29,7 +29,9 @@ def load_example_data(dest="example_data"):
     data_dir_name = "example_data"
     dir_name = os.path.dirname(snipar.example.__file__)
     data_dir = os.path.join(dir_name, data_dir_name)
-    shutil.copytree(data_dir, dest)
+    shutil.copytree(data_dir, dest, ignore=shutil.ignore_patterns(
+        '__pycache__', '*.mmm', '*.metafile', '*.bgi', '.DS_Store',
+    ))
 
 if __name__ == '__main__':
     args = parser.parse_args()

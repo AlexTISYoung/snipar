@@ -94,6 +94,7 @@ def compute_ldscores(bed_pattern, snp_ids, chromosomes, ld_wind=1.0, ld_out=None
     scores = np.full(len(snp_ids), np.nan)
     metadata = {'bed_files': [], 'ldscore_files': []}
     seen_ids = set()
+    any_match = False
     for bed, requested_chrom in _bed_files(bed_pattern, requested):
         bim, chrom = _bim_metadata(bed, requested_chrom)
         rows = np.arange(len(snp_ids)) if unknown_chromosomes else np.flatnonzero(valid_chrom & (chromosomes == chrom))
@@ -108,18 +109,19 @@ def compute_ldscores(bed_pattern, snp_ids, chromosomes, ld_wind=1.0, ld_out=None
         identifiers = np.asarray(identifiers, dtype=str)
         if values.ndim != 1 or identifiers.shape != values.shape:
             raise ValueError('LD-score backend returned incompatible SNP and score arrays.')
-        if pd.Index(identifiers).has_duplicates:
+        lookup = pd.Index(identifiers)
+        if lookup.has_duplicates:
             raise ValueError('LD-score backend returned duplicate SNP IDs for ' + str(bed))
-        if not np.isin(identifiers, bim.index.to_numpy()).all():
+        if np.any(bim.index.get_indexer(lookup) < 0):
             raise ValueError('LD-score backend returned SNP IDs absent from ' + str(bed.with_suffix('.bim')))
         if unknown_chromosomes and seen_ids.intersection(identifiers):
             raise ValueError('LD-score SNP IDs must be unique across BED files when summary chromosomes are unknown.')
-        seen_ids.update(identifiers)
-        lookup = pd.Series(values, index=identifiers)
-        matched = pd.Index(snp_ids[rows]).isin(lookup.index)
-        if not matched.any():
-            raise ValueError('No SNPs in common between LD scores and summary statistics for chromosome ' + str(chrom))
-        scores[rows[matched]] = lookup.reindex(snp_ids[rows[matched]]).to_numpy(dtype=float)
+        if unknown_chromosomes:
+            seen_ids.update(identifiers)
+        source_rows = lookup.get_indexer(snp_ids[rows])
+        matched = source_rows >= 0
+        any_match |= bool(matched.any())
+        scores[rows[matched]] = values[source_rows[matched]]
         metadata['bed_files'].append(str(bed))
         if ld_out is not None:
             output_pattern = str(ld_out).replace('#', '@')
@@ -133,4 +135,6 @@ def compute_ldscores(bed_pattern, snp_ids, chromosomes, ld_wind=1.0, ld_out=None
             metadata['ldscore_files'].append(str(output))
     if not metadata['bed_files']:
         raise ValueError('No genotype chromosomes overlap the summary statistics.')
+    if not any_match:
+        raise ValueError('No SNPs in common between LD scores and summary statistics.')
     return scores, metadata

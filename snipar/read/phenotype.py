@@ -22,47 +22,32 @@ def read_phenotype(file_path, column=None, column_index=None, na_values='NA'):
     
     Note: If neither column nor column_index is provided, defaults to first column after IID/FID
     """
-    # Determine delimiter (tab or whitespace)
     with open(file_path, 'r') as file:
-        first_line = file.readline()
-        delimiter = '\t' if '\t' in first_line else ' '  
-        header = first_line.split(delimiter)
-        header[-1] = header[-1].strip()  # Remove newline character
-    # Determine file format based on header
-    has_fid = (len(header) > 1 and header[0] == 'FID' and header[1] == 'IID')
-    # Set default column if neither is provided
-    if column is None and column_index is None:
-        # Default to first column after IID/FID
-        column_index = 1
-    # Determine the usecols parameter for pd.read_csv
-    if column is not None:
-        if column in ['FID', 'IID']:
-            raise ValueError(f"Phenotype cannot be named FID or IID")
-        # We need to read the IID column and the target column
-        cols_to_use = ['IID', column]
-    else:  # column_index is provided
-        # Adjust column_index based on file format
-        offset = 2 if has_fid else 1
-        adjusted_index = column_index + offset - 1  # -1 for 0-based indexing
-        if adjusted_index >= len(header):
+        header = next((line.split() for line in file if line.strip()), [])
+    if header[:2] == ['FID', 'IID']:
+        columns = header[2:]
+    elif header[:1] == ['IID']:
+        columns = header[1:]
+    else:
+        raise ValueError("Phenotype header must start with IID or FID IID")
+    if column is None:
+        column_index = 1 if column_index is None else column_index
+        if not 1 <= column_index <= len(columns):
             raise ValueError(f"Column index {column_index} out of range")
-        column = header[adjusted_index]
-        cols_to_use = ['IID', column]
+        column = columns[column_index - 1]
+    if column in ('FID', 'IID') or column not in columns:
+        raise ValueError(f"Unknown phenotype column: {column}")
+    if columns.count(column) != 1:
+        raise ValueError(f"Duplicate phenotype column: {column}")
     print('Reading phenotype from column:', column)
-    # Read the data using pandas for efficiency, handling missing values
-    df = pd.read_csv(file_path, 
-                     sep=delimiter,
-                     usecols=cols_to_use,
-                     na_values=na_values)
-    # Verify target column contains numeric data
-    try:
-        df[column] = pd.to_numeric(df[column], errors='coerce')
-    except ValueError:
-        raise ValueError(f"Phenotype contains non-numeric values that cannot be converted")
-    # Remove rows with missing values in either IID or target column
-    df = df.dropna(subset=['IID', column])
-    # Return gtarray
-    return gtarray(np.array(df[column].values).reshape((df.shape[0],1)), ids=np.array(df['IID'].values, dtype=str))
+    df = pd.read_csv(file_path, sep=r"\s+", usecols=['IID', column], dtype={'IID': str},
+                     keep_default_na=False, na_values={column: na_values})
+    values = pd.to_numeric(df[column], errors='coerce').to_numpy(dtype=float)
+    keep = (df['IID'] != '').to_numpy() & np.isfinite(values)
+    ids = df.loc[keep, 'IID'].to_numpy(dtype=str)
+    if len(set(ids)) != len(ids):
+        raise ValueError("Phenotype file contains duplicate individual IDs")
+    return gtarray(values[keep, None], ids=ids)
 
 def match_phenotype(G,y,pheno_ids):
     """Match a phenotype to a genotype array by individual IDs.
@@ -80,12 +65,8 @@ def match_phenotype(G,y,pheno_ids):
             vector of phenotype values matched by individual IDs to the genotype array
 
     """
-    in_G_dict = np.array([x in G.id_dict for x in pheno_ids])
-    y = y[in_G_dict]
-    pheno_ids = pheno_ids[in_G_dict]
     pheno_id_dict = make_id_dict(pheno_ids)
-    y = y[[pheno_id_dict[x] for x in G.ids]]
-    return y
+    return y[[pheno_id_dict[x] for x in G.ids]]
 
 def read_covariates(covar, pheno_ids=None, missing_char = 'NA'):
     covar = Pheno(covar, missing=missing_char).read()

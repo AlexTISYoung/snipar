@@ -289,3 +289,29 @@ def test_invalid_inputs_are_rejected(fault):
         ld[0] = np.nan
     with pytest.raises(ValueError):
         estimator.fit_covariance(effects, sampling, ldscores=ld)
+
+
+def test_homogeneous_covariance_refits_weighted_psd_solution():
+    # A correlated sampling covariance makes clipping eigenvalues in the
+    # original units differ from clipping after whitening.
+    cov = np.array([[1.2, .35], [.35, .4]])
+    rng = np.random.default_rng(31)
+    effects = rng.normal(size=(120, 2)) @ np.array([[1.8, .2], [.1, .4]])
+    ld = rng.uniform(1, 3, len(effects))
+    blocks = np.repeat(np.arange(6), 20)
+    sampling = np.broadcast_to(cov, (len(effects), 2, 2))
+    fit = estimator.fit_coherent(effects, sampling, ld, blocks=blocks)
+    l = np.linalg.cholesky(cov)
+
+    def weighted_oracle(keep):
+        whitened = np.linalg.solve(l, effects[keep].T).T
+        moment = whitened.T @ (whitened / ld[keep, None]) / np.sum(1 / ld[keep])
+        spectrum, eigenvectors = np.linalg.eigh(moment)
+        return l @ ((eigenvectors * np.maximum(spectrum - 1, 0)) @ eigenvectors.T) @ l.T
+
+    np.testing.assert_allclose(fit['covariance'], weighted_oracle(np.ones(len(effects), dtype=bool)),
+                               rtol=2e-7, atol=2e-9)
+    i, j = np.triu_indices(2)
+    np.testing.assert_allclose(fit['moment_delete'],
+                               [weighted_oracle(blocks != block)[i, j] for block in np.unique(blocks)],
+                               rtol=2e-7, atol=2e-9)

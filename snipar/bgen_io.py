@@ -15,14 +15,18 @@ class BgenFile:
 
     def __init__(self, filename):
         self._reader = BgenReader(str(filename))
-        if self._reader.header.has_sample_ids:
-            self.samples = np.asarray(self._reader.samples, dtype=str)
-            if self.samples.size and self.samples[0] != "sample_0":
-                return
-        sample_file = Path(filename).with_suffix(".sample")
-        self.samples = read_oxford_sample(sample_file)
-        if len(self.samples) != self._reader.header.nsamples:
-            raise ValueError("Sample file length differs from the BGEN sample count")
+        try:
+            if self._reader.header.has_sample_ids:
+                self.samples = np.asarray(self._reader.samples, dtype=str)
+                if not len(self.samples) or self.samples[0] != "sample_0":
+                    return
+            sample_file = Path(filename).with_suffix(".sample")
+            self.samples = read_oxford_sample(sample_file)
+            if len(self.samples) != self._reader.header.nsamples:
+                raise ValueError("Sample file length differs from the BGEN sample count")
+        except BaseException:
+            self.close()
+            raise
 
     @cached_property
     def ids(self):
@@ -49,12 +53,13 @@ class BgenFile:
         records = []
         for i in range(len(self._reader)):
             variant = self._reader[i]
+            alleles = variant.alleles
             # Offset of the genotype block after the variable-length BGEN identifier fields.
-            strings = [variant.varid, variant.rsid, variant.chrom, *variant.alleles]
-            header_size = (12 if variant.layout == 2 else 14) + 4 * len(variant.alleles)
+            strings = (variant.varid, variant.rsid, variant.chrom, *alleles)
+            header_size = (12 if variant.layout == 2 else 14) + 4 * len(alleles)
             vaddr = variant.fileoffset + header_size + sum(len(s.encode()) for s in strings)
             records.append((variant.varid, variant.rsid, variant.chrom, variant.pos,
-                            len(variant.alleles), ",".join(variant.alleles), vaddr))
+                            len(alleles), ",".join(alleles), vaddr))
         return pd.DataFrame.from_records(records, columns=["id", "rsid", "chrom", "pos",
                                                            "nalleles", "allele_ids", "vaddr"])
 
@@ -68,25 +73,23 @@ class BgenFile:
         if isinstance(sample_index, slice):
             sample_count = len(range(*sample_index.indices(len(self.samples))))
         else:
-            sample_index = np.atleast_1d(sample_index)
-            sample_count = (np.count_nonzero(sample_index) if sample_index.dtype == bool
-                            else len(sample_index))
+            sample_index = _array_index(sample_index, len(self.samples), 'sample')
+            sample_count = len(sample_index)
+        nvariants = len(self._reader)
         if isinstance(variant_index, slice):
-            variants = range(*variant_index.indices(len(self._reader)))
+            variants = range(*variant_index.indices(nvariants))
         else:
-            variants = np.atleast_1d(variant_index)
-            if variants.dtype == bool:
-                if len(variants) != len(self._reader):
-                    raise IndexError("Boolean variant mask length differs from BGEN variant count")
-                variants = np.flatnonzero(variants)
-        if not len(self._reader):
+            variants = _array_index(variant_index, nvariants, 'variant')
+        if not nvariants:
             raise ValueError("BGEN file has no variants")
         first = int(variants[0]) if len(variants) else 0
         probs = self._reader[first].probabilities
         result = np.empty((sample_count, len(variants), probs.shape[1]), dtype=dtype, order="F")
+        previous = first
         for column, i in enumerate(variants):
-            if column:
+            if i != previous:
                 probs = self._reader[int(i)].probabilities
+                previous = i
             if probs.shape[1] != result.shape[2]:
                 raise ValueError("Selected BGEN variants have different probability dimensions")
             result[:, column, :] = probs[sample_index]
@@ -100,3 +103,20 @@ class BgenFile:
 
     def __exit__(self, *exc_info):
         self.close()
+
+
+def _array_index(index, size, axis):
+    index = np.atleast_1d(index)
+    if index.ndim != 1:
+        raise IndexError(f'BGEN {axis} index must be one dimensional')
+    if index.dtype.kind == 'b':
+        if len(index) != size:
+            raise IndexError(f'Boolean {axis} mask length differs from BGEN {axis} count')
+        return np.flatnonzero(index)
+    if not index.size:
+        return index.astype(np.intp)
+    if index.dtype.kind not in 'iu':
+        raise IndexError(f'BGEN {axis} indices must be integers or booleans')
+    if np.any(index >= size) or np.any(index < -size):
+        raise IndexError(f'BGEN {axis} index out of bounds')
+    return np.where(index < 0, index + size, index).astype(np.intp)

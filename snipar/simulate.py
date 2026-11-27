@@ -4,62 +4,48 @@ from snipar.utilities import *
 from snipar.map import decode_map_from_pos
 
 ### Read haplotypes from bgen
-def haps_from_bgen(bgenfiles,chr_range):
-    bgenfiles, chroms = parse_obsfiles(bgenfiles, obsformat='bgen', chromosomes=chr_range)
-    # Read genotypes
-    haps = []
-    maps = []
-    snp_ids = []
-    alleles = []
-    positions = []
-    for i in range(bgenfiles.shape[0]):
-        print('Reading in chromosome '+str(chroms[i]))
-        # Read bgen
-        bgen = open_bgen(bgenfiles[i], verbose=True)
-        # Read map
-        map = decode_map_from_pos(chroms[i], bgen.positions)
-        not_nan = np.logical_not(np.isnan(map))
-        maps.append(map[not_nan])
-        positions.append(bgen.positions[not_nan])
-        # Snp
-        snp_ids.append(bgen.rsids[not_nan])
-        # Alleles
-        alleles.append(np.array([x.split(',') for x in bgen.allele_ids[not_nan]]))
-        # Read genotypes
-        gts = bgen.read(([x for x in range(bgen.samples.shape[0])], [x for x in range(bgen.ids.shape[0])]), np.bool_)[:, :,
-            np.array([0, 2])]
-        gts = gts[:,not_nan]
-        nfam = int(np.floor(gts.shape[0] / 2))
-        ngen = np.zeros((nfam, 2, gts.shape[1], 2), dtype=np.bool_)
-        ngen[:, 0, :, :] = gts[0:nfam, :, :]
-        ngen[:, 1, :, :] = gts[nfam:(2 * nfam), :, :]
-        del gts
-        haps.append(ngen)
+def haps_from_bgen(bgenfiles, chr_range, nfam=None):
+    bgenfiles, chroms = parse_obsfiles(bgenfiles, obsformat="bgen", chromosomes=chr_range)
+    haps, maps, snp_ids, alleles, positions = [], [], [], [], []
+    samples = None
+    for i, file in enumerate(bgenfiles):
+        bgen = open_bgen(file, verbose=True)
+        if chroms[i] == 0:
+            file_chroms = np.unique(bgen.chromosomes)
+            if len(file_chroms) != 1 or not str(file_chroms[0]).isdigit():
+                raise ValueError("Supply a single BGEN chromosome, or use a chromosome wildcard")
+            chroms[i] = int(file_chroms[0])
+        print(f"Reading in chromosome {chroms[i]}")
+        if samples is None:
+            n_pairs = len(bgen.samples) // 2 if nfam is None else nfam
+            if not 1 <= n_pairs <= len(bgen.samples) // 2:
+                raise ValueError("Number of requested families exceeds the available pairs")
+            samples = bgen.samples[:2 * n_pairs]
+            rows = np.arange(len(samples))
+        else:
+            sample_indices = make_id_dict(bgen.samples)
+            try:
+                rows = np.array([sample_indices[iid] for iid in samples])
+            except KeyError as exc:
+                raise ValueError(f"BGEN chromosomes disagree on sample {exc.args[0]}") from exc
+        if len(set(samples)) != len(samples):
+            raise ValueError("BGEN files must have unique sample IDs")
+        genetic_map = decode_map_from_pos(chroms[i], bgen.positions)
+        markers = np.flatnonzero(np.isfinite(genetic_map))
+        if not len(markers):
+            raise ValueError(f"No SNPs on chromosome {chroms[i]} have genetic map positions")
+        order = np.argsort(bgen.positions[markers], kind="stable")
+        markers = markers[order]
+        probs = bgen.read((rows, markers), np.float32)
+        if probs.shape[2] != 4 or not np.isfinite(probs).all():
+            raise ValueError("Found missing or unphased genotypes; simulation requires complete phased biallelic BGEN input")
+        calls = probs[:, :, [0, 2]] >= .5
+        haps.append(calls.reshape((2, n_pairs, len(markers), 2)).transpose(1, 0, 2, 3).copy())
+        maps.append(genetic_map[markers])
+        positions.append(bgen.positions[markers])
+        snp_ids.append(bgen.rsids[markers])
+        alleles.append(np.array([x.split(",") for x in bgen.allele_ids[markers]]))
     return haps, maps, snp_ids, alleles, positions, chroms
-
-### Simulate haplotypes ###
-# Simulate frequencies: either all one value, or sampled from density proportional to 1/x
-def simulate_freqs(nsnp, maf=None, min_maf=None):
-    if maf is not None:
-        if 0.5>=maf>0:
-            freqs = maf*np.ones((nsnp))
-        else:
-            raise(ValueError('MAF must be between zero and 0.5'))
-    else:
-        if 0.5>=min_maf>0:
-            C = -1/np.log(2*min_maf)
-            u = np.random.uniform(0,1,nsnp)
-            freqs = min_maf*np.exp(u/C)
-        else:
-            raise(ValueError('minimum MAF must be between zero and 0.5'))
-    return freqs
-
-@njit
-def simulate_haplotypes(freqs,nfam):
-    haps = np.zeros((nfam,2,freqs.shape[0],2),dtype=np.bool_)
-    for i in prange(freqs.shape[0]):
-        haps[:, :, i, :] = np.random.binomial(1,freqs[i],(nfam,2,2))
-    return haps
 
 def simulate_first_gen(nfam, ncausal, maf=None,min_maf=0.05):
         # Chromosomes
@@ -90,18 +76,20 @@ def simulate_freqs(nsnp, maf=None, min_maf=None, Fst=0):
             raise(ValueError('MAF must be between zero and 0.5'))
     else:
         if 0.5>=min_maf>0:
-            C = -1/np.log(2*min_maf)
-            u = np.random.uniform(0,1,nsnp)
-            freqs = min_maf*np.exp(u/C)
+            u = np.random.uniform(0, 1, nsnp)
+            freqs = min_maf * np.exp(-u * np.log(2 * min_maf))
         else:
             raise(ValueError('minimum MAF must be between zero and 0.5'))
     return freqs
 
-@njit
-def simulate_haplotypes(freqs,nfam):
-    haps = np.zeros((nfam,2,freqs.shape[0],2),dtype=np.bool_)
-    for i in prange(freqs.shape[0]):
-        haps[:, :, i, :] = np.random.binomial(1,freqs[i],(nfam,2,2))
+@njit(cache=True, parallel=True)
+def simulate_haplotypes(freqs, nfam):
+    haps = np.empty((nfam, 2, len(freqs), 2), dtype=np.bool_)
+    for family in prange(nfam):
+        for sex in range(2):
+            for snp in range(len(freqs)):
+                haps[family, sex, snp, 0] = np.random.random() < freqs[snp]
+                haps[family, sex, snp, 1] = np.random.random() < freqs[snp]
     return haps
 
 @njit
@@ -122,49 +110,40 @@ def meiosis(map,n=1):
     for r in range(n):
         n_recomb, recomb_points = simulate_recombinations(map)
         # Initialize
-        last_hap = np.bool_(np.random.binomial(1,0.5,1)[0])
+        last_hap = np.random.randint(2) != 0
         recomb_vector[r,:] = np.bool_(last_hap)
         # Recombine
         if n_recomb>0:
             for i in range(n_recomb):
-                first_snp = np.argmax(map>recomb_points[i])
+                first_snp = np.searchsorted(map, recomb_points[i], side="right")
                 recomb_vector[r,first_snp:recomb_vector.shape[1]] = ~recomb_vector[r,first_snp:recomb_vector.shape[1]]
     # Return
     return recomb_vector
 
 
 ##### Produce next generation for unlinked variants #####
-@njit(parallel=True)
-def produce_next_gen_unlinked(father_indices,mother_indices,males,females):
-    ngen = np.zeros((father_indices.shape[0],2,males.shape[1],2),dtype=np.bool_)
-    ibd = np.zeros((father_indices.shape[0],males.shape[1],2),dtype=np.bool_)
-    for i in prange(ngen.shape[0]):
-        meiosis = np.random.binomial(1,0.5,(4,ngen.shape[2]))
-        for j in range(0,meiosis.shape[1]):
-            # Paternal sib 1
-            if meiosis[0,j] == 0:
-                ngen[i, 0, j, 0] = males[father_indices[i], j, 0]
-            else:
-                ngen[i, 0, j, 0] = males[father_indices[i], j , 1]
-            # Paternal sib 2
-            if meiosis[1,j] == 0:
-                ngen[i, 1, j, 0] = males[father_indices[i], j, 0]
-            else:
-                ngen[i, 1, j, 0] = males[father_indices[i], j , 1]
-            # Maternal sib 1
-            if meiosis[2,j] == 0:
-                ngen[i, 0, j, 1] = females[mother_indices[i], j, 0]
-            else:
-                ngen[i, 0, j, 1] = females[mother_indices[i], j , 1]
-            # Maternal sib 2
-            if meiosis[3,j] == 0:
-                ngen[i, 1, j, 1] = females[mother_indices[i], j, 0]
-            else:
-                ngen[i, 1, j, 1] = females[mother_indices[i], j , 1]
-            # IBD
-            ibd[i, j, 0] = meiosis[0,j]==meiosis[1,j]
-            ibd[i, j, 1] = meiosis[2,j]==meiosis[3,j]
-    return ngen, ibd
+@njit(cache=True, parallel=True)
+def produce_next_gen_unlinked(father_indices, mother_indices, males, females):
+    n_families = len(father_indices)
+    n_snps = males.shape[1]
+    children = np.empty((n_families, 2, n_snps, 2), dtype=np.bool_)
+    ibd = np.empty((n_families, n_snps, 2), dtype=np.bool_)
+    for i in prange(n_families):
+        father, mother = father_indices[i], mother_indices[i]
+        # Four independent fair transmissions per SNP, eight SNPs per draw.
+        for start in range(0, n_snps, 8):
+            bits = np.random.randint(0, 2**32)
+            for j in range(start, min(start + 8, n_snps)):
+                father_a, father_b = bits & 1, (bits >> 1) & 1
+                mother_a, mother_b = (bits >> 2) & 1, (bits >> 3) & 1
+                children[i, 0, j, 0] = males[father, j, father_a]
+                children[i, 1, j, 0] = males[father, j, father_b]
+                children[i, 0, j, 1] = females[mother, j, mother_a]
+                children[i, 1, j, 1] = females[mother, j, mother_b]
+                ibd[i, j, 0] = father_a == father_b
+                ibd[i, j, 1] = mother_a == mother_b
+                bits >>= 4
+    return children, ibd
 
 #### Produce next generation with linkage through recombination map #####
 @njit(parallel=True)
@@ -205,28 +184,44 @@ def produce_next_gen(father_indices,mother_indices,males,females,map):
 def random_mating_indices(nfam):
     return np.random.choice(np.array([x for x in range(nfam)],dtype=np.int_),size=nfam,replace=False)
 
-def am_indices(yp,ym,r):
-    v = np.sqrt(np.var(yp)*np.var(ym))
-    s2 = (1/r-1)*v
-    zp = yp+np.sqrt(s2)*np.random.randn(yp.shape[0])
-    zm = ym+np.sqrt(s2)*np.random.randn(ym.shape[0])
+def am_indices(yp, ym, r):
+    if not -1 <= r <= 1:
+        raise ValueError("Parental correlation must be between -1 and 1")
+    if r == 0:
+        return np.random.permutation(len(yp)), np.random.permutation(len(ym))
+    # Adding independent noise attenuates same-rank mating to the requested correlation.
+    noise_scale = np.sqrt(1 / abs(r) - 1)
+    zp = yp + noise_scale * np.std(yp) * np.random.randn(len(yp))
+    zm = ym + noise_scale * np.std(ym) * np.random.randn(len(ym))
     rank_p = np.argsort(zp)
     rank_m = np.argsort(zm)
+    if r < 0:
+        rank_m = rank_m[::-1]
     return rank_p, rank_m
 
-def compute_genetic_component(haps,causal,a):
-    causal = set(causal)
-    G_m = np.zeros((haps[0].shape[0]))
-    G_p = np.zeros((haps[0].shape[0]))
-    snp_count = 0
-    for chr in range(len(haps)):
-        snp_index = np.array([snp_count+x for x in range(haps[chr].shape[2])])
-        in_causal = np.array([snp_index[x] in causal for x in range(haps[chr].shape[2])])
-        causal_gts = np.sum(haps[chr][:,:,in_causal,:],axis=3)
-        G_p += causal_gts[:, 0, :].dot(a[snp_index[in_causal]])
-        G_m += causal_gts[:, 1, :].dot(a[snp_index[in_causal]])
-        snp_count += haps[chr].shape[2]
-    return G_p, G_m
+@njit(cache=True, parallel=True)
+def _add_chromosome_scores(chromosome, markers, effects, paternal, maternal):
+    for row in prange(chromosome.shape[0]):
+        p = m = 0.0
+        for i in range(len(markers)):
+            snp = markers[i]
+            p += effects[i] * (int(chromosome[row, 0, snp, 0]) + int(chromosome[row, 0, snp, 1]))
+            m += effects[i] * (int(chromosome[row, 1, snp, 0]) + int(chromosome[row, 1, snp, 1]))
+        paternal[row] += p
+        maternal[row] += m
+
+
+def compute_genetic_component(haps, causal, a):
+    causal = np.unique(np.fromiter(causal, dtype=np.intp))
+    paternal = np.zeros(haps[0].shape[0])
+    maternal = np.zeros(haps[0].shape[0])
+    start = 0
+    for chromosome in haps:
+        end = start + chromosome.shape[2]
+        markers = causal[np.searchsorted(causal, start):np.searchsorted(causal, end)]
+        _add_chromosome_scores(chromosome, markers - start, a[markers], paternal, maternal)
+        start = end
+    return paternal, maternal
 
 def compute_phenotype(haps,causal,a,sigma2):
     G_p, G_m = compute_genetic_component(haps,causal,a)
@@ -284,11 +279,12 @@ def simulate_effects(haps, n_causal, h2, old_haps=None, v_indirect=0, r_direct_i
     if v_indirect==0:
         print('Simulating direct genetic effects')
         a = np.zeros((nsnp))
-        causal = np.sort(np.random.choice(np.arange(0,nsnp),n_causal,replace=False))
         a[causal] = np.random.randn(n_causal)
         G_p, G_m = compute_genetic_component(haps,causal,a)
-        scale_fctr = np.sqrt(h2/np.var(np.hstack((G_p,G_m))))
-        a = a*scale_fctr
+        variance = np.var(np.hstack((G_p, G_m)))
+        if h2 > 0 and variance <= 0:
+            raise ValueError("Causal variants have no genetic variance in the simulated cohort")
+        a *= np.sqrt(h2 / variance) if h2 > 0 else 0
         h2_total = h2
     else:
         if old_haps is None:
@@ -301,10 +297,12 @@ def simulate_effects(haps, n_causal, h2, old_haps=None, v_indirect=0, r_direct_i
                                                 np.array([[1,r_direct_indirect],[r_direct_indirect,1]]),
                                                 size=n_causal)
         G_males, G_females, Y_males, Y_females, eta_p, eta_m, delta_p, delta_m = compute_phenotype_indirect(haps,old_haps,father_indices,mother_indices,causal,a[:,0],a[:,1],0)
-        # Rescale direct effects
-        a[:,0] = a[:,0] * np.sqrt(h2 / np.var(np.hstack((G_males, G_females))))
-        # Rescale indirect effects
-        a[:,1] = a[:,1] * np.sqrt(v_eg / np.var(eta_p+eta_m))
+        direct_variance = np.var(np.hstack((G_males, G_females)))
+        indirect_variance = np.var(eta_p + eta_m)
+        if h2 > 0 and (direct_variance <= 0 or indirect_variance <= 0):
+            raise ValueError("Causal variants have no genetic variance in the simulated cohort")
+        a[:, 0] *= np.sqrt(h2 / direct_variance) if h2 > 0 else 0
+        a[:, 1] *= np.sqrt(v_eg / indirect_variance) if v_eg > 0 else 0
     return a, causal, h2_total
 
 
@@ -791,11 +789,14 @@ def find_sibs_and_cousins(ped):
     sibs[:,3] = 'FS'
     # Fill in cousin relatedness
     cousins = np.zeros((int(2*last_gen.shape[0]),4),dtype=ped.dtype)
-    parent_gen_fam_dict = make_id_dict(parent_gen)
+    father_offspring_by_id, mother_offspring_by_id = {}, {}
+    for _, iid, father, mother, *_ in last_gen:
+        father_offspring_by_id.setdefault(father, []).append(iid)
+        mother_offspring_by_id.setdefault(mother, []).append(iid)
     ccount = 0
     for i in range(0,parent_gen.shape[0],2):
-        father_offspring = last_gen[last_gen[:,2]==parent_gen[i,1],1]
-        mother_offspring = last_gen[last_gen[:,3]==parent_gen[i+1,1],1]
+        father_offspring = father_offspring_by_id[parent_gen[i, 1]]
+        mother_offspring = mother_offspring_by_id[parent_gen[i + 1, 1]]
         for j in range(0,2):
             for k in range(0,2):
                 cousins[ccount,:] = [father_offspring[j], mother_offspring[k], 0.125,

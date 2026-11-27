@@ -4,6 +4,10 @@ from typing import NamedTuple
 import numpy as np
 
 
+class NoMatchingVariantsError(ValueError):
+    """No compatible SNPs remain after aligning observed and imputed genotypes."""
+
+
 class MatchedVariants(NamedTuple):
     chromosome: np.ndarray
     sid: np.ndarray
@@ -74,7 +78,7 @@ def match_variants(sid, chromosome, pos, alleles, imputation, snp_ids=None, star
         keep = np.isin(sid[obs], requested[counts == 1])
         obs, imp = obs[keep], imp[keep]
     if obs.size == 0:
-        raise ValueError('No SNPs with unique IDs in common between imputed and observed data')
+        raise NoMatchingVariantsError('No SNPs with unique IDs in common between imputed and observed data')
     order = np.argsort(imp)
     obs, imp = obs[order], imp[order]
 
@@ -92,7 +96,7 @@ def match_variants(sid, chromosome, pos, alleles, imputation, snp_ids=None, star
 
     keep = forward | reverse
     if not np.any(keep):
-        raise ValueError('No alleles match between observed and imputed genotypes')
+        raise NoMatchingVariantsError('No alleles match between observed and imputed genotypes')
     if not np.all(keep):
         print(f'Removing {np.sum(~keep)} SNPs with mismatched alleles between imputed and observed')
     obs, imp = obs[keep], imp[keep]
@@ -100,3 +104,29 @@ def match_variants(sid, chromosome, pos, alleles, imputation, snp_ids=None, star
     if 'Chr' in columns and np.any(chrom == ''):
         chrom = np.where(chrom == '', bim[:, columns.index('Chr')][imp], chrom)
     return MatchedVariants(chrom, sid[obs], pos[obs], alleles[obs], (reverse & ~forward)[keep], imp, obs)
+
+
+def observed_variant_indices(observed_ids, requested, preserve_order):
+    """Match only unambiguous IDs, optionally retaining the caller's requested order."""
+    unique, indices = _unique_ids(observed_ids)
+    if requested is None:
+        return np.sort(indices) if preserve_order else indices
+    requested = np.asarray(requested)
+    if not preserve_order:
+        requested, _ = _unique_ids(requested)
+    locations = np.searchsorted(unique, requested)
+    valid = locations < len(unique)
+    locations = locations[valid]
+    return indices[locations[unique[locations] == requested[valid]]]
+
+
+def sibling_sample_indices(sibpairs, id_dict, format_name):
+    """Use each observed sibling once even if the pedigree contains several pairs."""
+    pairs = np.asarray(sibpairs, dtype=str).reshape(-1, 2) if sibpairs is not None else []
+    present = [(first, second) for first, second in pairs if first in id_dict and second in id_dict]
+    dropped = len(pairs) - len(present)
+    if dropped:
+        print(f'{dropped} sibling pairs do not both have genotypes in {format_name}')
+    if not present:
+        raise ValueError(f'No sibling pairs have both genotypes in {format_name}')
+    return np.array(sorted({id_dict[iid] for pair in present for iid in pair}), dtype=int)

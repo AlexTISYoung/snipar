@@ -35,16 +35,20 @@ def test_fresh_process_cross_entry_point_cache(first, tmp_path):
     sampling = np.array([[.1, -.03], [-.03, .15]])
     signal = np.array([[.8, .1], [.1, .4]])
     effects = rng.normal(size=(n, 2)) @ np.linalg.cholesky(signal+sampling).T
+    # Heterogeneous sampling exercises the compiled numerical fit rather
+    # than the exact common-covariance solution.
+    scales = np.linspace(.8, 1.2, n)
+    effects *= scales[:, None]
     data = tmp_path / 'effects.npz'
-    np.savez(data, effects=effects, sampling=np.repeat(sampling[None], n, axis=0))
+    np.savez(data, effects=effects, sampling=sampling[None] * scales[:, None, None]**2)
     sumstats = tmp_path / 'sumstats.tsv'
     with sumstats.open('w') as handle:
         writer = csv.writer(handle, delimiter='\t')
         writer.writerow(['SNP', 'CHR', 'pos', 'freq', 'direct_Beta', 'direct_SE',
                          'avg_NTC_Beta', 'avg_NTC_SE', 'r_direct_avg_NTC'])
         for index, effect in enumerate(effects):
-            writer.writerow(['rs'+str(index), 1, index+1, .3, effect[0], np.sqrt(.1),
-                             effect[1], np.sqrt(.15), -.03/np.sqrt(.015)])
+            writer.writerow(['rs'+str(index), 1, index+1, .3, effect[0], scales[index]*np.sqrt(.1),
+                             effect[1], scales[index]*np.sqrt(.15), -.03/np.sqrt(.015)])
     package_script = """import json,sys,numpy as np
 from snipar.coherent import fit_coherent,fast_kernels
 data=np.load(sys.argv[1])

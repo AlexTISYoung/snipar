@@ -54,7 +54,8 @@ beginning ``FID IID FATHER_ID MOTHER_ID`` followed by score columns. The
 precomputed-score reader also accepts files beginning ``FID IID`` without
 parental IDs; however, parental IDs/status are needed for ``--bpg`` and for
 estimating the parental correlation used by ``--h2f`` when ``--rk`` is absent.
-Use a single space between header fields, as in the generated file.
+Separate fields with whitespace. The generated file uses a single space
+between fields.
 
 ``FID`` identifies a full-sibling family and ``IID`` identifies the proband.
 In generated files, a parental ID is ``NA`` when that parent is not genotyped;

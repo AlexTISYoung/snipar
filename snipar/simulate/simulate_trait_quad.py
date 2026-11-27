@@ -2,12 +2,6 @@ import numpy as np
 import argparse
 from pysnptools.snpreader import Bed
 
-def convert_str_array(x):
-    x_shape = x.shape
-    x = x.flatten()
-    x_out = np.array([y.decode('UTF-8') for y in x])
-    return x_out.reshape(x_shape)
-
 parser = argparse.ArgumentParser()
 parser.add_argument('gts', type=str, help='Path to bed file with sibling genotypes')
 parser.add_argument('ped', type=str, help='Path to pedigree file')
@@ -20,69 +14,55 @@ args=parser.parse_args()
 
 fsize = args.fsize
 
-print('reading genotypes')
-gts_f = Bed(args.gts,count_A1 = True)
-gts_ids = gts_f.iid
-#gts_ids = np.loadtxt('fsize4.fam', dtype='S20')
-gts_ids = gts_ids[:,0:2]
-id_dict = {}
-for i in range(0,gts_ids.shape[0]):
-    id_dict[gts_ids[i,1]] =i
+print("reading genotypes")
+bed = Bed(args.gts, count_A1=True)
+ids = {iid: index for index, iid in enumerate(bed.iid[:, 1])}
+genotypes = bed.read().val
+if not np.isfinite(genotypes).all():
+    raise ValueError("Trait simulation requires complete genotypes")
+bim = np.loadtxt(args.gts.removesuffix(".bed") + ".bim", dtype=str, ndmin=2)
 
-# Read causal genotypes
-gts = gts_f.read().val
-gts = np.array(gts)
+ped = np.loadtxt(args.ped, dtype=str, ndmin=2)
+if tuple(ped[0, :4]) == ("FID", "IID", "FATHER_ID", "MOTHER_ID"):
+    ped = ped[1:]
+families = {}
+for fid, iid, father, mother, *_ in ped:
+    if iid in ids and father in ids and mother in ids:
+        families.setdefault((fid, father, mother), []).append(iid)
+families = {key: children for key, children in families.items() if len(children) == fsize}
+if not families:
+    raise ValueError("The pedigree and genotypes do not contain a complete family of the requested size")
+if not 0 <= args.h2quad <= 1 or fsize < 1:
+    raise ValueError("Require heritability between zero and one and a positive family size")
+n_effects = 3 if args.no_sib else 4
+if not -1 / (n_effects - 1) <= args.dncor <= 1:
+    raise ValueError("Direct and indirect effect correlation is outside the valid range")
 
-# Read bim
-bim = np.loadtxt(args.gts.split('.bed')[0]+'.bim',dtype=str)
-
-# Find parents
-ped = convert_str_array(np.loadtxt(args.ped,dtype='S'))
-ped = ped[1:ped.shape[0],:]
-
-fams = np.unique(ped[:,0])
-
-G = np.zeros((fams.shape[0]*fsize,4,gts.shape[1]),dtype=np.int8)
-ped_out = np.zeros((fams.shape[0]*fsize,2),dtype='S20')
-for i in range(0,fams.shape[0]):
-    ped_fam = ped[ped[:,0]==fams[i],:]
-    sib_indices = np.array([id_dict[ped_fam[j,1]] for j in range(0,fsize)])
-    # Genotypes
-    for j in range(0,fsize):
-        G[fsize*i+j,0,:] = gts[sib_indices[j],:]
-    # Average of other sib genotypes
-    for j in range(0,fsize):
-        sib_indices_j = np.delete(sib_indices,j)
-        G[fsize*i+j,1,:] = np.sum(gts[sib_indices_j,:],axis=0)
-    G[(fsize*i):(fsize*(i+1)),2,:] = gts[id_dict[ped_fam[fsize, 1]],:]
-    G[(fsize*i):(fsize*(i+1)),3,:] = gts[id_dict[ped_fam[fsize+1, 1]],:]
-    ped_out[(fsize*i):(fsize*(i+1)),:] = ped_fam[0:fsize,0:2]
-
-print('simulating trait')
-# Simulate genetic effects
-if args.no_sib:
-    effect_cov = np.zeros((3,3))
-    G = G[:,np.array([0,2,3]),:]
-else:
-    effect_cov = np.zeros((4, 4))
-
-effect_cov[:] = args.dncor
-np.fill_diagonal(effect_cov,1)
-if args.no_sib:
-    b = np.random.multivariate_normal(np.zeros((3)),effect_cov,(gts.shape[1]))
-else:
-    b = np.random.multivariate_normal(np.zeros((4)),effect_cov,(gts.shape[1]))
-# # additive genetic component
-if args.no_sib:
-    A = G[:,0,:].dot(b[:,0])+G[:,1,:].dot(b[:,1])+G[:,2,:].dot(b[:,2])
-else:
-    A = G[:,0,:].dot(b[:,0])+G[:,1,:].dot(b[:,1])+G[:,2,:].dot(b[:,2])+G[:,3,:].dot(b[:,3])
-
+print("simulating trait")
+effect_cov = np.full((n_effects, n_effects), args.dncor)
+np.fill_diagonal(effect_cov, 1)
+b = np.random.multivariate_normal(np.zeros(n_effects), effect_cov, genotypes.shape[1])
+scores = genotypes @ b
+a_components, phenotype_ids = [], []
+for (fid, father, mother), children in sorted(families.items()):
+    rows = np.array([ids[iid] for iid in children])
+    direct = scores[rows, 0]
+    inherited = scores[ids[father], -2] + scores[ids[mother], -1]
+    family_effects = direct + inherited
+    if not args.no_sib:
+        family_effects += scores[rows, 1].sum() - scores[rows, 1]
+    a_components.extend(family_effects)
+    phenotype_ids.extend((fid, iid) for iid in children)
+A = np.asarray(a_components)
+ped_out = np.asarray(phenotype_ids)
 # Simulate residual variance
 e = np.random.randn(A.shape[0])
 
 ### Form phenotype
-a_factor = np.sqrt(args.h2quad)*np.power(np.std(A,axis=0),-1)
+genetic_sd = np.std(A)
+if genetic_sd <= 0 and args.h2quad > 0:
+    raise ValueError("Simulated genetic component has zero variance")
+a_factor = np.sqrt(args.h2quad) / genetic_sd if args.h2quad > 0 else 0
 
 # make phenotype
 y = A*a_factor+np.sqrt(1-args.h2quad)*e

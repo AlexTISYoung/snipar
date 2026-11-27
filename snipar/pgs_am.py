@@ -12,7 +12,7 @@ def delta_method(f, x, v_x):
     Returns:
         _type_: _description_
     """
-    if np.isnan(x).any():
+    if not np.all(np.isfinite(x)):
         return np.nan
     else:
         grad_f = nd.Gradient(f)(x)
@@ -62,7 +62,8 @@ def k_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
 
 def estimate_r(delta, se_delta, h2f, se_h2f, rk, return_all=True, bound=True, allow_neg_r=False):
     k = estimate_k(delta, se_delta, h2f, se_h2f, rk, bound=bound)
-    r = rk/(k+(1-k)*rk)
+    denominator = k + (1 - k) * rk
+    r = rk / denominator if denominator != 0 else np.nan
     if r>1 and bound:
         r=1
     elif r<(-1) and bound:
@@ -88,7 +89,7 @@ def h2eq_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
     return delta_method(est_h2eq, np.array([delta, h2f, rk]), np.diag([se_delta**2, se_h2f**2, se_rk**2]))
 
 def estimate_rho(delta, se_delta, h2f, se_h2f, rk, return_all=True, bound=True):
-    r = estimate_r(delta, se_delta, h2f, se_h2f, rk)
+    r = estimate_r(delta, se_delta, h2f, se_h2f, rk, bound=bound)
     rho = 1-(1-r['k'])*r['r']
     return {'rho':rho, 'r':r['r'], 'k':r['k']} if return_all else rho
 
@@ -99,8 +100,9 @@ def rho_se(delta, se_delta, h2f, se_h2f, rk, se_rk):
 
 def alpha_from_alpha(delta, se_delta, alpha, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
-    alpha = (rho['rho']+rho['k']*rho['r'])*(alpha/delta)-(1-rho['rho'])
-    alpha = alpha/(1+rho['r'])
+    denominator = delta * (1 + rho['r'])
+    numerator = (rho['rho'] + rho['k'] * rho['r']) * alpha - (1 - rho['rho']) * delta
+    alpha = numerator / denominator if denominator != 0 else np.nan
     if return_all:
         return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
@@ -116,7 +118,8 @@ def se_alpha_from_alpha(delta, se_delta, alpha, se_alpha, r_delta_alpha, h2f, se
 
 def alpha_from_beta(delta, se_delta, beta, h2f, se_h2f, rk, return_all=True):
     rho = estimate_rho(delta, se_delta, h2f, se_h2f, rk)
-    alpha = (rho['rho']-delta/beta)/((delta/beta)*(1+rho['r']))
+    denominator = delta * (1 + rho['r'])
+    alpha = (rho['rho'] * beta - delta) / denominator if denominator != 0 else np.nan
     if return_all:
         return {'alpha_delta':alpha, 'rho':rho['rho'], 'r':rho['r'], 'k':rho['k']}
     else:
@@ -230,9 +233,9 @@ def simulate_ests(n, delta, alpha, beta, v_alpha_delta_beta, h2f, h2f_se, rk, rk
 def se_check(ests,se_ests):
     return np.nanmedian(se_ests)/np.nanstd(ests)
 
-def check_se_calc(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se):
+def check_se_calc(n, delta, alpha, beta, v_alpha_delta_beta, h2f, h2f_se, rk, rk_se):
     # Simulate sample estimates
-    k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_beta_ests, se_alpha_from_beta_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests, v_eta_delta_ests, se_v_eta_delta_ests = simulate_ests(n, delta, delta_se, alpha, alpha_se, h2f, h2f_se, rk, rk_se)
+    k_ests, se_k_ests, r_ests, se_r_ests, h2eq_ests, se_h2eq_ests, rho_ests, se_rho_ests, alpha_from_beta_ests, se_alpha_from_beta_ests, alpha_from_alpha_ests, se_alpha_from_alpha_ests, v_eta_delta_ests, se_v_eta_delta_ests = simulate_ests(n, delta, alpha, beta, v_alpha_delta_beta, h2f, h2f_se, rk, rk_se)
     # Check standard error estimates
     return np.nanmean(k_ests), se_check(k_ests,se_k_ests), np.nanmean(r_ests), se_check(r_ests,se_r_ests), np.nanmean(h2eq_ests), se_check(h2eq_ests,se_h2eq_ests), np.nanmean(rho_ests), se_check(rho_ests,se_rho_ests), np.nanmean(alpha_from_beta_ests), se_check(alpha_from_beta_ests,se_alpha_from_beta_ests), np.nanmean(alpha_from_alpha_ests), se_check(alpha_from_alpha_ests,se_alpha_from_alpha_ests), np.nanmean(v_eta_delta_ests), se_check(v_eta_delta_ests,se_v_eta_delta_ests)
     

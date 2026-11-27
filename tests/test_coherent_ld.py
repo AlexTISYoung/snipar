@@ -99,3 +99,12 @@ def test_duplicate_backend_ids_and_no_overlap_are_rejected(tmp_path, monkeypatch
                         lambda *args: (np.array([1.]), np.array(['b'])))
     with pytest.raises(ValueError, match='No SNPs in common'):
         coherent_ld.compute_ldscores(prefix, ['a'], [1])
+
+
+def test_chromosome_without_shared_snps_does_not_discard_other_chromosomes(tmp_path, monkeypatch):
+    _bed(tmp_path, 'chr1', [(1, 'a', 10)])
+    _bed(tmp_path, 'chr2', [(2, 'b', 10)])
+    monkeypatch.setattr(coherent_ld, 'ldscores_from_bed',
+                        lambda filename, chrom, *args: (np.array([2.]), np.array(['a' if chrom == 1 else 'b'])))
+    value, _ = coherent_ld.compute_ldscores(tmp_path / 'chr@', ['a', 'c'], [1, 2])
+    np.testing.assert_allclose(value, [2., np.nan])

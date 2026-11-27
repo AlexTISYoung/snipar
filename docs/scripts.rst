@@ -25,6 +25,31 @@ gwas.py
 .. _gwas.py:
 .. automodule:: snipar.scripts.gwas
 
+gts_matrix.py
+-------------
+Writes family genotype arrays with proband and parental dosages and, with
+``--fit_sib``, sibling dosages. It accepts the same BED or BGEN prefixes and
+imputation or pedigree inputs as the scoring command.
+
+    ``gts_matrix.py --bed chr_@ --imp chr_@ --out genotypes``
+
+It writes one ``.genoarray.hdf5`` file per chromosome. The files include sample
+and variant identifiers, and ``--help`` lists the filtering options.
+
+make_rdr_grms.py
+----------------
+Computes proband, parental, and symmetrized parent–offspring genomic
+relatedness matrices from PLINK BED genotypes and pedigree information.
+Use ``--pargts`` to include parental genotypes produced by ``impute.py``.
+
+    ``make_rdr_grms.py chr_1.bed rdr --ped pedigree.txt --hdf5_out``
+
+With ``--hdf5_out``, ``rdr_grms.hdf5`` contains the three matrices, their
+variant count and the family and individual IDs in matrix order. The
+default output is three sets of GCTA ``.grm.bin``, ``.grm.N.bin`` and
+``.grm.id`` files. ``--min_maf`` and ``--max_missing`` filter variants by minor
+allele frequency and percent missing calls.
+
 pgs.py
 -------
 .. _pgs.py:

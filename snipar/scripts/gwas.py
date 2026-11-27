@@ -60,6 +60,10 @@ def main(args):
             list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
     """
     import os, time
+    if args.cpus < 1 or args.threads < 1:
+        raise ValueError('--cpus and --threads must be positive integers')
+    if args.batch_size is not None and args.batch_size < 1:
+        raise ValueError('--batch_size must be a positive integer')
     num_threads = args.threads
     print('Number of threads for numpy: '+str(num_threads))
     # export OMP_NUM_THREADS=...
@@ -84,8 +88,8 @@ def main(args):
     # Check if mutually incompatible design arguments supplied
     if int(args.robust) + int(args.sib_diff) + int(args.impute_unrel) > 1:
         raise argparse.ArgumentTypeError('Only supply one of --robust, --sib_diff and --impute_unrel.')
-    if (args.robust or args.sib_diff) and args.fit_sib:
-        raise argparse.ArgumentTypeError('Cannot fit sib IGE while --robust or --sib_diff is supplied.')
+    if (args.robust or args.sib_diff or args.impute_unrel) and args.fit_sib:
+        raise argparse.ArgumentTypeError('Cannot fit sib IGE with --robust, --sib_diff or --impute_unrel.')
     if (args.sib_diff or args.robust) and args.parsum:
         raise argparse.ArgumentTypeError('--parsum is ignored with --sib_diff and --robust estimator.')
     # Check if GRM provided
@@ -141,8 +145,7 @@ def main(args):
         print("No imputation provided.")
         if args.robust:
             raise ValueError("The robust estimator requires imputed parental genotypes. If these are not available, remove the --robust flag and a meta analysis of trios and siblings will be performed.")
-        trios_sibs = True if not args.sib_diff else False
-        trios_only = False
+        trios_sibs = not (args.sib_diff or args.fit_sib)
         # if trios_sibs and not args.impute_unrel:
         #     print('Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.')
         if args.bed is not None:
@@ -154,7 +157,6 @@ def main(args):
         pargts_list = [None for x in range(chroms.shape[0])]
     else:
         trios_sibs = False
-        trios_only = False
         if args.bed is not None:
             bedfiles, pargts_list, chroms = parse_filelist(args.bed, args.imp, 'bed', chromosomes=args.chr_range)
             bgenfiles = [None for x in range(chroms.shape[0])]
@@ -166,106 +168,53 @@ def main(args):
     # Read phenotype and covariates
     ######### Read Phenotype ########
     y = read.phenotype.read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
-    ######## Read covariates ########
-    if args.covar is not None:
-        print('Reading covariates')
-        covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
-        # Match to pheno ids
-        # covariates.filter_ids(y.ids)
-    else:
-        covariates = None
-    ########## Read pedigree ########
+    if args.keep is not None:
+        keep = np.loadtxt(args.keep, dtype=str, usecols=0, ndmin=1)
+        y.filter_ids(y.ids[np.isin(y.ids, keep)])
     if args.imp is None:
-        # Read pedigree from file
-        print('Reading pedigree from '+str(args.pedigree))
-        ped = np.loadtxt(args.pedigree,dtype=str)[1:,]
+        print('Reading pedigree from ' + args.pedigree)
+        ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
         if ped.shape[1] < 4:
-            raise(ValueError('Not enough columns in pedigree file'))
-        elif ped.shape[1] > 4:
-            print('WARNING: pedigree file has more than 4 columns. The first four columns only will be used.')
-        # Remove rows with missing parents
-        sibpairs, ped = get_sibpairs_from_ped(ped)
-        imp_fams = None
+            raise ValueError('Not enough columns in pedigree file')
+        if ped.shape[1] > 4:
+            print('WARNING: only the first four pedigree columns will be used.')
+        if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
+            ped = ped[1:]
+        _, ped = get_sibpairs_from_ped(ped[:, :4])
+        pedigrees = [(ped, None)] * len(chroms)
     else:
-        ped, imp_fams = read.build_ped_from_par_gts(pargts_list[0])
-        if args.sib_diff:
-            imp_fams = None # imputation not used
-    # # Check if sibling pairs are present
-    # if sibpairs is not None:
-    #     print('Found '+str(sibpairs.shape[0])+' sibling pairs in pedigree')
-    # else:
-    #     print('Found 0 sibling pairs')
-    #     if args.sib_diff:
-    #         raise argparse.ArgumentTypeError('No sibling pairs found in pedigree. Cannot use sibling difference estimator.')
-    #     if not args.no_sib_var:
-    #         print('No sibling pairs found in pedigree. Dropping sibling variance component')
-    #         args.no_sib_var = True
-    ####### Print which estimator will be used #########
+        pedigrees = [read.build_ped_from_par_gts(path) for path in pargts_list]
     if args.robust:
-        print("== The robust estimator will be used.")
+        print('== The robust estimator will be used.')
     elif args.sib_diff:
-        print("== The sib-difference estimator will be used.")
-    elif trios_sibs:
-        if args.impute_unrel:
-            print("== The unified estimator will be used.")
-        else:
-            print("== Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.")
+        print('== The sib-difference estimator will be used.')
     elif args.impute_unrel:
-        print("== The unified estimator will be used.")
-    else:
-        print("== The Young estimator will be used.")
-    print("Check if the dataset is feasible for the selected estimator...")
-    ## Find which individuals can be used for the selected estimator ##
-    if args.sib_diff:
-        # Find individuals with genotyped siblings
-        ids = y.ids
-        fam_labels = y.fams
-        ped_dict = make_id_dict(ped,1)
-        y.filter_ids(ped[:,1])
-        print(str(y.shape[0])+' individuals with phenotype values found in pedigree')
-        ped_indices = np.array([ped_dict[x] for x in y.ids])
-        y.fams = ped[ped_indices,0]
-        ids = y.ids
-        fam_labels = y.fams
-        ids, fam_labels = read.get_ids_with_sibs(bedfiles[0] if args.bed is not None else bgenfiles[0], ped, 
-                                                 y.ids, return_info=False, ibdrel_path=args.grm)
+        print('== The unified estimator will be used.')
     elif trios_sibs:
-        if args.impute_unrel:
-            # Remove siblings
-            ids = remove_sibs(
-                ped, bedfiles[0] if args.bed is not None else bgenfiles[0], y.ids
-            )
-            # Find trios
-            ids, fam_labels = read.get_ids_with_par(
-                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
-                ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.grm,
-                return_info=False
-            )
-            trios_sibs = False
-        else:
-            # Find individuals with genotyped siblings and/or both parents genotyped
-            ids, fam_labels, trios_only = read.get_ids_with_trios_sibs(
-                bedfiles[0] if args.bed is not None else bgenfiles[0], ped, y.ids, ibdrel_path=args.grm
-            )
+        print('== Defaulting to meta-analyzing trios and siblings using genetic differences between siblings.')
     else:
-        # Find individuals with observed and/or imputed parental genotypes
-        ids, fam_labels = read.get_ids_with_par(
-            bedfiles[0] if args.bed is not None else bgenfiles[0], ped, imp_fams,
-            y.ids, sib=args.fit_sib, include_unrel=args.impute_unrel, ibdrel_path=args.grm,
-            return_info=False
-        )
-    #### Filter phenotype to valid IDs ###
-    y.filter_ids(ids)
-    if args.sib_diff:
-        ids = y.ids
-        fam_labels = y.fams
-    np.testing.assert_array_equal(ids, y.ids)
-    if args.covar:
-        if not args.sib_diff:
-            covariates.filter_ids(ids)
-            np.testing.assert_array_equal(ids, covariates.ids)
+        print('== The Young estimator will be used.')
+
+    observed_files = bedfiles if args.bed is not None else bgenfiles
+    ids = y.ids
+    trios_by_chromosome = []
+    for observed, (ped, imp_fams) in zip(observed_files, pedigrees):
+        trios = None
+        if args.sib_diff:
+            ids, fam_labels = read.get_ids_with_sibs(observed, ped, ids, ibdrel_path=args.grm)
+        elif trios_sibs and not args.impute_unrel:
+            ids, fam_labels, genotype_indices = read.get_ids_with_trios_sibs(
+                observed, ped, ids, ibdrel_path=args.grm, return_info=True)
+            trios = ids[np.all(genotype_indices >= 0, axis=1)]
         else:
-            covariates.filter_ids(y.ids)
+            if trios_sibs:
+                ids = remove_sibs(ped, observed, ids)
+            ids, fam_labels = read.get_ids_with_par(observed, ped, imp_fams, ids,
+                                                     sib=args.fit_sib, include_unrel=args.impute_unrel,
+                                                     ibdrel_path=args.grm)
+        trios_by_chromosome.append(trios)
+    trios_sibs = trios_sibs and not args.impute_unrel
+    print(f'Using {len(ids)} individuals eligible on all chromosomes.')
     # Read GRM if provided 
     if args.grm is not None:
         id_dict = make_id_dict(ids)
@@ -277,6 +226,13 @@ def main(args):
         id_dict = make_id_dict(ids)
         grm_data, grm_row_ind, grm_col_ind = slmm.build_grm_arr(
             args.grmgz, id_dict=id_dict, thres=args.sparse_thresh)
+    y.filter_ids(ids)
+    covariates = None
+    if args.covar is not None:
+        print('Reading covariates')
+        covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)
+        covariates.filter_ids(y.ids)
+
     # Build sparse silbship array if fitting sib variance component
     if not args.no_sib_var:
         sib_data, sib_row_ind, sib_col_ind = slmm.build_sib_arr(fam_labels)
@@ -300,12 +256,11 @@ def main(args):
             raise ValueError(f'Supplied varcomps length {len(varcomps)} does not match the number of variance components.')
     else:
         varcomps = None
-    # Define sparse linear mixed model for variance component estimation
-    if args.covar is None:
-        y.gts -= y.gts.mean()
-        model = slmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=None, add_intercept=False, add_jitter=False)
-    else:
-        model = slmm.LinearMixedModel(y.gts.reshape(-1).data, varcomps=varcomps, varcomp_arr_lst=varcomp_lst, covar_X=covariates.gts.data, add_intercept=True, add_jitter=False)
+    # Fit the null model on the same ordered cohort used for the SNP regressions.
+    model = slmm.LinearMixedModel(y.gts.data.reshape(-1), varcomps=varcomps,
+                                  varcomp_arr_lst=varcomp_lst,
+                                  covar_X=None if covariates is None else covariates.gts.data,
+                                  add_intercept=covariates is not None, drop_collinear_covariates=True)
     if not varcomps:
         print(f'Optimizing variance components...')
         # print('Nonzero entries: ', model.V.nnz, 'Number of individuals: ', model.n, 'density: ', model.V.nnz / model.n / model.n)
@@ -335,22 +290,7 @@ def main(args):
         print(f'Implied sibling correlation: {(0.5*varcomps[0] + varcomps[1]) / np.sum(varcomps):.3f}')
     else:
         print(f'Implied sibling correlation: {0.5*varcomps[0] / np.sum(varcomps):.3f}')
-    # Define variance components: does this need to be done twice?     
     sigmas = model.varcomps
-    if not args.no_grm_var:
-        if not args.no_sib_var:
-            varcomp_lst = (
-                (grm_data, grm_row_ind, grm_col_ind),
-                (sib_data, sib_row_ind, sib_col_ind),
-            )
-        else:
-            varcomp_lst = (
-                (grm_data, grm_row_ind, grm_col_ind),
-            )
-    elif not args.no_sib_var:
-        varcomp_lst = (
-            (sib_data, sib_row_ind, sib_col_ind),
-        )
     ######### Process chromosomes ###########
     start = time.time()
     for i in range(chroms.shape[0]):
@@ -363,7 +303,9 @@ def main(args):
         if chroms.shape[0]>1:
             print('Estimating SNP effects for chromosome '+str(chroms[i]))
         else:
-            print('Estimaing SNP effects')
+            print('Estimating SNP effects')
+        ped, imp_fams = pedigrees[i]
+        trios_only = trios_sibs and np.all(np.isin(y.ids, trios_by_chromosome[i]))
         process_chromosome(chroms[i], y, varcomp_lst,
                            ped, imp_fams, sigmas, args.out, covariates, 
                            bedfile=bedfiles[i], bgenfile=bgenfiles[i],

@@ -1,6 +1,8 @@
 from snipar.gtarray import gtarray
 import numpy as np
-from snipar.read import get_gts_matrix
+from snipar.read import bed, bgen, get_gts_matrix
+from snipar.read.variants import NoMatchingVariantsError, bgen_variant_ids
+import h5py
 from snipar.utilities import *
 from scipy.optimize import fmin_l_bfgs_b
 from numba import njit, prange
@@ -10,6 +12,7 @@ from pysnptools.snpreader import Bed
 import numdifftools as nd
 import warnings
 from pathlib import Path
+from contextlib import nullcontext
 from snipar.pgs_am import *
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -27,13 +30,19 @@ class pgs(object):
 
     """
     def __init__(self,snp_ids,weights,alleles):
-        if snp_ids.shape[0] == weights.shape[0] and alleles.shape[0] == weights.shape[0] and alleles.shape[1]==2:
-            self.snp_ids = snp_ids
-            self.snp_dict = make_id_dict(snp_ids)
-            self.weights = weights
-            self.alleles = alleles
-        else:
-            raise ValueError('All inputs must have the same dimension')
+        snp_ids = np.asarray(snp_ids)
+        weights = np.asarray(weights)
+        alleles = np.asarray(alleles)
+        if snp_ids.ndim != 1 or weights.shape != snp_ids.shape or alleles.shape != (snp_ids.size, 2):
+            raise ValueError('PGS SNP IDs, weights and allele pairs have incompatible shapes')
+        if not np.isfinite(weights).all():
+            raise ValueError('PGS weights must be finite')
+        self.snp_ids = snp_ids
+        self.snp_dict = make_id_dict(snp_ids)
+        if len(self.snp_dict) != len(snp_ids):
+            raise ValueError('PGS weights must have unique SNP IDs')
+        self.weights = weights
+        self.alleles = alleles
     
     def remove_zeros(self):
         zero_weight = self.weights==0
@@ -67,94 +76,103 @@ class pgs(object):
                 names given in 'cols' are stored in 'sid' attribute of the output.
 
         """
-        if not type(garray) == gtarray:
+        if not isinstance(garray, gtarray):
             raise ValueError('Must be of gtarray class')
         if garray.alleles is None:
             raise ValueError('Alleles of genotype matrix must be provided')
-        # Match SNP IDs
-        in_pgs_snps = np.array([x in self.snp_dict for x in garray.sid])
-        nmatch = np.sum(in_pgs_snps)
-        if nmatch==0:
+        weight_indices = np.fromiter((self.snp_dict.get(snp, -1) for snp in garray.sid),
+                                     dtype=np.intp, count=len(garray.sid))
+        variant_indices = np.flatnonzero(weight_indices >= 0)
+        if not variant_indices.size:
             print('No overlap between PGS SNPs and genotype SNPs')
             return None
-        else:
-            # Get weights
-            matched_snps = garray.sid[in_pgs_snps]
-            matched_alleles = garray.alleles[in_pgs_snps,:]
-            snp_indices = np.zeros((nmatch),dtype=int)
-            for i in range(0,nmatch):
-                snp_indices[i] = self.snp_dict[matched_snps[i]]
-            weights_compute = self.weights[snp_indices]
-            alleles = self.alleles[snp_indices,:]
-            # Match alleles and adjust weights
-            a_match = np.logical_and(alleles[:,0] == matched_alleles[:, 0], alleles[:,1] == matched_alleles[:, 1])
-            a_reverse = np.logical_and(alleles[:,0] == matched_alleles[:, 1], alleles[:,1] == matched_alleles[:, 0])
-            a_nomatch = np.logical_and(np.logical_not(a_match), np.logical_not(a_reverse))
-            n_nomatch = np.sum(a_nomatch)
-            if n_nomatch > 0:
-                print('Removing ' + str(n_nomatch) + ' SNPs due to allele mismatch between genotypes and PGS alleles')
-                weights_compute[a_nomatch] = 0
-            weights_compute[a_reverse] = -weights_compute[a_reverse]
 
-        ### Compute PGS
-        if garray.ndim == 2:
-            geno_means = np.mean(garray.gts[:, in_pgs_snps],axis=0)
-            garray.gts = garray.gts[:, in_pgs_snps]-geno_means
-            pgs_val = ma.dot(garray.gts[:, in_pgs_snps],weights_compute)
-        elif garray.ndim == 3:
-            geno_means = np.mean(garray.gts[:, 0, in_pgs_snps], axis=0)
-            pgs_val = np.zeros((garray.gts.shape[0], garray.gts.shape[1]), garray.dtype)
-            for i in range(0, garray.gts.shape[1]):
-                if cols[i]=='parental':
-                    sf = 2.0                
-                else:
-                    sf = 1.0
-                garray.gts[:, i, in_pgs_snps] = garray.gts[:, i, in_pgs_snps]-sf*geno_means
-                pgs_val[:, i] = ma.dot(garray.gts[:, i, in_pgs_snps], weights_compute)
-        return pgarray(pgs_val, garray.ids, sid=cols, fams=garray.fams, par_status=garray.par_status, ped=garray.ped)
-        
+        weight_indices = weight_indices[variant_indices]
+        score_alleles = self.alleles[weight_indices]
+        genotype_alleles = garray.alleles[variant_indices]
+        forward = np.all(score_alleles == genotype_alleles, axis=1)
+        reverse = np.all(score_alleles == genotype_alleles[:, ::-1], axis=1) & ~forward
+        matched = forward | reverse
+        if not np.all(matched):
+            print(f'Removing {np.sum(~matched)} SNPs due to allele mismatch between genotypes and PGS alleles')
+        if not np.any(matched):
+            return None
+
+        indices = variant_indices[matched]
+        weights = self.weights[weight_indices[matched]] * np.where(reverse[matched], -1, 1)
+        genotypes = garray.gts
+        n_cols = 1 if garray.ndim == 2 else genotypes.shape[1]
+        if cols is None:
+            cols = ['proband'] + [f'relative_{i}' for i in range(1, n_cols)]
+        cols = np.asarray(cols)
+        if cols.shape != (n_cols,):
+            raise ValueError('Provide one PGS column name per genotype column')
+
+        # Limit each working array to one generation. Missing genotypes
+        # contribute zero after centering by the proband allele dosage.
+        genotypes = genotypes[:, None, :] if garray.ndim == 2 else genotypes
+        if indices.size != genotypes.shape[-1]:
+            proband = genotypes[:, 0, indices]
+        else:
+            proband = genotypes[:, 0, :]
+        complete = not np.any(ma.getmask(genotypes))
+        means = proband.data.mean(axis=0) if complete else proband.mean(axis=0)
+        if complete:
+            score_mean = means @ weights
+        dtype = genotypes.dtype if garray.ndim == 3 and genotypes.dtype.kind == 'f' else np.float64
+        result = np.empty((genotypes.shape[0], n_cols), dtype=dtype)
+        for column, name in enumerate(cols):
+            if column == 0:
+                values = proband
+            elif indices.size == genotypes.shape[-1]:
+                values = genotypes[:, column, :]
+            else:
+                values = genotypes[:, column, indices]
+            scale = 2 if name == 'parental' else 1
+            if complete:
+                # Center the projected score, avoiding a second sample x SNP
+                # matrix and the full float64 cast used by mixed-dtype dot.
+                result[:, column] = np.einsum('ij,j->i', values.data, weights, dtype=float) - scale * score_mean
+            else:
+                result[:, column] = ma.dot(values - scale * means, weights).filled(np.nan)
+        return pgarray(result, garray.ids, sid=cols, fams=garray.fams,
+                       par_status=garray.par_status, ped=garray.ped)
+
+
 def read_weights(weights, SNP='SNP', beta_col='b', A1='A1', A2='A2', sep=None):
-    if sep is None:
-        weights = np.loadtxt(weights,dtype=str)
-    else:
-        weights = np.loadtxt(weights,dtype=str, delimiter=sep)
-    colnames = weights[0,:]
-    weights = weights[1:weights.shape[0],:]
-    print('Read weights for '+str(weights.shape[0])+' variants')
-    beta = np.array(weights[:,np.where(colnames == beta_col)[0][0]],dtype=np.float64)
-    allele_indices = np.array([np.where(colnames==A1)[0][0],np.where(colnames==A2)[0][0]])
-    return pgs(weights[:,np.where(colnames==SNP)[0][0]],
-            beta,
-            weights[:,allele_indices])
+    table = np.loadtxt(weights, dtype=str, delimiter=sep, ndmin=2)
+    if table.shape[0] < 2:
+        raise ValueError('Weights file must contain a header and at least one variant')
+    header = table[0].tolist()
+    columns = [SNP, beta_col, A1, A2]
+    if any(header.count(name) != 1 for name in columns):
+        raise ValueError('Weight file must contain each required column exactly once: ' + ', '.join(columns))
+    snp, beta, a1, a2 = [header.index(name) for name in columns]
+    print(f'Read weights for {table.shape[0] - 1} variants')
+    return pgs(table[1:, snp], table[1:, beta].astype(float), table[1:, [a1, a2]])
+
 
 def read_pgs(pgs_file):
-    pgs_f = open(pgs_file,'r')
-    pgs_header = pgs_f.readline().split(' ')
-    pgs_header[len(pgs_header)-1] = pgs_header[len(pgs_header)-1].split('\n')[0]
-    ncols = len(pgs_header)
-    if pgs_header[0]=='FID' and pgs_header[1]=='IID':
-        precols = 2
-    else:
-        raise(ValueError('First two columns of PGS file must be FID and IID'))
-    if pgs_header[2]=='FATHER_ID' and pgs_header[3]=='MOTHER_ID':
-        precols = 4
-    pgs_cols = tuple([x for x in range(precols,ncols)])
-    # Read pedigree
-    if precols==4:
-        ped = np.loadtxt(pgs_file,usecols=tuple([x for x in range(4)]),dtype=str, skiprows=1)
-    else:
-        ped = None
-    if ped is not None:
-        par_status = np.array(ped[:,2:4]=='NA',dtype=int)
-    else:
-        par_status = None
-    pg = pgarray(np.genfromtxt(pgs_file,usecols = pgs_cols, skip_header=1, missing_values=['nan','NA','N/A']),
-                    np.loadtxt(pgs_file,usecols = 1, dtype=str, skiprows=1),
-                    sid=np.array(pgs_header[precols:ncols]),
-                    fams=np.loadtxt(pgs_file,usecols = 0, dtype=str, skiprows=1),
-                    par_status = par_status,
-                    ped=ped)
-    return pg
+    table = np.loadtxt(pgs_file, dtype=str, comments=None, ndmin=2)
+    if not table.size or not np.array_equal(table[0, :2], ['FID', 'IID']):
+        raise ValueError('First two columns of PGS file must be FID and IID')
+    has_parents = np.array_equal(table[0, 2:4], ['FATHER_ID', 'MOTHER_ID'])
+    n_metadata = 4 if has_parents else 2
+    header = table[0, n_metadata:]
+    if not header.size or table.shape[0] < 2:
+        raise ValueError('PGS file must contain at least one score column and one observation')
+    if np.unique(header).size != header.size:
+        raise ValueError('PGS column names must be unique')
+    ids = table[1:, 1]
+    if np.unique(ids).size != ids.size:
+        raise ValueError('PGS individual IDs (IID) must be unique')
+    ped = table[1:, :4].copy() if has_parents else None
+    par_status = (ped[:, 2:4] == 'NA').astype(int) if has_parents else None
+    values = table[1:, n_metadata:]
+    values[np.isin(values, ['NA', 'N/A'])] = 'nan'
+    return pgarray(values.astype(float), ids, sid=header, fams=table[1:, 0],
+                   par_status=par_status, ped=ped)
+
 
 def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
@@ -177,122 +195,84 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
             observed/imputed maternal PGS
 
     """
-    # Check for SNP overlap
-    if bedfile is not None:
-        bed = Bed(bedfile, count_A1=True)
-        snp_ids = bed.sid
-    if bgenfile is not None:
-        bgen = open_bgen(bgenfile)
-        snp_ids = bgen.ids
-        if np.unique(snp_ids).shape[0] == 1:
-            snp_ids = bgen.rsids
-    pgs_snp_set = set(pgs.snp_ids)
-    in_snp_set = np.array([x in pgs_snp_set for x in snp_ids])
-    if np.sum(in_snp_set)==0:
-        print('No overlap between variants in weights file and observed genotypes')
+    if (bedfile is None) == (bgenfile is None):
+        raise ValueError('Provide one BED or BGEN file')
+    if compute_controls and par_gts_f is None:
+        raise ValueError('Control PGSs require an imputed parental genotype file')
+    if batch_size is not None and (int(batch_size) != batch_size or batch_size < 1):
+        raise ValueError('PGS batch size must be a positive integer')
+
+    source = nullcontext(Bed(bedfile, count_A1=True)) if bedfile is not None else open_bgen(bgenfile, verbose=False)
+    matched = None
+    with source as observed:
+        snp_ids = observed.sid if bedfile is not None else bgen_variant_ids(observed)[0]
+        pgs_snp_set = set(pgs.snp_ids)
+        snps = np.array([snp for snp in snp_ids if snp in pgs_snp_set], dtype=str)
+        _, indices, counts = np.unique(snps, return_index=True, return_counts=True)
+        snps = snps[np.sort(indices[counts == 1])]
+        if not snps.size:
+            print('No unique variants in common between weights file and observed genotypes')
+            return None
+        if par_gts_f is not None:
+            try:
+                with h5py.File(par_gts_f, 'r') as imputed:
+                    if bedfile is not None:
+                        matched = bed._match_variants(observed, imputed, Path(bedfile).with_suffix('.bim'), snps)
+                    else:
+                        matched = bgen._match_variants(observed, imputed, snps)
+            except NoMatchingVariantsError as exc:
+                print(exc)
+                return None
+            snps = matched.sid
+
+    n_snps = snps.size
+    batch_size = n_snps if batch_size is None else min(int(batch_size), n_snps)
+    scores = None
+    for start in range(0, n_snps, batch_size):
+        batch = slice(start, start + batch_size)
+        genotypes = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
+                                   ped=ped, snp_ids=snps[batch], sib=sib, compute_controls=compute_controls,
+                                   verbose=verbose and start == 0,
+                                   matched_variants=None if matched is None else matched.subset(batch))
+        for index, array in enumerate(genotypes if compute_controls else (genotypes,)):
+            cols = ['proband', 'sibling'] if sib else ['proband']
+            cols += ['paternal', 'maternal'] if array.shape[1] == len(cols) + 2 else ['parental']
+            score = pgs.compute(array, cols)
+            if score is None:
+                continue
+            if scores is None:
+                scores = [None] * (4 if compute_controls else 1)
+            scores[index] = score if scores[index] is None else scores[index].add(score)
+    if scores is None:
         return None
-    else:
-        ## Get genotype matrix
-        snps_in_pgs = snp_ids[in_snp_set]
-        # Get batch size
-        if batch_size is not None:
-            batch_size = min(batch_size, snps_in_pgs.shape[0])
-        else: 
-            batch_size = snps_in_pgs.shape[0]
-        # Set batch boundaries 
-        n_batches = int(np.ceil(snps_in_pgs.shape[0]/batch_size))
-        batch_boundaries = np.zeros((n_batches,2),dtype=int)
-        for i in range(n_batches-1):
-            batch_boundaries[i,:] = [i*batch_size,(i+1)*batch_size]
-        batch_boundaries[n_batches-1,:] = [(n_batches-1)*batch_size,snps_in_pgs.shape[0]]
-        ## Compute PGS, reading snps in batches
-        # First batch
-        G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, 
-                           snp_ids=snps_in_pgs[batch_boundaries[0,0]:batch_boundaries[0,1]], 
-                           sib=sib, compute_controls=compute_controls, verbose=verbose)
-        if sib:
-            if G.shape[1]==4:
-                cols = np.array(['proband', 'sibling', 'paternal', 'maternal'])
-            else:
-                cols = np.array(['proband','sibling','parental'])
-        else:
-            if G.shape[1]==3:
-                cols = np.array(['proband', 'paternal', 'maternal'])
-            else:
-                cols = np.array(['proband','parental'])
-        if compute_controls:
-            pgs_out = [pgs.compute(x,cols) for x in G[0:3]]
-            if sib:
-                o_cols = np.array(['proband', 'sibling', 'parental'])
-            else:
-                o_cols = np.array(['proband','parental'])
-            pgs_out.append(pgs.compute(G[3], o_cols))
-        else:
-            pgs_out = pgs.compute(G,cols)
-        # Remaining batches
-        for i in range(1,n_batches):
-            del G
-            G = get_gts_matrix(bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ped=ped, 
-                               snp_ids=snps_in_pgs[batch_boundaries[i,0]:batch_boundaries[i,1]], 
-                               sib=sib, compute_controls=compute_controls, verbose=False)
-            if compute_controls:
-                pgs_out_i = [pgs.compute(x,cols) for x in G[0:3]]
-                if sib:
-                    o_cols = np.array(['proband', 'sibling', 'parental'])
-                else:
-                    o_cols = np.array(['proband','parental'])
-                pgs_out_i.append(pgs.compute(G[3], o_cols))
-                pgs_out = [pgs_out[x].add(pgs_out_i[x]) for x in range(0, len(pgs_out))]
-            else:
-                pgs_out = pgs_out.add(pgs.compute(G,cols))
-        return pgs_out
-        
+    if compute_controls and any(score is None for score in scores):
+        raise ValueError('No matching weighted variants for one or more control groups')
+    return scores if compute_controls else scores[0]
+
 
 class pgarray(gtarray):
 
-    def add(self,garray):
-        """
-        Adds another gtarray of the same dimension to this array and returns the sum. It matches IDs before summing.
-        """
-        if type(garray)==pgarray:
-            pass
-        else:
+    def add(self, garray):
+        """Sum scores across independent variant sets, matching by individual ID."""
+        if not isinstance(garray, pgarray):
             raise ValueError('Must add to another pgarray')
-
-        if not self.gts.ndim == garray.gts.ndim:
-            raise ValueError('Arrays must have same number of dimensions')
-
-        if self.gts.ndim == 2:
-            if not self.gts.shape[1] == garray.gts.shape[1]:
-                raise ValueError('Arrays must have same dimensions (apart from first)')
-
-        if self.gts.ndim == 3:
-            if not self.gts.shape[1:3] == garray.gts.shape[1:3]:
-                raise ValueError('Arrays must have same dimensions (apart from first)')
-
-        # Match IDs
-        common_ids = list(self.id_dict.keys() & garray.id_dict.keys())
-        if len(common_ids) == 0:
-            raise ValueError('No IDs in common')
-        self_index = np.array([self.id_dict[x] for x in common_ids])
-        other_index = np.array([garray.id_dict[x] for x in common_ids])
-
-        # Out
-        if self.ids.ndim == 1:
-            ids_out = self.ids[self_index]
+        if self.gts.shape[1:] != garray.gts.shape[1:] or not np.array_equal(self.sid, garray.sid):
+            raise ValueError('PGS arrays must have the same score columns')
+        if np.array_equal(self.ids, garray.ids):
+            left = right = slice(None)
         else:
-            ids_out = self.ids[self_index, :]
-
-        if self.gts.ndim ==2:
-            add_gts = self.gts[self_index, :]+garray.gts[other_index, :]
-        else:
-            add_gts = self.gts[self_index, :, :] + garray.gts[other_index, :, :]
-        if self.ped is None:
-            ped = garray.ped
-        else:
-            ped = self.ped
-
-        return pgarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:], ped=ped)
+            common = [iid for iid in self.id_dict if iid in garray.id_dict]
+            if not common:
+                raise ValueError('No IDs in common')
+            left = [self.id_dict[iid] for iid in common]
+            right = [garray.id_dict[iid] for iid in common]
+        a, b = self.gts[left], garray.gts[right]
+        combined = ma.array(a.filled(0) + b.filled(0), mask=ma.getmask(a) & ma.getmask(b))
+        fams = None if self.fams is None else self.fams[left]
+        par_status = None if self.par_status is None else self.par_status[left]
+        ped = self.ped if self.ped is not None else garray.ped
+        return pgarray(combined, self.ids[left], self.sid, alleles=self.alleles,
+                       fams=fams, par_status=par_status, ped=ped)
 
     def filter_bpg(self):
         if self.par_status is None:
@@ -302,131 +282,102 @@ class pgarray(gtarray):
             self.filter_ids(bpg_ids)
 
     def estimate_r(self, return_se=True, parents_only=False):
-        # Check pgs columns
-        if 'paternal' in self.sid:
-            paternal_index = np.where(self.sid=='paternal')[0][0]
-        if 'maternal' in self.sid:
-            maternal_index = np.where(self.sid=='maternal')[0][0]
-        # count fams
-        fams = np.unique(self.fams, return_counts=True)
-        # Mapping of sibships to pgs rows
-        fam_dict = {}
-        for fam in fams[0]:
-            fam_dict[fam] = np.where(self.fams==fam)[0]
-        # record genotype status of parents in each fam
-        par_status_fams = np.zeros((fams[0].shape[0],2),dtype=int)
-        for i in range(fams[0].shape[0]):
-            par_status_fams[i,:] = self.par_status[fam_dict[fams[0][i]][0]]
-        # get family sizes including parents
-        fsizes = fams[1]+np.sum(par_status_fams==0,axis=1)
-        ## pgs matrix with observed sibs and parents for each fam
-        pgs_fam = np.zeros((fams[0].shape[0],np.max(fsizes)))
-        pgs_fam[:] = np.nan
-        # record whether sib or parent
-        is_sib = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
-        is_father = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
-        is_mother = np.zeros((fams[0].shape[0],np.max(fsizes)),dtype=bool)
-        # populate
-        for i in range(fams[0].shape[0]):
-            # Fill in sibs
-            sib_indices = fam_dict[fams[0][i]]
-            pgs_fam[i,0:sib_indices.shape[0]] = self.gts[sib_indices,0]
-            is_sib[i,0:sib_indices.shape[0]] = True
-            npar = 0
-            if par_status_fams[i,0] == 0:
-                pgs_fam[i,sib_indices.shape[0]] = self.gts[sib_indices[0],paternal_index]
-                is_father[i,sib_indices.shape[0]] = True
-                npar = 1
-            if par_status_fams[i,1] == 0:
-                pgs_fam[i,sib_indices.shape[0]+npar] = self.gts[sib_indices[0],maternal_index]
-                is_mother[i,sib_indices.shape[0]+npar] = True
-        is_parent = np.logical_or(is_father,is_mother)
-        # normalize
-        pgs_fam[is_sib] = (pgs_fam[is_sib]-np.mean(pgs_fam[is_sib]))/np.std(pgs_fam[is_sib])
-        if np.sum(is_mother)>0:
-            pgs_fam[is_mother] = (pgs_fam[is_mother]-np.mean(pgs_fam[is_mother]))/np.std(pgs_fam[is_mother])
-        if np.sum(is_father)>0:
-            pgs_fam[is_father] = (pgs_fam[is_father]-np.mean(pgs_fam[is_father]))/np.std(pgs_fam[is_father])
-        # fam size dict
-        fsizes = dict(zip(list(fams[0]),list(fams[1])))
-        ### find correlation between maternal and paternal pgis
-        print('Finding MLE for correlation between parents scores')
-        ## Initialize with correlation from sibs and between parents
-        # correlation between parents
-        bpg = np.sum(self.par_status==0,axis=1)==2
-        n_bpg = np.sum(bpg)
-        if n_bpg>0:
-            r_bpg = np.corrcoef(self.gts[bpg,1],self.gts[bpg,2])[0,1]
-        else:
-            r_bpg = 0
+        if self.fams is None or self.par_status is None:
+            raise ValueError('Family IDs and parental genotype status are needed to estimate parental correlation')
+        family_ids, inverse, sizes = np.unique(self.fams, return_inverse=True, return_counts=True)
+        family_sizes = dict(zip(family_ids, sizes))
+        if not len(family_ids):
+            return np.nan, np.nan, family_sizes
+        # Group once, keeping the first member in the original order.
+        order = np.argsort(inverse, kind='stable')
+        first = order[np.concatenate(([0], np.cumsum(sizes[:-1])))]
+        scores = ma.asarray(self.gts, dtype=float).filled(np.nan)
+        parents = np.full((len(family_ids), 2), np.nan)
+        for i, name in enumerate(('paternal', 'maternal')):
+            observed = self.par_status[first, i] == 0
+            if name in self.sid_dict:
+                parents[observed, i] = scores[first[observed], self.sid_dict[name]]
+        has_both = np.isfinite(parents).all(axis=1)
+        n_both = has_both.sum()
+        r_par = np.nan
+        if n_both >= 2 and np.all(parents[has_both].std(axis=0) > 0):
+            r_par = np.clip(np.corrcoef(parents[has_both].T)[0, 1], -1, 1)
         if parents_only:
-            if n_bpg>0:
-                r_se = (1-r_bpg**2)/np.sqrt(n_bpg-1)
-                return r_bpg, r_se, fsizes
-            else:
-                return np.nan, np.nan, fsizes
+            se = (1 - r_par**2) / np.sqrt(n_both - 1) if n_both > 2 else np.nan
+            return r_par, se, family_sizes
+
+        proband = scores[:, self.sid_dict['proband']]
+        usable = np.isfinite(proband)
+        proband = _standardize(proband[usable])
+        usable_indices = inverse[usable][np.isfinite(proband)]
+        proband = proband[np.isfinite(proband)]
+        n_sib = np.bincount(usable_indices, minlength=len(family_ids))
+        sib_sum = np.bincount(usable_indices, weights=proband, minlength=len(family_ids))
+        sib_sq = np.bincount(usable_indices, weights=proband**2, minlength=len(family_ids))
+        for i in range(2):
+            observed = np.isfinite(parents[:, i])
+            parents[observed, i] = _standardize(parents[observed, i])
+        n_par = np.isfinite(parents).sum(axis=1)
+        par_sum = np.nansum(parents, axis=1)
+        par_sq = np.nansum(parents**2, axis=1)
+        informative = (n_sib + n_par) >= 2
+        if not np.any(informative):
+            return np.nan, np.nan, family_sizes
+
+        sib_mean = sib_sum / np.sqrt(np.maximum(n_sib, 1))
+        par_mean = par_sum / np.sqrt(np.maximum(n_par, 1))
+        counts, group = np.unique(np.column_stack((n_sib[informative], n_par[informative])),
+                                  axis=0, return_inverse=True)
+        moments = np.column_stack([np.bincount(group, weights=values[informative]) for values in (
+            sib_mean**2, par_mean**2, sib_mean * par_mean,
+            np.maximum(sib_sq - sib_mean**2, 0), np.maximum(par_sq - par_mean**2, 0))])
+        group_sizes = np.bincount(group)
+        n_sib_pairs = ((n_sib * (n_sib - 1)) // 2).sum()
+        r_sib = (np.sum(sib_sum**2 - sib_sq) / n_sib_pairs - 1) if n_sib_pairs else np.nan
+        init_values = np.array([r_par, r_sib])
+        init_weights = np.array([n_both, n_sib_pairs])
+        finite = np.isfinite(init_values)
+        r_init = np.average(init_values[finite], weights=init_weights[finite]) if np.any(finite) else 0.
+        r_init = np.clip(r_init, -.999, .999)
+
+        print('Finding MLE for correlation between parents scores')
+        def objective(x):
+            return _pgs_profile_loglik(x[0], counts, group_sizes, moments)
+
+        fit, _, info = fmin_l_bfgs_b(objective, x0=[r_init], approx_grad=True,
+                                    bounds=[(-.999, .999)])
+        if info['warnflag'] == 0:
+            r = fit[0]
+            curvature = nd.Hessian(objective, step=min(1e-3, (1 - abs(r)) / 4))(fit).item()
+            se = np.sqrt(2 / curvature) if curvature > 0 else np.nan
         else:
-            # Correlation from sibs
-            sib_2 = np.sum(is_sib,axis=1)>1
-            n_sib_2 = np.sum(sib_2)
-            if n_sib_2>0:
-                r_sib = 2*np.corrcoef(pgs_fam[sib_2,0],pgs_fam[sib_2,1])[0,1]-1
-            else:
-                r_sib = 0
-            # Initialize at weighted average
-            r_init = n_bpg*r_bpg+n_sib_2*r_sib
-            r_init = r_init/(n_bpg+n_sib_2)
-            # Find MLE
-            optimized = fmin_l_bfgs_b(func=pgs_cor_lik, x0=r_init,
-                                    args=(pgs_fam, is_sib, is_parent),
-                                    approx_grad=True,
-                                    bounds=[(-0.999,0.999)])
-            if optimized[2]['warnflag']==0:
-                r=optimized[0][0]
-                hess = nd.Hessian(pgs_cor_lik)
-                hess = hess([r], pgs_fam, is_sib, is_parent).item()
-                r_se = np.sqrt(2/hess)
-            else:
-                print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
-                r=r_init
-                r_se = (1-r**2)/np.sqrt(n_bpg+n_sib_2-1)
-            return r, r_se, fsizes
-    
+            print('Could not find MLE for correlation. Returning the observed family correlations.')
+            r = r_init
+            se = (1 - r**2) / np.sqrt(n_both + n_sib_pairs - 1) if n_both + n_sib_pairs > 1 else np.nan
+        return r, se, family_sizes
+
     def am_adj(self):
         print('Estimating correlation between maternal and paternal PGSs assuming equilibrium')
         r, r_se, fsizes = self.estimate_r()
-        r_z = r/r_se
-        print('Estimated correlation between maternal and paternal PGSs: '+str(round(r,4))+' S.E.='+str(round(r_se,4)))
-        if r_z>1.5:    
-            # Check pgs columns
-            if 'paternal' in self.sid and 'maternal' in self.sid:
-                paternal_index = np.where(self.sid=='paternal')[0][0]
-                maternal_index = np.where(self.sid=='maternal')[0][0]
-                parental_index = None
-            elif 'parental' in self.sid:
-                parental_index = np.where(self.sid=='parental')[0][0]
+        print(f'Estimated correlation between maternal and paternal PGSs: {r:.4f} S.E.={r_se:.4f}')
+        if np.isfinite(r_se) and r > 1.5 * r_se:
+            family_sizes = np.array([fsizes[fam] for fam in self.fams])
+            n_parents = (self.par_status == 0).sum(axis=1)
+            no_parents = n_parents == 0
+            print('Adjusting imputed PGSs for assortative mating')
+            if 'parental' in self.sid_dict and 'paternal' not in self.sid_dict:
+                self.gts[no_parents, self.sid_dict['parental']] *= npg_am_adj(r, family_sizes[no_parents])
             else:
-                raise(ValueError('No parental PGS values to adjust'))
-            # Adjust imputed parental PGSs
-            npar = np.sum(self.par_status==0,axis=1)
-            print('Adjuting imputed PGSs for assortative mating')
-            for i in range(self.gts.shape[0]):
-                # No parents genotyped
-                if npar[i]==0:
-                    if parental_index is None:
-                        self.gts[i,[paternal_index, maternal_index]] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,[paternal_index, maternal_index]]
-                    else:
-                        self.gts[i,parental_index] = npg_am_adj(r,fsizes[self.fams[i]])*self.gts[i,parental_index] 
-                # One parent genotyped
-                if npar[i]==1:
-                    # Father imputed
-                    if self.par_status[i,0] == 1:
-                        self.gts[i,paternal_index] = opg_am_adj(self.gts[i,paternal_index],self.gts[i,maternal_index],r,fsizes[self.fams[i]])
-                    # Mother imputed
-                    if self.par_status[i,1] == 1:
-                        self.gts[i,maternal_index] = opg_am_adj(self.gts[i,maternal_index],self.gts[i,paternal_index],r,fsizes[self.fams[i]])
+                father, mother = (self.sid_dict[name] for name in ('paternal', 'maternal'))
+                factor = npg_am_adj(r, family_sizes[no_parents])
+                self.gts[no_parents, father] *= factor
+                self.gts[no_parents, mother] *= factor
+                for index, (imputed, observed) in enumerate(((father, mother), (mother, father))):
+                    use = (n_parents == 1) & (self.par_status[:, index] == 1)
+                    self.gts[use, imputed] = opg_am_adj(
+                        self.gts[use, imputed], self.gts[use, observed], r, family_sizes[use])
         else:
-            print('Signal to noise ratio for correlation estimate too small, so not performing assortative mating adjustment. Use --force_am_adj to override')
+            print('Signal to noise ratio for correlation estimate too small, so not performing assortative mating adjustment.')
         return r, r_se
 
     def scale(self, sf=None):
@@ -436,6 +387,8 @@ class pgarray(gtarray):
             else:
                 raise(ValueError('Cannot scale as no proband column found and no scale factor provided'))
             sf = np.std(self.gts[:, proband_index])
+        if ma.is_masked(sf) or not np.isfinite(sf) or sf <= 0:
+            raise ValueError('PGS scale factor must be finite and positive')
         # Rescale by observed proband PGS
         self.gts = self.gts / sf
         return sf
@@ -444,15 +397,19 @@ class pgarray(gtarray):
         if scale:
             self.scale()
         ####### Write PGS to file ########  
-        parent_genotyped = self.par_status == 0
-        ped_dict = make_id_dict(self.ped,1)
-        ped_indices = np.array([ped_dict[x] for x in self.ids])
-        parent_ids = self.ped[ped_indices,2:4]
-        parent_ids[~parent_genotyped] = 'NA'
-        pg_out = np.column_stack((self.fams,self.ids,parent_ids,self.gts))
-        pg_header = np.column_stack((np.array(['FID','IID','FATHER_ID','MOTHER_ID']).reshape(1,4),self.sid.reshape(1,self.sid.shape[0])))
-        pg_out = np.vstack((pg_header,pg_out))
-        print('Writing PGS to ' + filename)
+        if self.fams is None:
+            raise ValueError('Family IDs are required to write a PGS file')
+        metadata = [self.fams, self.ids]
+        header = ['FID', 'IID']
+        if self.ped is not None and self.par_status is not None:
+            ped_dict = make_id_dict(self.ped, 1)
+            parent_ids = self.ped[[ped_dict[iid] for iid in self.ids], 2:4].astype(object)
+            parent_ids[self.par_status != 0] = 'NA'
+            metadata.extend(parent_ids.T)
+            header.extend(['FATHER_ID', 'MOTHER_ID'])
+        values = ma.asarray(self.gts, dtype=float).filled(np.nan)
+        pg_out = np.vstack((header + self.sid.tolist(), np.column_stack((*metadata, values))))
+        print('Writing PGS to ' + str(filename))
         np.savetxt(filename, pg_out, fmt='%s')
         return pg_out
     
@@ -478,6 +435,7 @@ class pgarray(gtarray):
         ## Create grandparental PGS matrix
         gpar = np.zeros((self.gts.shape[0],4))
         gpar[:] = np.nan
+        bpg_ped = self.ped[:0]
         if n_bpg>0:
             # Find their parents' IDs
             ped_dict = make_id_dict(self.ped,1)
@@ -502,17 +460,60 @@ class pgarray(gtarray):
                     # linear imputation from mother if no imputed
                     gpar[i_index, 2:4] = parent_means[1]+(1+r)*(self.gts[i_index, maternal_index]-parent_means[1])/2.0
         ## Append to PGS matrix
-        self.gts = np.hstack((self.gts,gpar))
+        self.gts = ma.column_stack((self.gts, ma.masked_invalid(gpar)))
         self.sid = np.hstack((self.sid,np.array(['gpp','gmp','gpm','gmm'])))
+        self.sid_dict = make_id_dict(self.sid)
+        self.shape = self.gts.shape
         return bpg_ped
         
-def opg_am_adj(pgi_imp, pgi_obs, r, n):
-    rcoef = r/((2**n)*(1+r)-r)
-    return rcoef*pgi_obs+(1+rcoef)*pgi_imp
+def _standardize(values):
+    if values.size < 2:
+        return np.full_like(values, np.nan)
+    scale = values.std()
+    return (values - values.mean()) / scale if scale > 0 else np.full_like(values, np.nan)
 
-def npg_am_adj(r,n):
-  rcoef = (1+r)/(1+(1-(1/2)**(n-1))*r)
-  return rcoef
+
+def opg_am_adj(pgi_imp, pgi_obs, r, n):
+    decay = np.exp2(-np.asarray(n, dtype=float))
+    coefficient = r * decay / (1 + r - r * decay)
+    return coefficient * pgi_obs + (1 + coefficient) * pgi_imp
+
+
+def npg_am_adj(r, n):
+    return (1 + r) / (1 + (1 - np.exp2(1 - np.asarray(n, dtype=float))) * r)
+
+
+@njit(cache=True)
+def _pgs_profile_loglik(r, counts, group_sizes, moments):
+    # Sibling contrasts have variance (1-r)/2 and the parent contrast
+    # (when present) has variance 1-r. Only the normalized sibling and
+    # parent means have a joint covariance, of dimension at most two.
+    k = (1 + r) / 2
+    residual = (1 - r) / 2
+    total = 0.
+    for group in range(len(counts)):
+        ns, np_ = counts[group]
+        n = group_sizes[group]
+        sib_sq, parent_sq, cross, sib_contrast, parent_contrast = moments[group]
+        if ns > 1:
+            total += n * (ns - 1) * np.log(residual) + sib_contrast / residual
+        if np_ == 2:
+            parent_variance = 1 + r
+            total += n * np.log(1 - r) + parent_contrast / (1 - r)
+        else:
+            parent_variance = 1.
+        if np_ > 0:
+            total += n * np.log(parent_variance) + parent_sq / parent_variance
+        if ns > 0:
+            if np_ > 0:
+                slope = np.sqrt(ns * np_) * k / parent_variance
+                conditional_variance = residual if np_ == 2 else residual * (1 + ns * k)
+                sib_sq = sib_sq - 2 * slope * cross + slope**2 * parent_sq
+            else:
+                conditional_variance = residual + ns * k
+            total += n * np.log(conditional_variance) + sib_sq / conditional_variance
+    return total
+
 
 @njit
 def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
@@ -595,80 +596,48 @@ def simulate_r_inf(r, nfam, nsib, npar):
     return np.array([r_init,optimized[0][0]])
 
 def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025, return_fit=False, sample_ids=None, write_effects=True):
-    pg.gts = ma.array(pg.gts,fill_value=np.nan)
-    pg.gts = pg.gts.filled()
-    if ngen in [1,2,3]:
-        pass
-    else:
-        raise(ValueError('ngen must be 1, 2, or 3'))
-    # Check if IDs are aligned
-    if not np.array_equal(y.ids,pg.ids):
+    if ngen not in (1, 2, 3):
+        raise ValueError('ngen must be 1, 2, or 3')
+    if not np.array_equal(y.ids, pg.ids):
         pg.filter_ids(y.ids)
         y.filter_ids(pg.ids)
-    # Check covariate IDs are aligned
-    if covariates is not None:
-        if not np.array_equal(pg.ids,covariates.ids):
-            covariates.filter_ids(pg.ids)
-    ## Fit model
-    if ngen==1:
+    if covariates is not None and not np.array_equal(pg.ids, covariates.ids):
+        covariates.filter_ids(pg.ids)
+        if not np.array_equal(pg.ids, covariates.ids):
+            raise ValueError('Covariates are required for every PGS individual in the analysis')
+
+    pg_cols = ['proband']
+    score_sums = {}
+    if ngen == 1:
         print('Fitting 1 generation model (proband only)')
-        pg_cols = ['proband']
-    elif ngen==2 or ngen==3:
+    else:
         if fit_sib:
-            if 'sibling' in pg.sid:
-                pg_cols = ['proband','sibling']
-            else:
-                raise(ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)'))
-        else:
-            pg_cols = ['proband']
+            if 'sibling' not in pg.sid:
+                raise ValueError('Sibling PGS not found (use --fit_sib when calculating PGS)')
+            pg_cols.append('sibling')
         if parsum:
-            if 'maternal' in pg.sid and 'paternal' in pg.sid:
-                parcols = np.sort(np.array([np.where(pg.sid=='maternal')[0][0],np.where(pg.sid=='paternal')[0][0]]))
-                trans_matrix = np.identity(pg.gts.shape[1])
-                trans_matrix[:,parcols[0]] += trans_matrix[:,parcols[1]]
-                trans_matrix = np.delete(trans_matrix,parcols[1],1)
-                pg.gts = pg.gts.dot(trans_matrix)
-                pg.sid = np.delete(pg.sid,parcols[1])
-                pg.sid[parcols[0]] = 'parental'
-            elif 'parental' in pg.sid:
-                pass
-            else:
-                raise(ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)'))
             pg_cols.append('parental')
+            if {'paternal', 'maternal'}.issubset(pg.sid):
+                score_sums['parental'] = ('paternal', 'maternal')
+            elif 'parental' not in pg.sid:
+                raise ValueError('Maternal and paternal PGS not found so cannot sum (--parsum option given)')
         else:
-            pg_cols += ['paternal','maternal']
-        if ngen==2:
+            pg_cols.extend(('paternal', 'maternal'))
+        if ngen == 2:
             print('Fitting 2 generation model (proband and observed/imputed parents)')
-        elif ngen==3:
+        else:
             print('Fitting 3 generation model: observed proband and observed parents, and observed/imputed grandparents')
             if gparsum:
-                if 'gpp' in pg.sid and 'gmp' in pg.sid and 'gpm' in pg.sid and 'gmm' in pg.sid:
-                    # Sum of paternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpp','gmp']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gp'
-                    # Sum of maternal grandparents
-                    gparcols = np.sort(np.array([np.where(pg.sid==x)[0][0] for x in ['gpm','gmm']]))
-                    trans_matrix = np.identity(pg.gts.shape[1])
-                    trans_matrix[:,gparcols[0]] += trans_matrix[:,gparcols[1]]
-                    trans_matrix = np.delete(trans_matrix,gparcols[1],1)
-                    pg.gts = pg.gts.dot(trans_matrix)
-                    pg.sid = np.delete(pg.sid,gparcols[1])
-                    pg.sid[gparcols[0]] = 'gm'
-                elif 'gp' in pg.sid and 'gm' in pg.sid:
-                    pass
-                else:
-                    raise(ValueError('Grandparental PGSs not found so cannot sum (--gparsum option given)'))
-                pg_cols += ['gp','gm']
+                pg_cols.extend(('gp', 'gm'))
+                if {'gpp', 'gmp', 'gpm', 'gmm'}.issubset(pg.sid):
+                    score_sums.update(gp=('gpp', 'gmp'), gm=('gpm', 'gmm'))
+                elif not {'gp', 'gm'}.issubset(pg.sid):
+                    raise ValueError('Grandparental PGSs not found so cannot sum (--gparsum option given)')
             else:
-                pg_cols += ['gpp','gpm','gmp','gmm']
+                pg_cols.extend(('gpp', 'gpm', 'gmp', 'gmm'))
     fit = make_and_fit_model(y, pg, pg_cols, ibdrel_path=ibdrel_path,
                              covariates=covariates, sparse_thresh=sparse_thresh,
-                             return_fit=True, sample_ids=sample_ids)
+                             return_fit=True, sample_ids=sample_ids, score_sums=score_sums)
     alpha, alpha_cols = fit['alpha'], fit['cols']
     # Save to file
     if outprefix is not None:
@@ -677,24 +646,37 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
             write_pgs_effects(outprefix, {ngen: (alpha, alpha_cols)})
     return fit if return_fit else (alpha, alpha_cols)
 
-def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025, return_fit=False, sample_ids=None):
-    pg_col_indices = [np.where(pg.sid==x)[0][0] for x in pg_cols]
+def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025,
+                       return_fit=False, sample_ids=None, score_sums=None):
+    score_sums = {} if score_sums is None else score_sums
+    score_columns = []
+    for name in pg_cols:
+        sources = score_sums.get(name, (name,))
+        if any(source not in pg.sid_dict for source in sources):
+            raise ValueError('Required PGS column not found: ' + name)
+        col = ma.asarray(pg.gts[:, pg.sid_dict[sources[0]]], dtype=float).filled(np.nan)
+        for source in sources[1:]:
+            col = col + ma.asarray(pg.gts[:, pg.sid_dict[source]], dtype=float).filled(np.nan)
+        score_columns.append(col)
+    X = np.column_stack(score_columns)
     if covariates is not None:
-        X = np.hstack((covariates.gts,np.array(pg.gts[:,pg_col_indices])))
-        X_cols = np.hstack((np.array(['intercept']),covariates.sid,pg_cols))
+        X = np.hstack((ma.asarray(covariates.gts, dtype=float).filled(np.nan), X))
+        X_cols = np.hstack((['intercept'], covariates.sid, pg_cols))
     else:
-        X = np.array(pg.gts[:, pg_col_indices])
-        X_cols = np.hstack((np.array(['intercept']),pg_cols))
-    # Check for NAs
-    no_NA = np.all(np.isfinite(X), axis=1) & np.isfinite(y.gts[:, 0])
+        X_cols = np.hstack((['intercept'], pg_cols))
+    response = ma.asarray(y.gts[:, 0], dtype=float).filled(np.nan)
+    no_NA = np.all(np.isfinite(X), axis=1) & np.isfinite(response)
     if sample_ids is not None:
         no_NA &= np.isin(pg.ids, sample_ids)
-    print('Sample size: '+str(np.sum(no_NA)))
+    n = int(no_NA.sum())
+    print(f'Sample size: {n}')
+    if n <= X.shape[1] + 1:
+        raise ValueError('Too few complete PGS and phenotype observations for this model')
     ## Read GRM
     id_dict = make_id_dict(pg.ids[no_NA])
     varcomp_lst = make_grms(pg.fams[no_NA], ibdrel_path=ibdrel_path, id_dict=id_dict, keep=pg.ids[no_NA], sparse_thresh=sparse_thresh)
     ## Define LMM
-    slmm_model = slmm.LinearMixedModel(np.array(y.gts[no_NA,0],dtype=float), 
+    slmm_model = slmm.LinearMixedModel(response[no_NA],
                     varcomp_arr_lst=varcomp_lst, covar_X=np.array(X[no_NA,:],dtype=float), add_intercept=True)
     # Optimize Lmm
     print('Optimizing linear mixed model')
@@ -978,7 +960,9 @@ def am_adj_2gen(estimates, estimate_cols, h2f, h2f_se, rk=None, rk_se=None, pg=N
     estimate_cov = estimate_cov*((pg_std/y_std)**2)
     ##### Estimate correlation between parents' PGIs ######
     if rk is None:
-        rk, rk_se, fam_sizes = pg.estimate_r(parents_only=True)
+        rk, rk_se, _ = pg.estimate_r(parents_only=True)
+    if rk_se is None or not np.isfinite(rk_se) or rk_se < 0 or not np.isfinite(rk):
+        raise ValueError('Provide a finite parental PGS correlation and SE with --rk when they cannot be estimated')
     ##### Estimate equilibrium quantities ######
     print('Computing equilibrium adjusted quantities')
     adj_estimates, adj_ses = am_adj_2gen_calc(estimate[0,0], np.sqrt(estimate_cov[0,0]), 

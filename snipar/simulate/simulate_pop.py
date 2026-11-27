@@ -6,24 +6,13 @@ def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
 
 def simulate_sibs(father,mother, blocksize=200):
-    # Compute blocks without recombination
-    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
-    blocksizes = np.zeros((n_blocks),dtype=int)
-    for i in range(n_blocks-1):
-        blocksizes[i] = blocksize
-    blocksizes[n_blocks-1] = father.shape[0]-np.sum(blocksizes)
-    meioses = [[np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)],
-               [np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)]]
-    for i in range(2):
-        for j in range(2):
-            block_start=0
-            for k in range(n_blocks):
-                block_end = block_start+blocksizes[k]
-                meioses[i][j][block_start:block_end] = np.random.binomial(1,0.5)
-                block_start = block_end
+    nsnp = father.shape[0]
+    n_blocks = (nsnp + blocksize - 1) // blocksize
+    meioses = np.repeat(np.random.randint(0, 2, (2, 2, n_blocks)),
+                        blocksize, axis=2)[:, :, :nsnp]
     ibd = np.array(meioses[0][0]==meioses[1][0],dtype=np.int8)+np.array(meioses[0][1]==meioses[1][1],dtype=np.int8)
     gts = np.zeros((2,father.shape[0],2),dtype=np.int8)
-    snp_index = np.array([x for x in range(0, father.shape[0])])
+    snp_index = np.arange(father.shape[0])
     for i in range(0,2):
         gts[i, :, 0] = father[snp_index,meioses[i][0]]
         gts[i, :, 1] = mother[snp_index, meioses[i][1]]
@@ -56,9 +45,10 @@ parser.add_argument('n_one_parent',type=int,help='Number of families to observe 
 parser.add_argument('p_sib_missing',type=float,help='Probability that one sibling is missing')
 parser.add_argument('outprefix', type=str, help='Prefix of output ped files')
 parser.add_argument('--blocksize',type=int,help='Size of blocks without recombination (number of SNPs)', default=None)
-parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default="")
+parser.add_argument('--chrom',type=int,help='Prefix for all snp ids', default=1)
 parser.add_argument('--gens',type=int,help='number of generations', default=2)
 parser.add_argument('--am_noise',type=int,help='size of am noise', default=100000)
+parser.add_argument('--no-plot', action='store_true', help='Skip matplotlib plotting')
 args=parser.parse_args()
 
 nsnp = args.nsnp
@@ -76,6 +66,11 @@ if args.blocksize is None:
     blocksize = nsnp
 else:
     blocksize = args.blocksize
+if nsnp < 3 or nfam < 1 or blocksize < 1:
+    parser.error("Require at least three SNPs, one family and a positive block size")
+if min(n_sib_only, n_one_parent) < 0 or n_sib_only + n_one_parent > nfam:
+    parser.error("The requested missing-parent groups must fit within the number of families")
+
 print(f"blocksize is {blocksize}")
 
 ibd = np.zeros((nfam,fsize*(fsize-1)//2,nsnp),dtype=np.int8)
@@ -112,7 +107,7 @@ mother_sum = np.sum(mother_gts, axis=2)
 mother_indirect = np.zeros(nfam)
 mother_direct = (mother_sum@direct_effects).flatten()
 mother_noise = np.random.normal(size=mother_direct.shape)
-mother_phen = mother_direct+mother_indirect
+mother_phen = mother_direct+mother_indirect+mother_noise
 
 v_direct.append(np.var(np.hstack((father_direct, mother_direct))))
 v_indirect.append(np.var(np.hstack((father_indirect, mother_indirect))))
@@ -165,19 +160,21 @@ for gen in range(gens):
     print("spousal corr", spousal_corr)
     print("v_direct", v_direct[-1])
     if gen < (gens-1):
-        whos_father = np.array([True,False]*(nfam//2))
+        whos_father = np.tile(np.arange(nfam)[:, None] < nfam // 2, (1, fsize))
+        if nfam % 2:
+            whos_father[nfam // 2, np.random.randint(fsize)] = True
         np.random.shuffle(whos_father)
-        father_gts = np.concatenate([sib_gts[whos_father, i, :, :] for i in range(sib_gts.shape[1])], 0)
+        father_gts = sib_gts[whos_father]
         father_sum = np.sum(father_gts, axis=2)
-        father_direct = np.concatenate([sib_direct[whos_father, i] for i in range(sib_direct.shape[1])], 0)
-        father_indirect = np.concatenate([sib_indirect[whos_father, i] for i in range(sib_indirect.shape[1])], 0)
-        father_phen = np.concatenate([sib_phen[whos_father, i] for i in range(sib_phen.shape[1])], 0)
+        father_direct = sib_direct[whos_father]
+        father_indirect = sib_indirect[whos_father]
+        father_phen = sib_phen[whos_father]
         
-        mother_gts = np.concatenate([sib_gts[~whos_father, i, :, :] for i in range(sib_gts.shape[1])], 0)
+        mother_gts = sib_gts[~whos_father]
         mother_sum = np.sum(mother_gts, axis=2)
-        mother_direct = np.concatenate([sib_direct[~whos_father, i] for i in range(sib_direct.shape[1])], 0)
-        mother_indirect = np.concatenate([sib_indirect[~whos_father, i] for i in range(sib_indirect.shape[1])], 0)
-        mother_phen = np.concatenate([sib_phen[~whos_father, i] for i in range(sib_phen.shape[1])], 0)
+        mother_direct = sib_direct[~whos_father]
+        mother_indirect = sib_indirect[~whos_father]
+        mother_phen = sib_phen[~whos_father]
 v_direct = np.array(v_direct)
 v_indirect = np.array(v_indirect)
 cov_parental_direct = np.array(cov_parental_direct)
@@ -185,18 +182,22 @@ spousal_corrs = np.array(spousal_corrs)
 sib_corrs = np.array(sib_corrs)
 
 def get_rel_change(x):
-    return list(range(len(x)-2)), (x[2:]-x[1:-1])/x[1:-1]
+    denominator = x[1:-1]
+    change = np.divide(x[2:] - denominator, denominator, out=np.full_like(denominator, np.nan),
+                       where=denominator != 0)
+    return np.arange(len(change)), change
 
-from matplotlib import pyplot as plt
-plt.rcParams["figure.figsize"] = (20,10)
-plt.plot(*get_rel_change(spousal_corrs), label="spousal_corrs")
-plt.plot(*get_rel_change(sib_corrs), label="sib_corrs")
-plt.plot(*get_rel_change(v_direct), label="v_direct")
-plt.axhline()
-plt.grid()
-plt.title(f"relative change nsnp {nsnp}, nfam {nfam}, blocksize {blocksize}")
-plt.legend()
-plt.savefig(f"{args.outprefix}rel_change_nsnp{nsnp}_nfam{nfam}_blocksize{blocksize}")
+if not args.no_plot:
+    from matplotlib import pyplot as plt
+    plt.rcParams["figure.figsize"] = (20,10)
+    plt.plot(*get_rel_change(spousal_corrs), label="spousal_corrs")
+    plt.plot(*get_rel_change(sib_corrs), label="sib_corrs")
+    plt.plot(*get_rel_change(v_direct), label="v_direct")
+    plt.axhline()
+    plt.grid()
+    plt.title(f"relative change nsnp {nsnp}, nfam {nfam}, blocksize {blocksize}")
+    plt.legend()
+    plt.savefig(f"{args.outprefix}rel_change_nsnp{nsnp}_nfam{nfam}_blocksize{blocksize}")
 
 
 np.save(f"{args.outprefix}phen", {
@@ -322,7 +323,7 @@ for i in range(0,nfam):
                 start_snps.append(f'{chrom}_rs'+str(j))
                 ibd_type.append(ibd[i,j])
     if init_ibd>0:
-        end_snps.append(f'{chrom}_rs'+str(j))
+        end_snps.append(f'{chrom}_rs'+str(ibd.shape[1] - 2))
     # Write to file
     nseg = len(start_snps)
     if nseg>0:
@@ -333,7 +334,6 @@ king_out.close()
 
 
 ## Write full haps file
-haps_out = open(outprefix+'.haps','w')
 haps_matrix = np.zeros((nsnp,2*(2+fsize)*nfam),dtype=np.int8)
 nhaps = 0
 for i in range(0,nfam):

@@ -56,7 +56,8 @@ SUMSTATS_STRING_COLUMNS = {'SNP', 'A1', 'A2'}
 class sumstats(object):
     def __init__(self,chrom,sid,pos, A1, A2, freqs, direct, direct_SE, avg_NTC, avg_NTC_SE, population, population_SE, r_direct_avg_NTC, r_direct_pop, ldscores = None, map=None):
         sizes = np.array([sid.shape[0],pos.shape[0],A1.shape[0],A2.shape[0],freqs.shape[0],direct.shape[0],
-                            avg_NTC.shape[0],population.shape[0],r_direct_avg_NTC.shape[0],r_direct_pop.shape[0]])
+                            avg_NTC.shape[0],population.shape[0],r_direct_avg_NTC.shape[0],r_direct_pop.shape[0],
+                            direct_SE.shape[0],avg_NTC_SE.shape[0],population_SE.shape[0]])
         if np.unique(sizes).shape[0] > 1:
             raise(ValueError('All inputs to sumstats class must have same size'))
         self.chrom = np.zeros(sid.shape,dtype=int)
@@ -114,10 +115,14 @@ class sumstats(object):
         self.population_SE = ma.concatenate([self.population_SE, s2.population_SE])
         self.r_direct_avg_NTC = ma.concatenate([self.r_direct_avg_NTC, s2.r_direct_avg_NTC])
         self.r_direct_pop = ma.concatenate([self.r_direct_pop, s2.r_direct_pop])
-        if self.ldscores is not None and s2.ldscores is not None:
-            self.ldscores = ma.concatenate([self.ldscores, s2.ldscores])
-        if self.map is not None and s2.map is not None:
-            self.map = ma.concatenate([self.map, s2.map])
+        for name in ('ldscores', 'map'):
+            first, second = getattr(self, name), getattr(s2, name)
+            if first is not None or second is not None:
+                if first is None:
+                    first = ma.masked_all(len(self.sid) - len(s2.sid))
+                if second is None:
+                    second = ma.masked_all(len(s2.sid))
+                setattr(self, name, ma.concatenate((first, second)))
     def filter(self,filter_pass):
         self.chrom = self.chrom[filter_pass]
         self.sid = self.sid[filter_pass]
@@ -139,22 +144,28 @@ class sumstats(object):
         if self.map is not None:
             self.map = self.map[filter_pass]
     def filter_NAs(self):
-        no_NAs = (~self.freqs.mask)*(~self.direct.mask)*(~self.avg_NTC.mask)*(~self.population.mask)*(~self.r_direct_pop.mask)*(~self.r_direct_avg_NTC.mask)
-        if self.ldscores is not None:
-            no_NAs = no_NAs*(~self.ldscores.mask)
-        if self.map is not None:
-            no_NAs = no_NAs*(~self.map.mask)
-        self.filter(no_NAs)
+        complete = np.ones(len(self.sid), dtype=bool)
+        for name in ('freqs', 'direct', 'direct_SE', 'avg_NTC', 'avg_NTC_SE', 'population',
+                     'population_SE', 'r_direct_pop', 'r_direct_avg_NTC', 'ldscores', 'map'):
+            values = getattr(self, name)
+            if values is not None:
+                complete &= np.isfinite(values.filled(np.nan))
+        self.filter(complete)
     def filter_maf(self,min_maf):
         if min_maf<0 or min_maf>1:
             raise(ValueError('MAF must be between 0 and 1'))
         good_maf = np.logical_and(min_maf < self.freqs, self.freqs < (1-min_maf))
         self.filter(good_maf)
     def filter_corrs(self,max_Z):
-        r_dir_avg_NTC_Z = (self.r_direct_avg_NTC-np.mean(self.r_direct_avg_NTC))/np.std(self.r_direct_avg_NTC)
-        r_dir_pop_Z = (self.r_direct_pop-np.mean(self.r_direct_pop))/np.std(self.r_direct_pop)
-        good_corrs = np.logical_and(np.abs(r_dir_avg_NTC_Z) < max_Z, np.abs(r_dir_pop_Z) < max_Z)
-        self.filter(good_corrs)
+        good = np.ones(len(self.sid), dtype=bool)
+        for correlation in (self.r_direct_avg_NTC, self.r_direct_pop):
+            centered = correlation - correlation.mean()
+            sd = correlation.std()
+            if sd > 32 * np.finfo(float).eps:
+                good &= (np.abs(centered) < max_Z * sd).filled(False)
+            else:
+                good &= ~ma.getmaskarray(correlation)
+        self.filter(good)
     def scores_from_ldsc(self,ld_files):
         self.ldscores = ma.array(np.zeros(self.sid.shape[0]), mask=np.ones(self.sid.shape[0]))
         for i in range(ld_files.shape[0]):
@@ -487,24 +498,26 @@ def compute_corr(z1,z2,v1,v2,r,l):
     var_1 = reweighted_estimate_var(z1,v1,l)
     var_2 = reweighted_estimate_var(z2,v2,l)
     cov_12 = reweighted_estimate_cov(z1, z2, v1, v2, r, l, var_1, var_2)
-    corr = cov_12/np.sqrt(var_1*var_2)
-    reg_21 = cov_12/var_1
-    resid_2 = z2-reg_21*z1
-    v_resid_2 = v2+(reg_21**2)*v1-2*reg_21*r*np.sqrt(v1*v2)
-    v_s = reweighted_estimate_var(resid_2, v_resid_2, l)
-    return np.array([var_1, var_2, cov_12, corr, reg_21, v_s/var_2],dtype=np.float64)
+    corr = cov_12 / np.sqrt(var_1 * var_2) if var_1 > 0 and var_2 > 0 else np.nan
+    reg_21 = cov_12 / var_1 if var_1 > 0 else np.nan
+    residual_fraction = np.nan
+    if var_1 > 0 and var_2 > 0:
+        resid_2 = z2 - reg_21 * z1
+        v_resid_2 = v2 + reg_21**2 * v1 - 2 * reg_21 * r * np.sqrt(v1 * v2)
+        v_s = reweighted_estimate_var(resid_2, v_resid_2, l)
+        residual_fraction = v_s / var_2
+    return np.array([var_1, var_2, cov_12, corr, reg_21, residual_fraction], dtype=np.float64)
 
 @njit(parallel=True)
 def jacknife(z1,z2,v1,v2,r,l,n_blocks,block_size):
     # Construct jacknife blocks
     jack_delete = np.zeros((n_blocks,6),dtype=np.float64)
-    mask = np.ones((n_blocks, z1.shape[0]),dtype=np.bool_)
-    for i in prange(n_blocks-1):
-        mask[i, (block_size*i):(block_size*(i+1))] = False
-    mask[n_blocks-1, (block_size*(n_blocks-1)):z1.shape[0]] = False
-    # Compute jacknife values 
+    # Build one deletion mask per worker instead of one per jackknife block.
     for i in prange(n_blocks):
-        jack_delete[i,:] = compute_corr(z1[mask[i,:]],z2[mask[i,:]],v1[mask[i,:]],v2[mask[i,:]],r[mask[i,:]],l[mask[i,:]])
+        keep = np.ones(z1.shape[0], dtype=np.bool_)
+        end = (i + 1) * block_size if i < n_blocks - 1 else len(z1)
+        keep[i * block_size:end] = False
+        jack_delete[i] = compute_corr(z1[keep], z2[keep], v1[keep], v2[keep], r[keep], l[keep])
     return jack_delete
 
 def _mask_outputs_with_negative_variance(est, se, delete, internal_est, residual_var_2,
@@ -594,6 +607,17 @@ def _variance_outputs(est, jack_delete, jack_vars):
     return variance_est, variance_se, variance_delete
 
 def jacknife_est(z1,z2,v1,v2,r,l,n_blocks,effect_1_name='first effects',effect_2_name='second effects',return_variances=False):
+    if l is None:
+        raise ValueError('LD scores are required for the legacy estimator')
+    arrays = [ma.asarray(values, dtype=float).filled(np.nan) for values in (z1, z2, v1, v2, r, l)]
+    if arrays[0].ndim != 1 or any(values.shape != arrays[0].shape for values in arrays[1:]):
+        raise ValueError('Effects, sampling variances and correlations, and LD scores must have matching 1D shapes')
+    keep = np.isfinite(arrays).all(axis=0)
+    z1, z2, v1, v2, r, l = (values[keep] for values in arrays)
+    if np.any(v1 <= 0) or np.any(v2 <= 0) or np.any(l <= 0) or np.any(np.abs(r) > 1):
+        raise ValueError('Sampling variances and LD scores must be positive, and correlations within [-1, 1]')
+    if int(n_blocks) != n_blocks or not 2 <= n_blocks <= len(z1):
+        raise ValueError('n_blocks must be an integer between 2 and the number of complete SNPs')
     # Estimate
     est = compute_corr(z1,z2,v1,v2,r,l)
     # Calculate blocks

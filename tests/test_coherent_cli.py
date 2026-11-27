@@ -454,3 +454,22 @@ def test_requested_chromosome_range_accepts_available_partial_panel(tmp_path):
     args.chr_range = ["3-22"]
     with pytest.raises(ValueError, match="No files matched"):
         cli.prepare_inputs(args)
+
+
+def test_external_ld_scores_match_both_snp_and_chromosome(tmp_path):
+    from snipar.scripts.correlate import build_parser, prepare_inputs
+
+    summary = tmp_path / 'stats.txt'
+    summary.write_text(
+        'SNP CHR BP freq direct_Beta direct_SE avg_NTC_Beta avg_NTC_SE r_direct_avg_NTC\n'
+        'one 1 1 .3 .1 .02 .1 .1 0\n'
+        'two 1 2 .3 -.2 .02 .1 .1 0\n'
+        'three 1 3 .3 .3 .02 -.1 .1 0\n'
+        'three-elsewhere 1 4 .3 .2 .02 .2 .1 0\n'
+    )
+    ld = tmp_path / 'ld.txt'
+    ld.write_text('CHR SNP L2\n1 one 1\n1 two 2\n1 three 3\n2 three-elsewhere 4\n')
+    args = build_parser().parse_args([str(summary), str(tmp_path / 'out'), '--ldscores', str(ld)])
+    _, _, scores, _, _, metadata = prepare_inputs(args)
+    np.testing.assert_allclose(scores, [1, 2, 3])
+    assert metadata['qc']['excluded_ld'] == 1

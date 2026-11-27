@@ -25,7 +25,7 @@ cdef cpair[double, cpair[bint, float]] impute_snp_from_offsprings(int snp,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
                       bint use_backup
-                      ) nogil
+                      ) noexcept nogil
 
 
 cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offsprings(int snp,
@@ -45,7 +45,7 @@ cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offspr
                       int len_snp_ibd1,
                       int len_snp_ibd2,
                       bint use_backup
-                      ) nogil
+                      ) noexcept nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)
 
@@ -58,4 +58,4 @@ cdef void get_IBD(signed char[:] hap1,
                   double threshold,
                   int[:] agreement_count,
                   double[:] agreement_percentage,
-                  int[:] agreement) nogil
+                  int[:] agreement) noexcept nogil

@@ -36,9 +36,66 @@ import pandas as pd
 import os
 from multiprocessing import Pool
 from time import time
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from snipar.utilities import get_parser_doc
 from snipar.numrange import parseNumRange, NumRangeAction
 random.seed(1567924)
+
+_MARKER_ROWS = {"bim_values"}
+_MARKER_COLUMNS = {"imputed_par_gts", "num_observed_parental_alleles", "maf_coefs"}
+_MARKER_VECTORS = {
+    "pos", "non_duplicates", "ratio_ibd0", "mendelian_error_ratio",
+    "estimated_genotyping_error", "parent_ratio_backup", "sib_ratio_backup",
+    "standard_f", "maf_TSS", "maf_RSS1", "maf_RSS2", "maf_R2_1", "maf_R2_2",
+    "maf_larger1", "maf_less0",
+}
+
+
+def _merge_chunks(chunks, filename, variant_count, compression, compression_opts):
+    """Copy each retained marker span directly into the destination datasets."""
+    bim_width = 0
+    for name, _, _ in chunks:
+        with h5py.File(name, "r") as data:
+            bim_width = max(bim_width, data["bim_values"].dtype.itemsize)
+
+    with h5py.File(filename, "w") as out:
+        cursor = 0
+        for name, selected, offset in chunks:
+            with h5py.File(name, "r") as data:
+                stop = cursor + selected.stop - selected.start
+                for key, src in data.items():
+                    if key in _MARKER_COLUMNS:
+                        axis = 1
+                    elif key in _MARKER_ROWS or key in _MARKER_VECTORS:
+                        axis = 0
+                    else:
+                        if key not in out:
+                            out[key] = src[()]
+                        continue
+                    if key not in out:
+                        shape = list(src.shape)
+                        shape[axis] = variant_count
+                        if key == "maf_coefs":
+                            out.create_dataset(key, shape, dtype=src.dtype,
+                                               maxshape=(None, variant_count), fillvalue=np.nan)
+                        elif key in {"imputed_par_gts", "num_observed_parental_alleles"}:
+                            out.create_dataset(key, shape, dtype=src.dtype, chunks=True,
+                                               compression=compression, compression_opts=compression_opts)
+                        else:
+                            dtype = f"S{bim_width}" if key == "bim_values" else src.dtype
+                            out.create_dataset(key, shape, dtype=dtype)
+                    dest = out[key]
+                    if axis == 1:
+                        if key == "maf_coefs" and src.shape[0] > dest.shape[0]:
+                            dest.resize(src.shape[0], axis=0)
+                        dest[:src.shape[0], cursor:stop] = src[:, selected]
+                    elif key == "non_duplicates":
+                        dest[cursor:stop] = src[selected] + offset
+                    else:
+                        dest[cursor:stop] = src[selected]
+                cursor = stop
+
 
 def run_imputation(data):
     """Runs the imputation and returns the consumed time
@@ -84,7 +141,7 @@ def run_imputation(data):
                     This function can do the imputation on a slice of each chromosome. If specified, his is the start of that slice(it is inclusive).
 
                 end: int, optional
-                    This function can do the imputation on a slice of each chromosome. If specified, his is the end of that slice(it is inclusive).
+                    This function can do the imputation on a slice of each chromosome. If specified, this is the exclusive end of that slice.
                     
                 bim: str, optional
                     Address of a bim file containing positions of SNPs if the address is different from Bim file of genotypes.
@@ -140,85 +197,63 @@ def run_imputation(data):
     silent_progress = data.get("silent_progress")
     logging.info("processing " + str(phased_address) + "," + str(unphased_address))
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam, control, chromosome = chromosome, pedigree_nan=pedigree_nan)
-    number_of_snps = len(bim)
+    if chunks < 1:
+        raise ValueError("chunks must be positive")
+    if sibships.empty:
+        raise ValueError("No families have the required sibling or parental genotypes for imputation")
     start_time = time()
-    #Doing imputation chunk by chunk
-    if start is None:
-        start = 0
-    if end is None:
-        end = number_of_snps
+    start = 0 if start is None else start
+    end = len(bim) if end is None else end
+    if not 0 <= start < end <= len(bim):
+        raise ValueError("Imputation requires 0 <= start < end <= number of SNPs")
 
-    if chunks > 1:
-        for i in range(chunks):
-            logging.info(f"imputing chunk {i+1}/{chunks}...")
-            chunk_output_address = f"{output_address}_chunk{i}"
-            interval = ((end-start+chunks-1)//chunks)
-            chunk_start = start+i*interval
-            chunk_end = min(start+(i+1)*interval, end)
-            phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, chunk_start, chunk_end, pcs, pc_ids, find_optimal_pc)
-            imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, chunk_output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
-            logging.info(f"imputing chunk {i}/{chunks} done")
-        
-        #Merging chunks one by one and then removing the outputs
-        logging.info("merging chunks...")
-        logging.info(f"merging chunks 1/{chunks}...")
-        chunk_output_address = f"{output_address}_chunk{0}.hdf5"
-        hdf5_results = {}
-        with h5py.File(chunk_output_address, "r") as hf:
-            for key, val in hf.items():
-                hdf5_results[key] = np.array(val)
-        os.remove(chunk_output_address)
-        for i in range(1, chunks):
-            logging.info(f"merging chunks {i+1}/{chunks}...")
-            chunk_output_address = f"{output_address}_chunk{i}.hdf5"
-            with h5py.File(chunk_output_address, "r") as hf:
-                for key in ["imputed_par_gts",
-                            "pos",
-                            "ratio_ibd0",
-                            "mendelian_error_ratio",
-                            "estimated_genotyping_error","num_observed_parental_alleles",
-                            "parent_ratio_backup","sib_ratio_backup","standard_f"]:
-                    # check if key exists in hf
-                    if key in hf:
-                        new_val = np.array(hf[key])
-                        hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
-                for key in ["bim_values"]:
-                    #TODO fix max estimator loggigng
-                    new_val = np.array(hf[key])
-                    hdf5_results[key] = np.vstack((hdf5_results[key], new_val))
-                if not pcs is None:
-                    for key in ["maf_x",
-                                "maf_TSS",
-                                "maf_RSS1",
-                                "maf_RSS2",
-                                "maf_R2_1",
-                                "maf_R2_2",
-                                "maf_larger1",
-                                "maf_less0",]:
-                        new_val = np.array(hf[key])
-                        hdf5_results[key] = np.hstack((hdf5_results[key], new_val))
-                    new_val = np.array(hf["maf_coefs"])
-                    hdf5_results["maf_coefs"] = np.hstack((hdf5_results["maf_coefs"], new_val))
-                non_duplicates = np.array(hf["non_duplicates"])
-                non_duplicates = hdf5_results["non_duplicates"][-1] + non_duplicates + 1
-                hdf5_results["non_duplicates"] = np.hstack((hdf5_results["non_duplicates"], non_duplicates))
-            os.remove(chunk_output_address)
-        logging.info(f"writing results of the merge")
-        #Writing the merged output
-        with h5py.File(f"{output_address}.hdf5", "w") as hf:
-            for key, val in hdf5_results.items():
-                if key=='imputed_par_gts':
-                    hf.create_dataset(key, val.shape, dtype = 'float16', chunks = True, compression = output_compression, compression_opts=output_compression_opts, data = val)
-                else:
-                    hf[key] = val
-        logging.info(f"merging chunks done")
-    elif chunks == 1:
-        phased_gts, unphased_gts, iid_to_bed_index, pos, freqs, hdf5_output_dict = prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start, end, pcs, pc_ids, find_optimal_pc)
-        imputed_fids, imputed_par_gts = impute(sibships, iid_to_bed_index, phased_gts, unphased_gts, ibd, pos, hdf5_output_dict, str(chromosomes), freqs, output_address, threads = threads, output_compression=output_compression, output_compression_opts=output_compression_opts, silent_progress=silent_progress, use_backup=use_backup)
+    def run_slice(first, last, out, compression=None, options=None, marker_indices=None):
+        phased, dosages, ids, pos, freqs, metadata = prepare_gts(
+            phased_address, unphased_address, bim, pedigree_output, ped_ids,
+            chromosomes, first, last, pcs, pc_ids, find_optimal_pc,
+            marker_indices=marker_indices,
+        )
+        impute(sibships, ids, phased, dosages, ibd, pos, metadata, str(chromosomes),
+               freqs, out, threads=threads, output_compression=compression,
+               output_compression_opts=options, silent_progress=silent_progress,
+               use_backup=use_backup)
+
+    if chunks == 1:
+        run_slice(start, end, output_address, output_compression, output_compression_opts)
     else:
-        raise Exception("invalid chunks, chunks should be a positive integer")  
-    end_time = time()
-    return (end_time-start_time)
+        _, markers = np.unique(bim["id"], return_index=True)
+        markers.sort()
+        markers = markers[(markers >= start) & (markers < end)]
+        if not len(markers):
+            raise ValueError("No unique SNPs in the requested slice")
+        if find_optimal_pc and pcs is not None:
+            sample = markers[np.linspace(0, len(markers) - 1, min(1000, len(markers)), dtype=int)]
+            *_, model = prepare_gts(phased_address, unphased_address, bim, pedigree_output,
+                                    ped_ids, chromosomes, start, end, pcs, pc_ids,
+                                    find_optimal_pc=True, marker_indices=sample)
+            pcs = pcs[:, :model["maf_x"].shape[1] - 1]
+            find_optimal_pc = False
+        # The phased IBD calculation uses a window of 50 unique markers on
+        # either side. Include that context at each internal chunk boundary.
+        half_window = 50 if phased_address else 0
+        boundaries = np.linspace(0, len(markers), min(chunks, len(markers)) + 1, dtype=int)
+        output = Path(f"{output_address}.hdf5")
+        with TemporaryDirectory(prefix=".snipar-impute-", dir=output.parent) as directory:
+            files = []
+            for i, (first, last) in enumerate(zip(boundaries[:-1], boundaries[1:])):
+                logging.info("imputing chunk %d/%d ...", i + 1, len(boundaries) - 1)
+                first_read = max(0, first - half_window)
+                last_read = min(len(markers), last + half_window)
+                chunk_start = int(markers[first_read])
+                chunk_end = int(markers[last_read - 1]) + 1
+                address = str(Path(directory) / f"chunk{i}")
+                run_slice(chunk_start, chunk_end, address, marker_indices=markers[first_read:last_read])
+                selected = slice(first - first_read, last - first_read)
+                files.append((f"{address}.hdf5", selected, chunk_start - start))
+            merged = Path(directory) / "merged.hdf5"
+            _merge_chunks(files, merged, len(markers), output_compression, output_compression_opts)
+            os.replace(merged, output)
+    return time() - start_time
 
 #does the imputation and writes the results
 def main(args):
@@ -243,7 +278,7 @@ def main(args):
         pedigree = create_pedigree(args.king, args.agesex)
     else:
         logging.info("reading pedigree ...")
-        pedigree = pd.read_csv(args.pedigree, sep=r"\s+")
+        pedigree = pd.read_csv(args.pedigree, sep=r"\s+", dtype=str, keep_default_na=False)
     pedigree = pedigree[['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']]
     logging.info("pedigree loaded.")
     
@@ -252,9 +287,9 @@ def main(args):
     if args.pcs:
         logging.info("loading pcs ...")
         #ordering should be the same
-        pcs = pd.read_csv(f"{args.pcs}", sep=r"\s+")
-        pc_ids = pcs.iloc[:, 1].values.astype("S").tolist()
-        pcs = pcs.iloc[:, 2:].values
+        pcs = pd.read_csv(args.pcs, sep=r"\s+", dtype=str, keep_default_na=False)
+        pc_ids = pcs.iloc[:, 1].to_numpy(dtype="S")
+        pcs = pcs.iloc[:, 2:].to_numpy(dtype=float)
         if not args.pc_num is None:
             if args.pc_num > pcs.shape[1]:
                 raise Exception(f"pc_num={args.pc_num} more than {pcs.shape} PCs available in pcs")
@@ -283,9 +318,6 @@ def main(args):
         if ("@" in args.bed) ^ ("@" in args.bgen):
             raise Exception("Can not have @ for just one of the bed and bgen")
 
-    if args.bgen and chromosomes==[None]:
-        raise Exception("bgen files should be used with chr_range argument")
-
     if args.ibd is None:
         if args.ibd_is_king:
             raise Exception("can not use 'ibd_is_king' without any ibd file")
@@ -294,6 +326,10 @@ def main(args):
         if a is not None:
             return a.replace(b, c)
         return None
+    def output_for_chromosome(chrom):
+        if len(chromosomes) > 1 and "@" not in args.out:
+            return f"{args.out}{chrom}"
+        return none_tansform(args.out, "@", str(chrom))
     inputs = [{"pedigree": pedigree,
             "control":args.c,
             "use_backup":args.use_backup,
@@ -304,7 +340,7 @@ def main(args):
             "pcs": pcs,
             "pc_ids": pc_ids,
             "find_optimal_pc": args.find_optimal_pc,
-            "output_address":none_tansform(args.out, "@", str(chromosome)),
+            "output_address":output_for_chromosome(chromosome),
             "start": args.start,
             "end": args.end,
             "bim": none_tansform(args.bim, "@", str(chromosome)),
@@ -374,7 +410,7 @@ parser.add_argument('--start',
                     default=None)
 parser.add_argument('--end',
                     type=int,
-                    help='The script can do the imputation on a slice of each chromosome. This is the end of that slice(it is inclusive).',
+                    help='The script can do the imputation on a slice of each chromosome. Tthis is the exclusive end of that slice.',
                     default=None)
 parser.add_argument('--pedigree',
                     type=str,

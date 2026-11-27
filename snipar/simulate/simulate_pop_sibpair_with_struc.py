@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import h5py, argparse, gzip
 from scipy.stats import multivariate_normal
@@ -13,22 +12,9 @@ from collections import defaultdict
 from scipy import stats
 from math import log10
 from scipy.stats import chi2
-import os
-import code
+from pathlib import Path
 
 save = False
-print('XXXXX start')
-num_threads = 1
-os.environ["OMP_NUM_THREADS"] = str(num_threads)
-# export OPENBLAS_NUM_THREADS=...
-os.environ["OPENBLAS_NUM_THREADS"] = str(num_threads)
-# export MKL_NUM_THREADS=...
-os.environ["MKL_NUM_THREADS"] = str(num_threads)
-# export VECLIB_MAXIMUM_THREADS=...
-os.environ["VECLIB_MAXIMUM_THREADS"] = str(num_threads)
-# export NUMEXPR_NUM_THREADS=...
-os.environ["NUMEXPR_NUM_THREADS"] = str(num_threads)
-
 def sp_solve_dense3d_lu(sps_mat: csc_matrix,
                             dense_mat: np.ndarray) -> np.ndarray:
         """Compute product of the inverse of given sparse matrix and given 3-d dense array using LU; used for repeated OLS.
@@ -58,8 +44,7 @@ def sp_solve_dense3d_lu(sps_mat: csc_matrix,
         lu = splu(sps_mat)
         out: np.ndarray = np.empty((m, n1, c))
         for i in range(m):
-            for j in range(c):
-                out[i, :, j] = lu.solve(dense_mat[i, :, j])
+            out[i] = lu.solve(dense_mat[i])
         return out
 
 def build_sib_arr(fam_labels):   
@@ -93,50 +78,26 @@ def simulate_ind(nsnp,f):
     return np.random.binomial(1,f,nsnp*2).reshape((nsnp,2))
 
 def simulate_sibs(father,mother, blocksize=200):
-    # Compute blocks without recombination
-    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
-    blocksizes = np.zeros((n_blocks),dtype=int)
-    for i in range(n_blocks-1):
-        blocksizes[i] = blocksize
-    blocksizes[n_blocks-1] = father.shape[0]-np.sum(blocksizes)
-    meioses = [[np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)],  # sib1_f, sib1_m
-               [np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)]]  # sib2_f, sib2_m
-    for i in range(2):
-        for j in range(2):
-            block_start=0
-            for k in range(n_blocks):
-                block_end = block_start+blocksizes[k]
-                meioses[i][j][block_start:block_end] = np.random.binomial(1,0.5)
-                block_start = block_end
+    nsnp = father.shape[0]
+    n_blocks = (nsnp + blocksize - 1) // blocksize
+    meioses = np.repeat(np.random.randint(0, 2, (2, 2, n_blocks)),
+                        blocksize, axis=2)[:, :, :nsnp]
     ibd = np.array(meioses[0][0]==meioses[1][0],dtype=np.int8)+np.array(meioses[0][1]==meioses[1][1],dtype=np.int8)
     gts = np.zeros((2,father.shape[0],2),dtype=np.int8)
-    snp_index = np.array([x for x in range(0, father.shape[0])])
+    snp_index = np.arange(father.shape[0])
     for i in range(0,2):
         gts[i, :, 0] = father[snp_index,meioses[i][0]]
         gts[i, :, 1] = mother[snp_index, meioses[i][1]]
     return [gts,ibd]
 
 def simulate_sibs_phased(father,mother, blocksize=200):
-    # Compute blocks without recombination
-    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
-    blocksizes = np.zeros((n_blocks),dtype=int)
-    for i in range(n_blocks-1):
-        blocksizes[i] = blocksize
-    blocksizes[n_blocks-1] = father.shape[0]-np.sum(blocksizes)
-    meioses = [[np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)],  # sib1_f, sib1_m
-               [np.zeros((father.shape[0]),dtype=np.int8),np.zeros((father.shape[0]),dtype=np.int8)]]  # sib2_f, sib2_m
-    for i in range(2):
-        for j in range(2):
-            block_start=0
-            for k in range(n_blocks):
-                block_end = block_start+blocksizes[k]
-                meioses[i][j][block_start:block_end] = np.random.binomial(1,0.5) # the whole block passes to sibling j
-                block_start = block_end
-    # (nfams, 2) ibd: entry in first column is 1 (0) if (not) sharing allele from father, entry in second column is 1 if sharing allele from mother
-    # sum of two column give IBD state
+    nsnp = father.shape[0]
+    n_blocks = (nsnp + blocksize - 1) // blocksize
+    meioses = np.repeat(np.random.randint(0, 2, (2, 2, n_blocks)),
+                        blocksize, axis=2)[:, :, :nsnp]
     ibd = np.vstack([meioses[0][0]==meioses[1][0], meioses[0][1]==meioses[1][1]],)
     gts = np.zeros((2,father.shape[0],2),dtype=np.int8)
-    snp_index = np.array([x for x in range(0, father.shape[0])])
+    snp_index = np.arange(father.shape[0])
     for i in range(0,2):
         gts[i, :, 0] = father[snp_index,meioses[i][0]] # get father allele from meiosis
         gts[i, :, 1] = mother[snp_index, meioses[i][1]] # get mother allele from meiosis
@@ -292,7 +253,7 @@ def get_alpha_var(sf, se, Vf, X, y):
     lu = splu(V)
     Vinv_y = lu.solve(y)
     # XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X, Vinv_y)
-    # alpha: np.ndarray = np.linalg.solve(XT_Vinv_X, XT_Vinv_y)
+    # alpha: np.ndarray = np.linalg.solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
     alpha_var: np.ndarray = np.diagonal(alpha_cov, axis1=1, axis2=2)[:, 0]
     return alpha_var
@@ -386,7 +347,7 @@ def _simple_fit(V, gts, inds, y):
     Vinv_X: np.ndarray = sp_solve_dense3d_lu(V[inds, :][:, inds], gts)
     XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', gts, Vinv_X)
     XT_Vinv_y: np.ndarray = Vinv_X.transpose(0, 2, 1).dot(y[inds])
-    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
     return alpha, alpha_cov
 
@@ -410,7 +371,7 @@ def gwas(V_, X_, X_comple_, y_, n_rel=None, r=0, Fst=0, compare_with_theo=False)
     Vinv_X: np.ndarray = sp_solve_dense3d_lu(V, X.transpose(2,0,1))
     XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X.transpose(2,0,1), Vinv_X)
     XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X.transpose(2,0,1), lu.solve(y))
-    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
     alpha_ses =  np.sqrt(
         np.diagonal(alpha_cov, axis1=1, axis2=2))
@@ -418,7 +379,7 @@ def gwas(V_, X_, X_comple_, y_, n_rel=None, r=0, Fst=0, compare_with_theo=False)
     Vinv_X: np.ndarray = sp_solve_dense3d_lu(V, X_comple.transpose(2,0,1))
     XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X_comple.transpose(2,0,1), Vinv_X)
     XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X_comple.transpose(2,0,1), lu.solve(y))
-    alpha_comple: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+    alpha_comple: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov_comple: np.ndarray = np.linalg.inv(XT_Vinv_X)
     alpha_ses_comple =  np.sqrt(
         np.diagonal(alpha_cov_comple, axis1=1, axis2=2))
@@ -485,7 +446,7 @@ def standard_gwas(V_, X_, y_, n_rel=None):
     Vinv_X: np.ndarray = sp_solve_dense3d_lu(V, X.transpose(2,0,1))
     XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X.transpose(2,0,1), Vinv_X)
     XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X.transpose(2,0,1), lu.solve(y))
-    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
     alpha_ses =  np.sqrt(alpha_cov)
 
@@ -505,7 +466,7 @@ def standard_gwas_with_no_V(X_, y_, n_rel=None):
     # Vinv_X: np.ndarray = sp_solve_dense3d_lu(V, X.transpose(2,0,1))
     XT_Vinv_X: np.ndarray = np.einsum('...ij,...ik', X.transpose(2,0,1), X.transpose(2,0,1))
     XT_Vinv_y: np.ndarray = np.einsum('...ij,i', X.transpose(2,0,1), y)
-    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y)
+    alpha: np.ndarray = solve(XT_Vinv_X, XT_Vinv_y[..., None])[..., 0]
     alpha_cov: np.ndarray = np.linalg.inv(XT_Vinv_X)
     alpha_ses =  np.sqrt(alpha_cov)
 
@@ -577,10 +538,8 @@ def robust_est(ibd_, V_, X_, X_comple_, y_, n_rel=None, separate=False,sf=0.5, s
         try:
             alpha0_, alpha0_cov_, = _simple_fit(V, gts0, ibd0_inds, y)
             alpha0_complete_, alpha0_cov_complete_, = _simple_fit(V, gts0_complete, ibd0_inds, y)
-        except np.linalg.LinAlgError:
-            code.interact(local=locals())
-            raise ValueError(str(s) + ' linalg')
-            continue
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(f"Singular fit at SNP {s}") from exc
         for d in range(0, gts1.shape[1]):
             gts1[:, d, :] = gts1[:, d, :] - np.mean(gts1[:, d, :], axis=0)
             gts1_complete[:, d, :] = gts1_complete[:, d, :] - np.mean(gts1_complete[:, d, :], axis=0)
@@ -588,10 +547,8 @@ def robust_est(ibd_, V_, X_, X_comple_, y_, n_rel=None, separate=False,sf=0.5, s
         try:
             alpha1_, alpha1_cov_, = _simple_fit(V, gts1, ibd1_inds, y)
             alpha1_complete_, alpha1_cov_complete_, = _simple_fit(V, gts1_complete, ibd1_inds, y)
-        except np.linalg.LinAlgError:
-            code.interact(local=locals())
-            raise ValueError(str(s) + ' linalg')
-            continue
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(f"Singular fit at SNP {s}") from exc
         if separate:
             lu = splu(V[ibd0_inds, :][:, ibd0_inds])
             bias0.append(np.linalg.inv(gts0.squeeze().T.dot(lu.solve(gts0.squeeze()))).dot(gts0.squeeze().T.dot(lu.solve(gts0_complete.squeeze())))[0,:])
@@ -667,17 +624,12 @@ def robust_est(ibd_, V_, X_, X_comple_, y_, n_rel=None, separate=False,sf=0.5, s
             alpha1, alpha1_ses, alpha1_cov, alpha1_complete, alpha1_ses_complete, alpha1_cov_complete
     return alpha, alpha_ses, alpha_cov, alpha_complete, alpha_ses_complete, alpha_cov_complete
 
-def savez(*args, **kwds):
-    if save:
-        print('SAVING')
-        np.savez(*args, **kwds)
-    else:
-        print('NOT SAVING')
-
-parser = argparse.ArgumentParser()
-args=parser.parse_args()
-
 def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5, h2_pop=0.1, unrel=False, npop=4, Fst=0.01, balding_nicols=True, save=True, diff=0.05, robust=False):
+    def savez(filename, **arrays):
+        if save:
+            Path(filename).parent.mkdir(parents=True, exist_ok=True)
+            np.savez(filename, **arrays)
+
     print(Fst, npop, nsnp, nfam, 'saving?: ', save)
     chrom = 1
     gens = 1
@@ -704,11 +656,11 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
     mother_gts_lst = []
 
     if Fst == 0 and balding_nicols:
-        pop_fs = np.ones((npop, nsnp), dtype=float) * 0.5
+        pop_fs = np.full((npop, nsnp), f)
     else:
         if balding_nicols:
-            a = (1-Fst)/Fst*0.5
-            b = (1-Fst)/Fst*0.5
+            a = (1 - Fst) * f / Fst
+            b = (1 - Fst) * (1 - f) / Fst
         pop_fs = np.zeros((npop, nsnp), dtype=float)
         for snp in range(nsnp):
             if nsnp == 1 and npop == 2:
@@ -727,8 +679,8 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
     for s, pf in enumerate(pop_fs):
         if phased: ibd = np.zeros((nfam, 2, nsnp),dtype=np.int8)
         else: ibd = np.zeros((nfam,fsize*(fsize-1)//2,nsnp),dtype=np.int8)
-        father_gts = np.full((nfam,nsnp,2), fill_value=np.nan, dtype=int)
-        mother_gts = np.full((nfam,nsnp,2), fill_value=np.nan, dtype=int)
+        father_gts = np.empty((nfam, nsnp, 2), dtype=np.int8)
+        mother_gts = np.empty((nfam, nsnp, 2), dtype=np.int8)
         for i,f in enumerate(pf):
             father_gts[:,i,:] = np.random.binomial(1, f, size=(nfam,2))
             mother_gts[:,i,:] = np.random.binomial(1, f, size=(nfam,2))
@@ -744,7 +696,7 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
         mother_indirect = np.zeros(nfam)
         mother_direct = (mother_sum@direct_effects).flatten()
         mother_noise = np.random.normal(size=mother_direct.shape)
-        mother_phen = mother_direct+mother_indirect
+        mother_phen = mother_direct+mother_indirect+mother_noise
 
 
         father_indexes = np.argsort(father_phen) # + np.random.normal(scale=am_noise*np.std(father_phen), size=father_phen.shape))
@@ -778,7 +730,7 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
             sib_direct[:, i] = (np.sum(sib_gts[:, i, :, :], axis=2)@direct_effects).flatten()
             sib_noise = np.random.normal(0, v, size=sib_direct[:, i].shape)
             sib_phen[:, i] = sib_direct[:, i] # +sib_indirect[:, i]
-            a_factor = np.sqrt(h2quad)*np.power(np.std(sib_phen[:, i],axis=0),-1)
+            a_factor = np.sqrt(h2quad)*np.power(np.std(sib_phen[:, i],axis=0),-1) if h2quad else 0
   
             sib_phen[:, i] = sib_phen[:, i]*a_factor+pop_effs[s]+np.sqrt(1-h2quad-h2_pop)*sib_noise
         sib_gts_lst.append(sib_gts)
@@ -819,7 +771,7 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
     unrel_inds = np.sort(np.random.choice([i for i in range(nfam)], int(nfam/10*9), replace=False))
     rel_inds = np.setdiff1d([i for i in range(nfam)], unrel_inds)
 
-    freqs = np.mean(sib_gts[:, 0, :, 0], axis=0)
+    freqs = (sib_gts.mean(axis=(0, 1, 3)) if phased else sib_gts.mean(axis=(0, 1)) / 2)
     # print(freqs)
     print(freqs.shape)
     if not unrel:
@@ -965,54 +917,46 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
             print(f'{text} imputed Zvar', np.mean(Z**2),)
 
     
-    from sklearn.model_selection import LeaveOneOut
     def plot_(alpha, alpha_cov, non_sampling=False):
-        s = np.zeros(alpha.shape[0])
-        loo = LeaveOneOut()
-        loo.get_n_splits(alpha)
-        for i, (index, _) in enumerate(loo.split(alpha)):
-            if alpha_cov.ndim == 1:
-                if not non_sampling:
-                    s[i] = np.var(alpha[index, 0] / np.sqrt(alpha_cov)[index])
-                else:
-                    s[i] = np.mean(alpha[index,0] ** 2) - np.mean(alpha_cov[index])
-            else:
-                if not non_sampling:
-                    s[i] = np.var(alpha[index, 0] / np.sqrt(np.diagonal(alpha_cov, axis1=1, axis2=2))[index,0])
-                else:
-                    s[i] = np.mean(alpha[index,0] ** 2) - np.mean(alpha_cov[index,0,0])
-        
-        mean = np.mean(s)
-        std = np.sqrt(np.sum(np.power(mean - s, 2)) * (s.shape[0] - 1) / s.shape[0])
-        print(mean - 1.96 * std, mean + 1.96 * std)
-        if alpha_cov.ndim == 1:
-            return mean, std, alpha_cov.mean()
+        variances = alpha_cov.reshape((len(alpha), -1))[:, 0]
+        count = len(alpha)
+        if count < 3:
+            return np.nan, np.nan, variances.mean()
+        if non_sampling:
+            contributions = alpha[:, 0] ** 2 - variances
+            estimates = (contributions.sum() - contributions) / (count - 1)
         else:
-            return mean, std, alpha_cov[:, 0, 0].mean()
+            z = alpha[:, 0] / np.sqrt(variances)
+            z -= z.mean()
+            estimates = ((z @ z - z*z) / (count - 1) - (z / (count - 1)) ** 2)
+        mean = estimates.mean()
+        std = np.sqrt((count - 1) / count * np.sum((estimates - mean) ** 2))
+        print(mean - 1.96 * std, mean + 1.96 * std)
+        return mean, std, variances.mean()
 
     # related
     
     if unrel:
         alpha, alpha_ses, alpha_cov, = standard_gwas(V, X, y, len(rel_inds))
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_standard_no_unrel', alpha=alpha, alpha_cov=alpha_cov)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_standard_no_unrel', alpha=alpha, alpha_cov=alpha_cov)
         plot(alpha, alpha_ses, alpha_cov, 'standard related', plot_or_not=False, pop_eff=False)
         alpha, alpha_ses, alpha_cov, = standard_gwas(V, X, y)
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_standard_with_unrel', alpha=alpha, alpha_cov=alpha_cov)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_standard_with_unrel', alpha=alpha, alpha_cov=alpha_cov)
         plot(alpha, alpha_ses, alpha_cov, 'standard all sample', plot_or_not=False, pop_eff=False)
         alpha, alpha_ses, alpha_cov, alpha_comple, alpha_ses_comple, alpha_cov_comple = gwas(V, X, X_comple, y, len(rel_inds), r=sf)
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_no_unrel', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_no_unrel', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
         plot(alpha, alpha_ses, alpha_cov, 'imputed related', True)
         plot(alpha_comple, alpha_ses_comple, alpha_cov_comple, 'complete related', plot_or_not=False)
         alpha1, alpha_ses1, alpha_cov1 = sib_diff(sib_gts[rel_inds], sib_phen[rel_inds], sf, se, Fst=Fst)
         plot(alpha1, alpha_ses1, alpha_cov1, 'sib diff', pop_eff=False)
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_sibdiff', alpha=alpha1, alpha_cov=alpha_cov1)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_sibdiff', alpha=alpha1, alpha_cov=alpha_cov1)
         print('relative eff sample size: sid diff vs young et al.', np.mean((alpha_ses1[:,0]/alpha_ses[:, 0])**2))
         alpha, alpha_ses, alpha_cov, alpha_comple, alpha_ses_comple, alpha_cov_comple = gwas(V, X, X_comple, y)
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_with_unrel', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_with_unrel', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
         plot(alpha, alpha_ses, alpha_cov, 'imputed unrelated')
         plot(alpha_comple, alpha_ses_comple, alpha_cov_comple, 'complete unrelated', plot_or_not=False)
         alpha, alpha_ses, alpha_cov, alpha_comple, alpha_ses_comple, alpha_cov_comple = robust_est(ibd, V, X, X_comple, y, len(rel_inds))
-        np.savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_robust', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
+        savez(f'sp_pairs/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_robust', alpha=alpha, alpha_cov=alpha_cov, alpha_comple=alpha_comple, alpha_cov_comple=alpha_cov_comple)
         plot(alpha, alpha_ses, alpha_cov, 'imputed robust', pop_eff=False)
         plot(alpha_comple, alpha_ses_comple, alpha_cov_comple, 'complete robust', plot_or_not=False, pop_eff=False)
     else:
@@ -1033,59 +977,51 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
         alpha1, alpha_ses1, alpha_cov1 = sib_diff(sib_gts, sib_phen, sf, se, Fst=Fst)
         savez(f'sp_pairs/allsibs/tmp/Fst_{Fst}_h2pop_{h2_pop}_h2quad_{h2quad}_sibdiff', alpha=alpha1, alpha_cov=alpha_cov1)
         plot(alpha1, alpha_ses1, alpha_cov1, 'sib diff', pop_eff=False)
-        print('sib diff'); plot_(alpha, alpha_cov)
+        sib_stats = plot_(alpha1, alpha_cov1)
+        observed = np.mean(alpha_ses1[:, 0] ** 2 / alpha_ses[:, 0] ** 2)
+        # Variance ratio of the sibling-difference and joint family estimates.
+        nu = 0.75 if phased else 0.75 - f * (1 - f) / 8
+        theoretical = 2 * (nu * (2 - sf) + sf - 1) / (nu * (1 + sf))
+        return observed, theoretical, sib_stats[1]
 
 
 
 
-save = True
-main(nsnp=20_000, nfam=20_000, h2quad=0.0, h2_pop=0.5, unrel=False, Fst=0, npop=2, save=True, balding_nicols=True)
+def compare_frequencies(nfam=3000, nsnp=1000):
+    from matplotlib import pyplot as plt
+    from scipy.interpolate import make_interp_spline
+
+    frequencies = np.linspace(.1, .5, 5)
+    grid = np.linspace(.1, .5, 500)
+    for phased, color, marker in ((True, "blue", "o"), (False, "red", "^")):
+        observed, theoretical = [], []
+        for frequency in frequencies:
+            results = main(nsnp=nsnp, nfam=nfam, phased=phased, h2quad=0, h2_pop=0.5,
+                           f=frequency, Fst=0, npop=2, save=False)
+            observed.append(results[0])
+            theoretical.append(results[1])
+        name = "phased" if phased else "unphased"
+        plt.plot(grid, make_interp_spline(frequencies, theoretical)(grid), color=color,
+                 label=f"{name} theoretical")
+        plt.scatter(frequencies, observed, edgecolors=color, marker=marker,
+                    facecolors="white", label=f"{name} observed")
+    plt.legend()
+    plt.xlabel("Allele frequency")
+    plt.ylabel("Relative effective sample size")
+    for extension in ("png", "pdf"):
+        plt.savefig(f"phased_unphased_maf.{extension}")
 
 
-
-unphased_obs = []
-unphased_theo = []
-f_list = [0.1, 0.2, 0.3, 0.4, 0.5]
-from scipy.interpolate import make_interp_spline
-for f in f_list:
-    while 1:
-        try:
-            res = main(phased=False, h2quad=0.0, nfam=3_000, nsnp=1000, f = f)
-            if res[2] < 0.0001:
-                break
-        except ValueError:
-            pass
-    unphased_obs.append(res[0])
-    unphased_theo.append(res[1])
-
-
-
-phased_obs = []
-phased_theo = []
-for f in f_list:
-    while 1:
-        try:
-            res = main(phased=True, h2quad=0.0, nfam=3_000, nsnp=1000, f = f)
-            if res[2] < 0.0001:
-                break
-        except ValueError:
-            pass
-    phased_obs.append(res[0])
-    phased_theo.append(res[1])
-
-import matplotlib.pyplot as plt
-X_Y_Spline_un = make_interp_spline(f_list, unphased_theo)
-X_un = np.linspace(f_list[0], f_list[-1], 500)
-Y_un = X_Y_Spline_un(X_un)
-X_Y_Spline = make_interp_spline(f_list, phased_theo)
-X_ = np.linspace(f_list[0], f_list[-1], 500)
-Y_ = X_Y_Spline(X_)
-plt.plot(X_, Y_, label='phased theoretical', c='blue')
-plt.plot(X_un, Y_un, label='unphased theoretical', c='red')
-plt.scatter(f_list, phased_obs, label='phased observed', edgecolors='blue', marker='o', s=70, facecolors='white')
-plt.scatter(f_list, unphased_obs, label='unphased observed', edgecolors='red', marker='^', s=70, facecolors='white')
-plt.legend()
-plt.xlabel('Allele frequency')
-plt.ylabel('Relative effective sample size')
-plt.savefig('phased_unphased_maf.png')
-plt.savefig('phased_unphased_maf.pdf')
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run structured-family research simulations")
+    parser.add_argument("--nsnp", type=int, default=20_000)
+    parser.add_argument("--nfam", type=int, default=20_000)
+    parser.add_argument("--no-save", action="store_true")
+    parser.add_argument("--compare-frequencies", action="store_true",
+                        help="Run the allele-frequency comparison and plot its results")
+    args = parser.parse_args()
+    if args.compare_frequencies:
+        compare_frequencies(nfam=args.nfam, nsnp=args.nsnp)
+    else:
+        main(nsnp=args.nsnp, nfam=args.nfam, h2quad=0.0, h2_pop=0.5,
+             unrel=False, Fst=0, npop=2, save=not args.no_save, balding_nicols=True)

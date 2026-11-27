@@ -1,9 +1,9 @@
 import snipar.preprocess as preprocess
 import numpy as np
 from snipar.gtarray import gtarray
-from snipar.utilities import *
+from snipar.utilities import make_id_dict, open_bgen
 
-from snipar.read.variants import bgen_variant_ids, match_variants
+from snipar.read.variants import bgen_variant_ids, match_variants, observed_variant_indices, sibling_sample_indices
 
 
 def _match_variants(gts_f, par_gts_f, snp_ids=None, start=0, end=None):
@@ -25,36 +25,39 @@ def get_snps(gts_f, snp_ids=None, match=False):
     in_obs_sid contains the SNPs in the imputed genotypes that are present in the observed SNPs
     obs_sid_index contains the index in the observed SNPs of the common SNPs
     """
-    # Match SNPs from imputed and observed and restrict to those in list
     obs_sid, _ = bgen_variant_ids(gts_f)
-    if snp_ids is None:
-        snp_ids = obs_sid
-    # Get bim info
-    alleles = np.array([x.split(',') for x in gts_f.allele_ids])
-    pos = np.array(gts_f.positions)
-    chromosome = np.array(gts_f.chromosomes)
-    # Remove duplicate ids
-    if not match: # this will change the ordering of snps, which affects the robust estimator
-        unique_snps, snp_indices, snp_counts = np.unique(snp_ids, return_index=True, return_counts=True)
-        snp_ids = snp_ids[snp_indices[snp_counts == 1]]
-    ## Read and match SNP ids
-    obs_sid_dict = make_id_dict(obs_sid)
-    in_obs_sid = np.array([x in obs_sid_dict for x in snp_ids])
-    if np.sum(in_obs_sid) == 0:
+    obs_sid_index = observed_variant_indices(obs_sid, snp_ids, match)
+    if not obs_sid_index.size:
         raise ValueError('No SNPs found in bgen file')
-    obs_sid_index = np.array([obs_sid_dict[x] for x in snp_ids[in_obs_sid]])
-    sid = obs_sid[obs_sid_index]
-    alleles = alleles[obs_sid_index, :]
-    chromosome = chromosome[obs_sid_index]
-    pos = pos[obs_sid_index]
-    return chromosome, sid, pos, alleles, obs_sid_index
+    alleles = np.array([pair.split(',') for pair in np.asarray(gts_f.allele_ids)[obs_sid_index]])
+    return (np.asarray(gts_f.chromosomes)[obs_sid_index], obs_sid[obs_sid_index],
+            np.asarray(gts_f.positions)[obs_sid_index], alleles, obs_sid_index)
+
+
+def _first_allele_dosage(reader, samples, variants):
+    probs = reader.read((samples, variants), np.float32)
+    if probs.shape[2] == 4:
+        return probs[:, :, 0] + probs[:, :, 2]
+    if probs.shape[2] == 3:
+        return 2 * probs[:, :, 0] + probs[:, :, 1]
+    raise ValueError('Expected diploid, biallelic BGEN genotypes')
+
 
 def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=None, ids=None, sib=False, sib_diff=False, parsum=False, start=0, end=None, include_unrel=False, robust=False, trios_sibs=False, match_snp_ids=False, verbose=False, print_sample_info = False, matched_variants=None):
     """
     Used in get_gts_matrix: see get_gts_matrix for documentation
     """
-    ### Genotype file ###
-    gts_f = open_bgen(bgenfile, verbose=verbose)
+    with open_bgen(bgenfile, verbose=verbose) as reader:
+        return _get_gts_matrix_given_ped(
+            ped, imp_fams, reader, par_gts_f, snp_ids, ids, sib, sib_diff, parsum, start,
+            end, include_unrel, robust, trios_sibs, match_snp_ids, verbose, print_sample_info,
+            matched_variants,
+        )
+
+
+def _get_gts_matrix_given_ped(ped, imp_fams, gts_f, par_gts_f, snp_ids, ids, sib, sib_diff,
+                              parsum, start, end, include_unrel, robust, trios_sibs,
+                              match_snp_ids, verbose, print_sample_info, matched_variants):
     # get ids of genotypes and make dict
     gts_ids = gts_f.samples
     if ids is None:
@@ -115,8 +118,10 @@ def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=No
     # Read observed genotypes
     if verbose:
         print('Reading observed genotypes')
-    # gts = np.sum(gts_f.read((observed_indices,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
-    gts = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
+    needs_siblings = sib or sib_diff or (trios_sibs and sibs_indices.size > 0)
+    sample_index = None if needs_siblings else observed_indices
+    gts = _first_allele_dosage(gts_f, sample_index, obs_sid_index)
+    gts_reduced = gts[observed_indices] if needs_siblings else gts
     gts_ids_reduced = gts_ids[observed_indices]
     gts_id_dict = make_id_dict(gts_ids_reduced)
     # Find indices in reduced data
@@ -134,16 +139,16 @@ def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=No
     if sib:
         if parsum:
             G = np.zeros((ids.shape[0], 3, gts.shape[1]), dtype=np.float32)
-            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+            G[:, np.array([0, 2]), :] = preprocess.make_gts_matrix(gts_reduced, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         else:
             G = np.zeros((ids.shape[0],4,gts.shape[1]), dtype=np.float32)
-            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+            G[:,np.array([0,2,3]),:] = preprocess.make_gts_matrix(gts_reduced, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
         # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=True).gts
     elif sib_diff:
         G = np.full((ids.shape[0], 2, gts.shape[1]), fill_value=-1, dtype=np.float32)
-        G[:,0,:] = gts[observed_indices][gt_indices,:]
+        G[:,0,:] = gts_reduced[gt_indices,:]
         # need to use original gts and gts_ids, since some of the sibs might not have phenotypes
         # gts_all = np.sum(gts_f.read((None,obs_sid_index), np.float32)[:,:,np.array([0,2])],axis=2)
         G[:,1,:] = preprocess.get_fam_means(ids, ped, gts, gts_ids, remove_proband=False).gts
@@ -152,20 +157,20 @@ def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=No
         # if parsum:
         #     G = np.zeros((ids.shape[0], 2, gts.shape[1]), dtype=np.float32)
         #     if sibs_indices.shape[0] > 0:
-        #         G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts[observed_indices], gts_ids, remove_proband=False).gts
+        #         G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts_reduced, gts_ids, remove_proband=False).gts
         # else:
         trios_indices = np.arange(0, trios_indices.shape[0]) # trios are in the upper rows of observed_indices based on construction 
         sibs_indices = trios_indices.shape[0] + np.arange(0, sibs_indices.shape[0])
         G = np.zeros((ids.shape[0],3,gts.shape[1]), dtype=np.float32)
-        G[:, :, :] = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=None, parsum=False)
+        G[:, :, :] = preprocess.make_gts_matrix(gts_reduced, par_status, gt_indices, imp_gts=None, parsum=False)
         if sibs_indices.shape[0] > 0:
-            G[sibs_indices,0,:] = gts[observed_indices][sibs_indices,:]
+            G[sibs_indices,0,:] = gts_reduced[gt_indices[sibs_indices, 0], :]
             G[sibs_indices,1,:] = preprocess.get_fam_means(ids[sibs_indices], ped, gts, gts_ids, remove_proband=False).gts
             # if not parsum:
             G[sibs_indices,2,:] = G[sibs_indices,1,:]
     else:
         # G = preprocess.make_gts_matrix(gts, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
-        G = preprocess.make_gts_matrix(gts[observed_indices], par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
+        G = preprocess.make_gts_matrix(gts_reduced, par_status, gt_indices, imp_gts=imp_gts, parsum=parsum)
     del gts
     if imp_gts is not None:
         del imp_gts
@@ -179,38 +184,28 @@ def get_gts_matrix_given_ped(ped, imp_fams, bgenfile, par_gts_f=None ,snp_ids=No
         return G
     return gtarray(G, ids, sid, alleles=alleles, pos=pos, chrom=chromosome, fams=fam_labels, par_status=par_status, ped=ped)
 
-def read_sibs_from_bgen(bgenfile,sibpairs):
-    bgen = open_bgen(bgenfile, verbose=True)
-    # IIDs
-    ids = bgen.samples
-    id_dict = make_id_dict(ids)
-    # SNP IDs
-    snp_ids = np.array(bgen.ids)
-    if np.unique(snp_ids).shape[0] == 1:
-        snp_ids = np.array(bgen.rsids)
-    # Find sibpairs in bed
-    in_bgen = np.vstack((np.array([x in id_dict for x in sibpairs[:,0]]),
-                        np.array([x in id_dict for x in sibpairs[:, 1]]))).T
-    both_in_bgen = np.sum(in_bgen,axis=1)==2
-    # Remove pairs without both in bedfile
-    if np.sum(both_in_bgen)<sibpairs.shape[0]:
-        print(str(sibpairs.shape[0]-np.sum(both_in_bgen))+' sibpairs do not both have genotypes')
-        sibpairs = sibpairs[both_in_bgen,:]
-    # Find indices of sibpairs
-    sibindices = np.sort(np.array([id_dict[x] for x in sibpairs.flatten()]))
-    gts = np.zeros((sibindices.shape[0],snp_ids.shape[0]),dtype=np.float32)
-    gts[:] = np.sum(bgen.read((sibindices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
-    return gtarray(garray = gts, ids = ids[sibindices], sid = snp_ids, pos = np.array(bgen.positions))
+def read_sibs_from_bgen(bgenfile, sibpairs):
+    with open_bgen(bgenfile, verbose=True) as bgen:
+        ids = bgen.samples
+        snp_ids, _ = bgen_variant_ids(bgen)
+        sibindices = sibling_sample_indices(sibpairs, make_id_dict(ids), 'BGEN')
+        selected_ids = ids[sibindices]
+        snp_ids = snp_ids.copy()
+        positions = np.array(bgen.positions)
+        gts = _first_allele_dosage(bgen, sibindices, None)
+    return gtarray(garray=gts, ids=selected_ids, sid=snp_ids, pos=positions)
+
 
 def read_PO_pairs_from_bgen(ped,bgenfile):
-    # Read bed
-    bgen = open_bgen(bgenfile, verbose=False)
+    with open_bgen(bgenfile, verbose=False) as bgen:
+        return _read_PO_pairs(ped, bgen, bgenfile)
+
+
+def _read_PO_pairs(ped, bgen, bgenfile):
     ids = bgen.samples
     id_dict = make_id_dict(ids)
     # SNP IDs
-    snp_ids = np.array(bgen.ids)
-    if np.unique(snp_ids).shape[0] == 1:
-        snp_ids = np.array(bgen.rsids)
+    snp_ids, _ = bgen_variant_ids(bgen)
     ## Find parent-offspring pairs
     # genotyped individuals
     genotyped = np.array([x in id_dict for x in ped[:, 1]])
@@ -226,7 +221,7 @@ def read_PO_pairs_from_bgen(ped,bgenfile):
     npair = np.sum(father_genotyped) + np.sum(mother_genotyped)
     if npair == 0:
         raise(ValueError('No parent-offspring pairs in  '+str(bgenfile)+' for genotype error probability estimation'))
-    print(str(npair)+' parent-offspring pairs found in '+bgenfile)
+    print(f'{npair} parent-offspring pairs found in {bgenfile}')
     if npair*snp_ids.shape[0] < 10**5:
         print('Warning: limited information for estimation of genotyping error probability.')
     ## Read genotypes
@@ -234,7 +229,5 @@ def read_PO_pairs_from_bgen(ped,bgenfile):
                                    ped[father_genotyped, 2],
                                    ped[mother_genotyped, 3])))
     all_ids_indices = np.sort(np.array([id_dict[x] for x in all_ids]))
-    gts = np.zeros((all_ids_indices.shape[0],snp_ids.shape[0]),dtype=np.float32)
-    gts[:] = np.sum(bgen.read((all_ids_indices,np.arange(0,snp_ids.shape[0])), np.float32)[:,:,np.array([0,2])],axis=2)
-    #print('Read genotypes from '+str(bgenfile))
-    return gtarray(gts,ids = ids[all_ids_indices], sid=snp_ids), opg_ped, npair
+    gts = _first_allele_dosage(bgen, all_ids_indices, None)
+    return gtarray(gts, ids=ids[all_ids_indices], sid=snp_ids.copy()), opg_ped, npair

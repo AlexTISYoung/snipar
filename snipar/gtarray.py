@@ -1,11 +1,10 @@
 import numpy as np
 import numpy.ma as ma
-import h5py
 from numba import njit
-from snipar.utilities import make_id_dict, convert_str_array
-from snipar.types import SparseGRMRepr, Ids, IdDict
+from snipar.utilities import make_id_dict
+from snipar.types import SparseGRMRepr, Ids
 from scipy.sparse import csc_matrix, tril
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import splu
 # import logging
 
 # logger = logging.getLogger(__name__)
@@ -45,31 +44,32 @@ class gtarray(object):
     def __init__(self, garray, ids, sid=None, alleles=None, pos=None, chrom=None, map=None, error_probs=None, fams=None, par_status=None, num_obs_par_al=None, ped=None, standard_f=None):
         if type(garray) == np.ndarray or type(garray) == np.ma.core.MaskedArray:
             if type(garray) == np.ndarray:
-                self.gts = ma.array(garray,mask=np.isnan(garray))
+                mask = np.isnan(garray)
+                self.has_NAs = bool(mask.any())
+                self.gts = ma.array(garray, mask=mask if self.has_NAs else ma.nomask)
             else:
                 self.gts = garray
+                self.has_NAs = bool(np.any(garray.mask))
             self.shape = garray.shape
             self.ndim = garray.ndim
             self.dtype = garray.dtype
             self.freqs = None
         else:
             raise ValueError('Genotypes must be a numpy ndarray')
+        if self.ndim not in (2, 3):
+            raise ValueError('Genotypes must be a 2- or 3-dimensional array')
         if garray.shape[0] == ids.shape[0]:
             self.ids = ids
             self.id_dict = make_id_dict(ids)
         else:
             raise ValueError('Shape of genotypes and ids does not match')
+        self.snp_index = self.ndim - 1
+        self.sid = sid
+        self.sid_dict = None
         if sid is not None:
-            if sid.shape[0] == garray.shape[1]:
-                self.snp_index = 1
-                self.sid = sid
-                self.sid_dict = make_id_dict(sid)
-            elif sid.shape[0] == garray.shape[2]:
-                self.snp_index = 2
-                self.sid = sid
-                self.sid_dict = make_id_dict(sid)
-            else:
+            if sid.shape != (garray.shape[-1],):
                 raise ValueError('Shape of SNP ids (sid) does not match shape of genotype array')
+            self.sid_dict = make_id_dict(sid)
         if alleles is not None:
             if self.sid is not None:
                 if alleles.shape[0] == self.sid.shape[0]:
@@ -129,7 +129,7 @@ class gtarray(object):
             self.fams = None
 
         if par_status is not None:
-            if par_status.shape[0] == ids.shape[0] and par_status.shape[1] == 2:
+            if par_status.shape == (ids.shape[0], 2):
                 self.par_status = par_status
             else:
                 raise ValueError('Incompatible par status array')
@@ -142,9 +142,7 @@ class gtarray(object):
             self.ped = None
         
         if num_obs_par_al is not None:
-            if self.ndim == 2 and num_obs_par_al.shape[0] == self.shape[0] and num_obs_par_al.shape[1] == self.shape[1]:
-                self.num_obs_par_al = num_obs_par_al
-            elif self.ndim == 3 and num_obs_par_al.shape[0] == self.shape[0] and num_obs_par_al.shape[1] == self.shape[2]:
+            if num_obs_par_al.shape == (self.shape[0], self.shape[-1]):
                 self.num_obs_par_al = num_obs_par_al
             else:
                 raise ValueError('Incompatible par status array')
@@ -152,8 +150,8 @@ class gtarray(object):
             self.num_obs_par_al = None
         
         if standard_f is not None:
-            if standard_f.shape[0] == self.sid.shape[0]:
-                    self.standard_f = standard_f
+            if self.sid is not None and standard_f.shape == self.sid.shape:
+                self.standard_f = standard_f
             else:
                 raise ValueError('Size of standard_f does not match number of SNPs')
         else:
@@ -161,28 +159,28 @@ class gtarray(object):
 
         self.mean_normalised = False
 
-        if np.sum(self.gts.mask)>0:
-            self.has_NAs = True
-        else:
-            self.has_NAs = False
-
         self.info = None
+        self.variances = None
 
     def compute_freqs(self):
         """
         Computes the frequencies of the SNPs. Stored in self.freqs.
         """
         proband = self.gts if self.ndim == 2 else self.gts[:, 0, :]
-        self.freqs = ma.filled(ma.mean(proband, axis=0) / 2.0, np.nan)
+        self.freqs = ma.filled(ma.mean(proband, axis=0, dtype=np.float64) / 2.0, np.nan)
 
     def filter(self, filter_pass):
         if self.freqs is not None:
             self.freqs = self.freqs[filter_pass]
-        if self.ndim == 2:
-            self.gts = self.gts[:,filter_pass]
-        elif self.ndim == 3:
-            self.gts = self.gts[:,:,filter_pass]
+        self.gts = self.gts[..., filter_pass]
         self.shape = self.gts.shape
+        if self.has_NAs:
+            self.has_NAs = bool(np.any(self.gts.mask))
+            if not self.has_NAs:
+                self.gts.shrink_mask()
+        if self.info is not None:
+            self.info = self.info[filter_pass]
+            self.variances = self.variances[filter_pass]
         if self.sid is not None:
             self.sid = self.sid[filter_pass]
             self.sid_dict = make_id_dict(self.sid)
@@ -210,18 +208,21 @@ class gtarray(object):
         freqs_pass = np.logical_and(self.freqs > min_maf, self.freqs < (1 - min_maf))
         if verbose:
             print(str(self.freqs.shape[0] - np.sum(freqs_pass)) + ' SNPs with MAF<' + str(min_maf))
-        self.filter(freqs_pass)
+        if not np.all(freqs_pass):
+            self.filter(freqs_pass)
         return freqs_pass
 
     def filter_missingness(self, max_missing = 5, verbose=False):
-        if self.ndim == 2:
-            missingness = ma.mean(self.gts.mask,axis=0)
-        elif self.ndim == 3:
-            missingness = ma.mean(self.gts.mask,axis = (0,1))
-        missingness_pass = 100 * missingness < max_missing
+        mask = self.gts.mask
+        if np.ndim(mask) == 0:
+            missingness_pass = np.full(self.shape[-1], 100 * mask <= max_missing)
+        else:
+            missingness = mask.mean(axis=tuple(range(self.snp_index)))
+            missingness_pass = 100 * missingness <= max_missing
         if verbose:
-            print(str(self.freqs.shape[0] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
-        self.filter(missingness_pass)
+            print(str(self.shape[-1] - np.sum(missingness_pass)) + ' SNPs with missingness >' + str(max_missing) + '%')
+        if not np.all(missingness_pass):
+            self.filter(missingness_pass)
         return missingness_pass
 
     def compute_info(self):
@@ -231,7 +232,9 @@ class gtarray(object):
             self.variances = np.var(self.gts, axis=0)
         elif self.ndim==3:
             self.variances = np.var(self.gts[:,0,:], axis=0)
-        self.info = self.variances/(2.0*self.freqs*(1-self.freqs))
+        denominator = 2.0 * self.freqs * (1 - self.freqs)
+        self.info = np.divide(ma.filled(self.variances, np.nan), denominator,
+                              out=np.full(denominator.shape, np.nan), where=denominator > 0)
 
     def filter_info(self, min_info = 0.99, verbose=False):
         if self.info is None:
@@ -245,7 +248,8 @@ class gtarray(object):
         """
         Keep only individuals with ids given by keep_ids
         """
-        in_ids = np.array([x in self.id_dict for x in keep_ids])
+        keep_ids = np.asarray(keep_ids)
+        in_ids = np.array([x in self.id_dict for x in keep_ids], dtype=bool)
         n_filtered = np.sum(in_ids)
         if n_filtered==0:
             raise(ValueError('No individuals would be left after filtering'))
@@ -253,10 +257,7 @@ class gtarray(object):
             if verbose:
                 print('After filtering, '+str(n_filtered)+' individuals remain')
             indices = np.array([self.id_dict[x] for x in keep_ids[in_ids]])
-            if self.ndim == 2:
-                self.gts = self.gts[indices, :]
-            elif self.ndim == 3:
-                self.gts = self.gts[indices, :, :]
+            self.gts = self.gts[indices]
             self.ids = self.ids[indices]
             self.id_dict = make_id_dict(self.ids)
             self.shape = self.gts.shape
@@ -266,28 +267,32 @@ class gtarray(object):
                 self.par_status = self.par_status[indices, :]
             if self.num_obs_par_al is not None:
                 self.num_obs_par_al = self.num_obs_par_al[indices, :]
+            for field in ('complete_trios_inds', 'sibs_inds'):
+                if hasattr(self, field):
+                    setattr(self, field, np.flatnonzero(np.isin(indices, getattr(self, field))))
+            self.freqs = self.info = self.variances = None
+            if self.has_NAs:
+                self.has_NAs = bool(np.any(self.gts.mask))
+                if not self.has_NAs:
+                    self.gts.shrink_mask()
+            self.mean_normalised = False
 
     def mean_normalise(self):
         """
         This normalises the SNPs/PGS columns to have mean-zero.
         """
         if not self.mean_normalised:
-            if self.gts.ndim == 2:
-                self.gts = self.gts - ma.mean(self.gts,axis=0)
-            elif self.gts.ndim==3:
-                for i in range(0, self.gts.shape[1]):
-                    self.gts[:, i, :] = self.gts[:, i, :] - ma.mean(self.gts[:, i, :], axis=0)
+            self.gts = self.gts - ma.mean(self.gts, axis=0)
+            self.dtype = self.gts.dtype
             self.mean_normalised = True
 
     def scale(self):
         """
         This normalises the SNPs/PGS columns to have variance 1.
         """
-        if self.gts.ndim == 2:
-            self.gts = self.gts/ma.std(self.gts, axis=0)
-        elif self.gts.ndim == 3:
-            for i in range(0, self.gts.shape[1]):
-                self.gts[:, i, :] = self.gts[:, i, :]/ma.std(self.gts[:, i, :], axis=0)
+        self.gts = self.gts / ma.std(self.gts, axis=0)
+        self.dtype = self.gts.dtype
+        self.has_NAs = bool(np.any(self.gts.mask))
 
     def fill_NAs(self):
         """
@@ -295,9 +300,14 @@ class gtarray(object):
         """
         if not self.mean_normalised:
             self.mean_normalise()
-        NAs = np.sum(self.gts.mask, axis=0)
-        self.gts[self.gts.mask] = 0
-        self.gts.mask = False
+        mask = self.gts.mask
+        if np.ndim(mask) == 0:
+            self.has_NAs = False
+            return np.zeros(self.shape[1:], dtype=int)
+        NAs = mask.sum(axis=0)
+        if NAs.any():
+            self.gts[mask] = 0
+        self.gts.mask = ma.nomask
         self.has_NAs = False
         return NAs
 
@@ -322,7 +332,7 @@ class gtarray(object):
                 raise ValueError('Arrays must have same dimensions (apart from first)')
 
         # Match IDs
-        common_ids = list(self.id_dict.keys() & garray.id_dict.keys())
+        common_ids = [iid for iid in self.id_dict if iid in garray.id_dict]
         if len(common_ids) == 0:
             raise ValueError('No IDs in common')
         self_index = np.array([self.id_dict[x] for x in common_ids])
@@ -342,7 +352,10 @@ class gtarray(object):
             ped = garray.ped
         else:
             ped = self.ped
-        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles, fams=self.fams[self_index], par_status=self.par_status[self_index,:], ped=ped)
+        fams = None if self.fams is None else self.fams[self_index]
+        par_status = None if self.par_status is None else self.par_status[self_index]
+        return gtarray(add_gts, ids_out, self.sid, alleles=self.alleles,
+                       fams=fams, par_status=par_status, ped=ped)
 
     def diagonalise(self,inv_root):
         """
@@ -353,11 +366,11 @@ class gtarray(object):
             raise(ValueError('Family labels needed for diagonalization'))
         if not self.mean_normalised:
             self.mean_normalise()
-        unique_fams, famsizes = np.unique(self.fams, return_counts = True)
-        fam_indices = dict()
-        # Transform
-        for fam in unique_fams:
-            fam_indices[fam] = np.where(self.fams == fam)[0]
+        groups = {}
+        for i, fam in enumerate(self.fams):
+            groups.setdefault(fam, []).append(i)
+        fam_indices = {fam: np.asarray(idx) for fam, idx in groups.items()}
+        for fam in fam_indices:
             famsize = fam_indices[fam].shape[0]
             if self.ndim == 2:
                 if famsize == 1:
@@ -392,7 +405,7 @@ def _po_imp(freq, g, gp):
         if gp == 0:
             return 1 + freq
         elif gp == 1:
-            return 2 + freq
+            return 0.5 + freq
         else:  # gp == 2
             return freq
     else:  # g == 2
@@ -401,28 +414,33 @@ def _po_imp(freq, g, gp):
 
 @njit
 def _impute_unrel_pat_gts(gts: np.ndarray, freqs: np.ndarray, parsum: bool) -> np.ndarray:
-    missing_ind = gts[:, 1, 0] == -1
-    imp = 0.5 * gts[missing_ind, 0, :] + freqs
-    gts[missing_ind, 1, :] = imp
-    if parsum:
-        gts[missing_ind, 1, :] += imp
-    else:
-        gts[missing_ind, 2, :] = imp
+    if gts.shape[2] == 0:
+        return gts
+    for i in range(gts.shape[0]):
+        if gts[i, 1, 0] != -1:
+            continue
+        for j in range(gts.shape[2]):
+            estimate = 0.5 * gts[i, 0, j] + freqs[j]
+            gts[i, 1, j] = 2 * estimate if parsum else estimate
+            if not parsum:
+                gts[i, 2, j] = estimate
     return gts
 
 
 def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
                                    grm: SparseGRMRepr, unrelated_inds: Ids, parsum: bool) -> np.ndarray:
     freqs = G.freqs
-    ids = G.ids
     id_dict = G.id_dict
+    gts = G.gts.astype(np.result_type(G.dtype, np.float32), copy=False).filled(np.nan)
+    if not len(unrelated_inds):
+        return gts
     unrelated_inds_dict = make_id_dict(unrelated_inds)
     R12_data, R12_row, R12_col = [], [], []
     for i in range(len(grm[0])):
         row = grm[1][i]
         col = grm[2][i]
-        row_in = row in unrelated_inds
-        col_in = col in unrelated_inds
+        row_in = row in unrelated_inds_dict
+        col_in = col in unrelated_inds_dict
         if not row_in and not col_in:
             continue
         elif row_in and col_in:
@@ -446,20 +464,17 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
     R12_col += [idx for idx in unrelated_inds]
     R12_row += [unrelated_inds_dict[idx] for idx in unrelated_inds]
     R12_data += [0.5 for k in range(len(unrelated_inds))]
-    for i in unrelated_inds:
-        x = ped[:,2] == ids[i]
-        y = ped[:,3] == ids[i]
-        # assert x.sum() * y.sum() == 0
-        if x.sum() == 0 and y.sum() == 0:
-            continue
-        inds = np.where(x)[0] if x.sum()>0 else np.where(y)[0]
-        for j in inds:
-            iid = ped[j, 1]
-            if iid not in ids:
+    if ped is not None:
+        for iid, father, mother in ped[:, 1:4]:
+            child_index = id_dict.get(iid)
+            if child_index is None:
                 continue
-            R12_row.append(unrelated_inds_dict[i])
-            R12_col.append(id_dict[iid])
-            R12_data.append(0.25)
+            for parent in (father, mother):
+                parent_index = id_dict.get(parent)
+                if parent_index in unrelated_inds_dict:
+                    R12_row.append(unrelated_inds_dict[parent_index])
+                    R12_col.append(child_index)
+                    R12_data.append(0.25)
 
     R12_row = np.array(R12_row, dtype='uint32')
     R12_col = np.array(R12_col, dtype='uint32')
@@ -469,58 +484,61 @@ def _impute_unrel_pat_gts_cond_gau(G: gtarray, ped: np.ndarray,
     R22_triu: csc_matrix = tril(R22, k=-1, format='csc')
     R22 = R22 + R22_triu.T
   
-    for fam in unrelated_inds:
-        G.gts[fam, 1, G.gts[fam, 1, :] < 0] = 0
-        G.gts[fam, 1, G.gts[fam, 1, :] > 2] = 2
+    means = 2 * freqs
+    lu = splu(R22)
+    for start in range(0, G.shape[-1], 256):
+        block = slice(start, start + 256)
+        proband = gts[:, 0, block] - means[block]
+        proband[np.isnan(proband)] = 0
+        estimate = np.clip(means[block] + R12 @ lu.solve(proband.astype(float, copy=False)), 0, 2)
+        gts[unrelated_inds, 1, block] = 2 * estimate if parsum else estimate
+        if not parsum:
+            gts[unrelated_inds, 2, block] = estimate
+    return gts
 
-    if parsum:
-        G.gts[unrelated_inds, 1, :] += G.gts[unrelated_inds, 1, :]
-    else:
-        G.gts[unrelated_inds, 2, :] = G.gts[unrelated_inds, 1, :]
-    return G.gts.data
-    
 
 @njit
 def _impute_missing(gts: np.ndarray, freqs: np.ndarray) -> np.ndarray:
-    for i in range(gts.shape[2]):
-        freq = freqs[i]
-        is_na = np.where(np.sum(np.isnan(gts[:,:,i]), axis=1) > 0)[0]
-        if len(is_na) == 0:
-            continue
-        for j in is_na:
-            mask = np.isnan(gts[j, :, i])
-            if gts.shape[1] == 2:
-                if np.sum(mask) == 2:
-                    gts[j, :, i] = freq * 2
-                if mask[0] and not mask[1]:
-                    gts[j, 0, i] = gts[j, 1, i] / 2
-                if not mask[0] and mask[1]:
-                    gts[j, 1, i] = gts[j, 0, i] + 2 * freq
-            elif gts.shape[1] == 3:
-                if mask[0]:
-                    if np.sum(mask[1:]) == 2:
-                        gts[j, :, i] = freq * 2
-                    elif np.sum(mask[1:]) == 0:
-                        gts[j, 0, i] = np.sum(gts[j, 1:, i]) / 2
-                    elif mask[1]:
-                        gts[j, 0, i] = gts[j, 2, i] / 2 + freq
-                        gts[j, 1, i] = freq * 2
-                    elif mask[2]:
-                        gts[j, 0, i] = gts[j, 1, i] / 2 + freq
-                        gts[j, 2, i] = freq * 2
+    parents_separate = gts.shape[1] == 3
+    for j in range(gts.shape[0]):
+        for i in range(gts.shape[2]):
+            child = gts[j, 0, i]
+            first = gts[j, 1, i]
+            no_child, no_first = np.isnan(child), np.isnan(first)
+            if not parents_separate:
+                if no_child:
+                    gts[j, 0, i] = 2 * freqs[i] if no_first else first / 2
+                if no_first:
+                    gts[j, 1, i] = 4 * freqs[i] if no_child else child + 2 * freqs[i]
+                continue
+            second = gts[j, 2, i]
+            no_second = np.isnan(second)
+            if not (no_child or no_first or no_second):
+                continue
+            freq = freqs[i]
+            if no_child:
+                if no_first and no_second:
+                    gts[j, :, i] = 2 * freq
+                elif no_first:
+                    gts[j, 0, i] = second / 2 + freq
+                    gts[j, 1, i] = 2 * freq
+                elif no_second:
+                    gts[j, 0, i] = first / 2 + freq
+                    gts[j, 2, i] = 2 * freq
                 else:
-                    if np.sum(mask[1:]) == 2:
-                        gts[j, 1:3, i] = gts[j, 0, i] / 2 + freq
-                    elif mask[1]:
-                        if _is_whole(gts[j, 2, i]):
-                            gts[j, 1, i] = _po_imp(freq, gts[j, 0, i], gts[j, 2, i])
-                        else:
-                           gts[j, 1, i] = _lin_imp(freq, gts[j, 0, i], gts[j, 2, i]) 
-                    elif mask[2]:
-                        if _is_whole(gts[j, 1, i]):
-                            gts[j, 2, i] = _po_imp(freq, gts[j, 0, i], gts[j, 1, i])
-                        else:
-                           gts[j, 2, i] = _lin_imp(freq, gts[j, 0, i], gts[j, 1, i])
+                    gts[j, 0, i] = (first + second) / 2
+            elif no_first and no_second:
+                gts[j, 1:3, i] = child / 2 + freq
+            elif no_first:
+                if _is_whole(child) and _is_whole(second):
+                    gts[j, 1, i] = _po_imp(freq, child, second)
+                else:
+                    gts[j, 1, i] = _lin_imp(freq, child, second)
+            else:
+                if _is_whole(child) and _is_whole(first):
+                    gts[j, 2, i] = _po_imp(freq, child, first)
+                else:
+                    gts[j, 2, i] = _lin_imp(freq, child, first)
     return gts
 
 
@@ -541,6 +559,8 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False, pe
         # )
         # print('WARNING: No need to impute parental genotypes of unrelated individuals if sib effect is modelled.')
         return G
+    if G.ndim != 3 or G.shape[1] != (2 if parsum else 3):
+        raise ValueError('Genotype matrix does not match the parental genotype design.')
     if G.freqs is None:
         G.compute_freqs()
     if grm is not None and unrelated_inds is not None:
@@ -550,10 +570,14 @@ def impute_unrel_par_gts(G: gtarray, sib: bool = False, parsum: bool = False, pe
         # print('Imputing parental geotypes using conditional gaussian')
         gts = _impute_unrel_pat_gts_cond_gau(G, parsum=parsum, ped=ped, grm=grm, unrelated_inds=unrelated_inds)
     elif grm is None and unrelated_inds is None:
-        gts = _impute_unrel_pat_gts(G.gts.data, G.freqs, parsum=parsum)
+        gts = G.gts.astype(np.result_type(G.dtype, np.float32), copy=False).filled(np.nan)
+        gts = _impute_unrel_pat_gts(gts, G.freqs, parsum=parsum)
     else:
         raise TypeError('One of grm and unrelated_inds is None.')
-    G.gts = ma.array(gts, mask=np.isnan(gts))
+    mask = np.isnan(gts)
+    G.has_NAs = bool(mask.any())
+    G.gts = ma.array(gts, mask=mask if G.has_NAs else ma.nomask)
+    G.dtype = G.gts.dtype
     # logger.info(
     #     'Done imputing parental geotypes of unrelated individuals.'
     # )
@@ -572,12 +596,16 @@ def impute_missing(G: gtarray) -> gtarray:
     """
     if G.freqs is None:
         G.compute_freqs()
-    gts = _impute_missing(G.gts.data, G.freqs)
-    G.gts = ma.array(gts, mask=np.isnan(gts))
-    assert G.gts.mask.sum() == 0
+    if G.ndim != 3 or G.shape[1] not in (2, 3):
+        raise ValueError('Missing-genotype imputation requires a proband and two parents or a parental sum')
+    gts = _impute_missing(G.gts.astype(np.result_type(G.dtype, np.float32), copy=False).filled(np.nan), G.freqs)
+    if np.isnan(gts).any():
+        raise ValueError('Genotypes remain missing after imputation')
+    G.gts = ma.array(gts)
+    G.dtype = G.gts.dtype
+    G.has_NAs = False
     # logger.info(
     #     'Done imputing missing genotypes.'
     # )
     # print('Done imputing missing genotypes.')
     return G
-    

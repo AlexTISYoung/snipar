@@ -76,8 +76,15 @@ jobs:
         python -m pip check &&
         python -m unittest -f snipar.tests.test_impute_from_sibs
         snipar.tests.test_impute.TestImpute.test_impute_with_phased_pedigree_control &&
+        python -m snipar.scripts.ibd --help &&
+        python -m snipar.scripts.impute --help &&
+        python -m snipar.scripts.gwas --help &&
+        python -m snipar.scripts.simulate --help &&
         python -m snipar.scripts.correlate --help &&
-        python -m snipar.scripts.pgs --help
+        python -m snipar.scripts.pgs --help &&
+        python -m snipar.scripts.gts_matrix --help &&
+        python -m snipar.scripts.make_rdr_grms --help &&
+        python -m snipar.example.snipar_example_data --help
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

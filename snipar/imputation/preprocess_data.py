@@ -16,14 +16,13 @@ Functions
     prepare_gts
 """
 import logging
+from itertools import chain
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
 from snipar.utilities import open_bgen, read_bgen
 from snipar.config import nan_integer
 from tqdm import tqdm
-import statsmodels.api as sm
-from scipy.stats import norm
 
 class Person:
     """Just a simple data structure representing individuals
@@ -145,8 +144,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
     else:
         ibd = ibd[ibd["Chr"]==chromosomes[0]][["ID1", "ID2", "IBDType", "StartSNP", "StopSNP"]]
     #TODO cancel or generalize this
-    if set(ibd["IBDType"].unique().tolist()) == {"IBD1", "IBD2"}:
-        ibd["IBDType"] = ibd["IBDType"].apply(lambda x: 2 if x=="IBD2" else 1)
+    ibd["IBDType"] = ibd["IBDType"].replace({"IBD1": "1", "IBD2": "2"})
     ibd["IBDType"] = ibd["IBDType"].astype(int)
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StartSNP","coordinate":"StartSNPLoc"})
     ibd= ibd.merge(temp, on="StartSNP")
@@ -163,9 +161,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
     temp = bim[["id", "coordinate"]].rename(columns = {"id":"StopSNP","coordinate":"StopSNPLoc"})
     segs = segs.merge(temp, on="StopSNP")
     segs = segs[['StartSNPLoc', 'StopSNPLoc']].sort_values('StartSNPLoc').values.tolist()
-    flatten_seg_as_ibd0 = []
-    for l in segs:
-        flatten_seg_as_ibd0 = flatten_seg_as_ibd0 + l + [0]
+    flatten_seg_as_ibd0 = list(chain.from_iterable([start, end, 0] for start, end in segs))
     #TODO does this work with multichromosome in the ibd file? it won't work if snplocs are indexed from zero in each snp
     all_ibd_segs = []
     for index, row in ibd.iterrows():
@@ -176,7 +172,7 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
         prev_end = start
         for seg_start, seg_end, ibd_type in segments:  
             while seg_start>end:
-                if prev_end<end:
+                if prev_end <= end:
                     row_ibd0.append([prev_end, end, 0])
                 if (seg_counter+1) < len(segs):
                     seg_counter+=1
@@ -189,13 +185,13 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                 raise Exception("segment starts sooner than it should")
 
             if seg_start>prev_end:
-                row_ibd0.append([prev_end, seg_start, 0])
+                row_ibd0.append([prev_end, seg_start - 1, 0])
 
             if seg_end>end:
                 raise Exception("segment ends outside where it should have")
-            prev_end=seg_end
+            prev_end = seg_end + 1
 
-        if prev_end<end:
+        if prev_end <= end:
             row_ibd0.append([prev_end, end, 0])
         row_ibd0 = row_ibd0 + [[start, end, 0] for start, end in segs[seg_counter+1:]]
         row_ibd = segments+row_ibd0
@@ -283,53 +279,79 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
-        bim = pd.read_csv(bim_address, sep=r"\s+", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+        bim = pd.read_csv(bim_address, sep=r"\s+", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"],
+                          dtype={"id": str, "allele1": str, "allele2": str}, keep_default_na=False)
         if fam_address is None:
             fam_address = unphased_address+'.fam'
-        fam = pd.read_csv(fam_address, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
+        fam = pd.read_csv(fam_address, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"],
+                          dtype={"IID": str}, keep_default_na=False)
 
     else:
         if bim_address is None:
             bim_address = phased_address+'.bgen'
         if fam_address is None:
             fam_address = phased_address+'.bgen'
-        if chromosome is None:
-            raise ValueError("chromosome should be specified when using phased data")
-        reader = open_bgen(bim_address)
-        if hasattr(reader, "variant_metadata"):
-            bim = reader.variant_metadata()
-        else:
-            bim = read_bgen(bim_address)["variants"].compute()
+        with open_bgen(bim_address) as reader:
+            if chromosome is None:
+                chroms = np.unique(reader.chromosomes)
+                if len(chroms) != 1 or not str(chroms[0]).isdigit():
+                    raise ValueError("Supply a single BGEN chromosome, or use a chromosome wildcard")
+                chromosome = chroms[0]
+            if hasattr(reader, "variant_metadata"):
+                bim = reader.variant_metadata()
+            elif hasattr(reader, "_vaddr"):
+                # cbgen already loaded these arrays when opening the BGEN.
+                # Copy them here before its mapped index is closed.
+                bim = pd.DataFrame({
+                    "id": reader.ids, "rsid": reader.rsids, "chrom": reader.chromosomes,
+                    "pos": reader.positions, "nalleles": reader.nalleles,
+                    "allele_ids": reader.allele_ids, "vaddr": reader._vaddr,
+                }, copy=True)
+            else:
+                bim = read_bgen(bim_address)["variants"].compute()
+            ids = np.array(reader.samples)
         bim = bim.rename(columns={"chrom": "Chr", "pos": "coordinate"})
         bim["id"] = bim["rsid"]
         bim["Chr"] = chromosome
-        ids = reader.samples if fam_address == bim_address else open_bgen(fam_address).samples
+        if fam_address != bim_address:
+            with open_bgen(fam_address) as reader:
+                ids = np.array(reader.samples)
         fam = pd.DataFrame({"IID": ids})
 
     chromosomes = bim["Chr"].unique().astype(int)
+    if len(chromosomes) != 1:
+        raise ValueError("Imputation requires one chromosome per genotype file")
+    pedigree = pedigree.copy()
+    id_columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID"]
+    pedigree[id_columns] = pedigree[id_columns].astype(str)
+    genotype_ids = set(fam["IID"].astype(str))
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
     logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
     #Keep individuals in fam
-    pedigree = pedigree[pedigree["IID"].isin(fam["IID"].astype(str))].copy()
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(fam["IID"].astype(str))
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(fam["IID"].astype(str))
+    pedigree = pedigree[pedigree["IID"].isin(genotype_ids)].copy()
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(genotype_ids) & (pedigree["FATHER_ID"] != pedigree_nan)
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(genotype_ids) & (pedigree["MOTHER_ID"] != pedigree_nan)
     if control:
         logging.info("Adding control to the pedigree ...")
         pedigree = add_control(pedigree)
         logging.info("Control Added.")
     #keeping individuals with no parents
     no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
-    #removing individual whose parents are nan
-    no_parent_pedigree = no_parent_pedigree[(no_parent_pedigree["MOTHER_ID"] != pedigree_nan) & (no_parent_pedigree["FATHER_ID"] != pedigree_nan)]
+    # Keep a singleton with one observed parent, even when the missing parent's ID is unknown.
+    has_known_parents = ((no_parent_pedigree["MOTHER_ID"] != pedigree_nan) &
+                         (no_parent_pedigree["FATHER_ID"] != pedigree_nan))
+    single_observed = no_parent_pedigree["has_father"] ^ no_parent_pedigree["has_mother"]
+    no_parent_pedigree = no_parent_pedigree.loc[has_known_parents | single_observed].copy()
     no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
-    ped_ids =  set(no_parent_pedigree["IID"].tolist())
     #finding siblings in each family
     sibships = no_parent_pedigree.groupby(["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]).agg({'IID':lambda x: list(x)}).reset_index()
 
     sibships["sib_count"] = sibships["IID"].apply(len)
     sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
     sibships = sibships[(sibships["sib_count"]>1) | sibships["single_parent"]]
-    fids = set([i for i in sibships["FID"].values.tolist() if i.startswith(b"_")])
+    ped_ids = set(no_parent_pedigree["IID"])
+    ped_ids.update(sibships.loc[sibships["has_father"], "FATHER_ID"])
+    ped_ids.update(sibships.loc[sibships["has_mother"], "MOTHER_ID"])
     logging.info(f"with chromosomes {chromosomes} loading bim file ...")      
     logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
     if ibd_address is None:
@@ -338,32 +360,23 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             raise Exception("Should provide ibd file in the presence of families with multiple sibs")
         ibd = {}
     else:
-        ibd = pd.read_csv(f"{ibd_address}.segments.gz", sep=r"\s+").astype(str)
+        ibd = pd.read_csv(f"{ibd_address}.segments.gz", sep=r"\s+", dtype=str, keep_default_na=False)
         if ibd_is_king:            
-            king_segs = pd.read_csv(f"{ibd_address}allsegs.txt", sep=r"\s+").astype(str)
+            king_segs = pd.read_csv(f"{ibd_address}allsegs.txt", sep=r"\s+", dtype=str, keep_default_na=False)
             if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(ibd.columns.values.tolist())):
                 raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
             ibd = preprocess_king(ibd, king_segs, bim, chromosomes, sibships)
         else:
             if not {"ID1", "ID2", "IBDType", "Chr", "start_coordinate", "stop_coordinate",}.issubset(set(ibd.columns.values.tolist())):
                 raise Exception("Invalid ibd columns for snipar formatted ibd. Columns must be include: ID1, ID2, IBDType, Chr, start_coordinate, stop_coordinate")
-            ibd = ibd.astype(str)
-            ibd[["IBDType", "start_coordinate", "stop_coordinate"]] = ibd[["IBDType", "start_coordinate", "stop_coordinate"]].astype(int)
-            #Adding location of start and end of each
-            chromosomes = chromosomes.astype(str)
-            if len(chromosomes)>1:
-                ibd = ibd[ibd["Chr"].isin(chromosomes)]
-            else:
-                ibd = ibd[ibd["Chr"]==chromosomes[0]]
-            #TODO cancel or generalize this    
-            ibd['segment'] = ibd[['start_coordinate', 'stop_coordinate', "IBDType"]].values.tolist()
-            def create_seg_list(x):
-                elements = list(x)
-                result = []
-                for el in elements:
-                    result = result+el
-                return result
-            ibd = ibd.groupby(["ID1", "ID2"]).agg({'segment':lambda x:create_seg_list(x)}).to_dict()["segment"]
+            ibd = ibd.loc[ibd["Chr"].isin(chromosomes.astype(str))].copy()
+            columns = ["start_coordinate", "stop_coordinate", "IBDType"]
+            ibd[columns] = ibd[columns].astype(int)
+            grouped = {}
+            for first, second, start, stop, ibd_type in ibd[["ID1", "ID2", *columns]].itertuples(
+                    index=False, name=None):
+                grouped.setdefault((first, second), []).extend((start, stop, ibd_type))
+            ibd = grouped
     if not ibd:
         logging.warning(f"with chromosomes {chromosomes} no matching ibd segments")        
     logging.info("ibd loaded.")        
@@ -372,51 +385,45 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values)).astype('S')
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
-def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
-    """Akaike information criterion of linear regressions with increasing number of PCs. Returns the number of PCs that minimizes aic.
-    Args:    
-        unphased_gts: np.array[signed char]
-            A two-dimensional array containing genotypes for all individuals and SNPs respectively.
+def _fit_frequency_model(x, dosage, called):
+    """Fit SNP regressions using only called individuals."""
+    coefs = np.zeros((x.shape[1], dosage.shape[1]))
+    complete = called.all(axis=0)
+    if complete.any():
+        coefs[:, complete] = np.linalg.lstsq(x, dosage[:, complete], rcond=None)[0]
+    for marker in np.flatnonzero(~complete):
+        rows = called[:, marker]
+        if rows.any():
+            coefs[:, marker] = np.linalg.lstsq(x[rows], dosage[rows, marker], rcond=None)[0]
+        else:
+            coefs[:, marker] = np.nan
+    return coefs
 
-        pc_scores: np.array[float]
-            A two-dimensional array containing pc scores for all individuals and SNPs respectively.
 
-        linear : bool, optional
-            Whether the model is linear regression or not. GLM is not implemented yet. Default is true.
-        
-        sample_size : int, optional
-            number of snps to use for computing aics. aics from these snps are averaged. default is 1000.
-    
-    Returns:
-        int:
-            optimal number of PCs to use
-    """
-    if linear:
-        pop_size = unphased_gts.shape[0]
-        nsnps = unphased_gts.shape[1]
-        if nsnps < sample_size:
-            sample_size = nsnps
-        individual_mask = np.random.permutation([True]*sample_size+[False]*(nsnps-sample_size))
-        unphased_gts = unphased_gts[:, individual_mask]
+def compute_aics(unphased_gts, pc_scores, linear=True, sample_size=1000):
+    """Select the PC count by mean Gaussian AIC across an evenly spaced marker sample."""
+    if not linear:
+        raise NotImplementedError("AIC selection is implemented for linear models")
+    nsnps = unphased_gts.shape[1]
+    sample = np.linspace(0, nsnps - 1, min(sample_size, nsnps), dtype=int)
+    genotypes = unphased_gts[:, sample]
+    called = genotypes != nan_integer
+    dosage = np.where(called, genotypes / 2.0, 0)
+    observations = called.sum(axis=0)
+    x = np.column_stack((np.ones(len(pc_scores)), pc_scores))
+    # Use the same variants across models so that AIC compares the same data.
+    compare = observations > x.shape[1]
+    if not compare.any():
+        return 0
+    aic = []
+    for n in range(1, x.shape[1] + 1):
+        design = x[:, :n]
+        coefs = _fit_frequency_model(design, dosage, called)
+        residuals = np.where(called, dosage - design @ coefs, 0)
+        mse = np.sum(residuals[:, compare] ** 2, axis=0) / observations[compare]
+        aic.append(np.mean(observations[compare] * np.log(np.maximum(mse, np.finfo(float).eps))) + 2*n)
+    return int(np.argmin(aic))
 
-        unphased_pc_gts = unphased_gts.copy().astype(float)
-        unphased_pc_gts[unphased_gts==nan_integer]=0.
-        number_of_pcs = pc_scores.shape[1]
-        x = np.hstack((np.ones((pop_size, 1)), pc_scores))
-        aic = []
-        logging.info("computing aics ...")
-        for i in tqdm(range(1,number_of_pcs+2)):
-            coefs, _, _, _ = np.linalg.lstsq(x[:, :i], unphased_pc_gts/2)
-            fs = x[:, :i]@coefs
-            std = np.sqrt(np.var(unphased_pc_gts.flatten()/2)-np.var(fs.flatten()))
-            fs[fs>1] = 1
-            fs[fs<0] = 0            
-            log_likelihoods = np.sum(np.log(norm.pdf(unphased_pc_gts/2-fs, 0, std)), axis=0, dtype=np.float64)
-            log_likelihood = np.mean(log_likelihoods, dtype=np.float64)
-            aic.append(2*(i-log_likelihood))
-        logging.info("computing aics done")
-        return np.argmin(aic)
-    raise Exception("not implemented yet")
 
 def estimate_f(unphased_gts, pc_scores, linear=True):
     """Estimates MAF with an ols or glm from by regressing unphased_gts on pc_scores
@@ -436,51 +443,44 @@ def estimate_f(unphased_gts, pc_scores, linear=True):
             A two-dimensional array containing estimated fs for all individuals and SNPs respectively and a dictionary containing information about the model. These include ['x', 'coefs', 'TSS', 'RSS1', 'RSS2', 'R2_1', 'R2_2', 'larger1', 'less0'].
     """
 
-    pop_size = unphased_gts.shape[0]
-    nsnps = unphased_gts.shape[1]
-    unphased_pc_gts = unphased_gts.copy().astype(float)
-    unphased_pc_gts[unphased_gts==nan_integer] = 0.
-    x = np.hstack((pc_scores, np.ones((pop_size, 1))))
+    pop_size, nsnps = unphased_gts.shape
+    called = unphased_gts != nan_integer
+    x = np.column_stack((pc_scores, np.ones(pop_size)))
     data = {}
     if linear:
-        y = unphased_pc_gts/2
-        coefs, _, _, _ = np.linalg.lstsq(x, y)
-        fs = x@coefs
-        residuals1 = y-fs
-        larger1 = np.sum(fs>1., axis=0)/pop_size
-        less0 = np.sum(fs<0., axis=0)/pop_size
-        fs[fs>1] = 1
-        fs[fs<0] = 0
-        residuals2 = y-fs
-        TSS = np.sum(y*y, axis=0)
-        RSS1 = np.sum(residuals1*residuals1, axis=0)
-        RSS2 = np.sum(residuals2*residuals2, axis=0)
-        data["x"] = x
-        data["coefs"] = coefs
-        data["TSS"] = TSS
-        data["RSS1"] = RSS1
-        data["RSS2"] = RSS2
-        data["R2_1"] = 1-(RSS1/TSS)
-        data["R2_2"] = 1-(RSS2/TSS)
-        data["larger1"] = larger1
-        data["less0"] = less0
+        y = np.where(called, unphased_gts / 2.0, 0)
+        coefs = _fit_frequency_model(x, y, called)
+        fs = x @ coefs
+        residuals1 = np.where(called, y - fs, 0)
+        larger1 = np.mean(fs > 1, axis=0)
+        less0 = np.mean(fs < 0, axis=0)
+        np.clip(fs, 0, 1, out=fs)
+        residuals2 = np.where(called, y - fs, 0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            centered = np.where(called, y - y.sum(axis=0) / called.sum(axis=0), 0)
+            tss = np.sum(centered**2, axis=0)
+            rss1 = np.sum(residuals1**2, axis=0)
+            rss2 = np.sum(residuals2**2, axis=0)
+            r2_1 = np.where(tss > 0, 1 - rss1/tss, np.nan)
+            r2_2 = np.where(tss > 0, 1 - rss2/tss, np.nan)
+        data.update(x=x, coefs=coefs, TSS=tss, RSS1=rss1, RSS2=rss2,
+                    R2_1=r2_1, R2_2=r2_2, larger1=larger1, less0=less0)
     else:
-        models = []
-        model_results = []
-        fs = unphased_pc_gts.copy()
+        import statsmodels.api as sm
+
+        fs = np.full((pop_size, nsnps), np.nan)
         for i in tqdm(range(nsnps)):
-            y = np.zeros((pop_size,2))
-            y[:,0] = unphased_pc_gts[:,i]
-            y[:,1] = 2-unphased_pc_gts[:,i]
-            binom_model = sm.GLM(y, x, family=sm.families.Binomial())
-            binom_result = binom_model.fit()
-            models.append(binom_model)
-            model_results.append(binom_result)
-            fs[:,i] = binom_result.predict(x)
+            observed = called[:, i]
+            if observed.any():
+                dosage = unphased_gts[observed, i]
+                y = np.column_stack((dosage, 2 - dosage))
+                model = sm.GLM(y, x[observed], family=sm.families.Binomial())
+                fs[:, i] = model.fit().predict(x)
     return fs, data
 
 
-def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes, start=None, end=None, pcs=None, pc_ids=None, find_optimal_pc=None):
+def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids, chromosomes,
+                start=None, end=None, pcs=None, pc_ids=None, find_optimal_pc=None, *, marker_indices=None):
     """ Processes the gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -546,124 +546,81 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
                     'MAF_*' : info about the MAF estimator if MAF estimator is used.
     """
     logging.info(f"with chromosomes {chromosomes} initializing gts data with start={start} end={end}")
+    start = 0 if start is None else start
+    end = len(bim) if end is None else end
+    if not 0 <= start < end <= len(bim):
+        raise ValueError("Imputation requires 0 <= start < end <= number of SNPs")
+
+    if marker_indices is None:
+        _, unique_indices = np.unique(bim["id"], return_index=True)
+        unique_indices.sort()
+        marker_indices = unique_indices[(unique_indices >= start) & (unique_indices < end)]
+    selected_bim = bim.iloc[marker_indices]
+    pos = selected_bim["coordinate"].to_numpy(dtype=int)
+    bed = Bed(unphased_address + ".bed", count_A1=True) if unphased_address else None
+    bgen = open_bgen(phased_address + ".bgen", verbose=False) if phased_address else None
+    if bed is not None and bed.sid_count != len(bim):
+        raise ValueError("BIM and BED datasets must have the same number of SNPs")
+    if not len(marker_indices):
+        raise ValueError("No unique SNPs in the requested slice")
+    all_ids = bed.iid[:, 1] if bed is not None else bgen.samples
+    sample_indices = np.flatnonzero(np.isin(all_ids.astype("S"), list(ped_ids)))
+    gts_ids = all_ids[sample_indices].astype("S")
+    if not len(sample_indices):
+        raise ValueError("No relevant individuals have genotypes")
+    unphased_gts = bed[sample_indices, marker_indices].read(dtype=np.float64).val if bed is not None else None
+
     phased_gts = None
-    unphased_gts = None
-    unphased_pc_gts = None    
-    if unphased_address:
-        bim_as_csv = pd.read_csv(unphased_address+".bim", sep=r"\s+", header=None)
-        gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
-        logging.info(f"with chromosomes {chromosomes} opened unphased file ...")
-        if not pc_ids is None:
-            ids_in_ped_pc = [(id in ped_ids) and (id in pc_ids) for id in gts_f.iid[:,1].astype("S")]
+    if bgen is not None:
+        if bed is None:
+            bgen_indices = sample_indices
+            present = np.ones(len(gts_ids), dtype=bool)
+            bgen_markers = marker_indices
+            flipped = np.zeros(len(marker_indices), dtype=bool)
         else:
-            ids_in_ped_pc = [(id in ped_ids) for id in gts_f.iid[:,1].astype("S")]
-        logging.info(f"with chromosomes {chromosomes} loaded ids ...")
-        gts_ids = gts_f.iid[ids_in_ped_pc]
-        logging.info(f"with chromosomes {chromosomes} restrict to ids ...")
-        all_sids = bim_as_csv[1].values
+            bgen_samples = {iid: i for i, iid in enumerate(bgen.samples.astype("S"))}
+            sample_rows = np.array([bgen_samples.get(iid, -1) for iid in gts_ids])
+            present = sample_rows >= 0
+            bgen_indices = sample_rows[present]
+            variant_rows = {(sid, bp): i for i, (sid, bp) in
+                            enumerate(zip(bgen.rsids, bgen.positions))}
+            bgen_markers = np.array([variant_rows.get((sid, bp), -1)
+                                    for sid, bp in zip(selected_bim["id"], pos)])
+            if np.any(bgen_markers < 0):
+                raise ValueError("The BED and BGEN datasets must contain the same SNP IDs and positions")
+            a1 = selected_bim["allele1"].to_numpy()
+            a2 = selected_bim["allele2"].to_numpy()
+            alleles = np.asarray(bgen.allele_ids)[bgen_markers]
+            forward = np.asarray([pair == f"{a},{b}" for pair, a, b in zip(alleles, a1, a2)])
+            flipped = np.asarray([pair == f"{b},{a}" for pair, a, b in zip(alleles, a1, a2)])
+            if not np.all(forward | flipped):
+                raise ValueError("The BED and BGEN datasets disagree on SNP alleles")
+        phased_gts = np.full((len(gts_ids), len(marker_indices), 2), np.nan)
+        if len(bgen_indices):
+            probs = bgen.read((bgen_indices, bgen_markers), np.float32)
+            if probs.shape[2] != 4:
+                raise ValueError("BGEN imputation requires phased biallelic SNPs")
+            calls = np.full((*probs.shape[:2], 2), np.nan)
+            calls[probs[:, :, 0] > .99, 0] = 1
+            calls[probs[:, :, 1] > .99, 0] = 0
+            calls[probs[:, :, 2] > .99, 1] = 1
+            calls[probs[:, :, 3] > .99, 1] = 0
+            calls[:, flipped, :] = 1 - calls[:, flipped, :]
+            phased_gts[present] = calls
+        if unphased_gts is None:
+            unphased_gts = phased_gts.sum(axis=2)
 
-        if end is not None:
-            unphased_gts = gts_f[ids_in_ped_pc , start:end].read().val
-            logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
-            pos = gts_f.pos[start:end, 2]
-            logging.info(f"with chromosomes {chromosomes} loaded pos ...")
-            sid = all_sids[start:end]
-            logging.info(f"with chromosomes {chromosomes} loaded sid ...")
-        else:
-            unphased_gts = gts_f[ids_in_ped_pc, :].read().val
-            logging.info(f"with chromosomes {chromosomes} loaded genotypes ...")
-            pos = gts_f.pos[:, 2]
-            logging.info(f"with chromosomes {chromosomes} loaded pos ...")
-            sid = all_sids
-            logging.info(f"with chromosomes {chromosomes} loaded sid ...")
-    if phased_address:
-        bgen = open_bgen(phased_address+".bgen", verbose=False)
-        if not pc_ids is None:
-            ids_in_ped_pc = [(id in ped_ids) and (id in pc_ids) for id in bgen.samples.astype("S")]
-        else:
-            ids_in_ped_pc = [(id in ped_ids) for id in bgen.samples.astype("S")]
-        gts_ids = np.array([[None, id] for id in bgen.samples])
-        gts_ids = gts_ids[ids_in_ped_pc]
-        pos = np.array(bim["coordinate"][start: end])
-        all_sids = np.array(bim["id"])
-        sid = np.array(bim["id"][start: end])
-        pop_size = len(gts_ids)
-        probs= bgen.read((slice(0, len(bgen.samples)),slice(start, end)))        
-        phased_gts = np.zeros((probs.shape[0], probs.shape[1], 2))
-        phased_gts[:] = np.nan
-        phased_gts[probs[:,:,0] > 0.99, 0] = 1
-        phased_gts[probs[:,:,1] > 0.99, 0] = 0
-        phased_gts[probs[:,:,2] > 0.99, 1] = 1
-        phased_gts[probs[:,:,3] > 0.99, 1] = 0
-        phased_gts = phased_gts[ids_in_ped_pc,:]
-        if not unphased_gts:
-            unphased_gts = phased_gts[:,:,0]+phased_gts[:,:,1]
-    if not pcs is None:
-        set_gts_ids = set(gts_ids[:, 1].astype("S"))
-        pc_ids_gts_ids =  [id in set_gts_ids for id in pc_ids]
-        pcs = pcs[pc_ids_gts_ids]
-    _, indexes = np.unique(all_sids, return_index=True)
-    indexes = np.sort(indexes)
-    indexes = (indexes[(indexes>=start) & (indexes<end)]-start)
-    sid = sid[indexes]
-    pos = pos[indexes]
-    unphased_gts = unphased_gts[:, indexes]
-    if not phased_gts is None:
-        phased_gts = phased_gts[:, indexes, :]        
-    pos = pos.astype(int)
-    unphased_gts_greater2 = unphased_gts>2
-    num_unphased_gts_greater2 = np.sum(unphased_gts_greater2)
-    if num_unphased_gts_greater2>0:
-        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are greater than 2 in {num_unphased_gts_greater2} locations. Converted to NaN")  
-        unphased_gts[unphased_gts_greater2] = np.nan
-        
-    unphased_gts_less0 = unphased_gts<0
-    num_unphased_gts_less0 = np.sum(unphased_gts_less0)
-    if num_unphased_gts_less0>0:
-        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes are less than 0 in {num_unphased_gts_less0} locations. Converted to NaN")  
-        unphased_gts[unphased_gts_less0] = np.nan
-
-    if not phased_gts is None:
-        phased_gts_less0 = phased_gts<0
-        num_phased_gts_less0 = np.sum(phased_gts_less0)
-        if num_phased_gts_less0>0:
-            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are less than 0 in {num_phased_gts_less0} locations. Converted to NaN")  
-            phased_gts[phased_gts_less0] = np.nan
-        
-        phased_gts_greater1 = phased_gts>1
-        num_phased_gts_greater1 = np.sum(phased_gts_greater1)
-        if num_phased_gts_greater1>0:
-            logging.warning(f"with chromosomes {chromosomes}: phased genotypes are greater than 1 in {num_phased_gts_greater1} locations. Converted to NaN")  
-            phased_gts[phased_gts_greater1] = np.nan
-    
-    standard_f = np.nanmean(unphased_gts, axis=0, dtype=np.float64)/2.0
-    practical_f = unphased_gts.copy()
-    practical_f[:] = standard_f
-
-    #transforming genotypes into int8
-    unphased_gts[np.isnan(unphased_gts)] = nan_integer
-    unphased_gts = unphased_gts.astype(np.int8)
-    if not phased_gts is None:
-        phased_gts[np.isnan(phased_gts)] = nan_integer
-        phased_gts = phased_gts.astype(np.int8)    
-    iid_to_bed_index = {i.encode("ASCII"):index for index, i in enumerate(gts_ids[:,1])}
-    selected_bim = bim.iloc[indexes+start, :]
-    bim_values = selected_bim.to_numpy().astype('S')
-    bim_columns = selected_bim.columns.to_numpy().astype('S')
-    logging.info(f"with chromosomes {chromosomes} initializing non_gts data done")
-    if unphased_gts.shape[0] == 0:
-        logging.warning(f"with chromosomes {chromosomes}: 0 individuals in unphased genotypes")
-    if unphased_gts.shape[1] == 0:
-        logging.warning(f"with chromosomes {chromosomes}: 0 snps in unphased genotypes")
-    if unphased_gts.max()>2 or unphased_gts.min()<0:
-        logging.warning(f"with chromosomes {chromosomes}: unphased genotypes has values out of 0-2 range")
-    if not phased_gts is None:
-        if phased_gts.shape[0] == 0:
-            logging.warning(f"with chromosomes {chromosomes}: 0 individuals in phased genotypes")
-        if phased_gts.shape[1] == 0:
-            logging.warning(f"with chromosomes {chromosomes}: 0 snps in phased genotypes")
-        if phased_gts.max()>1 or phased_gts.min()<0:
-            logging.warning(f"with chromosomes {chromosomes}: phased genotypes has values out of 0-1 range")
+    with np.errstate(invalid="ignore", divide="ignore"):
+        called = np.isfinite(unphased_gts)
+        standard_f = np.nansum(unphased_gts, axis=0) / (2 * called.sum(axis=0))
+    practical_f = np.broadcast_to(standard_f, unphased_gts.shape).copy()
+    unphased_gts = np.where(called, unphased_gts, nan_integer).astype(np.int8)
+    if phased_gts is not None:
+        phased_gts = np.where(np.isfinite(phased_gts), phased_gts, nan_integer).astype(np.int8)
+    iid_to_bed_index = {iid: i for i, iid in enumerate(gts_ids)}
+    bim_values = selected_bim.to_numpy().astype("S")
+    bim_columns = selected_bim.columns.to_numpy().astype("S")
+    indexes = marker_indices - start
     #value types should be hdf5 compatible
     hdf5_output_dict = {"bim_columns":bim_columns,
                         "bim_values":bim_values,
@@ -671,16 +628,19 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
                         "non_duplicates":indexes,
                         "standard_f":standard_f,
                         }
-    if not pcs is None:
+    if pcs is not None:
         logging.info("estimating MAF using PCs ...")
+        pc_rows = {iid: i for i, iid in enumerate(pc_ids)}
+        row_indices = np.array([pc_rows.get(iid, -1) for iid in gts_ids])
+        present = row_indices >= 0
+        if not present.any():
+            raise ValueError("No principal component scores match genotyped individuals")
+        matched_pcs = pcs[row_indices[present]]
+        pc_gts = unphased_gts[present]
         if find_optimal_pc:
-            logging.info("finding optimal number of PCs using aic...")
-            optimal_pc_num = compute_aics(unphased_gts, pcs, sample_size=1000)
-            logging.info(f"optimal number of PCs is {optimal_pc_num}")
-            logging.info("finding optimal number of PCs using aic done")
-            practical_f, maf_estimator_data = estimate_f(unphased_gts, pcs[:, :optimal_pc_num])
-        else:
-            practical_f, maf_estimator_data = estimate_f(unphased_gts, pcs)
+            optimal_pc_num = compute_aics(pc_gts, matched_pcs, sample_size=1000)
+            matched_pcs = matched_pcs[:, :optimal_pc_num]
+        practical_f[present], maf_estimator_data = estimate_f(pc_gts, matched_pcs)
         for key, val in maf_estimator_data.items():
             hdf5_output_dict[f"maf_{key}"] = val
         logging.info("estimating MAF using PCs done")

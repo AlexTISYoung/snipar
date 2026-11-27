@@ -96,6 +96,8 @@ def main(args):
     if args.chrom is not None and chroms.shape[0]==1:
         chroms = np.array([args.chrom],dtype=int)
     # Set parameters
+    if args.batches < 1:
+        raise ValueError("--batches must be positive")
     min_length = args.min_length
     kinfile = args.king
 
@@ -103,9 +105,6 @@ def main(args):
         min_maf = args.min_maf
     else:
         raise(ValueError('Min MAF must be between 0 and 0.5'))
-
-    mapfile = args.map
-    outprefix = args.out
 
     if 0 <= args.max_missing <= 100:
         max_missing = args.max_missing
@@ -115,18 +114,22 @@ def main(args):
     if 0 <= args.max_error <= 1:
         max_error = args.max_error
     else:
-        raise(ValueError('Max missing % must be between 0 and 100'))
+        raise ValueError('Max error probability must be between 0 and 1')
 
     #### Find sibling pairs ####
     if args.pedigree is not None:
         print('Reading pedigree from '+str(args.pedigree))
-        ped = np.loadtxt(args.pedigree,dtype=str)
+        ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
+        if ped.size and tuple(ped[0, :4]) == ("FID", "IID", "FATHER_ID", "MOTHER_ID"):
+            ped = ped[1:]
+        if not ped.size:
+            raise ValueError("No sibling pairs found")
         if ped.shape[1] < 4:
             raise(ValueError('Not enough columns in pedigree file'))
         elif ped.shape[1] > 4:
             print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
         # Remove rows with missing parents
-        sibpairs, ped = get_sibpairs_from_ped(ped)
+        sibpairs, _ = get_sibpairs_from_ped(ped)
         if sibpairs is None:
             raise(ValueError('No sibpairs found'))
     elif kinfile is not None:
@@ -156,29 +159,26 @@ def main(args):
             print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
     else:
         error_prob = args.p_error
+        if not 0 <= error_prob <= 1:
+            raise ValueError("--p_error must be between 0 and 1")
         error_probs = None
 
-    ######### Infer IBD ###########
-    for i in range(chroms.shape[0]):
-        if error_probs is None:
-            error_probs_i = None
-        else:
-            error_probs_i = error_probs[i]
-        if args.batches > 1:
-            sibpairs = np.array_split(sibpairs, args.batches)
-            for j in range(args.batches):
-                print('Inferring IBD on batch '+str(j+1)+' of '+str(args.batches))
-                snipar.ibd.infer_ibd_chr(sibpairs[j], error_prob, error_probs_i, outprefix+str(j+1),
-                                        bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
-                                        min_length=min_length, mapfile=args.map,
-                                        ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
-                                        min_maf=min_maf, max_missing=max_missing, max_error=max_error)
-        else:
-            snipar.ibd.infer_ibd_chr(sibpairs, error_prob, error_probs_i, outprefix,
-                                    bedfile=bedfiles[i], bgenfile=bgenfiles[i], chrom=chroms[i],
-                                    min_length=min_length, mapfile=args.map,
-                                    ibdmatrix=args.ibdmatrix, ld_out=args.ld_out,
-                                    min_maf=min_maf, max_missing=max_missing, max_error=max_error)
+    batches = np.array_split(sibpairs, min(args.batches, len(sibpairs)))
+    for i, chrom in enumerate(chroms):
+        error_probs_i = None if error_probs is None else error_probs[i]
+        for j, batch in enumerate(batches, 1):
+            outprefix = args.out
+            if args.batches > 1:
+                print(f"Inferring IBD on batch {j} of {len(batches)}")
+                outprefix += str(j)
+            snipar.ibd.infer_ibd_chr(
+                batch, error_prob, error_probs_i, outprefix, bedfile=bedfiles[i],
+                bgenfile=bgenfiles[i], chrom=None if chrom == 0 else chrom,
+                min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix,
+                ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
+                max_error=max_error,
+            )
+
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)

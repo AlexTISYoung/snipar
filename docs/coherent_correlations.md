@@ -150,7 +150,10 @@ Gaussian composite objective
 
 Backtracking makes the objective nonincreasing. The fit must satisfy a relative
 constrained-score step tolerance; failure raises an error. Numerical scaling
-handles small GWAS variances. Computation is chunked and only small information
+handles small GWAS variances. When every SNP has the same sampling covariance,
+the solver whitens by that covariance and clips the whitened total-covariance
+eigenvalues at one. This gives the exact Gaussian fit, including for each
+refitted jackknife deletion. In the general case, computation is chunked and only small information
 matrices are accumulated. This seeks a converged constrained score solution;
 the heteroskedastic covariance likelihood need not be globally convex.
 

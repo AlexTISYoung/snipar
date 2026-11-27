@@ -120,7 +120,7 @@ def _normal_equations_jit(y, s, weight, sigma):
             left[k], right[k], mult[k] = a, b, 1.0 if a == b else 2.0
             k += 1
     information, rhs = np.zeros((q, q)), np.zeros(q)
-    inverse, products = np.empty((3, 3)), np.empty(q)
+    inverse, products, contributions = np.empty((3, 3)), np.empty(q), np.empty(q)
     bad = np.zeros(n, np.bool_)
     for row in range(n):
         ia, ib, ic, idd, ie, iff, _, _, good = _row_algebra(y, s, sigma, row, p, False)
@@ -132,17 +132,24 @@ def _normal_equations_jit(y, s, weight, sigma):
         inverse[2, 0], inverse[2, 1], inverse[2, 2] = ic, ie, iff
         for k in range(q):
             products[k] = y[row, left[k]]*y[row, right[k]]-s[row, left[k], right[k]]
+            contributions[k] = 0.
+        # Product precision is symmetric. Accumulate each off-diagonal
+        # once and use it in both coordinates of the right-hand side.
         for k in range(q):
-            contribution = 0.0
             a, b = left[k], right[k]
-            for ell in range(q):
+            for ell in range(k, q):
                 c, d = left[ell], right[ell]
                 precision = ((inverse[a, c]*inverse[b, d]+inverse[a, d]*inverse[b, c])
                              * mult[k]*mult[ell]/4.0)
                 precision *= weight[row]
                 information[k, ell] += precision
-                contribution += precision*products[ell]
-            rhs[k] += contribution
+                contributions[k] += precision*products[ell]
+                if ell != k:
+                    contributions[ell] += precision*products[k]
+            rhs[k] += contributions[k]
+    for k in range(q):
+        for ell in range(k):
+            information[k, ell] = information[ell, k]
     return information, rhs, bad
 
 

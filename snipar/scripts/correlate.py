@@ -226,6 +226,13 @@ def read_sumstats(files, mode="auto", block_column=None, enforce_chromosome=Fals
             raise ValueError("{} missing required metadata: {}".format(path, ", ".join(missing)))
         if block_column and block_column not in header.columns:
             raise ValueError("{} missing block column {}".format(path, block_column))
+        effects = MODE_EFFECTS[selected_mode]
+        used = required + ['CHR'] + [effect + suffix for effect in effects for suffix in ('_Beta', '_SE')]
+        for i, left in enumerate(effects):
+            for right in effects[i + 1:]:
+                pair = left + '_' + right
+                used.append('cov_' + pair if 'cov_' + pair in resolved else 'r_' + pair)
+        resolved = {name: resolved[name] for name in used if name in resolved}
         usecols = list(dict.fromkeys(resolved.values()))
         if block_column and block_column not in usecols:
             usecols.append(block_column)
@@ -238,9 +245,8 @@ def read_sumstats(files, mode="auto", block_column=None, enforce_chromosome=Fals
         frame = frame.rename(columns={source: canonical for canonical, source in resolved.items()})
         # Normalize covariance sources separately in each file: one chromosome may
         # supply correlations while another supplies covariances explicitly.
-        effect_names = MODE_EFFECTS[selected_mode]
-        for i, left in enumerate(effect_names):
-            for right in effect_names[i + 1:]:
+        for i, left in enumerate(effects):
+            for right in effects[i + 1:]:
                 pair = left + "_" + right
                 if "cov_" + pair not in frame:
                     frame["cov_" + pair] = (_numeric(frame["r_" + pair])
@@ -311,24 +317,37 @@ def _chromosome_numbers(values):
     return pd.to_numeric(labels, errors="coerce").to_numpy(dtype=float, na_value=np.nan)
 
 
-def read_ldscores(files):
+def read_ldscores(files, include_chromosome=False):
     frames = []
-    for path, _ in files:
+    for path, requested_chromosome in files:
         header, delimiter = _table_header(path)
         lookup = {str(name).lower(): str(name) for name in header.columns}
         snp = next((lookup[name] for name in ("snp", "rsid", "id") if name in lookup), None)
         score = next((lookup[name] for name in ("l2", "ldscore", "ld_score", "ldscores") if name in lookup), None)
+        chrom = next((lookup[name] for name in ("chr", "chromosome", "chrom") if name in lookup), None)
         if snp is None or score is None:
             raise ValueError("LD-score file {} requires SNP and L2 columns.".format(path))
-        frame = pd.read_csv(path, sep=delimiter, usecols=[snp, score], dtype={snp: str},
-                            compression="infer", low_memory=False).rename(columns={snp: "SNP", score: "L2"})
+        columns = {snp: "SNP", score: "L2"}
+        if chrom is not None:
+            columns[chrom] = "CHR"
+        frame = pd.read_csv(path, sep=delimiter, usecols=list(columns), dtype={snp: str},
+                            compression="infer", low_memory=False).rename(columns=columns)
+        if chrom is not None:
+            chromosome = _chromosome_numbers(frame["CHR"])
+            if requested_chromosome is not None and np.any(
+                    np.isfinite(chromosome) & (chromosome != requested_chromosome)):
+                raise ValueError("{} contains CHR values inconsistent with its @ chromosome.".format(path))
+            frame["CHR"] = chromosome
+        else:
+            frame["CHR"] = requested_chromosome if requested_chromosome is not None else np.nan
         frames.append(frame)
     data = pd.concat(frames, ignore_index=True)
     data = data.loc[data["SNP"].notna()].copy()
     if data["SNP"].duplicated().any():
         raise ValueError("LD-score files must have unique SNP IDs.")
     data["L2"] = _numeric(data["L2"])
-    return data.set_index("SNP")["L2"]
+    data = data.set_index("SNP")
+    return data if include_chromosome else data["L2"]
 
 
 def prepare_inputs(args):
@@ -374,7 +393,11 @@ def prepare_inputs(args):
         ld_files = resolve_files(args.ldscores, "l2.ldscore.gz", chromosomes)
         for path, _ in ld_files:
             print(f"Reading LD scores from {path}", flush=True)
-        ldscores = data["SNP"].map(read_ldscores(ld_files)).to_numpy(dtype=float)
+        aligned = read_ldscores(ld_files, include_chromosome=True).reindex(data["SNP"])
+        ldscores = aligned["L2"].to_numpy(dtype=float, copy=True)
+        if not data.attrs["chromosome_unavailable"]:
+            ld_chrom = aligned["CHR"].to_numpy(dtype=float)
+            ldscores[np.isfinite(ld_chrom) & (ld_chrom != chrom)] = np.nan
     elif args.bed:
         from snipar.coherent_ld import compute_ldscores
         ldscores = np.full(len(data), np.nan)

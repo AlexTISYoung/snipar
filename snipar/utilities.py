@@ -1,5 +1,6 @@
 import errno
 import hashlib
+from math import isqrt
 import os
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, Optional, Union
@@ -17,40 +18,37 @@ def make_id_dict(x,col=0):
     """
     if len(x.shape)>1:
         x = x[:,col]
-    id_dict = {}
-    for i in range(0,x.shape[0]):
-        id_dict[x[i]] = i
-    return id_dict
+    return {identifier: i for i, identifier in enumerate(x)}
 
 def convert_str_array(x):
     """
-    Convert an ascii array to unicode array (UTF-8)
+    Decode an array of UTF-8 strings.
     """
-    x = np.array(x)
-    x_shape = x.shape
-    x = x.flatten()
-    x_out = np.array([y.decode('UTF-8') for y in x])
-    return x_out.reshape(x_shape)
+    x = np.asarray(x)
+    if x.dtype.kind == 'U' or not x.size:
+        return x.astype(str, copy=False)
+    if x.dtype.kind == 'O':
+        return np.array([value.decode('utf-8') if isinstance(value, bytes) else str(value)
+                         for value in x.flat]).reshape(x.shape)
+    return np.char.decode(np.asarray(x, dtype='S'), 'utf-8')
 
 def encode_str_array(x):
     """
-    Encode a unicode array as an ascii array
+    Encode an array of strings as UTF-8 bytes.
     """
-    x = np.array(x)
-    x_shape = x.shape
-    x = x.flatten()
-    x_out = np.array([y.encode('ascii') for y in x])
-    return x_out.reshape(x_shape)
+    x = np.asarray(x)
+    if x.dtype.kind == 'S' or not x.size:
+        return x.astype('S', copy=False)
+    return np.char.encode(x.astype(str, copy=False), 'utf-8')
 
 def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@', chromosomes=None):
     obs_files = []
     chroms = []
     if wildcard in obsfiles:
-        bed_ixes = obsfiles.split(wildcard)
         if chromosomes is None:
             chromosomes = np.arange(1,23)
         for i in chromosomes:
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
+            obsfile = obsfiles.replace(wildcard, str(i))+'.'+obsformat
             if path.exists(obsfile):
                 if append:
                     obs_files.append(obsfile)
@@ -71,17 +69,17 @@ def parse_obsfiles(obsfiles, obsformat='bed', append = True, wildcard = '@', chr
     return np.array(obs_files), np.array(chroms,dtype=int)
 
 def parse_filelist(obsfiles, impfiles, obsformat, chromosomes=None):
+    if impfiles is None:
+        raise ValueError('Must provide a prefix for the imputed genotype files')
     obs_files = []
     imp_files = []
     chroms = []
-    if '@' in obsfiles and impfiles:
-        bed_ixes = obsfiles.split('@')
-        imp_ixes = impfiles.split('@')
+    if '@' in obsfiles or '@' in impfiles:
         if chromosomes is None:
             chromosomes = np.arange(1,23)
         for i in chromosomes:
-            obsfile = bed_ixes[0]+str(i)+bed_ixes[1]+'.'+obsformat
-            impfile = imp_ixes[0]+str(i)+imp_ixes[1]+'.hdf5'
+            obsfile = obsfiles.replace('@', str(i))+'.'+obsformat
+            impfile = impfiles.replace('@', str(i))+'.hdf5'
             if path.exists(impfile) and path.exists(obsfile):
                 obs_files.append(obsfile)
                 imp_files.append(impfile)
@@ -108,8 +106,7 @@ def outfile_name(outprefix,outsuffix,chrom=None):
     if '@' in outprefix:
         if chrom is None:
             raise(ValueError('Must provide chromosome number with wildcard character'))
-        outprefix = outprefix.split('@')
-        outprefix = outprefix[0]+str(chrom)+outprefix[1]
+        outprefix = outprefix.replace('@', str(chrom))
         return outprefix+outsuffix
     elif chrom is not None:
         return outprefix+'_chr_'+str(chrom)+outsuffix
@@ -117,15 +114,18 @@ def outfile_name(outprefix,outsuffix,chrom=None):
         return outprefix+outsuffix
 
 def coord2linear(ind1: int, ind2: int) -> int:
-    row_ind, col_ind = max(ind1, ind2), min(ind1, ind2)
-    return int(row_ind * (row_ind + 1) / 2 + col_ind)
+    row_ind, col_ind = sorted((int(ind1), int(ind2)), reverse=True)
+    if col_ind < 0:
+        raise ValueError('Matrix coordinates must be nonnegative')
+    return row_ind * (row_ind + 1) // 2 + col_ind
 
 
 def linear2coord(ind: int) -> Tuple[int, int]:
-    ind += 1
-    ind1 = np.ceil((2 * ind + 0.25) ** 0.5 - 0.5)
-    ind2 = ind - (ind1 - 1) * ind1 / 2
-    return int(ind1 - 1), int(ind2 - 1)
+    ind = int(ind)
+    if ind < 0:
+        raise ValueError('Packed matrix index must be nonnegative')
+    row = (isqrt(8 * ind + 1) - 1) // 2
+    return row, ind - row * (row + 1) // 2
 
 def read_oxford_sample(filename):
     """Read individual IDs, preserving leading zeros and skipping the column-type row."""
@@ -156,9 +156,26 @@ def _legacy_bgen(filename, *, lazy=False, allow_complex=False, verbose=False):
         except FileNotFoundError:
             return False
 
+    def metadata_error(error):
+        # A current timestamp does not guarantee that the metadata mmap is
+        # readable. Rebuild it only when the failure came from its parser.
+        traceback = error.__traceback__
+        while traceback is not None:
+            module = traceback.tb_frame.f_globals.get('__name__')
+            if module == 'bgen_reader._multimemmap':
+                return True
+            traceback = traceback.tb_next
+        return False
+
     def open_at(index):
         if current(index):
-            return read(index)
+            try:
+                return read(index)
+            except FileNotFoundError:
+                pass
+            except Exception as error:
+                if lazy or not metadata_error(error):
+                    raise
         # bgen-reader uses a fixed temporary filename. Publish a completed
         # index from a private directory when multiple workers build at once.
         with TemporaryDirectory(dir=index.parent) as directory:
@@ -171,10 +188,14 @@ def _legacy_bgen(filename, *, lazy=False, allow_complex=False, verbose=False):
                 os.utime(temporary, ns=(stat.st_mtime_ns, stat.st_mtime_ns))
             try:
                 temporary.replace(index)
-            except PermissionError:
+            except PermissionError as error:
                 # Windows can keep an index published by another worker mapped.
                 if not current(index):
                     raise
+                try:
+                    return read(index)
+                except Exception:
+                    raise error
         if lazy:
             # Mirror bgen-reader's invalidation after replacing a .metafile.
             from bgen_reader import _genotype, _metafile
@@ -242,7 +263,7 @@ def open_bgen(filename: str, verbose: bool = False):
         from snipar.bgen_io import BgenFile
         return BgenFile(filename)
     bgen = _legacy_bgen(filename, verbose=verbose)
-    if bgen.samples[0] == 'sample_0':
+    if len(bgen.samples) and bgen.samples[0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
         samples_filepath = Path(filename).with_suffix('.sample')
         bgen = _bgen(filename, samples_filepath=samples_filepath, reader=bgen)
@@ -259,7 +280,7 @@ def read_bgen(filename: str, verbose: bool = False) -> Dict:
         raise ImportError("The lazy read_bgen API requires snipar[legacy-bgen]. "
                           "Use open_bgen for array access.") from exc
     bgen = _legacy_bgen(filename, lazy=True, verbose=verbose)
-    if bgen['samples'][0] == 'sample_0':
+    if len(bgen['samples']) and bgen['samples'][0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
         samples_filepath = Path(filename).with_suffix('.sample')
         if not path.exists(samples_filepath):
