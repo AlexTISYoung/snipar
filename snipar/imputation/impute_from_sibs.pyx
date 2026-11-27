@@ -176,7 +176,8 @@ cdef double get_probability_of_one_parent_conditioned_on_offsprings_and_parent(i
 cdef extern from * nogil:
     r"""
     #include <omp.h>
-    #include <stdio.h>  
+    #include <stdio.h>
+    #include <time.h>
     #include <string.h>
     static omp_lock_t cnt_lock;
     //the counter for progress
@@ -199,7 +200,7 @@ cdef extern from * nogil:
             now = time(NULL);
             text = ctime(&now);
             text[strlen(text)-1] = 0;
-            printf("%s INFO impute with chromosome %s: progress is %d\% \n", text, chromosomes, (100*cnt)/total);
+            printf("%s INFO impute with chromosome %s: progress is %d%% \n", text, chromosomes, (100*cnt)/total);
         }
         omp_unset_lock(&cnt_lock);
     }
@@ -280,8 +281,8 @@ cdef int get_hap_index(int i, int j) nogil:
     Returns:
         int"""
     if i > j:
-        return i*(i-1)/2+j
-    return j*(j-1)/2+i
+        return i*(i-1)//2+j
+    return j*(j-1)//2+i
 
 cdef bint is_possible_child(int child, int parent) nogil:
     """Checks whether the child genotype is a possible offspring of the parent genotype. Returns False if any of them are nan
@@ -559,13 +560,13 @@ cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offspr
         sib_count : int
             Number of the offspring the parents have. The gts indexes of offsprings should be the first sib_count elements of sib_indexes.
         
-        snp_ibd0 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd0 : cnp.ndarray[cnp.int64_t, ndim=2]
             List of sib pairs that are ibd0 in this SNP. It is assumed that there are len_snp_ibd0 sib pairs is this list.
 
-        snp_ibd1 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd1 : cnp.ndarray[cnp.int64_t, ndim=2]
             List of sib pairs that are ibd1 in this SNP. It is assumed that there are len_snp_ibd1 sib pairs is this list
 
-        snp_ibd2 : cnp.ndarray[cnp.int_t, ndim=2]
+        snp_ibd2 : cnp.ndarray[cnp.int64_t, ndim=2]
             List of sib pairs that are ibd2 in this SNP. It is assumed that there are len_snp_ibd2 sib pairs is this list
 
         f : float
@@ -1011,7 +1012,7 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     #ibd
     cdef cmap[cpair[cstring, cstring], vector[int]] c_ibd = dict_to_cmap(ibd)
     #pos
-    cdef cnp.ndarray[cnp.int_t, ndim=1] c_pos = pos
+    cdef cnp.ndarray[cnp.int64_t, ndim=1] c_pos = np.asarray(pos, dtype=np.int64)
     cdef int len_snp_ibd0 = 0
     cdef int len_snp_ibd1 = 0
     cdef int len_snp_ibd2 = 0
@@ -1037,14 +1038,14 @@ def impute(sibships, iid_to_bed_index,  phased_gts, unphased_gts, ibd, pos, hdf5
     cdef int[:, :] agreement_counts = np.ones([number_of_threads, number_of_snps], dtype=np.dtype("i"))
     cdef int half_window_c = half_window
     cdef float ibd_threshold_c = ibd_threshold
-    cdef long[:] counter_ibd0 = np.zeros(number_of_snps).astype(long)
-    cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype(long)
+    cdef long[:] counter_ibd0 = np.zeros(number_of_snps).astype("l")
+    cdef long[:] counter_nonnan_input = np.zeros(number_of_snps).astype("l")
     cdef bint is_backup
     cdef cpair[double,cpair[bint,float]] o_result
     cdef cpair[cpair[double,float],cpair[int,bint]] po_result
-    cdef long[:] sib_backup_count = np.zeros(number_of_snps).astype(long)
-    cdef long[:] single_parent_backup_count = np.zeros(number_of_snps).astype(long)
-    cdef long[:] single_parent_mendelian_error_count = np.zeros(number_of_snps).astype(long)
+    cdef long[:] sib_backup_count = np.zeros(number_of_snps).astype("l")
+    cdef long[:] single_parent_backup_count = np.zeros(number_of_snps).astype("l")
+    cdef long[:] single_parent_mendelian_error_count = np.zeros(number_of_snps).astype("l")
     cdef double[:] single_parent_fvars = np.zeros(number_of_snps)
     cdef int mendelian_error_count
     cdef bint c_silent_progress = silent_progress

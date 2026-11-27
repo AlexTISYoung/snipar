@@ -152,8 +152,7 @@ def resolve_files(pattern, suffix, chromosomes=None):
         path = existing_file(pattern)
         if path is None:
             raise ValueError("Cannot find input file or prefix: " + pattern)
-        inferred = chromosomes[0] if chromosomes and len(chromosomes) == 1 else None
-        return [(path, inferred)]
+        return [(path, None)]
     files = []
     for chromosome in chromosomes if chromosomes is not None else range(1, 23):
         path = existing_file(pattern.replace("@", str(chromosome)))
@@ -339,6 +338,8 @@ def prepare_inputs(args):
         print(f"Reading summary statistics from {path}", flush=True)
     data, mode = read_sumstats(files, args.mode, args.block_column,
                               enforce_chromosome="@" in args.sumstats, duplicate_snps=args.duplicate_snps)
+    if chromosomes is not None and data.attrs["chromosome_unavailable"]:
+        raise ValueError("--chr_range requires a CHR column or an @ chromosome pattern in the summary input.")
     effects, sampling, ses, names = build_effect_arrays(data, mode)
     freq = _numeric(data["freq"])
     positions = _numeric(data["pos"])
@@ -359,7 +360,7 @@ def prepare_inputs(args):
     if np.any(keep & ~valid_metadata):
         raise ValueError("Complete rows contain invalid frequencies, chromosomes, or positions.")
     chromosome_pass = (np.isin(chrom, chromosomes)
-                       if chromosomes is not None and not data.attrs["chromosome_unavailable"]
+                       if chromosomes is not None
                        else np.ones(len(data), dtype=bool))
     qc["excluded_chr"] = int((keep & ~chromosome_pass).sum())
     keep &= chromosome_pass

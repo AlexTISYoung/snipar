@@ -3,7 +3,7 @@ import gzip
 from functools import lru_cache
 from operator import attrgetter
 from typing import Tuple, NamedTuple, Sequence
-from typing_extensions import Literal
+from typing import Literal
 from itertools import product, combinations_with_replacement
 from collections import defaultdict
 
@@ -19,6 +19,11 @@ from snipar.gtarray import gtarray
 
 # logger = logging.getLogger(__name__)
 
+
+
+def _solve_snp_effects(information, scores):
+    """Solve for one coefficient vector per SNP using an explicit RHS column."""
+    return solve(information, scores[..., None])[..., 0]
 
 
 def build_sib_arr(fam_labels: FamLabels) -> SparseGRMRepr:    
@@ -727,14 +732,14 @@ class LinearMixedModel:
             Vinv_X = self.sp_solve_dense3d_lu(self.V, X_)
             XT_Vinv_X = np.einsum('...ij,...ik', X_, Vinv_X)
             XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
-            alpha = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)
             alpha_cov = np.linalg.inv(XT_Vinv_X)
         else:
             gts = gts.transpose(2, 0, 1)
             Vinv_X = self.sp_solve_dense3d_lu(self.V, gts)
             XT_Vinv_X = np.einsum('...ij,...ik', gts, Vinv_X)
             XT_Vinv_y = np.einsum('...ij,i', gts, self.Vinv_y)
-            alpha = solve(XT_Vinv_X, XT_Vinv_y)
+            alpha = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)
             alpha_cov = np.linalg.inv(XT_Vinv_X)
 
         alpha_ses: np.ndarray = np.sqrt(
@@ -887,7 +892,7 @@ class LinearMixedModel:
             Vinv_X = self.sp_solve_dense3d_lu(self.V, X_)
             XT_Vinv_X = np.einsum('...ij,...ik', X_, Vinv_X)
             XT_Vinv_y = np.einsum('...ij,i', Vinv_X, y)
-            alpha[:, 0] = solve(XT_Vinv_X, XT_Vinv_y)[:, 0]
+            alpha[:, 0] = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)[:, 0]
             alpha_cov[:, 0, 0] = np.linalg.inv(XT_Vinv_X)[:, 0, 0]
 
         else:
@@ -895,7 +900,7 @@ class LinearMixedModel:
             Vinv_X = self.sp_solve_dense3d_lu(self.V, gts_)
             XT_Vinv_X = np.einsum('...ij,...ik', gts_, Vinv_X)
             XT_Vinv_y = np.einsum('...ij,i', gts_, self.Vinv_y)
-            alpha[:, 0] = solve(XT_Vinv_X, XT_Vinv_y)[:,0]
+            alpha[:, 0] = _solve_snp_effects(XT_Vinv_X, XT_Vinv_y)[:,0]
             alpha_cov[:, 0, 0] = np.linalg.inv(XT_Vinv_X)[:,0,0]
         alpha_ses[:, 0] = np.sqrt(
             alpha_cov)[:, 0, 0]
@@ -946,13 +951,13 @@ class LinearMixedModel:
         Vinv_X_trios = self.sp_solve_dense3d_lu(V_trios, X_trios)
         XT_Vinv_X_trios = np.einsum('...ij,...ik', X_trios, Vinv_X_trios)
         XT_Vinv_y_trios = np.einsum('...ij,i', Vinv_X_trios, y_trios)
-        alpha_trios = solve(XT_Vinv_X_trios, XT_Vinv_y_trios)[:, 0]
+        alpha_trios = _solve_snp_effects(XT_Vinv_X_trios, XT_Vinv_y_trios)[:, 0]
         alpha_cov_trios = np.linalg.inv(XT_Vinv_X_trios)[:, 0, 0]
 
         Vinv_X_sibs = self.sp_solve_dense3d_lu(V_sibs, X_sibs)
         XT_Vinv_X_sibs = np.einsum('...ij,...ik', X_sibs, Vinv_X_sibs)
         XT_Vinv_y_sibs = np.einsum('...ij,i', Vinv_X_sibs, y_sibs)
-        alpha_sibs = solve(XT_Vinv_X_sibs, XT_Vinv_y_sibs)[:, 0]
+        alpha_sibs = _solve_snp_effects(XT_Vinv_X_sibs, XT_Vinv_y_sibs)[:, 0]
         alpha_cov_sibs = np.linalg.inv(XT_Vinv_X_sibs)[:, 0, 0]
         # numpy cannot do the following einsum
         # print(np.einsum('ji,ik->jk', Vinv_X_trios[:, :, 0], V_trios_sibs))

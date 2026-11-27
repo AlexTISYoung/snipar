@@ -226,15 +226,11 @@ def main(args):
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
     
+    from importlib.metadata import PackageNotFoundError, version
     try:
-        dir_name = os.path.dirname(os.path.realpath(__file__))
-        import git
-        repo = git.Repo(dir_name)
-        logging.info(f"Last commit is: {repo.head.commit}")
-        logging.info(f"summary is: {repo.head.commit.summary}")
-        logging.info(f"Active branch is: {repo.active_branch.name}")        
-    except :
-        pass
+        logging.info("snipar version: %s", version("snipar"))
+    except PackageNotFoundError:
+        logging.info("Running snipar from an uninstalled source tree")
 
     #fids starting with _ are reserved for control
     #Families should not have grandparents
@@ -243,7 +239,7 @@ def main(args):
         pedigree = create_pedigree(args.king, args.agesex)
     else:
         logging.info("reading pedigree ...")
-        pedigree = pd.read_csv(args.pedigree, delim_whitespace=True)
+        pedigree = pd.read_csv(args.pedigree, sep=r"\s+")
     pedigree = pedigree[['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']]
     logging.info("pedigree loaded.")
     
@@ -252,7 +248,7 @@ def main(args):
     if args.pcs:
         logging.info("loading pcs ...")
         #ordering should be the same
-        pcs = pd.read_csv(f"{args.pcs}", delim_whitespace=True)
+        pcs = pd.read_csv(f"{args.pcs}", sep=r"\s+")
         pc_ids = pcs.iloc[:, 1].values.astype("S").tolist()
         pcs = pcs.iloc[:, 2:].values
         if not args.pc_num is None:

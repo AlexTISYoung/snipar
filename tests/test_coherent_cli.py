@@ -374,6 +374,17 @@ def test_single_file_without_chromosomes_keeps_supplied_genomic_order(tmp_path):
     assert prepared[5]["qc"]["rows_retained"] == len(frame)
 
 
+@pytest.mark.parametrize("requested", [["22"], ["1", "2"]])
+def test_chromosome_filter_requires_known_chromosomes(tmp_path, requested):
+    frame = _frame().drop(columns="chromosome")
+    _write(frame, tmp_path / "input.sumstats.gz")
+    with pytest.raises(ValueError, match="--chr_range requires a CHR column"):
+        _load(tmp_path, options=["--chr_range", *requested])
+    _write(frame, tmp_path / "chr1.sumstats.gz")
+    prepared = _load(tmp_path, name="chr@", options=["--chr_range", "1"])
+    assert prepared[5]["qc"]["rows_retained"] == len(frame)
+
+
 @pytest.mark.parametrize("requested, expected", [(None, 4), (2, 2), (100, 4)])
 def test_thread_count_is_set_and_capped(tmp_path, monkeypatch, requested, expected):
     numba = pytest.importorskip("numba")

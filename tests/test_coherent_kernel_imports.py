@@ -88,3 +88,24 @@ print(json.dumps({'metric_names':result['metric_names'],
                       for name in results['package']['metric_names']]
         np.testing.assert_allclose(cli_values, results['package'][field],
                                    atol=1e-12, rtol=1e-10, equal_nan=True)
+
+
+def test_missing_cache_locator_uses_uncached_jit(monkeypatch):
+    from snipar import coherent_kernels
+    from numba import njit
+
+    def njit_without_writable_cache(**options):
+        if options['cache']:
+            def reject_cache(function):
+                raise RuntimeError("cannot cache function: no locator available for file")
+            return reject_cache
+        return njit(**options)
+
+    monkeypatch.setattr(coherent_kernels, '_numba_njit', njit_without_writable_cache)
+
+    @coherent_kernels.njit(cache=True)
+    def increment(value):
+        return value + 1
+
+    assert increment(2) == 3
+    assert increment.signatures

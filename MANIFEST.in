@@ -3,9 +3,10 @@ include docs/coherent_correlations.md
 include docs/pgs_binary.md
 include snipar/scripts/pgs.R
 include snipar/tests/test_pgs_binary.R
-recursive-include tests test_coherent*.py
-include tests/test_pgs_output.py
+recursive-include tests test_*.py
 recursive-include docs *.txt
 recursive-include snipar util_data/**
 recursive-include snipar tests/test_data/*
 recursive-include snipar example/example_data/*
+prune docs/_build
+global-exclude __pycache__ *.py[cod] .DS_Store

@@ -80,7 +80,7 @@ def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
     gts.filter_maf(min_maf)
     ## Count Mendelian errors
     #print('Counting mendelain errors')
-    ME = count_ME(np.array(gts.gts,dtype=np.float_), pair_indices)
+    ME = count_ME(np.array(gts.gts,dtype=np.float64), pair_indices)
     #print('Counted mendelain errors')
     # Estimate error probability
     N_pair = np.sum(np.logical_not(gts.gts[pair_indices[:, 0], :].mask) * np.logical_not(gts.gts[pair_indices[:, 1], :].mask),

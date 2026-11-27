@@ -49,6 +49,18 @@ check_parser_guards <- function() {
     cat("PASS: CLI optional arguments, covariate dependency and invalid-option guards\n")
 }
 
+check_table_width <- function() {
+    path <- tempfile()
+    on.exit(unlink(path))
+    writeLines(c("FID IID case_status", "11 01 81 1", "12 02 82 0"), path)
+    expect_error(read_pgs_binary_table(path, "NA"), "field count")
+    writeLines(c("FID IID case_status", "11 01 1", "12 02"), path)
+    expect_error(read_pgs_binary_table(path, "NA"), "field count")
+    writeLines(c("FID IID case_status", "", "11\t01\t1", "12 02 0"), path)
+    table <- read_pgs_binary_table(path, "NA")
+    stopifnot(identical(table$FID, c("11", "12")), identical(table$IID, c("01", "02")))
+}
+
 generate_example <- function(n_families = 300L) {
     n <- 2L * n_families
     proband <- rep(rnorm(n_families), each = 2L) * sqrt(.5) +
@@ -398,6 +410,7 @@ check_cli <- function() {
 }
 
 check_parser_guards()
+check_table_width()
 check_numerics()
 check_zero_variance()
 check_pirls_precision()

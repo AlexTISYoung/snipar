@@ -94,7 +94,7 @@ def simulate_ind(nsnp,f):
 
 def simulate_sibs(father,mother, blocksize=200):
     # Compute blocks without recombination
-    n_blocks = np.int(np.ceil(father.shape[0]/float(blocksize)))
+    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
     blocksizes = np.zeros((n_blocks),dtype=int)
     for i in range(n_blocks-1):
         blocksizes[i] = blocksize
@@ -118,7 +118,7 @@ def simulate_sibs(father,mother, blocksize=200):
 
 def simulate_sibs_phased(father,mother, blocksize=200):
     # Compute blocks without recombination
-    n_blocks = np.int(np.ceil(father.shape[0]/float(blocksize)))
+    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
     blocksizes = np.zeros((n_blocks),dtype=int)
     for i in range(n_blocks-1):
         blocksizes[i] = blocksize
@@ -814,7 +814,7 @@ def main(nsnp=1500, nfam=1500, v=1, phased=True, blocksize=1, f=0.5, h2quad=0.5,
         mother_gts = mother_gts.sum(axis=2)
         
     # vec_impute_from_sibs_phased = np.vectorize(impute_from_sibs_phased)
-    imp = np.zeros((sib_gts.shape[0],sib_gts.shape[2]),dtype=np.float_)
+    imp = np.zeros((sib_gts.shape[0],sib_gts.shape[2]),dtype=np.float64)
     fam_ids = np.array([str(i) for i in range(nfam)])
     unrel_inds = np.sort(np.random.choice([i for i in range(nfam)], int(nfam/10*9), replace=False))
     rel_inds = np.setdiff1d([i for i in range(nfam)], unrel_inds)

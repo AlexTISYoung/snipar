@@ -172,10 +172,8 @@ class gtarray(object):
         """
         Computes the frequencies of the SNPs. Stored in self.freqs.
         """
-        if self.ndim == 2:
-            self.freqs = ma.mean(self.gts,axis=0)/2.0
-        elif self.ndim == 3:
-            self.freqs = ma.mean(self.gts[:,0,:], axis=0) / 2.0
+        proband = self.gts if self.ndim == 2 else self.gts[:, 0, :]
+        self.freqs = ma.filled(ma.mean(proband, axis=0) / 2.0, np.nan)
 
     def filter(self, filter_pass):
         if self.freqs is not None:

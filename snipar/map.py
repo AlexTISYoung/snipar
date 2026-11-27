@@ -7,7 +7,7 @@ from snipar.gtarray import gtarray
 
 @njit
 def pos_to_cM(pos,boundaries, cM_pos):
-    cM_out = np.zeros((pos.shape[0]), dtype=np.float_)
+    cM_out = np.zeros((pos.shape[0]), dtype=np.float64)
     cM_out[...] = np.nan
     current_seg = 0
     for i in range(pos.shape[0]):

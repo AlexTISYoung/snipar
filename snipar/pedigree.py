@@ -94,7 +94,7 @@ def create_pedigree(king_address, agesex_address, same_parents_in_ped=True):
         id2_in_mz = np.array([x in mz_id1 for x in kinship.ID2])
         in_mz = np.logical_or(id1_in_mz,id2_in_mz)
         kinship = kinship.drop(kinship[in_mz].index)
-    agesex = pd.read_csv(agesex_address, delim_whitespace=True)
+    agesex = pd.read_csv(agesex_address, sep=r"\s+")
     agesex["IID"] = agesex["IID"].astype(str)
     agesex["FID"] = agesex["FID"].astype(str)
     logging.info("loaded agesex file")

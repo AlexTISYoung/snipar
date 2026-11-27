@@ -94,7 +94,9 @@ their average includes a sibling term, so a parental-only reconstruction is inva
 SNP identifiers, chromosome, position and frequency are used for QC and genomic
 ordering. A single legacy summary file without a chromosome column is also
 accepted: its existing row order is preserved for the genomic jackknife, so it
-must already be genomically ordered. When computing LD scores for such a file,
+must already be genomically ordered. Selecting chromosomes with `--chr_range`
+requires a chromosome column or an `@` pattern in the summary filenames.
+When computing LD scores for a file without chromosome labels,
 SNP IDs are matched without chromosome labels and must be unique across BED files.
 The command accepts native snipar names and common aliases, excludes
 incomplete effect vectors and invalid MAF/LD rows, and requires positive definite

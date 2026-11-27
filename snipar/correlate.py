@@ -492,12 +492,12 @@ def compute_corr(z1,z2,v1,v2,r,l):
     resid_2 = z2-reg_21*z1
     v_resid_2 = v2+(reg_21**2)*v1-2*reg_21*r*np.sqrt(v1*v2)
     v_s = reweighted_estimate_var(resid_2, v_resid_2, l)
-    return np.array([var_1, var_2, cov_12, corr, reg_21, v_s/var_2],dtype=np.float_)
+    return np.array([var_1, var_2, cov_12, corr, reg_21, v_s/var_2],dtype=np.float64)
 
 @njit(parallel=True)
 def jacknife(z1,z2,v1,v2,r,l,n_blocks,block_size):
     # Construct jacknife blocks
-    jack_delete = np.zeros((n_blocks,6),dtype=np.float_)
+    jack_delete = np.zeros((n_blocks,6),dtype=np.float64)
     mask = np.ones((n_blocks, z1.shape[0]),dtype=np.bool_)
     for i in prange(n_blocks-1):
         mask[i, (block_size*i):(block_size*(i+1))] = False

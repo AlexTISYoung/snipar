@@ -30,7 +30,8 @@ LD scores from ``ibd.py`` or LDSC, run
 
 Here ``chr_@_young`` matches files such as ``chr_1_young.sumstats.gz``, and
 ``chr_@`` matches files such as ``chr_1.l2.ldscore.gz``. The command searches
-chromosomes 1–22 by default. Use ``--chr_range 1-5 7`` to select chromosomes.
+chromosomes 1–22 by default. Use ``--chr_range 1-5 7`` to select chromosomes
+when the summary files have a chromosome column or an ``@`` filename pattern.
 A single plain-text or gzip file can also be supplied by its full name.
 
 The default analysis downweights SNPs in stronger linkage disequilibrium

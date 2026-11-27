@@ -1,65 +1,57 @@
-from setuptools import setup, find_packages, Extension
-from setuptools import dist
-from pathlib import Path
 import os
+import sys
+from pathlib import Path
+
+import numpy
+from setuptools import Extension, setup
+
 
 this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text()
+long_description = (this_directory / "README.md").read_text(encoding="utf-8")
 
-class MyExt(Extension):
-    def __init__(self, *args, **kwargs):
-        self.__include_dirs = ["."]
-        super().__init__(*args, **kwargs)
-
-    @property
-    def include_dirs(self):
-        import numpy
-        return self.__include_dirs + [numpy.get_include()]
-
-    @include_dirs.setter
-    def include_dirs(self, dirs):
-        self.__include_dirs = dirs
-
-# Define the install requirements conditionally
-if os.environ.get("READTHEDOCS", "").lower() == "true":
-    # When building on Read the Docs, exclude pysnptools to avoid Rust dependency issues
-    install_requires = [
-        'numpy==1.21.1',
-        'scipy==1.7.1',
-        'bgen_reader==4.0.7',
-        'pandas==1.1.4',
-        'networkx==2.5',
-        'h5py==3.6.0',
-        'pooch==1.5.1',
-        'numba==0.55.0',
-        'gitpython==3.1.24',
-        'scikit-learn==1.0.2',
-        'statsmodels==0.13.2',
-        'numdifftools>=0.9.39'
-    ]
+# The native imputation loop uses OpenMP locks as well as parallel loops.
+if sys.platform == "win32":
+    openmp_options = dict(extra_compile_args=["/openmp"])
+elif sys.platform == "darwin":
+    prefix = os.environ.get("SNIPAR_OPENMP_PREFIX")
+    if not prefix:
+        for candidate in (Path(sys.prefix), Path("/opt/homebrew/opt/libomp"),
+                          Path("/usr/local/opt/libomp")):
+            if (candidate / "include/omp.h").is_file():
+                prefix = str(candidate)
+                break
+    openmp_options = dict(extra_compile_args=["-Xpreprocessor", "-fopenmp"],
+                          libraries=["omp"])
+    if prefix:
+        openmp_options.update(library_dirs=[str(Path(prefix) / "lib")],
+                              runtime_library_dirs=[str(Path(prefix) / "lib")])
 else:
-    install_requires = [
-        'numpy==1.21.1',
-        'scipy==1.7.1',
-        'bgen_reader==4.0.7',
-        'pandas==1.1.4',
-        'pysnptools==0.5.3',
-        'networkx==2.5',
-        'h5py==3.6.0',
-        'pooch==1.5.1',
-        'numba==0.55.0',
-        'gitpython==3.1.24',
-        'scikit-learn==1.0.2',
-        'statsmodels==0.13.2',
-        'numdifftools>=0.9.39'
-    ]
+    openmp_options = dict(extra_compile_args=["-fopenmp"], extra_link_args=["-fopenmp"])
+
+include_dirs = [numpy.get_include()]
+if sys.platform == "darwin" and prefix:
+    include_dirs.append(str(Path(prefix) / "include"))
+
+install_requires = [
+    "numpy>=2.1.2,<3",
+    "scipy>=1.14.1,<2",
+    "bgen-reader>=4.0.9,<5",
+    "pandas>=2.2.3,<3",
+    "pysnptools>=1.0.1,<2",
+    "networkx>=3.3,<4",
+    "h5py>=3.12,<4",
+    "numba>=0.61,<1",
+    "statsmodels>=0.14.4,<1",
+    "numdifftools>=0.9.41,<1",
+    "tqdm>=4.66.5",
+]
 
 setup(name='snipar',
-      version='0.0.23',
+      version='0.0.24',
       description='Library and command line scripts for inferring identity-by-descent (IBD) segments shared between siblings, imputing missing parental genotypes, performing family based genome-wide association and polygenic score analyses.',
       long_description = long_description,
       long_description_content_type="text/markdown",
-      url='http://github.com/alexTISYoung/snipar',
+      url='https://github.com/AlexTISYoung/snipar',
       download_url='https://pypi.org/project/snipar/files',
       author='Alexander Strudwick Young, Moeen Nehzati, Junming Guan',
       author_email='alextisyoung@gmail.com',
@@ -78,20 +70,21 @@ setup(name='snipar',
             'Intended Audience :: Science/Research',
             'Topic :: Scientific/Engineering :: Bio-Informatics',
       ],
-      python_requires='>=3.7',
+      python_requires='>=3.11.5,<3.14',
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
       install_requires=install_requires,
       zip_safe=False,
       ext_modules=[
-                MyExt("snipar.imputation.impute_from_sibs",
+                Extension("snipar.imputation.impute_from_sibs",
                     ["snipar/imputation/impute_from_sibs.pyx"],
                     language='c++',
-                    extra_compile_args=['-fopenmp'],
-                    extra_link_args=['-fopenmp'],
+                    include_dirs=include_dirs,
+                    **openmp_options,
 			     ),
-                MyExt("snipar.tests.test_impute_from_sibs",
+                Extension("snipar.tests.test_impute_from_sibs",
                     ["snipar/tests/test_impute_from_sibs.pyx"],
+                    include_dirs=[numpy.get_include()],
                     language='c++',
 			    ),
                   ],

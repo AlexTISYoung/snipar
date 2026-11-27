@@ -292,6 +292,11 @@ parse_pgs_binary_options <- function(arguments) {
 
 
 read_pgs_binary_table <- function(path, missing_char) {
+    # read.table otherwise treats an extra field as implicit row names.
+    widths <- count.fields(path, quote = "", comment.char = "")
+    if (length(widths) && any(widths != widths[[1L]])) {
+        stop(path, " contains a row whose field count differs from the header")
+    }
     data <- read.table(path, header = TRUE, colClasses = "character",
                        stringsAsFactors = FALSE, check.names = FALSE,
                        comment.char = "", quote = "", row.names = NULL,

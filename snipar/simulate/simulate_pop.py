@@ -7,7 +7,7 @@ def simulate_ind(nsnp,f):
 
 def simulate_sibs(father,mother, blocksize=200):
     # Compute blocks without recombination
-    n_blocks = np.int(np.ceil(father.shape[0]/float(blocksize)))
+    n_blocks = int(np.ceil(father.shape[0]/float(blocksize)))
     blocksizes = np.zeros((n_blocks),dtype=int)
     for i in range(n_blocks-1):
         blocksizes[i] = blocksize

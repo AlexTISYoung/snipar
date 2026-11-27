@@ -773,7 +773,7 @@ def impute_all_fams(gts,freqs,ibd):
 
 @njit(parallel=True)
 def impute_all_fams_phased(haps,freqs,ibd):
-    imp = np.zeros((haps.shape[0],haps.shape[2]),dtype=np.float_)
+    imp = np.zeros((haps.shape[0],haps.shape[2]),dtype=np.float64)
     for i in prange(haps.shape[0]):
         for j in range(haps.shape[2]):
             imp[i,j] = impute_from_sibs_phased(haps[i,0,j,:],haps[i,1,j,:],ibd[i,j,:],freqs[j])

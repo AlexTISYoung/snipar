@@ -108,7 +108,7 @@ def add_control(pedigree):
     keep_father["has_father"] = True
     keep_father["has_mother"] = False
 
-    pedigree = pedigree.append(families_with_multiple_sibs).append(keep_father).append(keep_mother)
+    pedigree = pd.concat([pedigree, families_with_multiple_sibs, keep_father, keep_mother])
     return pedigree
 
 #TODO raise error if file is multi chrom
@@ -283,10 +283,10 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     if unphased_address:
         if bim_address is None:
             bim_address = unphased_address+'.bim'
-        bim = pd.read_csv(bim_address, delim_whitespace=True, header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
+        bim = pd.read_csv(bim_address, sep=r"\s+", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"])
         if fam_address is None:
             fam_address = unphased_address+'.fam'
-        fam = pd.read_csv(fam_address, delim_whitespace=True, header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
+        fam = pd.read_csv(fam_address, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"])
 
     else:
         if bim_address is None:
@@ -341,9 +341,9 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             raise Exception("Should provide ibd file in the presence of families with multiple sibs")
         ibd = {}
     else:
-        ibd = pd.read_csv(f"{ibd_address}.segments.gz", delim_whitespace=True).astype(str)
+        ibd = pd.read_csv(f"{ibd_address}.segments.gz", sep=r"\s+").astype(str)
         if ibd_is_king:            
-            king_segs = pd.read_csv(f"{ibd_address}allsegs.txt", delim_whitespace=True).astype(str)                        
+            king_segs = pd.read_csv(f"{ibd_address}allsegs.txt", sep=r"\s+").astype(str)
             if not {"ID1", "ID2", "IBDType", "Chr", "StartSNP", "StopSNP",}.issubset(set(ibd.columns.values.tolist())):
                 raise Exception("Invalid ibd columns for king formatted ibd. Columns must include: ID1, ID2, IBDType, Chr, StartSNP, StopSNP")
             ibd = preprocess_king(ibd, king_segs, bim, chromosomes, sibships)
@@ -402,7 +402,7 @@ def compute_aics(unphased_gts, pc_scores, linear=True, sample_size = 1000):
         individual_mask = np.random.permutation([True]*sample_size+[False]*(nsnps-sample_size))
         unphased_gts = unphased_gts[:, individual_mask]
 
-        unphased_pc_gts = unphased_gts.copy().astype(np.float)
+        unphased_pc_gts = unphased_gts.copy().astype(float)
         unphased_pc_gts[unphased_gts==nan_integer]=0.
         number_of_pcs = pc_scores.shape[1]
         x = np.hstack((np.ones((pop_size, 1)), pc_scores))
@@ -441,7 +441,7 @@ def estimate_f(unphased_gts, pc_scores, linear=True):
 
     pop_size = unphased_gts.shape[0]
     nsnps = unphased_gts.shape[1]
-    unphased_pc_gts = unphased_gts.copy().astype(np.float)
+    unphased_pc_gts = unphased_gts.copy().astype(float)
     unphased_pc_gts[unphased_gts==nan_integer] = 0.
     x = np.hstack((pc_scores, np.ones((pop_size, 1))))
     data = {}
@@ -553,7 +553,7 @@ def prepare_gts(phased_address, unphased_address, bim, pedigree_output, ped_ids,
     unphased_gts = None
     unphased_pc_gts = None    
     if unphased_address:
-        bim_as_csv = pd.read_csv(unphased_address+".bim", delim_whitespace=True, header=None)
+        bim_as_csv = pd.read_csv(unphased_address+".bim", sep=r"\s+", header=None)
         gts_f = Bed(unphased_address+".bed",count_A1 = True, sid=bim_as_csv[1].values.tolist())
         logging.info(f"with chromosomes {chromosomes} opened unphased file ...")
         if not pc_ids is None:

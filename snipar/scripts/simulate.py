@@ -106,12 +106,11 @@ def main(args):
         if args.nfam is None:
             raise(ValueError('Must specify number of families to simulate'))
         unlinked = True
+        n_breeding = args.nfam
         if selection:
             n_breeding = args.selection_nfam if args.selection_nfam is not None else 4 * args.nfam
-            haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(
-                n_breeding, args.n_causal, maf=args.maf, min_maf=args.min_maf)
-        else:
-            haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(args.nfam, args.n_causal, maf=None,min_maf=0.05)
+        haps, maps, snp_ids, alleles, positions, chroms = simulate_first_gen(
+            n_breeding, args.n_causal, maf=args.maf, min_maf=args.min_maf)
     else:
         unlinked = False
         haps, maps, snp_ids, alleles, positions, chroms = haps_from_bgen(args.bgen, args.chr_range)
@@ -180,9 +179,11 @@ def main(args):
                 hf.close()
             # Unphased
             if args.unphased_impute:
-                hf = h5py.File(args.outprefix+'unphased_impute_chr_'+str(chroms[i])+'.hdf5','w')
                 ibd[i] = np.sum(ibd[i],axis=2)
-                imp = impute_all_fams(gts_chr, freqs, ibd[i])
+                family_dosages = gts_chr.val.reshape(new_haps[i].shape[:3])
+                imp = impute_all_fams(family_dosages, freqs, ibd[i])
+                del family_dosages
+                hf = h5py.File(args.outprefix+'unphased_impute_chr_'+str(chroms[i])+'.hdf5','w')
                 hf['imputed_par_gts'] = imp
                 del imp
                 hf['bim_values'] = encode_str_array(bim_i)
@@ -192,13 +193,8 @@ def main(args):
                 hf.close()
         del gts_chr
     #### Write IBD segments
-    snp_count = 0
     sibpairs = ped[last_gen,1]
     sibpairs = sibpairs.reshape((int(sibpairs.shape[0]/2),2))
-    if args.v_indir==0:
-        causal_out = np.zeros((a.shape[0],5),dtype='U30')
-    else:
-        causal_out = np.zeros((a.shape[0],5),dtype='U30')
     for i in range(len(haps)):
         print('Writing IBD segments for chromosome '+str(chroms[i]))
         # Segments
@@ -207,23 +203,18 @@ def main(args):
         segs = write_segs_from_matrix(ibd[i], sibpairs,
                                     snp_ids[i], positions[i],maps[i],chroms[i],
                                     args.outprefix+'chr_'+str(chroms[i])+'.segments.gz')
-        # Causal effects
-        if args.v_indir==0:
-            a_chr = a[snp_count:(snp_count + snp_ids[i].shape[0])]
-            a_chr_v1 = a_chr+np.random.normal(0,np.std(a_chr),a_chr.shape)
-            causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],
-                                                                                    a_chr,a_chr_v1)).T
-            if i==0:
-                causal_out = np.vstack((np.array(['SNP','A1','A2','direct','direct_v1']).reshape((1,5)),causal_out))
-        else:
-            a_chr = a[snp_count:(snp_count + snp_ids[i].shape[0]),:]
-            causal_out[snp_count:(snp_count + snp_ids[i].shape[0]),:] = np.vstack((snp_ids[i],alleles[i][:,0],alleles[i][:,1],
-                                                                                    a_chr[:,0],a_chr[:,1])).T
-            if i==0:
-                causal_out = np.vstack((np.array(['SNP','A1','A2','direct','indirect']).reshape((1,5)),causal_out))
-        snp_count += snp_ids[i].shape[0]
-        # count
-    np.savetxt(args.outprefix+'causal_effects.txt',causal_out,fmt='%s')
+    header = 'SNP A1 A2 direct ' + ('direct_v1' if args.v_indir == 0 else 'indirect')
+    with open(args.outprefix+'causal_effects.txt', 'w') as output:
+        output.write(header + '\n')
+        start = 0
+        for ids, chrom_alleles in zip(snp_ids, alleles):
+            end = start + len(ids)
+            effects = a[start:end]
+            if args.v_indir == 0:
+                noisy = effects + np.random.normal(0, np.std(effects), effects.shape)
+                effects = np.column_stack((effects, noisy))
+            np.savetxt(output, np.column_stack((ids, chrom_alleles.astype(str), effects)), fmt='%s')
+            start = end
 if __name__ == "__main__":
     args=parser.parse_args()
     main(args)

@@ -378,11 +378,11 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
     print('Computing LD weights')
     ld_n = np.min([1000, gts.shape[0]])
     ld_sample = np.random.randint(0, gts.shape[0], size=ld_n)
-    ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float_), gts.map, max_dist=1)
+    ld = compute_ld_scores(np.array(gts.gts[ld_sample,:], dtype=np.float64), gts.map, max_dist=1)
     gts.weights = np.power(ld, -1)
     # IBD
     print('Inferring IBD')
-    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float_), gts.freqs, gts.map, gts.weights, gts.error_probs)
+    ibd = infer_ibd(sibpair_indices, np.array(gts.gts,dtype=np.float64), gts.freqs, gts.map, gts.weights, gts.error_probs)
     ibd, allsegs = smooth_ibd(ibd, gts.map, gts.sid, gts.pos, min_length)
     ## Write output
     # Write segments

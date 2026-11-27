@@ -384,7 +384,7 @@ class pgarray(gtarray):
             if optimized[2]['warnflag']==0:
                 r=optimized[0][0]
                 hess = nd.Hessian(pgs_cor_lik)
-                hess = float(hess([r], pgs_fam, is_sib, is_parent))
+                hess = hess([r], pgs_fam, is_sib, is_parent).item()
                 r_se = np.sqrt(2/hess)
             else:
                 print('Could not find MLE for correlation. Returning weighted average from siblings and parents.')
@@ -519,11 +519,11 @@ def pgs_corr_matrix(r,is_sib_fam,is_parent_fam):
     n_sib = np.sum(is_sib_fam)
     n_par = np.sum(is_parent_fam)
     # Full matrix
-    R = np.zeros((n_sib+n_par,n_sib+n_par), dtype=np.float_)
+    R = np.zeros((n_sib+n_par,n_sib+n_par), dtype=np.float64)
     np.fill_diagonal(R, 1.0)
     # sib submatrix
     r_sib = (1+r)/2
-    R_sib = r_sib*np.ones((n_sib,n_sib),dtype=np.float_)
+    R_sib = r_sib*np.ones((n_sib,n_sib),dtype=np.float64)
     np.fill_diagonal(R_sib,1.0)
     R[0:n_sib,0:n_sib] = R_sib
     # sib to parent

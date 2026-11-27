@@ -21,7 +21,15 @@ except ImportError:
 def njit(*args, **kwargs):
     """Use the package-qualified module name for CLI and API Numba caches."""
     def decorate(function):
-        return function if _numba_njit is None else _numba_njit(*args, **kwargs)(function)
+        if _numba_njit is None:
+            return function
+        try:
+            return _numba_njit(*args, **kwargs)(function)
+        except RuntimeError as error:
+            if not kwargs.get('cache') or 'no locator available for file' not in str(error):
+                raise
+            # Shared installations may have no writable Numba cache.
+            return _numba_njit(*args, **dict(kwargs, cache=False))(function)
     return decorate
 
 

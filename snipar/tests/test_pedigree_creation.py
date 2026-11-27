@@ -39,7 +39,7 @@ class TestPedigree(SniparTest):
         result = create_pedigree(f"{tests_root}/test_data/pedigree_creation_sample.king",
                                    f"{tests_root}/test_data/pedigree_creation_sample.agesex",
         ).sort_values(by=['FID', "IID"])
-        expected = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"])
+        expected = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", sep=r"\s+").sort_values(by=['FID', "IID"])
         result_graph = create_graph_from_pedigree(result)
         expected_graph = create_graph_from_pedigree(expected)
 
@@ -47,7 +47,7 @@ class TestPedigree(SniparTest):
         self.assertTrue(equality)
     
     def test_add_control(self):
-        pedigree = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", delim_whitespace=True).sort_values(by=['FID', "IID"]).astype(str)
+        pedigree = pd.read_csv(f"{tests_root}/test_data/pedigree_creation_sample.ped", sep=r"\s+").sort_values(by=['FID', "IID"]).astype(str)
         pedigree["has_father"] = pedigree["FATHER_ID"].isin(pedigree["IID"])
         pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(pedigree["IID"])
         controlled_pedigree = add_control(pedigree).astype(str)
