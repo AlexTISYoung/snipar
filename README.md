@@ -1,12 +1,12 @@
 # snipar
 
 <p align="center">
-  <img src="docs/snipar_logo.png" width="350" alt="snipar logo">
+  <img src="https://raw.githubusercontent.com/AlexTISYoung/snipar/HEAD/docs/snipar_logo.png" width="350" alt="snipar logo">
 </p>
 
-![Python Versions](https://img.shields.io/badge/Python-3.7--3.9-blue?style=flat-square&labelColor=3776AB&color=FFD43B&logo=python&logoColor=white)
+![Python Versions](https://img.shields.io/badge/Python-3.11--3.14-blue?style=flat-square&labelColor=3776AB&color=FFD43B&logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
-![CI](https://github.com/alextisyoung/snipar/actions/workflows/test.yml/badge.svg)
+![CI](https://github.com/alextisyoung/snipar/actions/workflows/build.yml/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-8A2BE2.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/index.html)
 [![Guide](https://img.shields.io/badge/guide-red.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/guide.html)
 [![Tutorial](https://img.shields.io/badge/tutorial-20B2AA.svg?style=flat-square)](https://snipar.readthedocs.io/en/latest/tutorial.html)
@@ -26,7 +26,7 @@
 - **Correlations between GWAS effects**: `correlate.py` fits a joint covariance matrix for direct effects and non-transmitted coefficients (NTCs) using their per-SNP sampling covariance. It derives population effects as direct effects plus average NTCs. The results include the direct–population and direct–NTC correlations and the population-to-direct standard deviation ratio, with genomic block jackknife standard errors. See the [correlation guide and output tables](https://snipar.readthedocs.io/en/latest/correlate.html).
 
 <p align="center">
-  <img src="docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
+  <img src="https://raw.githubusercontent.com/AlexTISYoung/snipar/HEAD/docs/snipar_flowchart.png" width="100%" alt="snipar flowchart">
 </p>
 
 The above illustrates an end-to-end workflow for performing family-GWAS in *snipar*, an example of which is given in the [Tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html). Not all steps are necessary for all analyses. For example, family-GWAS (and PGS analyses) can be performed without imputed parental genotypes, requiring only input genotypes in .bed or .bgen format along with pedigree information. Also: imputation for parent-offspring pairs can proceed without IBD inference. 
@@ -91,145 +91,36 @@ Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, 
 
 # Installing Using pip
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX (14.7 and higher). We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
+SNIPar requires Python 3.11.5 through 3.14. On Intel macOS use Python 3.11 or 3.12 for prebuilt dependencies. Python 3.12 is a suitable choice on Linux, Windows and macOS, including Apple Silicon. With Conda, create and activate an environment named `snipar`.
 
-The easiest way to install is using pip:
+> `conda create -n snipar python=3.12 pip`
 
-> `pip install snipar`
+> `conda activate snipar`
 
-Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
+Install the published release with the Python interpreter in that environment.
 
-> `pip install --upgrade pip`
+> `python -m pip install --upgrade pip`
 
-Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
+> `python -m pip install snipar`
 
-# Virtual Environment
+The Python tools install together. To run the binary-trait command `pgs.R`, also install R and its `lme4` package. In a Conda environment you can install both with one command.
 
-You may encounter problems with the installation due to Python version incompatibility or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
-
-To create the venv, use the following commands in your directory of choice:
-
-> `python -m venv path-to-where-you-want-the-virtual-environment-to-be`
-
-You can activate and use the environment using
-
-> `source path-to-where-you-want-the-virtual-environment-to-be/bin/activate`
-
-Alternatively, we recommend using conda:
-
-> `conda create -n myenv python=3.9`
-
-> `conda activate myenv`
+> `conda install -c conda-forge r-base r-lme4`
 
 # Installing From Source
-To install from source, clone the git repository, and in the directory
-containing the *snipar* source code, at the shell type:
 
-> `pip install .`
+To install the version in a repository checkout, run the following command from the directory containing `pyproject.toml`.
 
-Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
+> `python -m pip install .`
 
-# Python version incompatibility 
+A source build compiles two C++ extensions and requires a C++ compiler with OpenMP support. Use GCC and its OpenMP runtime on Linux or the Microsoft C++ Build Tools on Windows. On macOS, install the Xcode Command Line Tools and the OpenMP runtime for your architecture.
 
-*snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
-To overcome this, see **Virtual Environment** above.
+> `xcode-select --install`
 
-# Apple ARM processor machines
+> `brew install libomp`
 
-There can be difficulties install *snipar* on Apple ARM processor machines due
-to lack of available versions of scientific computing software made for these
-processors' architectures. A workaround for this is to use *Snipar* in a docker
-container.
+SNIPar detects Homebrew's default `libomp` location and the active environment's `include/omp.h`. For a custom installation, set `SNIPAR_OPENMP_PREFIX` to the directory containing the OpenMP `include` and `lib` directories before running the source install.
 
-The following steps will guide you on how to create a suitable container for
-your M1/M2 MacBook and seamlessly integrate it into a VSCode environment. These
-steps assume you have little knowledge about Docker, so we will start from
-scratch.
-
-## 1. Installing Docker Engine
-
-Ensure that Docker Engine is installed on your machine. If it's already
-installed, you can skip this step. Otherwise, you can install it by following
-the instructions provided at the following link:
-
-[Install Docker Engine on a MacBook](https://docs.docker.com/desktop/install/mac-install/)
-
-## 2. Creating the Docker Container
-
-To install the Snipar package, you need to create a Docker container that
-emulates a virtual Ubuntu machine where Snipar can be installed.
-
-To create the appropriate Docker container, follow these steps:
-
-- Start the Docker engine. Just open the Docker application from your
-  Applications folder.
-
-- While the engine is running, open your terminal and execute the following
-  command to create a container named "snipar_container" (you can choose a
-  different name if you prefer):
-
-  > `docker run --name snipar_container -it amd64/python:3.9.9-slim-buster /bin/bash`
-
-After running this command, you should see the "snipar_container" listed in the
-Docker GUI under the "Containers" tab.
-
-- You can close the terminal at this point.
-
-## 3. Running the Container
-
-To use the environment of the created container within VSCode or other IDEs,
-ensure that the container is running. You can do this easily through the Docker
-GUI:
-
-- Open the Docker GUI.
-- In the "Containers" section of the dashboard, locate "snipar_container" (or
-  the name you chose for your container).
-- Click the play button to start the container.
-
-Once the container is running, you can access its terminal and files through the
-Docker GUI. Keep in mind that the files within the container are isolated from
-your macOS files. You won't be able to access them using Finder, but you can
-manage them through the Docker GUI, including uploading and downloading.
-
-## 4. Attaching the Container to VSCode
-
-If you prefer a smoother development experience with VSCode, follow these steps
-to attach the container to VSCode:
-
-- Install the "Dev Containers" extension by visiting the following link in the
-  VS Marketplace:
-
-  [Dev Containers Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-
-- Once installed, a new icon will appear on the left sidebar of VSCode labeled "
-  Remote Explorer."
-
-- Click on "Remote Explorer" and, under the "Dev Containers" section, locate "
-  snipar_container."
-
-- Next to the container name, you'll find a button that says "Attach in a new
-  window." Click on this button, and VSCode will open a new window attached to
-  the container.
-
-In the newly attached VSCode window, the terminal will be connected to the
-container, similar to the "Exec" tab in the Docker GUI. You can also open
-folders from the container environment (not your Mac itself) using the "Open
-Folder" button in VSCode. This makes it more convenient to manage files while
-writing code, and you can run your modules using the terminal directly within
-VSCode.
-
-## 5. Installing *snipar* Package in the Container
-
-Up to this point, you've set up the environment for snipar but haven't installed
-it in the container. To install snipar, follow these steps:
-
-- Open the terminal in the VSCode window attached to "snipar_container" (or use
-  the "Exec" tab in the Docker GUI).
-- After cloning the git repository and cding into the directory, run the following command:
-
-  > `pip install .`
-
-   
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 

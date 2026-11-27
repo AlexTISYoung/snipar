@@ -293,21 +293,18 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             bim_address = phased_address+'.bgen'
         if fam_address is None:
             fam_address = phased_address+'.bgen'
-        bgen = read_bgen(bim_address, verbose=False)
-        bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
-        #TODO this line should be replaced
-        bim["id"]=bim["rsid"]
         if chromosome is None:
-            raise Exception("chromosome should be specified when using phased data") 
+            raise ValueError("chromosome should be specified when using phased data")
+        reader = open_bgen(bim_address)
+        if hasattr(reader, "variant_metadata"):
+            bim = reader.variant_metadata()
+        else:
+            bim = read_bgen(bim_address)["variants"].compute()
+        bim = bim.rename(columns={"chrom": "Chr", "pos": "coordinate"})
+        bim["id"] = bim["rsid"]
         bim["Chr"] = chromosome
-        bgen = read_bgen(bim_address, verbose=False)
-        bim = bgen["variants"].compute().rename(columns={"chrom":"Chr", "pos":"coordinate"})
-        #TODO this line should be replaced
-        bim["id"]=bim["rsid"]
-        if chromosome is None:
-            raise Exception("chromosome should be specified when using phased data") 
-        bim["Chr"] = chromosome
-        fam = pd.DataFrame({"IID":read_bgen(fam_address)["samples"]})
+        ids = reader.samples if fam_address == bim_address else open_bgen(fam_address).samples
+        fam = pd.DataFrame({"IID": ids})
 
     chromosomes = bim["Chr"].unique().astype(int)
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data")

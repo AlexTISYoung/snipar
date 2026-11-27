@@ -2,7 +2,6 @@ from typing import Any, Dict, Optional, Union
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import bgen_reader
 from os import path
 from typing import Tuple
 
@@ -146,6 +145,12 @@ def get_parser_doc(parser):
     return doc
 
 
+def read_oxford_sample(filename):
+    """Read individual IDs, preserving leading zeros and skipping the column-type row."""
+    samples = pd.read_csv(filename, sep=r"\s+", dtype=str, skiprows=[1], keep_default_na=False)
+    return samples["ID_2"].to_numpy()
+
+
 class _bgen:
     """Simple wrapper class of bgen_reader.open_bgen that controls access to sample ids."""
     def __init__(self, 
@@ -153,7 +158,8 @@ class _bgen:
                  samples_filepath: Optional[Union[str, Path]] = None,
                  allow_complex: bool = False,
                  verbose: bool = True,):
-        self._bgen = bgen_reader.open_bgen(filepath, allow_complex=allow_complex, verbose=verbose)
+        from bgen_reader import open_bgen as legacy_open
+        self._bgen = legacy_open(filepath, allow_complex=allow_complex, verbose=verbose)
         self._samples = self._read_sample(samples_filepath)
         if self._bgen.samples.shape[0] != self._samples.shape[0]:
             raise ValueError('sample file length and bgen file length do not match.')
@@ -167,15 +173,22 @@ class _bgen:
         return getattr(self._bgen, name)
     
     def _read_sample(self, samples_filepath: str) -> np.ndarray:
-        return pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy(dtype=str)
+        return read_oxford_sample(samples_filepath)
 
 
-def open_bgen(filename: str, verbose: bool = False) -> bgen_reader.open_bgen:
+def open_bgen(filename: str, verbose: bool = False):
     """Wrapper of bgen_reader.open_bgen that checks if sample ids make sense."""
+    try:
+        import bgen_reader
+    except ModuleNotFoundError as exc:
+        if exc.name != "bgen_reader":
+            raise
+        from snipar.bgen_io import BgenFile
+        return BgenFile(filename)
     bgen = bgen_reader.open_bgen(filename, verbose=verbose)
     if bgen.samples[0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
-        samples_filepath = filename[:-4] + 'sample'
+        samples_filepath = Path(filename).with_suffix('.sample')
         if not path.exists(samples_filepath):
             raise FileNotFoundError(f'{samples_filepath} does not exist.')
         bgen = _bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
@@ -184,12 +197,19 @@ def open_bgen(filename: str, verbose: bool = False) -> bgen_reader.open_bgen:
 
 def read_bgen(filename: str, verbose: bool = False) -> Dict:
     """Wrapper of bgen_reader.read_bgen that checks if sample ids make sense."""
+    try:
+        import bgen_reader
+    except ModuleNotFoundError as exc:
+        if exc.name != "bgen_reader":
+            raise
+        raise ImportError("The lazy read_bgen API requires snipar[legacy-bgen]. "
+                          "Use open_bgen for array access.") from exc
     bgen = bgen_reader.read_bgen(filename, verbose=verbose)
     if bgen['samples'][0] == 'sample_0':
         print('WARNING: Sample ids in bgen file are generic. Trying to read the corresponding .sample file ...')
-        samples_filepath = filename[:-4] + 'sample'
+        samples_filepath = Path(filename).with_suffix('.sample')
         if not path.exists(samples_filepath):
             raise FileNotFoundError(f'{samples_filepath} does not exist.')
         bgen = bgen_reader.read_bgen(filename, verbose=verbose, samples_filepath=samples_filepath)
-        bgen['samples'] = pd.read_csv(samples_filepath, sep='\s+')['ID_2'][1:].to_numpy()
+        bgen['samples'] = read_oxford_sample(samples_filepath)
     return bgen

@@ -27,52 +27,37 @@ models correlations between siblings and between other relatives using a sparse 
 Installation
 ------------
 
-*snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX. 
-We recommend installing using pip in an Anaconda environment as the most reliable way to install *snipar* and its dependencies. 
+SNIPar requires Python 3.11.5 through 3.14. Python 3.12 is a suitable choice on
+Linux, Windows and macOS, including Apple Silicon. On Intel macOS, Python 3.11
+and 3.12 have prebuilt dependencies.
 
 Installing Using pip
 ~~~~~~~~~~~~~~~~~~~~
 
-The easiest way to install is using pip:
+Create an environment for SNIPar and activate it before installing the package.
 
-    ``pip install snipar``
+    ``conda create -n snipar python=3.12 pip``
 
-Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
+    ``conda activate snipar``
 
-    ``pip install --upgrade pip``
+    ``python -m pip install --upgrade pip``
 
-You may encounter problems with the installation due to Python version incompatibility or package conflicts with your existing Python environment.
-To overcome this, you can try installing in a virtual environment. 
-In a bash shell, this could be done by using the following commands in your directory of choice:
-    
-    ``python -m venv path-to-where-you-want-the-virtual-environment-to-be``
+    ``python -m pip install snipar``
 
-You can activate and use the environment using
+To run the binary-trait models in ``pgs.R``, also install R and its ``lme4`` package.
 
-    ``source path-to-where-you-want-the-virtual-environment-to-be/bin/activate``
-
-*snipar* can also be installed within a conda environment using pip. 
+    ``conda install -c conda-forge r-base r-lme4``
 
 Installing From Source
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
-To install from source, clone the git repository (https://github.com/AlexTISYoung/snipar), and in the directory
-containing the *snipar* source code, at the shell type:
+A source build requires a C++ compiler and the OpenMP runtime. Use GCC on
+Linux, Microsoft C++ Build Tools on Windows, or Xcode Command Line Tools and
+Homebrew's ``libomp`` on macOS. Then run this command from the directory
+containing ``pyproject.toml``.
 
-    ``pip install .``
+    ``python -m pip install .``
 
-Python version incompatibility
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
-
-*snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
-To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
-	
-    ``conda create -n myenv python=3.9``
-
-    ``conda activate myenv``
-    
-    ``pip install snipar``
-   
 Running tests
 ~~~~~~~~~~~~~
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:

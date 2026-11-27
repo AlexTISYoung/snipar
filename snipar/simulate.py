@@ -2,7 +2,6 @@ import numpy as np
 from numba import njit, prange
 from snipar.utilities import *
 from snipar.map import decode_map_from_pos
-from bgen_reader import open_bgen
 
 ### Read haplotypes from bgen
 def haps_from_bgen(bgenfiles,chr_range):

@@ -1,6 +1,6 @@
 import snipar.preprocess as preprocess
 from pysnptools.snpreader import Bed
-from bgen_reader import open_bgen
+from snipar.utilities import open_bgen
 import snipar.read.bed as bed
 import snipar.read.bgen as bgen
 import snipar.read.phenotype as phenotype

@@ -9,4 +9,5 @@ recursive-include snipar util_data/**
 recursive-include snipar tests/test_data/*
 recursive-include snipar example/example_data/*
 prune docs/_build
-global-exclude __pycache__ *.py[cod] .DS_Store
+recursive-include snipar *.pyx *.pxd
+global-exclude __pycache__ *.py[cod] *.cpp .DS_Store

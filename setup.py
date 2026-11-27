@@ -35,12 +35,18 @@ if sys.platform == "darwin" and prefix:
 install_requires = [
     "numpy>=2.1.2,<3",
     "scipy>=1.14.1,<2",
-    "bgen-reader>=4.0.9,<5",
+    # cbgen wheels cover these Python/platform combinations. Elsewhere the
+    # native bgen reader supplies the same score, GWAS and imputation inputs.
+    'bgen-reader>=4.0.9,<5; python_version < "3.13" and '
+    '(python_version < "3.12" or sys_platform != "linux" or platform_machine != "aarch64")',
+    'bgen>=1.11,<2; python_version >= "3.13" or '
+    '(python_version >= "3.12" and sys_platform == "linux" and platform_machine == "aarch64")',
     "pandas>=2.2.3,<3",
     "pysnptools>=1.0.1,<2",
     "networkx>=3.3,<4",
     "h5py>=3.12,<4",
-    "numba>=0.61,<1",
+    'numba>=0.61,<0.63; sys_platform == "darwin" and platform_machine == "x86_64"',
+    'numba>=0.61,<1; sys_platform != "darwin" or platform_machine != "x86_64"',
     "statsmodels>=0.14.4,<1",
     "numdifftools>=0.9.41,<1",
     "tqdm>=4.66.5",
@@ -70,10 +76,11 @@ setup(name='snipar',
             'Intended Audience :: Science/Research',
             'Topic :: Scientific/Engineering :: Bio-Informatics',
       ],
-      python_requires='>=3.11.5,<3.14',
+      python_requires='>=3.11.5,<3.15',
       keywords='statistics genetics',
       packages=['snipar', 'snipar.imputation', 'snipar.read', 'snipar.tests', 'snipar.example', 'snipar.scripts'],
       install_requires=install_requires,
+      extras_require={'legacy-bgen': ['bgen-reader>=4.0.9,<5']},
       zip_safe=False,
       ext_modules=[
                 Extension("snipar.imputation.impute_from_sibs",
