@@ -69,26 +69,6 @@ It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
 And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
-## GWAS effect correlations and family PGS analyses
-
-After [installing snipar](#installing-using-pip), run these examples from the directory containing your input files.
-
-For GWAS summary statistics in `chr_1.sumstats.gz`, `chr_2.sumstats.gz`, etc., and corresponding LD scores in `ld_chr1.l2.ldscore.gz`, `ld_chr2.l2.ldscore.gz`, run
-
-> `correlate.py 'chr_@' trait --ldscores 'ld_chr@'`
-
-`trait_corrs.txt` reports 17 estimates and their standard errors. `trait_moments.tsv` contains the fitted variances and covariances, `trait_sampling_covariance.tsv` gives the sampling covariance of the estimates, and `trait_diagnostics.json` records filtering and fit diagnostics. Add `--save_delete` to save the block deletions or `--common-weight` to include the raw moment comparison. [Correlation method and options](https://snipar.readthedocs.io/en/latest/correlate.html)
-
-For a quantitative trait, fit the default one- and two-generation models using a family score file from `pgs.py` and a phenotype file with `FID`, `IID`, and the trait value.
-
-> `pgs.py quantitative --pgs scores.pgs.txt --phenofile quantitative.txt`
-
-For a binary trait, use a phenotype column coded 0/1. The installed `pgs.R` command requires R and the `lme4` package.
-
-> `pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status`
-
-Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, with columns `statistic`, `est`, and `SE`. The `1.proband` and `2.proband` rows give the population and direct coefficients. The `direct_population_ratio` row gives the direct coefficient divided by the population coefficient on the same sample, with its standard error. For `pgs.R`, these coefficients are on the log-odds scale. It also prints each model's family random-intercept variance and standard error and saves them in `PREFIX.model_info.tsv`. Per-model and cross-model covariance matrices are available in separate files. See the [quantitative-trait guide](https://snipar.readthedocs.io/en/latest/pgs.html) and [binary-trait guide](https://snipar.readthedocs.io/en/latest/pgs_binary.html).
-
 # Installing Using pip
 
 SNIPar requires Python 3.11.5 through 3.14. On Intel macOS use Python 3.11 or 3.12 for prebuilt dependencies. Python 3.12 is a suitable choice on Linux, Windows and macOS, including Apple Silicon. With Conda, create and activate an environment named `snipar`.
