@@ -69,41 +69,15 @@ It is recommended to read the guide: https://snipar.rtfd.io/en/latest/guide.html
 
 And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutorial.html) and simulation exercise (https://snipar.readthedocs.io/en/latest/simulation.html). 
 
-## Working with VCF files
+## Supported genotype formats
 
-Use `--vcf` with `ibd.py`, `impute.py`, `gwas.py`, `pgs.py`, and `gts_matrix.py`. `correlate.py` accepts VCF for LD scores, and `simulate.py` accepts phased founder VCF. The reader uses diploid, biallelic autosomal `GT` calls from plain, gzip-compressed, or BGZF-compressed VCF. Supply one VCF or use a chromosome pattern such as `chr_@.vcf.gz`. Parental imputation uses consistent chromosome-wide phase when available. [Genotype input reference](https://snipar.readthedocs.io/en/latest/scripts.html#vcf-and-bgen-input)
+| Format | Option | Input |
+| --- | --- | --- |
+| PLINK BED | `--bed` | BED prefix with matching `.bim` and `.fam` files |
+| BGEN | `--bgen` | Phased or unphased BGEN prefix, with a `.sample` file when sample IDs are external |
+| VCF | `--vcf` | Phased or unphased diploid, biallelic autosomal `GT` calls in plain, gzip, or BGZF files |
 
-The bundled example includes `chr_1.vcf.gz`, with the same haplotypes as the example BGEN. Try a family GWAS using the observed genotypes and pedigree.
-
-```sh
-snipar_example_data.py --dest example_data
-cd example_data
-gwas.py phenotype.txt --vcf chr_1.vcf.gz --pedigree pedigree.txt --out vcf_gwas
-```
-
-The tutorial also shows how to infer IBD, impute missing parents using phase, and pass the resulting imputation to GWAS. [Phased VCF tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#using-the-phased-vcf)
-
-For large VCFs, `--vcf-variants` selects variant IDs and `--vcf-min-info-maf` filters by the input's annotated allele frequencies before decoding genotypes. The annotation cohort may differ from the analysis cohort. Use `vcf_to_genotypes.py --format auto` to prepare reusable BED or phased BGEN files for repeated analyses. [VCF filters](https://snipar.readthedocs.io/en/latest/scripts.html#filtering-large-vcfs)
-
-## GWAS effect correlations and family PGS analyses
-
-After [installing snipar](#installing-using-pip), run these examples from the directory containing your input files.
-
-For GWAS summary statistics in `chr_1.sumstats.gz`, `chr_2.sumstats.gz`, etc., and corresponding LD scores in `ld_chr1.l2.ldscore.gz`, `ld_chr2.l2.ldscore.gz`, run
-
-> `correlate.py 'chr_@' trait --ldscores 'ld_chr@'`
-
-`trait_corrs.txt` reports 17 estimates and their standard errors. `trait_moments.tsv` contains the fitted variances and covariances, `trait_sampling_covariance.tsv` gives the sampling covariance of the estimates, and `trait_diagnostics.json` records filtering and fit diagnostics. Add `--save_delete` to save the block deletions or `--common-weight` to include the raw moment comparison. [Correlation method and options](https://snipar.readthedocs.io/en/latest/correlate.html)
-
-For a quantitative trait, fit the default one- and two-generation models using a family score file from `pgs.py` and a phenotype file with `FID`, `IID`, and the trait value.
-
-> `pgs.py quantitative --pgs scores.pgs.txt --phenofile quantitative.txt`
-
-For a binary trait, use a phenotype column coded 0/1. The installed `pgs.R` command requires R and the `lme4` package.
-
-> `pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status`
-
-Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, with columns `statistic`, `est`, and `SE`. The `1.proband` and `2.proband` rows give the population and direct coefficients. The `direct_population_ratio` row gives the direct coefficient divided by the population coefficient on the same sample, with its standard error. For `pgs.R`, these coefficients are on the log-odds scale. It also prints each model's family random-intercept variance and standard error and saves them in `PREFIX.model_info.tsv`. Per-model and cross-model covariance matrices are available in separate files. See the [quantitative-trait guide](https://snipar.readthedocs.io/en/latest/pgs.html) and [binary-trait guide](https://snipar.readthedocs.io/en/latest/pgs_binary.html).
+Parental imputation uses chromosome-wide phase from BGEN or VCF when available. [Input file reference](https://snipar.readthedocs.io/en/latest/input%20files.html#observed-genotypes) · [Phased VCF tutorial](https://snipar.readthedocs.io/en/latest/tutorial.html#using-the-phased-vcf)
 
 # Installing Using pip
 
