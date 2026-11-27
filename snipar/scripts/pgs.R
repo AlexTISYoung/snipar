@@ -123,6 +123,7 @@ logistic_family_influence <- function(fit, term = "proband") {
             laplace_loglik = sum(loglik),
             lme4_loglik = fitted_loglik,
             loglik_difference = discrepancy,
+            pirls_tolerance = unname(fit@devcomp$cmp[["tolPwrss"]]),
             max_scaled_score = max(abs(scaled_score)),
             hessian_condition = kappa(information),
             model_based_se = sqrt(as.matrix(vcov(fit))[term, term]),
@@ -221,8 +222,10 @@ pgs_binary_usage <- function() {
         "  --help              Show this help\n\n",
         "OUT is the output prefix (--out OUT is also accepted). R package lme4\n",
         "is required. Coefficients are log odds; ratio is the 2-gen/1-gen\n",
-        "proband coefficient ratio. Sampling covariance files and the ratio SE\n",
-        "use a family-cluster sandwich of Laplace scores (nAGQ=1).\n"
+        "proband coefficient ratio. All coefficients and the ratio are written\n",
+        "to OUT.effects.txt with columns statistic, est, SE. Ratio status and\n",
+        "method are recorded in OUT.model_info.tsv. Sampling covariance files\n",
+        "and the ratio SE use a family-cluster sandwich of Laplace scores (nAGQ=1).\n"
     ))
 }
 
@@ -405,7 +408,11 @@ fit_pgs_binary_model <- function(analysis, terms, maxfun, generation) {
         formula, data = analysis, family = binomial(link = "logit"), nAGQ = 1L,
         control = lme4::glmerControl(
             optimizer = "bobyqa", optCtrl = list(maxfun = maxfun),
-            calc.derivs = TRUE, tolPwrss = 1e-9, check.conv.singular = "ignore"
+            # The Laplace log-determinant can retain appreciable error after
+            # PIRLS stops at 1e-9, even when the conditional modes are accurate.
+            # Tighten the fit so its objective agrees with the family scores;
+            # retain the independent likelihood and score checks above.
+            calc.derivs = TRUE, tolPwrss = 1e-12, check.conv.singular = "ignore"
         )
     )
     optimizer_code <- fit@optinfo$conv$opt
@@ -442,24 +449,31 @@ pgs_binary_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
     if (!dir.exists(output_directory)) dir.create(output_directory, recursive = TRUE)
     fits <- list(fit_1, fit_2)
     covariances <- list(result$population_vcov, result$direct_vcov)
+    effects <- vector("list", 2L)
     for (generation in seq_len(2L)) {
         prefix <- paste0(options$out, ".", generation)
         fit <- fits[[generation]]
         covariance <- covariances[[generation]]
-        estimates <- data.frame(
-            term = names(lme4::fixef(fit)), estimate = as.numeric(lme4::fixef(fit)),
-            se = sqrt(diag(covariance)), stringsAsFactors = FALSE
+        effects[[generation]] <- data.frame(
+            statistic = paste0(generation, ".", names(lme4::fixef(fit))),
+            est = as.numeric(lme4::fixef(fit)),
+            SE = sqrt(diag(covariance)), stringsAsFactors = FALSE
         )
-        write.table(estimates, paste0(prefix, ".effects.txt"), sep = "\t",
-                    row.names = FALSE, quote = FALSE, na = "NA")
         write_pgs_binary_matrix(covariance, paste0(prefix, ".vcov.txt"))
         write_pgs_binary_matrix(as.matrix(vcov(fit)), paste0(prefix, ".model_vcov.txt"))
     }
+    effects <- rbind(effects[[1L]], effects[[2L]], data.frame(
+        statistic = "direct_population_ratio", est = result$ratio$ratio,
+        SE = result$ratio$se, stringsAsFactors = FALSE
+    ))
+    write.table(effects, paste0(options$out, ".effects.txt"), sep = "\t",
+                row.names = FALSE, quote = FALSE, na = "NA")
     write_pgs_binary_matrix(result$cross_vcov, paste0(options$out, ".1_2.cross_vcov.txt"))
     write_pgs_binary_matrix(result$joint_vcov, paste0(options$out, ".direct_population.vcov.txt"))
-    write.table(result$ratio, paste0(options$out, ".direct_population_ratio.txt"),
-                sep = "\t", row.names = FALSE, quote = FALSE, na = "NA")
     diagnostics <- result$diagnostics
+    diagnostics$ratio_status <- result$ratio$status
+    diagnostics$ratio_method <- result$ratio$method
+    diagnostics$ratio_sampling_correlation <- result$ratio$sampling_correlation
     diagnostics$phenotype <- prepared$phenotype
     diagnostics$n <- nrow(analysis)
     diagnostics$cases <- sum(analysis$phenotype == 1)
@@ -479,6 +493,7 @@ pgs_binary_main <- function(arguments = commandArgs(trailingOnly = TRUE)) {
         "families; excluded:", prepared$excluded_n, "\n")
     cat("Direct/population PGS ratio:", result$ratio$ratio, "(SE", result$ratio$se,
         ");", result$ratio$status, "\n")
+    cat("Estimates and standard errors:", paste0(options$out, ".effects.txt"), "\n")
     cat("Results written with prefix:", options$out, "\n")
     invisible(result)
 }

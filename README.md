@@ -93,7 +93,7 @@ For a binary trait, use a phenotype column coded 0/1. The standalone R script ru
 
 > `Rscript snipar/scripts/pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status`
 
-Both PGS commands write `PREFIX.direct_population_ratio.txt`. The ratio divides the two-generation proband coefficient by the one-generation proband coefficient on the same sample. For `pgs.R`, both coefficients are on the log-odds scale. See the [quantitative-trait guide](docs/pgs.rst) and [binary-trait guide](docs/pgs_binary.rst) for score columns, covariates, and covariance outputs.
+Both PGS commands write one tab-separated estimate table, `PREFIX.effects.txt`, with columns `statistic`, `est`, and `SE`. The `1.proband` and `2.proband` rows give the population and direct coefficients. The `direct_population_ratio` row gives the direct coefficient divided by the population coefficient on the same sample, with its standard error. For `pgs.R`, these coefficients are on the log-odds scale. Covariance matrices are available in separate files. See the [quantitative-trait guide](docs/pgs.rst) and [binary-trait guide](docs/pgs_binary.rst).
 
 # Installing Using pip
 

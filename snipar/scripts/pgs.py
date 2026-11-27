@@ -16,11 +16,13 @@ Results:
         Also includes sibling PGS if --fit_sib is specified, and grandparental PGS if --grandpar is specified.
     PGS effect estimates
         Output when inputting a phenotype file.
-        A file with suffix effects.txt containing estimates of the PGS effects and their standard errors,
-        and a file with suffix vcov.txt containing the sampling variance-covariance matrix of the effect estimates
+        One .effects.txt table contains statistic, est, and SE columns for all requested models,
+        with generation-qualified coefficient names such as 1.proband and 2.proband.
+        Per-model .N.vcov.txt files contain the coefficient sampling covariance matrices.
     Direct/population PGS ratio
         When both 1- and 2-generation models are requested, fits them on the same complete cases
-        and writes .direct_population_ratio.txt with the proband coefficient ratio and delta-method SE.
+        and includes direct_population_ratio and its delta-method SE in .effects.txt.
+        Optional assortative-mating-adjusted results use am_adj.<parameter> rows in that table.
         .1_2.cross_vcov.txt contains covariance between models and .direct_population.vcov.txt
         contains the joint population/direct proband covariance matrix.
         
@@ -237,23 +239,29 @@ def main(args):
             y.scale()
         if args.scale_pgs:
             pg.scale()
-        ## Estimate models
+        ## Estimate models, then write one table for this complete invocation.
+        model_estimates = {}
+        ratio = None
+        adjusted = None
         paired_models = '1' in args.gen_models and '2' in args.gen_models
         if paired_models:
             print('Estimating paired 1- and 2-generation models and direct/population ratio')
             population_fit, direct_fit, ratio = pgs.fit_pgs_model_pair(
                 y, pg, ibdrel_path=args.grm, covariates=covariates,
                 fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum,
-                outprefix=args.out, sparse_thresh=args.sparse_thresh)
+                outprefix=args.out, sparse_thresh=args.sparse_thresh, write_effects=False)
             alpha_1 = population_fit['alpha'], population_fit['cols']
             alpha_2 = direct_fit['alpha'], direct_fit['cols']
+            model_estimates.update({1: alpha_1, 2: alpha_2})
         elif '1' in args.gen_models:
             print('Estimating population effect (1 generation model)')
-            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_1 = pgs.fit_pgs_model(y, pg, 1, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh, write_effects=False)
+            model_estimates[1] = alpha_1
         if '2' in args.gen_models:
             if not paired_models:
                 print('Estimating direct effect and parental NTCs (2 generation model)')
-                alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+                alpha_2 = pgs.fit_pgs_model(y, pg, 2, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh, write_effects=False)
+                model_estimates[2] = alpha_2
             if args.h2f is not None:
                 print('Adjusting two-generation model results and heritability estimate for assortative mating')
                 h2f, h2f_se = pgs.h2f_parse(args.h2f)
@@ -262,10 +270,13 @@ def main(args):
                 else:
                     rk, rk_se = pgs.h2f_parse(args.rk)
                     adj_estimates, adj_ses = pgs.am_adj_2gen(alpha_2[0], alpha_2[1], h2f, h2f_se, rk=rk, rk_se=rk_se, y_std=np.std(y.gts[:,0]), pg_std=np.std(pg.gts[:,np.where(pg.sid=='proband')[0][0]]))
-                pgs.write_2gen_adj_ests(adj_estimates, adj_ses, outprefix=args.out)
+                adjusted = adj_estimates, adj_ses
         if '3' in args.gen_models:
             print('Estimating direct effect and parental IGEs and grandparental coefficients (3 generation model)')
-            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh)
+            alpha_3 = pgs.fit_pgs_model(y, pg, 3, ibdrel_path=args.grm, covariates=covariates, fit_sib=args.fit_sib, parsum=args.parsum, gparsum=args.gparsum, outprefix=args.out, sparse_thresh=args.sparse_thresh, write_effects=False)
+            model_estimates[3] = alpha_3
+        if model_estimates:
+            pgs.write_pgs_effects(args.out, model_estimates, ratio=ratio, adjusted=adjusted)
     return None
 if __name__ == "__main__":
     args=parser.parse_args()

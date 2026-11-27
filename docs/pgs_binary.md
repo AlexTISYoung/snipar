@@ -99,18 +99,21 @@ With output prefix `results/trait`, the script writes:
 
 | Suffix | Contents |
 | --- | --- |
-| `.1.effects.txt`, `.2.effects.txt` | Fixed-effect `term`, `estimate`, and sampling `se` for each model. |
+| `.effects.txt` | All fixed effects and the direct/population ratio, with columns `statistic`, `est`, and `SE`. |
 | `.1.vcov.txt`, `.2.vcov.txt` | Labeled sampling covariance matrices for all fixed effects. |
 | `.1_2.cross_vcov.txt` | Sampling covariance between models, with one-generation rows and two-generation columns. |
-| `.direct_population_ratio.txt` | Ratio, SE, component coefficients and SEs, covariance, sampling correlation, sample and family counts, status, and method. |
 | `.direct_population.vcov.txt` | The two-by-two sampling covariance matrix for the population and direct proband coefficients. |
 | `.1.model_vcov.txt`, `.2.model_vcov.txt` | Model-based `lme4::vcov` matrices, provided separately for comparison. |
-| `.model_info.tsv` | Model, sample, convergence, and likelihood diagnostics. |
+| `.model_info.tsv` | Model, sample, convergence, and likelihood diagnostics, plus `ratio_status` and `ratio_method`. |
 
-The ratio table has columns `ratio`, `se`, `direct`, `population`,
-`direct_se`, `population_se`, `covariance`, `sampling_correlation`, `n`,
-`n_families`, `status`, and `method`. Counts refer to the shared complete-case
-sample. The method label is `Laplace_family_cluster_sandwich_delta`. The
+The tab-separated `.effects.txt` table names coefficients `1.TERM` and
+`2.TERM`: `1.proband` is the population effect and `2.proband` is the direct
+effect. `direct_population_ratio` gives their ratio, with its estimate in
+`est` and standard error in `SE`. Intercepts and covariates follow the same
+model-prefixed naming convention.
+
+Counts in `.model_info.tsv` refer to the shared complete-case sample.
+The `ratio_method` label is `Laplace_family_cluster_sandwich_delta`. The
 population/direct covariance matrix orders both axes as `population`, `direct`.
 
 Tables have headers. Covariance matrices label their rows and columns. The
@@ -135,8 +138,8 @@ model-based covariance matrices are not used for that calculation.
 
 A zero population coefficient gives an undefined ratio and SE. A population
 coefficient within 1.96 sandwich SEs of zero is flagged as weak, because the
-delta approximation can be unreliable near zero. Consult the `status` field
-and model diagnostics when interpreting results.
+delta approximation can be unreliable near zero. Consult `ratio_status`
+and the other diagnostics in `.model_info.tsv` when interpreting results.
 
 ## Regression checks
 

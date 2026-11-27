@@ -284,8 +284,8 @@ names, which we specify explicitly. After the imputation step above, run:
     ``pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt --SNP sid --beta_col ldpred_beta --A1 nt1 --A2 nt2 --phenofile phenotype.txt``
     
 This writes the family scores to ``direct.pgs.txt``. The ``--phenofile`` option
-also fits both models and writes ``direct.1.effects.txt``, ``direct.2.effects.txt``
-and the other regression results in the current directory. Parental scores use observed
+also fits both models and writes ``direct.effects.txt`` and the covariance
+files in the current directory. Parental scores use observed
 genotypes where available and imputed genotypes otherwise. If you skipped
 imputation, replace ``--imp chr_@`` with ``--pedigree pedigree.txt``; scores
 will then be computed only for individuals with both parents genotyped.
@@ -302,21 +302,24 @@ own PGS. The two-generation model includes parental scores to estimate the
 direct effect and parental NTCs. Both account for residual similarities
 between siblings.
 
-Start by inspecting these files:
+Start with the single estimate table:
 
-* ``direct.1.effects.txt``: the ``proband`` row gives the population effect.
-* ``direct.2.effects.txt``: the ``proband`` row gives the direct effect, and
-  the ``paternal`` and ``maternal`` rows give the parental NTCs.
-* ``direct.direct_population_ratio.txt``: the ``ratio`` column gives the
-  direct effect divided by the population effect, and ``se`` gives its
-  standard error, accounting for covariance between the estimates.
+    ``column -t direct.effects.txt``
 
-Each effects file has three columns without a header: coefficient name,
-estimate, and standard error. The ratio file has a header; for example, view
-it with ``cat direct.direct_population_ratio.txt``. Its ``n`` column reports
-the common sample size. Check that ``status`` is ``ok`` before interpreting
-the ratio. A ``weak_denominator`` means the population coefficient is too
-close to zero for the usual ratio approximation to be reliable.
+This tab-separated file has columns ``statistic``, ``est``, and ``SE``.
+Read its rows by name:
+
+* ``1.proband`` gives the population effect.
+* ``2.proband`` gives the direct effect; ``2.paternal`` and ``2.maternal``
+  give the parental NTCs.
+* ``direct_population_ratio`` gives the direct effect divided by the
+  population effect, with a standard error accounting for covariance between
+  the estimates.
+
+Intercepts and covariates use the same ``MODEL.TERM`` naming convention.
+The terminal reports the ratio status; check for warnings before interpreting
+it. A ``weak_denominator`` means the population coefficient is too close to
+zero for the usual ratio approximation to be reliable.
 
 In this example, the direct coefficient should be close to 1 because the
 score uses the true direct effects. The population coefficient also reflects
@@ -326,8 +329,9 @@ SNP-effect variance ratio produced by ``correlate.py``.
 
 The script also writes covariance matrices; see :ref:`PGS output files
 <pgs_effects>` and :ref:`pgs_ratio` for details. To fit only one model, add
-``--gen_models 1`` or ``--gen_models 2``; a single-model run does not produce
-the ratio files. If parental scores are imputed from siblings alone, use
+``--gen_models 1`` or ``--gen_models 2``; a single-model run writes that model's
+rows to the same table and omits the ratio row and paired-model covariance
+files. If parental scores are imputed from siblings alone, use
 ``--parsum`` to fit their sum and estimate the average NTC. A precomputed
 file containing only a ``parental`` score column selects this automatically.
 
@@ -337,8 +341,50 @@ continue to the :ref:`simulation exercise <simulation>`.
 Binary outcomes
 ~~~~~~~~~~~~~~~
 
-The tutorial's ``phenotype.txt`` contains a quantitative phenotype. For your
-own binary outcome, coded 0/1, use :doc:`pgs.R <pgs_binary>` with the same
-precomputed scores and a separate binary phenotype file. The R script fits
-logistic mixed models with a family random intercept and reports a
-direct/population ratio on the log-odds coefficient scale.
+The fourth column of ``phenotype.txt``, ``case_status``, is 1 when the
+quantitative phenotype exceeds the sample median and 0 otherwise. The file
+contains 3,000 cases and 3,000 controls. The Python examples above still use
+the quantitative phenotype by default.
+
+The R script matches on both family ID (``FID``) and individual ID (``IID``).
+The tutorial's IBD step can assign new family IDs. Since each individual ID
+is unique in this example, you can copy the family IDs from the scores into
+a new phenotype file. Run this from ``example_data``. If both IDs already
+match in your own files, use your phenotype file directly.
+
+    ``awk 'NR==FNR {family[$2]=$1; next} $2 in family {$1=family[$2]; print}' direct.pgs.txt phenotype.txt > matched_phenotype.txt``
+
+With R and ``lme4`` installed, select the binary outcome by name. This
+command fits both generations on the same individuals. Each model includes a
+family random intercept to account for the similarity between relatives.
+
+    ``pgs.R direct_binary --pgs direct.pgs.txt --phenofile matched_phenotype.txt --phen case_status``
+
+Read the estimates and standard errors from the single effects table.
+
+    ``column -t direct_binary.effects.txt``
+
+* ``1.proband`` gives the change in log odds of being a case per one-unit
+  increase in the individual's PGS in the one-generation model.
+* ``2.proband`` gives the corresponding change holding both parental scores
+  fixed. ``2.paternal`` and ``2.maternal`` give the association with each
+  parent's score holding the other scores fixed. For any of these score
+  coefficients, ``exp(est)`` gives the conditional odds ratio per score unit.
+* ``direct_population_ratio`` divides the two-generation proband log-odds
+  coefficient by the one-generation coefficient. Its ``SE`` accounts for
+  the two estimates coming from the same families.
+
+With the tutorial scores, ``1.proband`` is about 4.63 and ``2.proband`` is
+about 3.58. Their ratio is 0.773 (SE 0.022), so the proband coefficient is
+about 23% smaller on the log-odds scale after including parental scores.
+
+Check the sample used by both models and the ratio status in the diagnostics.
+
+    ``column -t direct_binary.model_info.tsv``
+
+For this run, both rows report 2,494 cases and 2,520 controls across 3,000
+families, with ``ratio_status`` equal to ``ok``. A ``weak_denominator``
+status means that the one-generation
+coefficient is too close to zero for a reliable ratio approximation.
+See :ref:`binary_pgs_outputs` for the covariance files and
+:ref:`binary_pgs_ratio` for details of the ratio calculation.

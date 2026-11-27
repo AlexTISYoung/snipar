@@ -291,14 +291,16 @@ The direct effect and NTCs of the PGS are estimated as fixed effects in a linear
 a random effect that models (residual) phenotypic correlations between siblings.
 By providing a :ref:`GRM <GRM>`, correlations between other relatives can also be modelled. The population effect is estimated
 from a separate regression model that includes only the proband PGS (no control for parental PGS). 
-The estimates and their standard errors are output to :ref:`file <pgs_effects>` along with a separate
+The estimates and their standard errors are output to the :ref:`table <pgs_effects>`
+``<out>.effects.txt``, with columns ``statistic``, ``est``, and ``SE``, along with a separate
 :ref:`file <pgs_vcov>` giving the sampling variance-covariance matrix of the regression coefficients.
 
 When both models are fitted, the script also reports the ratio of the direct
 effect to the population effect, with a standard error that accounts for the
-sampling covariance between the two estimates. The ratio and its status are
-written to ``<out>.direct_population_ratio.txt``. See :ref:`PGS ratio results
-<pgs_ratio>` for how to interpret this file, including cases where the
+sampling covariance between the two estimates. The ``direct_population_ratio``
+row in ``<out>.effects.txt`` contains the ratio and its standard error alongside
+the ``1.proband`` population and ``2.proband`` direct coefficient rows.
+See :ref:`PGS ratio results <pgs_ratio>` for interpretation, including cases where the
 population effect is too close to zero for a reliable ratio.
 
 For individuals with both parents genotyped, ``--grandpar`` can add observed

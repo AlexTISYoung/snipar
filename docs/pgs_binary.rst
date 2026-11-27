@@ -134,9 +134,12 @@ variance estimated at zero is supported and is recorded in the diagnostics.
 Inspect the results
 --------------------
 
-Start with ``OUT.direct_population_ratio.txt`` for the ratio and its status,
-``OUT.1.effects.txt`` and ``OUT.2.effects.txt`` for individual coefficients,
-and ``OUT.model_info.tsv`` for the sample counts and model diagnostics.
+Start with ``OUT.effects.txt`` for all coefficients and the ratio, and
+``OUT.model_info.tsv`` for sample counts, ratio status, and model diagnostics.
+The estimates table is tab-separated with columns ``statistic``, ``est``, and
+``SE``. ``1.proband`` gives the population coefficient, ``2.proband`` gives the
+direct coefficient, and ``direct_population_ratio`` gives their ratio.
+Other fixed effects follow the same ``MODEL.TERM`` naming convention.
 
 .. list-table:: Files written for output prefix OUT
    :header-rows: 1
@@ -144,25 +147,21 @@ and ``OUT.model_info.tsv`` for the sample counts and model diagnostics.
 
    * - Suffix
      - Contents
-   * - ``.1.effects.txt``, ``.2.effects.txt``
-     - Fixed-effect ``term``, ``estimate`` and sampling ``se`` for each generation model.
+   * - ``.effects.txt``
+     - All fixed effects and the direct/population ratio in columns ``statistic``, ``est``, and ``SE``. Model coefficients are named ``1.TERM`` and ``2.TERM``; the ratio is named ``direct_population_ratio``.
    * - ``.1.vcov.txt``, ``.2.vcov.txt``
      - Sampling covariance matrices for all fixed effects.
    * - ``.1_2.cross_vcov.txt``
      - Cross-model sampling covariance, with one-generation terms as rows and two-generation terms as columns.
-   * - ``.direct_population_ratio.txt``
-     - Ratio and SE, component coefficients and SEs, their covariance and sampling correlation, sample and family counts, status and method.
    * - ``.direct_population.vcov.txt``
      - Two-by-two sampling covariance matrix for the population and direct proband coefficients.
    * - ``.1.model_vcov.txt``, ``.2.model_vcov.txt``
      - Model-based ``lme4::vcov`` matrices for comparison with the primary sampling covariance estimates.
    * - ``.model_info.tsv``
-     - Phenotype, sample and case/control counts, exclusions, score scale, family counts, random-intercept SD, boundary indicator, and convergence and likelihood diagnostics for both models.
+     - Phenotype, sample and case/control counts, exclusions, score scale, family counts, random-intercept SD, boundary indicator, convergence and likelihood diagnostics, and ``ratio_status`` and ``ratio_method`` for both models.
 
-The ratio table has columns ``ratio``, ``se``, ``direct``, ``population``,
-``direct_se``, ``population_se``, ``covariance``, ``sampling_correlation``,
-``n``, ``n_families``, ``status`` and ``method``. ``n`` and ``n_families``
-count the shared complete-case individuals and families. The method label is
+In ``.model_info.tsv``, ``n`` and ``n_families`` count the shared
+complete-case individuals and families. ``ratio_method`` is
 ``Laplace_family_cluster_sandwich_delta``. The rows and columns of
 ``.direct_population.vcov.txt`` are ordered ``population``, then ``direct``.
 
@@ -193,7 +192,7 @@ Laplace-approximated likelihood. For interior fits this includes uncertainty
 in the estimated random-intercept SD; at the boundary (SD at most ``1e-4``)
 the calculation uses the fixed-effect block.
 
-Check ``status`` in the ratio table:
+Check ``ratio_status`` in ``OUT.model_info.tsv``:
 
 .. list-table:: Ratio status values
    :header-rows: 1

@@ -91,22 +91,18 @@ Args:
         Print command-line help and exit.
 
 Results:
-    ``OUT.1.effects.txt``, ``OUT.2.effects.txt``
-        Fixed effects for the one- and two-generation models. Each file has
-        columns ``term``, ``estimate``, and ``se``. The ``proband`` row gives
-        the population or direct log-odds coefficient, respectively. Standard
-        errors account for clustering within families.
-
-    ``OUT.direct_population_ratio.txt``
-        The two-generation proband log-odds coefficient divided by the
-        one-generation coefficient, with its delta-method standard error.
-        The table includes both coefficients and their standard errors,
-        sampling covariance and correlation, individual and family counts,
-        status, and method. Check ``status`` when interpreting the ratio.
+    ``OUT.effects.txt``
+        One tab-separated table with columns ``statistic``, ``est``, and ``SE``.
+        Fixed effects use names ``1.TERM`` and ``2.TERM``; ``1.proband`` is
+        the population log-odds coefficient and ``2.proband`` is the direct
+        log-odds coefficient. The ``direct_population_ratio`` row divides the
+        latter by the former, with its delta-method standard error. Standard
+        errors account for clustering within families. Separate per-model
+        effect and ratio estimate files are not written.
 
     ``OUT.1.vcov.txt``, ``OUT.2.vcov.txt``
         Family-cluster sandwich covariance matrices for the fixed effects of
-        each model. Their diagonals give the variances used in the effects files.
+        each model. Their diagonals give the variances used in the effects table.
 
     ``OUT.1_2.cross_vcov.txt``
         Sampling covariance between models, with one-generation terms in rows
@@ -122,6 +118,8 @@ Results:
     ``OUT.model_info.tsv``
         Fit diagnostics for each model, including case and control counts,
         family count, score scaling, convergence, and random-intercept standard deviation.
+        ``ratio_status`` and ``ratio_method`` record the paired ratio's diagnostic
+        status and method; check ``ratio_status`` before interpreting it.
 
 For example input files and guidance on interpreting the ratio, see :doc:`pgs_binary`.
 

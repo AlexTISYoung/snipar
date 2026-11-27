@@ -166,6 +166,30 @@ check_zero_variance <- function() {
     cat("PASS: zero random-intercept variance agrees with the full GLM sandwich\n")
 }
 
+check_pirls_precision <- function() {
+    # Mixed singleton/sibling families with a strong PGS effect expose a stale
+    # Laplace log-determinant at tolPwrss=1e-9 in lme4 1.1-32.
+    set.seed(20261128L)
+    sizes <- sample(c(1L, 2L), 600L, replace = TRUE, prob = c(.33, .67))
+    groups <- rep(seq_along(sizes), sizes)
+    proband <- rnorm(length(sizes), sd = .3)[groups] +
+        rnorm(length(groups), sd = .3)
+    phenotype <- rbinom(length(groups), 1L,
+                        plogis(4.5 * proband + rnorm(length(sizes), sd = 1.5)[groups]))
+    data <- data.frame(phenotype = phenotype, proband = proband, FID = factor(groups))
+    fit <- fit_pgs_binary_model(data, "proband", 200000L, 1L)
+    influence <- logistic_family_influence(fit)
+    stopifnot(influence$diagnostics$pirls_tolerance <= 1e-12,
+              abs(influence$diagnostics$loglik_difference) <= max(1e-5, nrow(data) * 1e-7),
+              influence$diagnostics$max_scaled_score < .005,
+              all(is.finite(influence$influences)))
+    # The independent likelihood guard must still reject an inconsistent fit.
+    inconsistent <- fit
+    inconsistent@devcomp$cmp[["dev"]] <- inconsistent@devcomp$cmp[["dev"]] + 1
+    expect_error(logistic_family_influence(inconsistent), "Laplace likelihood disagrees")
+    cat("PASS: tight PIRLS fit agrees with family likelihood and retains discrepancy guard\n")
+}
+
 write_input <- function(data, path) {
     write.table(data, path, sep = "\t", quote = FALSE, row.names = FALSE, na = "NA")
 }
@@ -194,17 +218,30 @@ read_covariance <- function(path) {
 
 check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_families,
                               expected_direct_terms) {
+    estimates <- read_output(paste0(prefix, ".effects.txt"))
+    stopifnot(identical(names(estimates), c("statistic", "est", "SE")),
+              !anyDuplicated(estimates$statistic),
+              sum(estimates$statistic == "direct_population_ratio") == 1L,
+              !any(file.exists(paste0(prefix, c(".1.effects.txt", ".2.effects.txt",
+                                                ".direct_population_ratio.txt")))))
     effects <- lapply(1:2, function(generation) {
-        read_output(paste0(prefix, ".", generation, ".effects.txt"))
+        rows <- startsWith(estimates$statistic, paste0(generation, "."))
+        output <- estimates[rows, ]
+        output$term <- substring(output$statistic, 3L)
+        output
     })
     covariance <- lapply(1:2, function(generation) {
         read_covariance(paste0(prefix, ".", generation, ".vcov.txt"))
     })
+    expected_statistics <- c(paste0("1.", rownames(covariance[[1L]])),
+                             paste0("2.", rownames(covariance[[2L]])),
+                             "direct_population_ratio")
+    stopifnot(identical(estimates$statistic, expected_statistics))
     for (generation in 1:2) {
-        stopifnot(all(c("term", "estimate", "se") %in% names(effects[[generation]])),
-                  identical(effects[[generation]]$term, rownames(covariance[[generation]])),
-                  identical(rownames(covariance[[generation]]), colnames(covariance[[generation]])))
-        assert_close(effects[[generation]]$se^2, unname(diag(covariance[[generation]])),
+        stopifnot(identical(effects[[generation]]$term, rownames(covariance[[generation]])),
+                  identical(rownames(covariance[[generation]]), colnames(covariance[[generation]])),
+                  all(is.finite(effects[[generation]]$est)))
+        assert_close(effects[[generation]]$SE^2, unname(diag(covariance[[generation]])),
                      1e-10, paste("CLI generation", generation, "SE/covariance agreement"))
         stopifnot(min(eigen(covariance[[generation]], symmetric = TRUE,
                              only.values = TRUE)$values) > -1e-9)
@@ -214,32 +251,18 @@ check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_famil
     }
     stopifnot(all(c("proband", "age", "PC1") %in% effects[[1L]]$term),
               all(expected_direct_terms %in% effects[[2L]]$term))
-    ratio <- read_output(paste0(prefix, ".direct_population_ratio.txt"))
-    stopifnot(all(c("n", "n_families", "status", "method") %in% names(ratio)),
-              nrow(ratio) == 1L, ratio$n == expected_n,
-              ratio$n_families == expected_families,
-              all(is.finite(unlist(ratio[c("ratio", "se", "direct", "population",
-                                           "direct_se", "population_se", "covariance")]))))
-    population_row <- match("proband", effects[[1L]]$term)
-    direct_row <- match("proband", effects[[2L]]$term)
-    assert_close(ratio$population, effects[[1L]]$estimate[population_row], 1e-10,
-                 "CLI population coefficient")
-    assert_close(ratio$direct, effects[[2L]]$estimate[direct_row], 1e-10,
-                 "CLI direct coefficient")
-    assert_close(ratio$population_se, effects[[1L]]$se[population_row], 1e-10,
-                 "CLI population sandwich SE")
-    assert_close(ratio$direct_se, effects[[2L]]$se[direct_row], 1e-10,
-                 "CLI direct sandwich SE")
-    assert_close(ratio$ratio, ratio$direct / ratio$population, 1e-10, "CLI ratio")
+    ratio <- estimates[estimates$statistic == "direct_population_ratio", ]
+    stopifnot(all(is.finite(unlist(ratio[c("est", "SE")]))))
+    population <- effects[[1L]]$est[match("proband", effects[[1L]]$term)]
+    direct <- effects[[2L]]$est[match("proband", effects[[2L]]$term)]
+    assert_close(ratio$est, direct / population, 1e-10, "CLI ratio")
     cross <- read_covariance(paste0(prefix, ".1_2.cross_vcov.txt"))
     stopifnot(identical(rownames(cross), effects[[1L]]$term),
               identical(colnames(cross), effects[[2L]]$term))
-    assert_close(ratio$covariance, cross["proband", "proband"], 1e-10,
-                 "CLI cross-model proband covariance")
     joint <- read_covariance(paste0(prefix, ".direct_population.vcov.txt"))
     joint <- joint[c("population", "direct"), c("population", "direct")]
-    gradient <- c(-ratio$direct / ratio$population^2, 1 / ratio$population)
-    assert_close(ratio$se, sqrt(as.numeric(t(gradient) %*% joint %*% gradient)),
+    gradient <- c(-direct / population^2, 1 / population)
+    assert_close(ratio$SE, sqrt(as.numeric(t(gradient) %*% joint %*% gradient)),
                  1e-10, "CLI delta-method SE reconstruction")
     assert_close(joint["population", "population"],
                  covariance[[1L]]["proband", "proband"], 1e-10,
@@ -247,15 +270,33 @@ check_cli_outputs <- function(prefix, expected_n, expected_cases, expected_famil
     assert_close(joint["direct", "direct"],
                  covariance[[2L]]["proband", "proband"], 1e-10,
                  "CLI joint direct variance")
+    assert_close(joint["population", "direct"], cross["proband", "proband"],
+                 1e-10, "CLI cross-model proband covariance")
     combined <- rbind(cbind(covariance[[1L]], cross),
                       cbind(t(cross), covariance[[2L]]))
     stopifnot(min(eigen(combined, symmetric = TRUE, only.values = TRUE)$values) > -1e-9)
     info <- read_output(paste0(prefix, ".model_info.tsv"))
     stopifnot(nrow(info) == 2L,
-              all(c("n", "cases", "controls", "n_families") %in% names(info)),
+              all(c("n", "cases", "controls", "n_families", "ratio_status",
+                    "ratio_method", "ratio_sampling_correlation") %in% names(info)),
+              identical(info$generation, 1:2),
               all(info$n == expected_n), all(info$cases == expected_cases),
               all(info$controls == expected_n - expected_cases),
-              all(info$n_families == expected_families))
+              all(info$n_families == expected_families),
+              all(info$convergence == "OK"), all(info$nAGQ == 1L),
+              all(info$optimizer == "bobyqa"),
+              all(info$pirls_tolerance <= 1e-12),
+              all(is.finite(info$max_scaled_score)), all(info$max_scaled_score <= .05),
+              length(unique(info$ratio_status)) == 1L,
+              all(info$ratio_status %in% c("ok", "weak_denominator")),
+              all(info$ratio_method == "Laplace_family_cluster_sandwich_delta"))
+    assert_close(info$sandwich_se, sqrt(diag(joint)), 1e-10,
+                 "CLI proband diagnostic SEs")
+    expected_correlation <- joint["population", "direct"] / sqrt(prod(diag(joint)))
+    assert_close(info$ratio_sampling_correlation, rep(expected_correlation, 2L),
+                 1e-10, "CLI ratio sampling-correlation diagnostic")
+    expected_status <- if (abs(population) < 1.96 * sqrt(joint[1L, 1L])) "weak_denominator" else "ok"
+    stopifnot(all(info$ratio_status == expected_status))
     invisible(ratio)
 }
 
@@ -359,5 +400,6 @@ check_cli <- function() {
 check_parser_guards()
 check_numerics()
 check_zero_variance()
+check_pirls_precision()
 check_cli()
 cat("All binary PGS tests passed.\n")

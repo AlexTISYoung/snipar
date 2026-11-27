@@ -246,20 +246,17 @@ onto proband, paternal, and maternal PGS; or proband and combined parental PGS).
 
 When both models are requested, they are fitted on the same individuals with
 finite observations for the two-generation model after covariate preparation.
-The script writes ``<out>.1.effects.txt`` for the population model and
-``<out>.2.effects.txt`` for the model estimating the direct effect and NTCs.
-Use ``--gen_models`` to choose which models to fit; a requested three-generation
-model writes ``<out>.3.effects.txt``.
-The output includes the estimated intercept and covariate coefficients for the regression as well as the PGS 
-effect estimates. 
-
-Each effects file has no header and three columns: the first gives the name of the regression coefficient
-(i.e. proband, for proband PGS; parental, for parental PGS; etc.), the second gives the corresponding regression coefficient,
-and the third gives the standard error. For example, in the two-generation analysis, 
-if your PGS file has columns proband, paternal, maternal,
-then the effects file contains the estimate of the direct effect 
-(regression coefficient on proband PGS when controlling for paternal and maternal PGS), 
-the maternal NTC, and the paternal NTC. 
+All fitted models write their estimates to one tab-separated file,
+``<out>.effects.txt``, with the header ``statistic``, ``est``, ``SE``.
+Coefficient names have a model prefix: ``1.proband`` is the population effect,
+``2.proband`` is the direct effect, and ``2.paternal`` and ``2.maternal`` are
+the parental NTCs. With ``--parsum``, ``2.parental`` gives the combined parental
+score coefficient. Intercepts and covariates use the same ``MODEL.TERM`` naming
+convention. ``--gen_models`` selects which models are included; a requested
+three-generation model contributes rows beginning with ``3.`` to the same file.
+When models 1 and 2 are fitted together, ``direct_population_ratio`` is an
+additional row with the direct/population coefficient ratio and its standard
+error. Separate per-model effect and ratio estimate files are not written.
 
 PGS effects sampling covariance
 -------------------------------
@@ -273,8 +270,10 @@ Direct/population PGS ratio
 ---------------------------
 .. _pgs_ratio_files:
 
-When both one- and two-generation models are requested (the default), the
-script writes three additional files:
+When both one- and two-generation models are requested (the default), read the
+``direct_population_ratio`` row of ``<out>.effects.txt``. Its ``est`` is
+``2.proband`` divided by ``1.proband``, and ``SE`` accounts for covariance
+between those estimates. The script also writes two covariance files:
 
 .. list-table::
    :header-rows: 1
@@ -282,10 +281,6 @@ script writes three additional files:
 
    * - File
      - Contents
-   * - ``<out>.direct_population_ratio.txt``
-     - One result row with a header: the direct/population coefficient ratio,
-       its standard error, both coefficients and their standard errors,
-       sampling covariance and correlation, sample size, status, and method.
    * - ``<out>.1_2.cross_vcov.txt``
      - Covariance between the models' coefficients. Rows are one-generation
        coefficients; columns are two-generation coefficients.
@@ -293,19 +288,21 @@ script writes three additional files:
      - The 2 by 2 covariance matrix for the population and direct proband
        coefficients, in that order.
 
-Read the ``status`` column before interpreting the ratio. A
+Check the ratio status printed in the terminal before interpreting the ratio. A
 ``weak_denominator`` means the population effect is too close to zero for
 the usual ratio approximation to be reliable; other diagnostic statuses can
 leave the ratio or its standard error as ``nan``. See :ref:`pgs_ratio` for
-all columns, statuses, and the standard-error calculation.
+the output columns, statuses, and the standard-error calculation.
 
 Assortative-mating-adjusted PGS effects
 ---------------------------------------
 
 When ``--h2f`` is supplied and the two-generation model is fitted, the
-additional file ``<out>.am_adj_pars.txt`` contains the adjusted estimates and
-standard errors. The usual effects and ratio files still contain the
-unadjusted model results. See :doc:`pgs` and the :ref:`simulation exercise
+``<out>.effects.txt`` table also contains the adjusted estimates and
+standard errors in rows beginning with ``am_adj.``, such as ``am_adj.delta``
+and ``am_adj.rho``. The model-prefixed coefficient rows and
+``direct_population_ratio`` row retain the unadjusted model results.
+No separate adjusted-estimate file is written. See :doc:`pgs` and the :ref:`simulation exercise
 <simulation>` for the required inputs and interpretation.
 
 Correlations between effects
@@ -340,9 +337,10 @@ Binary-outcome PGS results
 --------------------------
 
 The :ref:`pgs.R <pgs.R>` script uses the same main output suffixes for its
-one- and two-generation logistic mixed models. Its effects files have headers
-``term``, ``estimate``, and ``se``; estimates are on the log-odds scale.
-The ratio is calculated from those log-odds coefficients.
+one- and two-generation logistic mixed models. Its single tab-separated
+``<out>.effects.txt`` table has columns ``statistic``, ``est``, and ``SE``.
+``1.proband`` and ``2.proband`` are on the log-odds scale, and the
+``direct_population_ratio`` row is calculated from those coefficients.
 
 The primary effect standard errors and paired-model covariance files use a
 family-cluster sandwich calculation. The R script also writes

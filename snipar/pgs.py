@@ -9,6 +9,7 @@ import snipar.slmm as slmm
 from pysnptools.snpreader import Bed
 import numdifftools as nd
 import warnings
+from pathlib import Path
 from snipar.pgs_am import *
 class pgs(object):
     """Define a polygenic score based on a set of SNPs with weights and ref/alt allele pairs.
@@ -593,7 +594,7 @@ def simulate_r_inf(r, nfam, nsib, npar):
                             bounds=[(-0.999,0.999)])
     return np.array([r_init,optimized[0][0]])
 
-def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025, return_fit=False, sample_ids=None):
+def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False, parsum=False, gparsum=False, outprefix=None, sparse_thresh=0.025, return_fit=False, sample_ids=None, write_effects=True):
     pg.gts = ma.array(pg.gts,fill_value=np.nan)
     pg.gts = pg.gts.filled()
     if ngen in [1,2,3]:
@@ -671,7 +672,9 @@ def fit_pgs_model(y, pg, ngen, ibdrel_path=None, covariates=None, fit_sib=False,
     alpha, alpha_cols = fit['alpha'], fit['cols']
     # Save to file
     if outprefix is not None:
-        write_estimates(outprefix+'.'+str(ngen), alpha, alpha_cols)
+        write_estimates(str(outprefix)+'.'+str(ngen), alpha, alpha_cols, write_effects=False)
+        if write_effects:
+            write_pgs_effects(outprefix, {ngen: (alpha, alpha_cols)})
     return fit if return_fit else (alpha, alpha_cols)
 
 def make_and_fit_model(y, pg, pg_cols, ibdrel_path=None, covariates=None, sparse_thresh=0.025, return_fit=False, sample_ids=None):
@@ -745,13 +748,15 @@ def pgs_model_cross_covariance(population_fit, direct_fit):
     return covariance_1 @ (model_1.Vinv_Z.T @ model_2.Z) @ covariance_2
 
 
-def direct_population_ratio(population_fit, direct_fit, outprefix=None):
+def direct_population_ratio(population_fit, direct_fit, outprefix=None, write_effects=True):
     """Estimate the 2-gen/1-gen proband coefficient ratio and delta-method SE.
 
     Uses the marginal variance from each fitted model and their shared-error
     covariance. A weak denominator is flagged because the delta approximation
     can be inaccurate near zero. Substantially non-positive-semidefinite
     fitted covariance estimates are flagged and produce an undefined SE.
+    With outprefix, writes cross/joint covariance files and one effects table
+    containing both models and the ratio, unless write_effects is False.
     """
     cross = pgs_model_cross_covariance(population_fit, direct_fit)
     pop_index = list(population_fit['cols']).index('proband')
@@ -789,9 +794,8 @@ def direct_population_ratio(population_fit, direct_fit, outprefix=None):
     print('Direct/population PGS ratio: {} (SE {}); {}'.format(
         result['ratio'], result['se'], result['status']))
     if outprefix is not None:
-        with open(outprefix + '.direct_population_ratio.txt', 'w') as output:
-            output.write('\t'.join(result) + '\n')
-            output.write('\t'.join(str(value) for value in result.values()) + '\n')
+        outprefix = str(outprefix)
+        Path(outprefix).parent.mkdir(parents=True, exist_ok=True)
         cross_out = np.vstack((
             np.hstack((['term'], direct_fit['cols'])),
             np.column_stack((population_fit['cols'], cross))))
@@ -799,34 +803,68 @@ def direct_population_ratio(population_fit, direct_fit, outprefix=None):
         joint_out = np.vstack((['term', 'population', 'direct'],
                                np.column_stack((['population', 'direct'], joint))))
         np.savetxt(outprefix + '.direct_population.vcov.txt', joint_out, fmt='%s', delimiter='\t')
+        if write_effects:
+            write_pgs_effects(outprefix, {
+                1: (population_fit['alpha'], population_fit['cols']),
+                2: (direct_fit['alpha'], direct_fit['cols']),
+            }, ratio=result)
     return result
 
 
-def fit_pgs_model_pair(y, pg, **kwargs):
+def fit_pgs_model_pair(y, pg, write_effects=True, **kwargs):
     """Fit both generations on the full model's complete cases and their ratio.
 
     The full model is fitted first so absent parental scores cannot change the
-    sample used for the population coefficient. Existing single-model return
-    values and effect files are unchanged.
+    sample used for the population coefficient. Existing return values are
+    retained; output combines both models and the ratio in one effects table.
     """
-    direct_fit = fit_pgs_model(y, pg, 2, return_fit=True, **kwargs)
+    direct_fit = fit_pgs_model(y, pg, 2, return_fit=True, write_effects=False, **kwargs)
     population_kwargs = dict(kwargs, sample_ids=direct_fit['ids'])
-    population_fit = fit_pgs_model(y, pg, 1, return_fit=True,
+    population_fit = fit_pgs_model(y, pg, 1, return_fit=True, write_effects=False,
                                     **population_kwargs)
     ratio = direct_population_ratio(population_fit, direct_fit,
-                                    outprefix=kwargs.get('outprefix'))
+                                    outprefix=kwargs.get('outprefix'),
+                                    write_effects=write_effects)
     return population_fit, direct_fit, ratio
 
-def write_estimates(outprefix, alpha, cols):
+def write_pgs_effects(outprefix, models, ratio=None, adjusted=None):
+    """Write all requested coefficient estimates and SEs to one table.
+
+    models maps generation numbers to the (alpha, column_names) return values
+    of fit_pgs_model. Optional adjusted is the (estimates, SEs) pair returned
+    by am_adj_2gen. Covariance matrices are written separately by the fitters.
+    """
+    rows = []
+    for generation in sorted(models):
+        alpha, cols = models[generation]
+        for name, estimate, se in zip(cols, alpha[0], np.sqrt(np.diag(alpha[1]))):
+            statistic = '{}.{}'.format(generation, name) if generation != '' else str(name)
+            rows.append((statistic, estimate, se))
+    if ratio is not None:
+        rows.append(('direct_population_ratio', ratio['ratio'], ratio['se']))
+    if adjusted is not None:
+        estimates, ses = adjusted
+        for name in ('delta', 'alpha', 'rk', 'k', 'r', 'h2_eq', 'rho',
+                     'alpha_delta', 'v_eta_delta'):
+            rows.append(('am_adj.' + name, estimates[name], ses[name]))
+    outprefix = str(outprefix)
+    Path(outprefix).parent.mkdir(parents=True, exist_ok=True)
+    print('Saving effect estimates to ' + outprefix + '.effects.txt')
+    with open(outprefix + '.effects.txt', 'w') as output:
+        output.write('statistic\test\tSE\n')
+        for name, estimate, se in rows:
+            values = [str(float(value)) if np.isfinite(value) else 'NA'
+                      for value in (estimate, se)]
+            output.write('\t'.join([name] + values) + '\n')
+
+
+def write_estimates(outprefix, alpha, cols, write_effects=True):
+    """Write a model covariance, optionally with its coefficient table."""
+    outprefix = str(outprefix)
+    Path(outprefix).parent.mkdir(parents=True, exist_ok=True)
+    if write_effects:
+        write_pgs_effects(outprefix, {'': (alpha, cols)})
     cols = cols.reshape((cols.shape[0],1))
-    # Find cols
-    alpha_out = np.zeros((alpha[0].shape[0], 2))
-    alpha_out[:, 0] = alpha[0]
-    alpha_out[:, 1] = np.sqrt(np.diag(alpha[1]))
-    print('Saving effect estimates to '+outprefix+ '.effects.txt')
-    np.savetxt(outprefix + '.effects.txt',
-                np.hstack((cols, np.array(alpha_out, dtype='S'))),
-                delimiter='\t', fmt='%s')
     vcols = np.zeros((1,cols.shape[0]+1),dtype=cols.dtype)
     vcols[0,1:vcols.shape[1]] = cols[:,0]
     alpha_cov_out = np.vstack((vcols, np.hstack((cols,alpha[1]))))
@@ -947,7 +985,7 @@ def am_adj_2gen(estimates, estimate_cols, h2f, h2f_se, rk=None, rk_se=None, pg=N
     ##### Estimate equilibrium quantities ######
     print('Computing equilibrium adjusted quantities')
     adj_estimates, adj_ses = am_adj_2gen_calc(estimate[0,0], np.sqrt(estimate_cov[0,0]), 
-                                              estimate[1,0], np.sqrt(estimate_cov[0,0]), 
+                                              estimate[1,0], np.sqrt(estimate_cov[1,1]),
                                               estimate_cov[0,1]/np.sqrt(estimate_cov[0,0]*estimate_cov[1,1]), 
                                               h2f, h2f_se, rk, rk_se, verbose=True)
     return adj_estimates, adj_ses

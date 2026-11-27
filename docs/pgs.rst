@@ -168,7 +168,10 @@ in the population residual are orthogonal to that residual. Each model's
 own marginal coefficient variances are retained. As with the model's GLS
 standard errors, uncertainty in estimated variance components is not included.
 
-Three additional tab-delimited files are written:
+The ``direct_population_ratio`` row in ``analysis.effects.txt`` contains the
+ratio in ``est`` and its standard error in ``SE``. The component estimates
+are the ``1.proband`` and ``2.proband`` rows in the same table.
+Two additional tab-delimited covariance files are written:
 
 .. list-table:: Paired-model output files
    :header-rows: 1
@@ -176,20 +179,16 @@ Three additional tab-delimited files are written:
 
    * - Suffix
      - Contents
-   * - ``.direct_population_ratio.txt``
-     - Header and one result row with the ratio, its standard error, coefficient estimates, covariance, sample size, and status.
    * - ``.1_2.cross_vcov.txt``
      - Cross-model covariance matrix; rows are model 1 terms and columns are model 2 terms, including intercept and covariates.
    * - ``.direct_population.vcov.txt``
      - The 2-by-2 covariance matrix for the population and direct proband coefficients, in that order.
 
-The ratio file has columns ``ratio``, ``se``, ``direct``, ``population``,
-``direct_se``, ``population_se``, ``covariance``, ``sampling_correlation``,
-``n``, ``status``, and ``method``. ``n`` is the number of individuals used by
-both models. The method is recorded as
-``GLS_shared_full_model_residual_delta``.
-
-Check ``status`` before interpreting the ratio:
+The terminal reports the ratio status and warns when it is not ``ok``.
+The Python return value also retains the status and method
+(``GLS_shared_full_model_residual_delta``); these are not additional columns
+in the three-column estimates table. Check the reported status before
+interpreting the ratio:
 
 .. list-table:: Ratio status values
    :header-rows: 1
@@ -210,20 +209,26 @@ Check ``status`` before interpreting the ratio:
    * - ``inconsistent_marginal_covariance``
      - The joint covariance matrix has a materially negative eigenvalue. The standard error is ``nan``; the ratio can still be reported.
 
-The script emits a warning for every status other than ``ok``. Running only
-model 1 or model 2 produces that model's effect files without the paired-model
-ratio or cross-covariance files.
+Running only model 1 or model 2 writes that model's rows to the estimates
+table, without the ``direct_population_ratio`` row or paired-model covariance
+files.
 
 Effect and covariance files
 ---------------------------
 
-For each requested generation ``N``, ``analysis.N.effects.txt`` contains
-three tab-delimited columns without a header: coefficient name, estimate,
-and standard error. It includes the intercept, covariates, and score terms.
-``analysis.N.vcov.txt`` is the corresponding sampling variance-covariance
-matrix with row and column names. For example, ``analysis.2.effects.txt``
-contains the direct coefficient in its ``proband`` row and either separate
-``paternal``/``maternal`` NTCs or a single ``parental`` coefficient.
+``analysis.effects.txt`` collects all requested estimates in three
+tab-separated columns with a header: ``statistic``, ``est``, and ``SE``.
+Each coefficient is named ``N.TERM``, where ``N`` is the generation model.
+For example, ``1.proband`` is the population effect and ``2.proband`` is the
+direct effect; ``2.paternal`` and ``2.maternal`` give separate NTCs, or
+``2.parental`` gives the combined parental-score coefficient with ``--parsum``.
+Intercepts and covariates follow the same naming convention. Requested model 3
+coefficients begin with ``3.``. The ratio row is named
+``direct_population_ratio``.
+
+``analysis.N.vcov.txt`` remains the sampling variance-covariance matrix for
+model ``N``, with coefficient names labelling rows and columns. Separate
+per-model effect tables and a separate ratio estimate file are no longer written.
 
 Assortative mating adjustments
 ------------------------------
@@ -253,12 +258,15 @@ external ``--rk`` is needed when no such observed parental pairs are available.
 
     ``pgs.py adjusted --pgs scores.pgs.txt --phenofile phenotype.txt --h2f 0.42,0.02 --rk 0.10,0.01``
 
-``adjusted.am_adj_pars.txt`` has columns ``parameter``, ``estimate``, and
-``SE``. Its rows are ``delta``, ``alpha``, ``rk``, ``k``, ``r``, ``h2_eq``,
-``rho``, ``alpha_delta``, and ``v_eta_delta``. Here ``delta`` and ``alpha``
-are the standardised direct coefficient and average parental NTC; ``rho``
-is the direct/population ratio predicted from assortative mating alone. It
-is different from the empirical paired-model ``ratio`` described above.
+The adjusted estimates are added to ``adjusted.effects.txt`` with names
+``am_adj.delta``, ``am_adj.alpha``, ``am_adj.rk``, ``am_adj.k``, ``am_adj.r``,
+``am_adj.h2_eq``, ``am_adj.rho``, ``am_adj.alpha_delta``, and
+``am_adj.v_eta_delta``. They use the same ``statistic``, ``est``, and ``SE``
+columns as the regression coefficients and ratio; no separate adjusted-estimate
+file is written. ``am_adj.delta`` and ``am_adj.alpha`` are the standardised
+direct coefficient and average parental NTC. ``am_adj.rho`` is the
+direct/population ratio predicted from assortative mating alone, distinct from
+the empirical ``direct_population_ratio`` row in the same table.
 See the :ref:`simulation exercise <simulation>` for interpretation of the
 equilibrium quantities.
 
