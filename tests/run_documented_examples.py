@@ -38,7 +38,10 @@ def check_gwas(directory, names):
         with h5py.File(directory / f"{name}.sumstats.hdf5") as h5:
             assert np.isfinite(h5["estimate"][:]).all(), name
             variances = np.diagonal(h5["estimate_covariance"][:], axis1=1, axis2=2)
-            np.testing.assert_allclose(variances, h5["estimate_ses"][:] ** 2)
+            ses = h5["estimate_ses"][:]
+            # SEs and covariances are rounded separately when written to HDF5.
+            epsilon = max(np.finfo(variances.dtype).eps, np.finfo(ses.dtype).eps)
+            np.testing.assert_allclose(variances, ses ** 2, rtol=4 * epsilon)
 
 
 def check_pgs(directory, prefix):
