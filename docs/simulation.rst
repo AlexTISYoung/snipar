@@ -4,7 +4,11 @@
 Simulation Exercise
 ===================
 
-Exercise on simulating data using the simulate.py script and performing family-based polygenic score analysis. This assumes you are working in a bash environment on a unix based machine, but similar steps should work in different environments. 
+Exercise on simulating data using the simulate.py script and performing family-based polygenic score analysis. This assumes you are working in a bash environment on a unix based machine, but similar steps should work in different environments.
+Activate the environment containing *snipar* before starting. The genotype merging and
+sample removal steps also require `PLINK 1.9 <https://www.cog-genomics.org/plink/1.9/>`_
+available as ``plink`` on your PATH. The final binary-phenotype example requires R
+and the R package ``lme4``.
 
 Simulating data
 --------------------
@@ -33,11 +37,13 @@ Please change your working directory to sim/:
 
     ``cd sim``
 
-The genotype data (chr_1.bed) has been simulated so that there are 3000 independent families, each with two siblings genotyped.
+The genotype data (chr_1.bed) contains 3000 families, each with two siblings genotyped.
+The supplied GRM includes the sibling and cousin relationships in the final
+generation.
 
 The pedigree file (pedigree.txt) contains the pedigree for all simulated generations. The pedigree has columns:
-FID, IID, Father_ID, MOTHER_ID, SEX, PHENO, FATHER_PHENO, MOTHER_PHENO, DIRECT, FATHER_DIRECT, MOTHER_DIRECT. 
-The FID and IID columns are the family and individual IDs, respectively. The Father_ID and MOTHER_ID columns are the IDs of the parents of the individual.
+FID, IID, FATHER_ID, MOTHER_ID, SEX, PHENO, FATHER_PHENO, MOTHER_PHENO, DIRECT, FATHER_DIRECT, MOTHER_DIRECT.
+The FID and IID columns are the family and individual IDs, respectively. The FATHER_ID and MOTHER_ID columns are the IDs of the parents of the individual.
 The FATHER_PHENO and MOTHER_PHENO columns are the phenotype values of the parents, and the DIRECT, FATHER_DIRECT, and MOTHER_DIRECT columns are the direct genetic effect components of the individual, father, and mother, respectively.
 The FIDs follow the format ``generation_family``, and the IIDs follow the format ``generation_family_individual``.
 So if you look at the end of pedigree.txt (e.g. using ``tail pedigree.txt``), you should see
@@ -74,7 +80,7 @@ Since the genotype data of the final generation contains 3000 sibling pairs, but
 using genetic differences between siblings to estimate direct genetic effects (see `Guan et al. <https://www.nature.com/articles/s41588-025-02118-0>`_).
 The summary statistics are output to a gzipped text :ref:`sumstats file <sumstats_text>`: chr_1_sibdiff.sumstats.gz.
 
-We can combine the final two generations' genotype data into one .bed file using this command. This assumes you have a plink binary executable available in your environment. If you do not, you can obtain one `here <https://www.cog-genomics.org/plink/>`_:
+We can combine the final two generations' genotype data into one .bed file using PLINK 1.9:
 
     ``plink --bfile chr_1 --bmerge chr_1_par --out chr_1_combined``
 
@@ -312,12 +318,15 @@ we multiply the equilibrium heritability by :math:`(1-r_\delta)`, where :math:`r
 the last row. The equilibrium heritability should be around 0.59, and :math:`r_\delta` should be around 0.29, so the heritability as estimated
 by sib-regression, RDR, MZ-DZ twin comparisons should be around :math:`h^2_f \approx (1-0.29) \times 0.59=0.42`. 
 
-We can now perform two-generation PGI analysis accounting for assortative mating using the following command, 
-with the h2f argument set to the number computed from your VCs.txt file as outlined above (here we use 0.42):
+Compute this value from the final row of your own simulation output:
 
-    ``pgs.py direct_v1_obs --pgs direct_v1_obs.pgs.txt --phenofile phenotype.txt --h2f 0.42,0``
+    ``h2f=$(awk 'END {print ($1 / $2) * (1 - $3)}' VCs.txt)``
 
-This script will take the input heritability estimate (0.42) and the standard error of the estimate (here 0 since we used the true value)
+We can now perform two-generation PGI analysis accounting for assortative mating:
+
+    ``pgs.py direct_v1_obs --pgs direct_v1_obs.pgs.txt --phenofile phenotype.txt --h2f "$h2f,0"``
+
+This script will take the input heritability estimate (approximately 0.42) and its standard error (here 0 since we used the simulated components)
 to estimate the fraction of heritability the PGI would explain in a random mating population,
 :math:`k`, which should be around 0.5; the correlation between parents' direct genetic effect components, :math:`r_\delta`, 
 which should be around 0.29; the equilibrium heritability, :math:`h^2_\text{eq}`, which should be around 0.59; 
@@ -347,11 +356,17 @@ For a binary phenotype, the :doc:`pgs_binary` script fits one- and two-generatio
 logistic mixed models with a family random intercept. It uses the same complete
 cases in both models and reports the direct/population coefficient ratio and
 its standard error.
+The standard errors cluster by family ID; cousin relationships between families
+in ``last_gen_rel.seg`` are not modelled by this binary analysis.
 
 You can reuse direct_v1.pgs.txt with a separate binary phenotype file containing
 columns ``FID IID case_status``, where ``case_status`` is coded 0 or 1. Both
-values must occur in the analysis sample. The phenotype.txt file generated in
-this exercise contains a continuous phenotype; use it with ``pgs.py`` as above.
+values must occur in the analysis sample. For this demonstration, create an
+binary phenotype file by splitting the simulated continuous phenotype at its
+median.
+
+    ``Rscript -e 'p <- read.table("phenotype.txt", header=TRUE); p$case_status <- as.integer(p$phenotype > median(p$phenotype)); write.table(p[c("FID", "IID", "case_status")], "binary_phenotype.txt", quote=FALSE, row.names=FALSE)'``
+
 With R and the R package ``lme4`` installed, run the installed ``pgs.R`` command:
 
     ``pgs.R direct_v1_binary --pgs direct_v1.pgs.txt --phenofile binary_phenotype.txt --phen case_status --parsum``
@@ -395,10 +410,13 @@ siblings per family, measured before selection on their own phenotypes.
   surviving, compared with 100% at the optimum.
 * ``--nfam 200`` requests 200 final families. ``--selection_nfam`` sets the
   initial number of candidates of each sex (default four times ``--nfam``,
-  or 800 here). Increase the pool if too few survive. With phased ``--bgen``
-  input, the haplotypes determine the pool size. For simulated genotypes,
-  ``--maf`` fixes the allele frequency across SNPs and ``--min_maf`` sets the
-  lower bound when frequencies are drawn (default 0.05).
+  or 800 here). Increase the pool if too few survive. With phased BGEN input
+  (for example, ``--bgen phased_chr_@ --chr_range 1``), the haplotypes determine
+  the pool size, so omit ``--selection_nfam``. SNP positions must use GRCh38
+  coordinates covered by the bundled deCODE map. The simulator drops unmapped SNPs.
+  For simulated genotypes, ``--maf`` fixes the allele frequency across SNPs
+  and ``--min_maf`` sets the lower bound when frequencies are drawn (default
+  0.05).
 * ``--save_par_gts`` adds the final parental generation's PLINK files to the
   offspring genotypes saved by default.
 

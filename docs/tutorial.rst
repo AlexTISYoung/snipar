@@ -215,8 +215,10 @@ those three results from ``effect_corrs.txt`` by row name, run
 
     ``awk 'NR == 1 || $1 == "r_direct_population" || $1 == "r_direct_avg_NTC" || $1 == "sqrt_var_ratio_population_direct"' effect_corrs.txt``
 
-Here is an example from a run on the 1,000 retained tutorial SNPs. The first
-two rows describe alignment and the third describes relative magnitude.
+Here is an example from a fresh run of the BED and unphased-imputation commands
+above, using all 1,000 tutorial SNPs. The first two rows describe alignment
+and the third describes relative magnitude. Alternate BGEN or imputation
+runs can give slightly different estimates.
 
 .. list-table::
    :header-rows: 1
@@ -226,20 +228,20 @@ two rows describe alignment and the third describes relative magnitude.
      - SE
    * - ``r_direct_population``
      - 0.895
-     - 0.024
+     - 0.025
    * - ``r_direct_avg_NTC``
-     - 0.477
-     - 0.107
+     - 0.471
+     - 0.114
    * - ``sqrt_var_ratio_population_direct``
-     - 1.532
-     - 0.075
+     - 1.523
+     - 0.078
 
 Direct and population effects track one another closely across these SNPs.
 Direct effects also correlate positively with average NTCs, as expected in
-this simulation. The ratio of 1.532 means the population effects are about
-53% larger on the root-mean-square scale. The order of the names matters:
-``sqrt_var_ratio_direct_population`` is the reciprocal (0.653 here), and
-``var_ratio_direct_population`` is the square of that reciprocal (0.426).
+this simulation. The ratio of 1.523 means the population effects are about
+52% larger on the root-mean-square scale. The order of the names matters:
+``sqrt_var_ratio_direct_population`` is the reciprocal (0.657 here), and
+``var_ratio_direct_population`` is the square of that reciprocal (0.431).
 
 The estimates use all retained SNPs. To calculate their standard errors,
 the analysis omits each of 200 genomic blocks in turn and refits the weights
@@ -374,9 +376,10 @@ Read the estimates and standard errors from the single effects table.
   coefficient by the one-generation coefficient. Its ``SE`` accounts for
   the two estimates coming from the same families.
 
-With the tutorial scores, ``1.proband`` is about 4.63 and ``2.proband`` is
-about 3.58. Their ratio is 0.773 (SE 0.022), so the proband coefficient is
-about 23% smaller on the log-odds scale after including parental scores.
+With the scores from this BED-based run, ``1.proband`` is about 4.63 and
+``2.proband`` is about 3.59. Their ratio is 0.777 (SE 0.023), so the proband
+coefficient is about 22% smaller on the log-odds scale after including
+parental scores. Alternate imputation runs can change these numbers slightly.
 
 Check the sample used by both models and the ratio status in the diagnostics.
 
