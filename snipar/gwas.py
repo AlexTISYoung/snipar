@@ -211,13 +211,12 @@ def _restore_plans(plans):
                                    for field in plan)) for plan in plans)
 
 
-def _fit_model(y, components, sigmas, covariates, family_labels, add_jitter, solver='lu'):
+def _fit_model(y, components, sigmas, covariates, family_labels, add_jitter):
     if len(components) == len(sigmas) == 2:
         # A leading GRM may be provided solely for imputation.
         components = components[1:]
     return slmm.LinearMixedModel(y, components, sigmas, covariates, add_intercept=True,
-                                 add_jitter=add_jitter, family_labels=family_labels,
-                                 snp_solver=solver)
+                                 add_jitter=add_jitter, family_labels=family_labels)
 
 
 def _readers(stack, options, plans, sibling_plans):
@@ -230,7 +229,7 @@ def _readers(stack, options, plans, sibling_plans):
 
 
 def _start_process_worker(options, plans, sibling_plans, y, components, sigmas, covar,
-                          family_labels, add_jitter, threads, processor, solver, model_ids, variants):
+                          family_labels, add_jitter, threads, processor, model_ids, variants):
     from numba import config, set_num_threads
 
     set_num_threads(min(threads, config.NUMBA_NUM_THREADS))
@@ -240,7 +239,7 @@ def _start_process_worker(options, plans, sibling_plans, y, components, sigmas, 
         reader, sibling = _readers(stack, options, _restore_plans(plans), _restore_plans(sibling_plans))
         arrays = tuple(tuple(a.view() for a in component) for component in components)
         model = _fit_model(y.view(), arrays, sigmas, None if covar is None else covar.view(),
-                           None if family_labels is None else family_labels.view(), add_jitter, solver)
+                           None if family_labels is None else family_labels.view(), add_jitter)
     except BaseException:
         stack.close()
         raise
@@ -347,7 +346,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                        fit_sib=False, sib_diff=False, parsum=False, impute_unrel=False, max_missing=5, min_maf=0.01, 
                        no_hdf5_out=False, no_txt_out=False, cpus=1, debug=False, robust=False, trios_sibs=False, trios_only=False,
                        add_jitter=False, standard_gwas=False, batch_size=None, *,
-                       threads=1, family_labels=None, solver='lu', inference_model=None):
+                       threads=1, family_labels=None, inference_model=None):
     if (bedfile is None) == (bgenfile is None):
         raise ValueError('Must supply exactly one BED or BGEN genotype file')
     if cpus < 1 or threads < 1:
@@ -471,7 +470,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
         if workers == 1 or debug or use_threads:
             model = inference_model
             if model is None:
-                model = _fit_model(response, varcomp_lst, sigmas, covar, family_labels, add_jitter, solver)
+                model = _fit_model(response, varcomp_lst, sigmas, covar, family_labels, add_jitter)
             if workers == 1 or debug:
                 state = dict(model=model, reader=reader, sibling_reader=sibling_reader, model_ids=ids)
                 def task(batch):
@@ -510,7 +509,7 @@ def process_chromosome(chrom_out, y, varcomp_lst,
                            for component in varcomp_lst)
             initializer_args = (options, _share_plans(plans), _share_plans(sibling_plans),
                                 _share_array(response), shared, sigmas, _share_array(covar),
-                                _share_array(labels), add_jitter, threads, processor, solver, _share_array(ids),
+                                _share_array(labels), add_jitter, threads, processor, _share_array(ids),
                                 tuple(_share_array(array) for array in matched))
             with worker_environment(threads), ProcessPoolExecutor(
                 max_workers=workers, mp_context=get_context('spawn'), initializer=_start_process_worker,

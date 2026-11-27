@@ -51,8 +51,6 @@ parser.add_argument('--cpus', type=int, help='Number of cpus to distribute batch
 parser.add_argument('--threads',type=int,help='Number of threads to use per CPU.',default=1)
 parser.add_argument('--batch_size', type=int, default=None,
                     help='Maximum SNPs per batch. The default selects a batch size from available memory.')
-parser.add_argument('--snp-solver', choices=('lu', 'cg'), default='lu',
-                    help='Use sparse LU or sibship-preconditioned CG for SNP regressions with a GRM.')
 parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 output of summary statistics',default=False)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
@@ -231,7 +229,7 @@ def _main(args, cpus, threads):
     varcomp_lst = () if args.no_grm_var else ((grm_data, grm_row_ind, grm_col_ind),)
     if not family_only and not args.no_sib_var:
         varcomp_lst += (slmm.build_sib_arr(fam_labels),)
-    family_labels = fam_labels if family_only or args.snp_solver == 'cg' else None
+    family_labels = fam_labels if family_only else None
     if args.vc_list is not None:
         sigmas = tuple(args.vc_list)
         if len(sigmas) != len(varcomp_lst) + 1 + family_only:
@@ -278,7 +276,7 @@ def _main(args, cpus, threads):
     if cpus == 1 or (family_only and args.bed is not None and not args.robust and not trios_sibs):
         inference_model = _fit_model(y.gts.data.reshape(-1), varcomp_lst, sigmas,
                                      None if covariates is None else covariates.gts.data,
-                                     family_labels, False, args.snp_solver)
+                                     family_labels, False)
     ######### Process chromosomes ###########
     start = time.time()
     for i in range(chroms.shape[0]):
@@ -301,7 +299,7 @@ def _main(args, cpus, threads):
                            max_missing=args.max_missing, min_maf=args.min_maf,  
                            no_hdf5_out=args.no_hdf5_out, no_txt_out=False, cpus=cpus, add_jitter=False,
                            batch_size=args.batch_size, threads=threads, family_labels=family_labels,
-                           solver=args.snp_solver, inference_model=inference_model)
+                           inference_model=inference_model)
         del chromosome_ped, imp_fams
     print(f'Time used: {time.time() - start:.2f}s')
 

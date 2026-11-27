@@ -34,26 +34,6 @@ def test_structured_covariance_matches_sparse_reml_and_snp_gls(fixed_effects):
     assert blocked._component_mats is None
 
 
-def test_preconditioned_sparse_gls_matches_lu_on_common_outputs():
-    rng = np.random.default_rng(933)
-    rows = np.arange(20, dtype='uint32')
-    labels = np.repeat(np.arange(10), 2)
-    diagonal = (np.ones(20), rows, rows)
-    adjacency = (np.full(18, .1), rows[2:], rows[:-2])
-    component = tuple(np.concatenate(parts) for parts in zip(diagonal, adjacency))
-    components = [component, build_sib_arr(labels)]
-    y = rng.normal(size=20)
-    covariates = rng.normal(size=(20, 2))
-    effects = rng.normal(size=(20, 2, 8)).astype(np.float32)
-    dense = LinearMixedModel(y, components, (.41, .31, .5), covariates, True)
-    iterative = LinearMixedModel(y, components, (.41, .31, .5), covariates, True,
-                                  family_labels=labels, snp_solver='cg')
-    for actual, expected in zip(iterative.fit_snps_eff(effects), dense.fit_snps_eff(effects)):
-        assert_allclose(actual, expected, rtol=2e-8, atol=1e-9)
-    assert '_cached_V_lu' not in iterative.__dict__
-    assert_allclose(iterative.reml_loglik, dense.reml_loglik, atol=1e-12)
-
-
 @pytest.mark.parametrize('loci,workers,maximum', [(1, 4, None), (37, 3, 5), (29, 4, 1), (0, 1, None)])
 def test_batch_slices_cover_each_variant_once(loci, workers, maximum):
     blocks = list(_batch_slices(loci, workers, maximum))

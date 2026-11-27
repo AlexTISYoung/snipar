@@ -17,10 +17,7 @@ sizing phased blocks.
 
 The family-only GWAS and quantitative PGS mixed models solve their
 sibship covariance directly. For GWAS with a general relationship matrix,
-``--snp-solver cg`` selects conjugate gradient with a sibship-block
-preconditioner and a checked solve residual. This option can help when
-sparse LU creates many new nonzeros during factorization. REML estimation
-with a general relationship matrix still uses its exact determinant.
+SNP regressions use sparse LU, and REML estimation uses the exact determinant.
 Supplying previously fitted variance components with ``--vc_list``
 skips that estimation step.
 

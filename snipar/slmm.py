@@ -395,7 +395,7 @@ class LinearMixedModel:
                  add_intercept: bool = False,
                  add_jitter: bool = False,
                  drop_collinear_covariates: bool = False, *,
-                 family_labels: np.ndarray | None = None, snp_solver: str = 'lu') -> None:
+                 family_labels: np.ndarray | None = None) -> None:
         """Initialize a LinearMixedModel instance.
 
         Args:
@@ -407,10 +407,7 @@ class LinearMixedModel:
             add_jitter: (bool): a boolean indicating whether to add jitter to the diagonal of the covariance matrix or not.
             drop_collinear_covariates: (bool): reduce nuisance covariates to independent columns before fitting.
             family_labels: represent the family covariance implicitly when no
-                sparse components are provided. For CG, supply the families
-                used to construct the preconditioner.
-            snp_solver: use sparse LU or sibship-preconditioned CG for SNP solves.
-                REML always uses the exact covariance determinant.
+                sparse components are provided.
 
         Raises:
             ValueError: y should be a 1-d array.
@@ -444,14 +441,9 @@ class LinearMixedModel:
             self.Z = np.ones((self.n, 1))
         # self.logger.info(f'#individuals: {self.n}.')
             
-        if snp_solver not in ('lu', 'cg'):
-            raise ValueError("SNP solver must be 'lu' or 'cg'")
         if family_labels is not None and len(family_labels) != self.n:
             raise ValueError('Provide one family label per sample')
-        if snp_solver == 'cg' and family_labels is None:
-            raise ValueError('Sibship-preconditioned CG needs family labels')
         self._family = None
-        self._snp_families = family_labels if snp_solver == 'cg' else None
         if family_labels is not None and not len(varcomp_arr_lst):
             self._family = _FamilyPartition(family_labels)
             self._component_mats = None
@@ -941,7 +933,7 @@ class LinearMixedModel:
             gts = gts[:, :1, :]
         if self._family is None:
             precision_y, projection = self._snp_precision_terms
-            alpha, covariance, _ = _fit_gls_batch(gts, self._snp_factor, precision_y, projection)
+            alpha, covariance, _ = _fit_gls_batch(gts, self.V_lu, precision_y, projection)
         else:
             alpha, covariance = _fit_family_gls(gts, self.V_lu, *self._family_snp_terms)
         return alpha, covariance, np.sqrt(np.diagonal(covariance, axis1=1, axis2=2))
@@ -959,27 +951,14 @@ class LinearMixedModel:
 
     @cached_property_depends_on('_varcomps')
     def _snp_precision_terms(self):
-        return _precision_terms(self._snp_factor, self.y, self.Z if self.has_covar else None)
-
-    @cached_property_depends_on('_varcomps')
-    def _snp_factor(self):
-        if self._snp_families is not None and self._family is None:
-            from snipar.gwas_cg import SibshipCG
-
-            return SibshipCG(self.V, self._snp_families, fallback=True)
-        return self.V_lu
+        return _precision_terms(self.V_lu, self.y, self.Z if self.has_covar else None)
 
     def _factor_for_rows(self, rows):
         if self._family is not None:
             sibling, residual = self._varcomps
             partition = _FamilyPartition(self._family.codes[rows])
             return _FamilyFactor(partition, sibling, residual + self.jitter)
-        covariance = self.V[rows, :][:, rows]
-        if self._snp_families is not None:
-            from snipar.gwas_cg import SibshipCG
-
-            return SibshipCG(covariance, np.asarray(self._snp_families)[rows], fallback=True)
-        return splu(covariance)
+        return splu(self.V[rows, :][:, rows])
 
     def robust_est(self, G: gtarray, G_sib: gtarray):
         """Combine design-specific direct effects using their sampling covariance."""

@@ -1,8 +1,7 @@
-"""Generate repeatable large BED inputs and compare sparse GWAS linear solves."""
+"""Generate repeatable large BED inputs for scaling benchmarks."""
 
 import argparse
 from pathlib import Path
-from time import perf_counter
 
 import numpy as np
 
@@ -75,39 +74,6 @@ def imputation_fixture(destination, families, variants):
             packed.tofile(bed)
 
 
-def solver_case(n, count, links, solver):
-    from scipy.sparse import coo_matrix
-    from scipy.sparse.linalg import splu
-    from snipar.gwas_cg import SibshipCG
-    from snipar.resources import limit_native_threads
-
-    rng = np.random.default_rng(1903)
-    pairs = np.arange(n // 2) * 2
-    lines = np.arange(n - 1)
-    row = np.concatenate((pairs, lines, rng.integers(0, n, size=n * links)))
-    col = np.concatenate((pairs + 1, lines + 1, rng.integers(0, n, size=n * links)))
-    weight = np.concatenate((np.full(len(pairs), .9), np.full(len(lines), .03),
-                             np.full(n * links, .03)))
-    off_diag = coo_matrix((weight, (row, col)), shape=(n, n)).tocsc()
-    covariance = (off_diag + off_diag.T).tocsc()
-    covariance.setdiag(np.asarray(np.abs(covariance).sum(axis=1)).ravel() + .5)
-    rhs = rng.standard_normal((n, count))
-    with limit_native_threads(1):
-        if solver == 'cg':
-            # Trigger native compilation before timing, including extraction.
-            tiny = SibshipCG(covariance[:4, :4], np.array([0, 0, 1, 1]))
-            tiny.solve(rhs[:4, 0].copy())
-        start = perf_counter()
-        model = SibshipCG(covariance, np.arange(n) // 2) if solver == 'cg' else splu(covariance)
-        factored = perf_counter()
-        result = model.solve(rhs)
-        solved = perf_counter()
-        residual = np.linalg.norm(covariance @ result - rhs, axis=0) / np.linalg.norm(rhs, axis=0)
-    print(f'{n:,} rows, {covariance.nnz:,} nonzeros, {count} RHS, {solver} with {links} random links per row')
-    print(f'Setup {factored - start:.3f}s, solve {solved - factored:.3f}s, maximum residual {residual.max():.2g}')
-    assert residual.max() < 1e-9
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
@@ -119,19 +85,11 @@ def main():
     impute.add_argument('output', type=Path)
     impute.add_argument('--families', type=int, default=50_000)
     impute.add_argument('--variants', type=int, default=1_024)
-    factor = commands.add_parser('solver')
-    factor.add_argument('--rows', type=int, default=1000000)
-    factor.add_argument('--rhs', type=int, default=4)
-    factor.add_argument('--random-links', type=int, default=0)
-    factor.add_argument('--solver', choices=('lu', 'cg'), required=True)
     args = parser.parse_args()
-    if args.command in ('bed', 'impute-bed'):
-        if args.families < 1 or args.variants < 1:
-            parser.error('--families and --variants must be positive')
-        generate = bed_fixture if args.command == 'bed' else imputation_fixture
-        generate(args.output, args.families, args.variants)
-    else:
-        solver_case(args.rows, args.rhs, args.random_links, args.solver)
+    if args.families < 1 or args.variants < 1:
+        parser.error('--families and --variants must be positive')
+    generate = bed_fixture if args.command == 'bed' else imputation_fixture
+    generate(args.output, args.families, args.variants)
 
 
 if __name__ == '__main__':
