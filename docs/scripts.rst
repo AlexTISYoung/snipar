@@ -35,9 +35,7 @@ Fits one- and two-generation logistic mixed models for a binary phenotype using
 precomputed PGSs and a family random intercept. Both models use the same
 individuals. The script requires R and ``lme4``.
 
-.. code-block:: bash
-
-   pgs.R trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status
+    ``pgs.R trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status``
 
 Input files are whitespace-delimited tables with headers. Each row is matched
 by ``FID`` and ``IID``, and ``FID`` identifies the family. Both models exclude
@@ -135,9 +133,7 @@ Estimates the variances and covariances of family-GWAS effects across SNPs,
 accounting for their sampling covariance. Population effects are reconstructed
 as direct effects plus average non-transmitted coefficients (NTCs).
 
-.. code-block:: bash
-
-   correlate.py chr_@_young effect --ldscores chr_@ --save_delete
+    ``correlate.py chr_@_young effect --ldscores chr_@ --save_delete``
 
 Args:
     ``sumstats`` : required positional argument

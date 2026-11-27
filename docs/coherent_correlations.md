@@ -20,25 +20,19 @@ row uses the reciprocal direction and reports a variance ratio.
 
 After installing this branch of snipar:
 
-```bash
-correlate.py \
-  'path/to/trait_chr@' results/trait \
-  --chr_range 1-22 --ldscores 'path/to/chr@.l2.ldscore.gz' \
-  --n_blocks 200 --save_delete
+> `correlate.py 'path/to/trait_chr@' results/trait --chr_range 1-22 --ldscores 'path/to/chr@.l2.ldscore.gz' --n_blocks 200 --save_delete`
 
-# A single text/gz file, with SNP L2 scores in another file:
-correlate.py \
-  trait.sumstats.gz results/trait --ldscores trait.l2.ldscore.gz
+A single text/gz file, with SNP L2 scores in another file:
 
-# Compute LD scores from chromosome-specific PLINK files:
-correlate.py \
-  'path/to/trait_chr@' results/trait --bed 'path/to/genotypes_chr@' \
-  --ld_wind 1 --ld_out results/ld_chr --threads 4
+> `correlate.py trait.sumstats.gz results/trait --ldscores trait.l2.ldscore.gz`
 
-# Explicitly request no LD redundancy weighting:
-correlate.py \
-  trait.sumstats.gz results/trait --ld-weight none
-```
+Compute LD scores from chromosome-specific PLINK files:
+
+> `correlate.py 'path/to/trait_chr@' results/trait --bed 'path/to/genotypes_chr@' --ld_wind 1 --ld_out results/ld_chr --threads 4`
+
+Explicitly request no LD redundancy weighting:
+
+> `correlate.py trait.sumstats.gz results/trait --ld-weight none`
 
 The positional arguments follow snipar's `sumstats out` convention. The input
 may be an existing file or a prefix with `.sumstats.gz` appended. Supply LD scores

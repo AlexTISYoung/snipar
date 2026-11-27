@@ -73,31 +73,25 @@ And to work through the tutorial (https://snipar.readthedocs.io/en/latest/tutori
 
 To install the Python commands for this branch, run the following in a supported Python environment. The examples below use input files in the checkout directory.
 
-```bash
-git clone --branch tan https://github.com/AlexTISYoung/snipar.git
-cd snipar
-python -m pip install .
-```
+> `git clone --branch tan https://github.com/AlexTISYoung/snipar.git`
+
+> `cd snipar`
+
+> `python -m pip install .`
 
 For GWAS summary statistics in `chr_1.sumstats.gz`, `chr_2.sumstats.gz`, etc., and corresponding LD scores in `ld_chr1.l2.ldscore.gz`, `ld_chr2.l2.ldscore.gz`, run
 
-```bash
-correlate.py 'chr_@' trait --ldscores 'ld_chr@'
-```
+> `correlate.py 'chr_@' trait --ldscores 'ld_chr@'`
 
 `trait_corrs.txt` reports 17 estimates and their standard errors. `trait_moments.tsv` contains the fitted variances and covariances, `trait_sampling_covariance.tsv` gives the sampling covariance of the estimates, and `trait_diagnostics.json` records filtering and fit diagnostics. Add `--save_delete` to save the block deletions or `--common-weight` to include the raw moment comparison. [Correlation method and options](docs/correlate.rst)
 
 For a quantitative trait, fit the default one- and two-generation models using a family score file from `pgs.py` and a phenotype file with `FID`, `IID`, and the trait value.
 
-```bash
-pgs.py quantitative --pgs scores.pgs.txt --phenofile quantitative.txt
-```
+> `pgs.py quantitative --pgs scores.pgs.txt --phenofile quantitative.txt`
 
 For a binary trait, use a phenotype column coded 0/1. The standalone R script runs from the checkout with R and the `lme4` package.
 
-```bash
-Rscript snipar/scripts/pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status
-```
+> `Rscript snipar/scripts/pgs.R binary --pgs scores.pgs.txt --phenofile binary.txt --phen case_status`
 
 Both PGS commands write `PREFIX.direct_population_ratio.txt`. The ratio divides the two-generation proband coefficient by the one-generation proband coefficient on the same sample. For `pgs.R`, both coefficients are on the log-odds scale. See the [quantitative-trait guide](docs/pgs.rst) and [binary-trait guide](docs/pgs_binary.rst) for score columns, covariates, and covariance outputs.
 
@@ -106,14 +100,12 @@ Both PGS commands write `PREFIX.direct_population_ratio.txt`. The ratio divides 
 *snipar* currently supports Python 3.7-3.9 on Linux, Windows, and Mac OSX (14.7 and higher). We recommend using a python distribution such as Anaconda 3 (https://store.continuum.io/cshop/anaconda/). 
 
 The easiest way to install is using pip:
-  ```
-  pip install snipar
-  ```
+
+> `pip install snipar`
 
 Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
-  ```
-    pip install --upgrade pip
-  ```
+
+> `pip install --upgrade pip`
 
 Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
 
@@ -122,27 +114,25 @@ Note: installing *snipar* requires the package *bed_reader*, which in turn requi
 You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. To overcome this, you can try installing in a virtual environment. In a bash shell, this could be done either via the *venv* Python package or via conda.
 
 To create the venv, use the following commands in your directory of choice:
-    ```
-    python -m venv path-to-where-you-want-the-virtual-environment-to-be
-    ```
+
+> `python -m venv path-to-where-you-want-the-virtual-environment-to-be`
 
 You can activate and use the environment using
-  ```
-    source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
-  ```
+
+> `source path-to-where-you-want-the-virtual-environment-to-be/bin/activate`
 
 Alternatively, we recommend using conda:
-  ```
-  conda create -n myenv python=3.9
-  conda activate myenv
-  ```
+
+> `conda create -n myenv python=3.9`
+
+> `conda activate myenv`
 
 # Installing From Source
 To install from source, clone the git repository, and in the directory
 containing the *snipar* source code, at the shell type:
-  ```
-  pip install .
-  ```
+
+> `pip install .`
+
 Note: installing *snipar* requires the package *bed_reader*, which in turn requires Rust. If an error occurs at "Collecting bed-reader ...", please try downloading Rust following the instruction here: https://rust-lang.github.io/rustup/installation/other.html.
 
 # Python version incompatibility 
@@ -184,9 +174,7 @@ To create the appropriate Docker container, follow these steps:
   command to create a container named "snipar_container" (you can choose a
   different name if you prefer):
 
-  ```bash
-  docker run --name snipar_container -it amd64/python:3.9.9-slim-buster /bin/bash
-  ```
+  > `docker run --name snipar_container -it amd64/python:3.9.9-slim-buster /bin/bash`
 
 After running this command, you should see the "snipar_container" listed in the
 Docker GUI under the "Containers" tab.
@@ -244,11 +232,11 @@ it in the container. To install snipar, follow these steps:
 - Open the terminal in the VSCode window attached to "snipar_container" (or use
   the "Exec" tab in the Docker GUI).
 - After cloning the git repository and cding into the directory, run the following command:
-  ```bash
-  pip install .
-  ```
+
+  > `pip install .`
+
    
 # Running tests
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 
-    python -m unittest snipar.tests
+> `python -m unittest snipar.tests`

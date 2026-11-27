@@ -352,10 +352,7 @@ values must occur in the analysis sample. The phenotype.txt file generated in
 this exercise contains a continuous phenotype; use it with ``pgs.py`` as above.
 With R and the R package ``lme4`` installed, run the installed ``pgs.R`` command:
 
-.. code-block:: bash
-
-   pgs.R direct_v1_binary --pgs direct_v1.pgs.txt \
-       --phenofile binary_phenotype.txt --phen case_status --parsum
+    ``pgs.R direct_v1_binary --pgs direct_v1.pgs.txt --phenofile binary_phenotype.txt --phen case_status --parsum``
 
 ``--parsum`` uses the combined parental score in this example. The outputs
 include direct_v1_binary.1.effects.txt, direct_v1_binary.2.effects.txt, and
@@ -373,11 +370,9 @@ Simulating stabilizing selection
 Breeders whose phenotypes are closer to a fixed optimum have a higher chance
 of surviving to reproduce. To try this with 100 independent causal SNPs, run
 
-.. code-block:: bash
+    ``mkdir -p sim_stabilizing``
 
-   mkdir -p sim_stabilizing
-   simulate.py 100 0.5 sim_stabilizing/ --nfam 200 \
-       --n_stabilizing 3 --selection_variance 2 --save_par_gts
+    ``simulate.py 100 0.5 sim_stabilizing/ --nfam 200 --n_stabilizing 3 --selection_variance 2 --save_par_gts``
 
 The positional arguments give the number of causal SNPs, the initial
 heritability due to direct effects (0.5), and the output prefix. The trailing
@@ -416,8 +411,6 @@ For a neutral comparison, keep the same settings and use
 runs draw their own founders and environmental effects, so their realised
 variances will vary.
 
-.. code-block:: bash
+    ``mkdir -p sim_neutral``
 
-   mkdir -p sim_neutral
-   simulate.py 100 0.5 sim_neutral/ --nfam 200 \
-       --n_stabilizing 3 --selection_variance inf --save_par_gts
+    ``simulate.py 100 0.5 sim_neutral/ --nfam 200 --n_stabilizing 3 --selection_variance inf --save_par_gts``

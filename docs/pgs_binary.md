@@ -9,20 +9,11 @@ ratio and its sampling standard error are calculated automatically.
 
 The script requires R and the R package `lme4`:
 
-```r
-install.packages("lme4")
-```
+> `install.packages("lme4")`
 
 From the source checkout:
 
-```sh
-Rscript snipar/scripts/pgs.R results/trait \
-  --pgs scores.pgs.txt \
-  --phenofile phenotypes.txt \
-  --phen case_status \
-  --covar covariates.txt \
-  --covar_cols age,sex,PC1,PC2
-```
+> `Rscript snipar/scripts/pgs.R results/trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2`
 
 The first argument is the output prefix; `--out PREFIX` is also accepted. No
 additional ratio flag is needed.
@@ -152,9 +143,7 @@ and model diagnostics when interpreting results.
 The regression checks additionally require the R package `numDeriv`. From the
 source checkout, run:
 
-```sh
-Rscript snipar/tests/test_pgs_binary.R
-```
+> `Rscript snipar/tests/test_pgs_binary.R`
 
 The checks compare likelihood derivatives and sampling influences with
 independent numerical calculations, exercise the zero random-intercept

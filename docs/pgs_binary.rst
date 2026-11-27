@@ -20,21 +20,12 @@ Run an analysis
 The script requires R and the R package ``lme4``. Install the package from
 within R:
 
-.. code-block:: r
-
-   install.packages("lme4")
+    ``install.packages("lme4")``
 
 First obtain a :ref:`PGS file <pgs_file>`, for example using ``pgs.py`` with
 observed or imputed parental genotypes. From the source checkout, run:
 
-.. code-block:: bash
-
-   Rscript snipar/scripts/pgs.R results/case_status \
-     --pgs scores.pgs.txt \
-     --phenofile phenotypes.txt \
-     --phen case_status \
-     --covar covariates.txt \
-     --covar_cols age,sex,PC1,PC2
+    ``Rscript snipar/scripts/pgs.R results/case_status --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2``
 
 ``results/case_status`` is the output prefix; ``--out results/case_status``
 is also accepted. The output directory is created if necessary. Omit the
@@ -43,11 +34,7 @@ to calculate the direct/population ratio.
 
 If the PGS file contains a combined ``parental`` score, add ``--parsum``:
 
-.. code-block:: bash
-
-   Rscript snipar/scripts/pgs.R results/case_status_parsum \
-     --pgs scores.pgs.txt --phenofile phenotypes.txt \
-     --phen case_status --parsum
+    ``Rscript snipar/scripts/pgs.R results/case_status_parsum --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --parsum``
 
 ``--parsum`` can also sum separate ``paternal`` and ``maternal`` scores.
 Add ``--fit_sib`` to include a ``sibling`` score in the two-generation model.
@@ -242,9 +229,7 @@ Regression checks
 For development checks, install ``numDeriv`` in addition to ``lme4`` and run
 from the source checkout:
 
-.. code-block:: bash
-
-   Rscript snipar/tests/test_pgs_binary.R
+    ``Rscript snipar/tests/test_pgs_binary.R``
 
 The checks compare likelihood derivatives and sampling influences with
 independent numerical calculations, exercise the zero-variance boundary,

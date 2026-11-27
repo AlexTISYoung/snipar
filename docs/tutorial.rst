@@ -190,9 +190,7 @@ also similar in magnitude? We can answer both questions with the family-GWAS
 results from the earlier step (``chr_1_young.sumstats.gz``) and the LD scores
 from ``ibd.py`` (``chr_1.l2.ldscore.gz``). In the ``example_data`` directory, run
 
-.. code-block:: bash
-
-   correlate.py chr_@_young effect --ldscores chr_@ --save_delete
+    ``correlate.py chr_@_young effect --ldscores chr_@ --save_delete``
 
 The first argument, ``chr_@_young``, identifies the summary-statistic files.
 The script replaces ``@`` with each chromosome number. The second argument,
@@ -215,9 +213,7 @@ The terminal shows all 17 estimates alongside their standard errors, starting
 with the three statistics reported in the revised manuscript. To retrieve
 those three results from ``effect_corrs.txt`` by row name, run
 
-.. code-block:: bash
-
-   awk 'NR == 1 || $1 == "r_direct_population" || $1 == "r_direct_avg_NTC" || $1 == "sqrt_var_ratio_population_direct"' effect_corrs.txt
+    ``awk 'NR == 1 || $1 == "r_direct_population" || $1 == "r_direct_avg_NTC" || $1 == "sqrt_var_ratio_population_direct"' effect_corrs.txt``
 
 Here is an example from a run on the 1,000 retained tutorial SNPs. The first
 two rows describe alignment and the third describes relative magnitude.
@@ -278,26 +274,25 @@ for the full output definitions.
 Polygenic score analyses
 ------------------------
 
-The :ref:`pgs.py <pgs.py>` script computes PGSs for individuals and their parents,
-then estimates their effects on a phenotype. We will first compute the scores
-and then analyse them, so that the same scores can be reused for other phenotypes.
+The :ref:`pgs.py <pgs.py>` script can compute PGSs for individuals and their
+parents and estimate their effects on a phenotype in the same run.
 
 The tutorial includes ``direct_weights.txt``, where the weights are the true
 direct SNP effects used to simulate the phenotype. This file uses LDpred column
 names, which we specify explicitly. After the imputation step above, run:
 
-.. code-block:: bash
-
-   pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt \
-       --SNP sid --beta_col ldpred_beta --A1 nt1 --A2 nt2
+    ``pgs.py direct --bed chr_@ --imp chr_@ --weights direct_weights.txt --SNP sid --beta_col ldpred_beta --A1 nt1 --A2 nt2 --phenofile phenotype.txt``
     
-This writes ``direct.pgs.txt``, with a row for each included individual and
-columns for their own and their parents' scores. Parental scores use observed
+This writes the family scores to ``direct.pgs.txt``. The ``--phenofile`` option
+also fits both models and writes ``direct.1.effects.txt``, ``direct.2.effects.txt``
+and the other regression results in the current directory. Parental scores use observed
 genotypes where available and imputed genotypes otherwise. If you skipped
 imputation, replace ``--imp chr_@`` with ``--pedigree pedigree.txt``; scores
 will then be computed only for individuals with both parents genotyped.
 
-To estimate the PGS effects on the tutorial phenotype, run:
+If you already computed ``direct.pgs.txt`` without supplying a phenotype,
+run the following command from ``example_data`` to produce the regression files
+from those saved scores:
 
     ``pgs.py direct --pgs direct.pgs.txt --phenofile phenotype.txt``
 

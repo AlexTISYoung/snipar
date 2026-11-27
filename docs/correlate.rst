@@ -26,9 +26,7 @@ Running an analysis
 With :ref:`GWAS summary statistics <sumstats_text>` from ``gwas.py`` and
 LD scores from ``ibd.py`` or LDSC, run
 
-.. code-block:: bash
-
-   correlate.py chr_@_young effect --ldscores chr_@ --save_delete
+    ``correlate.py chr_@_young effect --ldscores chr_@ --save_delete``
 
 Here ``chr_@_young`` matches files such as ``chr_1_young.sumstats.gz``, and
 ``chr_@`` matches files such as ``chr_1.l2.ldscore.gz``. The command searches
@@ -40,9 +38,7 @@ The default analysis downweights SNPs in stronger linkage disequilibrium
 ``L2`` column, with one row per SNP ID. To compute scores from PLINK genotypes
 instead, supply one chromosome per BED/BIM/FAM file set. For example,
 
-.. code-block:: bash
-
-   correlate.py chr_@_young effect --bed chr_@ --ld_wind 1 --ld_out ld_chr@
+    ``correlate.py chr_@_young effect --bed chr_@ --ld_wind 1 --ld_out ld_chr@``
 
 The LD window defaults to 1 cM. This example also saves the scores to
 ``ld_chr1.l2.ldscore.gz``, etc. Both ``@`` and ``#`` are accepted in BED

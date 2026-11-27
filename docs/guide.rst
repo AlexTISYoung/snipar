@@ -35,21 +35,21 @@ Installing Using pip
 
 The easiest way to install is using pip:
 
-    pip install snipar
+    ``pip install snipar``
 
 Sometimes this may not work because the pip in the system is outdated. You can upgrade your pip using:
 
-    pip install --upgrade pip
+    ``pip install --upgrade pip``
 
 You may encounter problems with the installation due to Python version incompatability or package conflicts with your existing Python environment. 
 To overcome this, you can try installing in a virtual environment. 
 In a bash shell, this could be done by using the following commands in your directory of choice:
     
-    python -m venv path-to-where-you-want-the-virtual-environment-to-be
+    ``python -m venv path-to-where-you-want-the-virtual-environment-to-be``
 
 You can activate and use the environment using
 
-    source path-to-where-you-want-the-virtual-environment-to-be/bin/activate
+    ``source path-to-where-you-want-the-virtual-environment-to-be/bin/activate``
 
 *snipar* can also be installed within a conda environment using pip. 
 
@@ -59,7 +59,7 @@ Installing From Source
 To install from source, clone the git repository (https://github.com/AlexTISYoung/snipar), and in the directory
 containing the *snipar* source code, at the shell type:
 
-    pip install .
+    ``pip install .``
 
 Python version incompatibility
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
@@ -67,17 +67,17 @@ Python version incompatibility
 *snipar* does not currently support Python 3.10 or higher due to version incompatibilities of dependencies. 
 To overcome this, create a Python3.9 environment using conda and install using pip in the conda environment:
 	
-    conda create -n myenv python=3.9
+    ``conda create -n myenv python=3.9``
 
-	conda activate myenv
+    ``conda activate myenv``
     
-	pip install snipar
+    ``pip install snipar``
    
 Running tests
 ~~~~~~~~~~~~~
 To check that the code is working properly and that the C modules have been compiled, you can run the tests using this command:
 
-    python -m unittest snipar.tests
+    ``python -m unittest snipar.tests``
 
 Workflow
 --------

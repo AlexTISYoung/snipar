@@ -19,9 +19,7 @@ Compute and reuse scores
 To compute scores from observed genotypes, imputed parental genotypes, and a
 :ref:`weights file <weights>`:
 
-.. code-block:: bash
-
-   pgs.py scores --bed chr_@ --imp chr_@ --chr_range 1-22 --weights weights.txt
+    ``pgs.py scores --bed chr_@ --imp chr_@ --chr_range 1-22 --weights weights.txt``
 
 Supply genotype file prefixes without their extensions. ``@`` is replaced by
 chromosome numbers; ``--chr_range`` accepts ranges and individual chromosomes.
@@ -34,9 +32,7 @@ another delimiter.
 If parental genotypes are observed and no imputation files are supplied,
 provide a :ref:`pedigree <pedigree>` instead:
 
-.. code-block:: bash
-
-   pgs.py scores --bed combined_chr_@ --weights weights.txt --pedigree pedigree.txt
+    ``pgs.py scores --bed combined_chr_@ --weights weights.txt --pedigree pedigree.txt``
 
 In this mode, scores are computed only for individuals with both parents
 genotyped. ``--batch_size`` controls the number of variants read at a time
@@ -44,9 +40,7 @@ genotyped. ``--batch_size`` controls the number of variants read at a time
 
 The result is ``scores.pgs.txt``. To analyse it:
 
-.. code-block:: bash
-
-   pgs.py analysis --pgs scores.pgs.txt --phenofile phenotype.txt
+    ``pgs.py analysis --pgs scores.pgs.txt --phenofile phenotype.txt``
 
 Alternatively, add ``--phenofile`` to the score-computation command. A
 precomputed ``--pgs`` input requires a phenotype file. Use either the
@@ -165,10 +159,7 @@ where the numerator is the ``proband`` coefficient from model 2 and the
 denominator is the ``proband`` coefficient from model 1. Both models use the
 same phenotype, scaling, and complete cases. No additional option is needed:
 
-.. code-block:: bash
-
-   pgs.py analysis --pgs scores.pgs.txt --phenofile phenotype.txt \
-       --covar covariates.txt --grm relatives.seg --gen_models 1-2
+    ``pgs.py analysis --pgs scores.pgs.txt --phenofile phenotype.txt --covar covariates.txt --grm relatives.seg --gen_models 1-2``
 
 The delta-method standard error accounts for the sampling covariance between
 the two coefficients. The cross-model covariance uses the shared residual
@@ -260,10 +251,7 @@ external ``--rk`` is needed when no such observed parental pairs are available.
 ``--rk`` alone has no effect; model 2 and ``--h2f`` must also be requested.
 ``--no_am_adj`` does not disable this post-fit step.
 
-.. code-block:: bash
-
-   pgs.py adjusted --pgs scores.pgs.txt --phenofile phenotype.txt \
-       --h2f 0.42,0.02 --rk 0.10,0.01
+    ``pgs.py adjusted --pgs scores.pgs.txt --phenofile phenotype.txt --h2f 0.42,0.02 --rk 0.10,0.01``
 
 ``adjusted.am_adj_pars.txt`` has columns ``parameter``, ``estimate``, and
 ``SE``. Its rows are ``delta``, ``alpha``, ``rk``, ``k``, ``r``, ``h2_eq``,
@@ -288,10 +276,7 @@ imputation is set to zero.
 
 Fit model 3 from a file containing grandparental scores with, for example:
 
-.. code-block:: bash
-
-   pgs.py three_gen --pgs grandparent_scores.pgs.txt --phenofile phenotype.txt \
-       --gen_models 3 --gparsum
+    ``pgs.py three_gen --pgs grandparent_scores.pgs.txt --phenofile phenotype.txt --gen_models 3 --gparsum``
 
 ``--gparsum`` combines ``gpp + gmp`` into ``gp`` (paternal grandparents) and
 ``gpm + gmm`` into ``gm`` (maternal grandparents). Without it, model 3 fits
