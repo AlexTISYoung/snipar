@@ -23,9 +23,9 @@ within R:
     ``install.packages("lme4")``
 
 First obtain a :ref:`PGS file <pgs_file>`, for example using ``pgs.py`` with
-observed or imputed parental genotypes. From the source checkout, run:
+observed or imputed parental genotypes. To fit both models with covariates, run
 
-    ``Rscript snipar/scripts/pgs.R results/case_status --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2``
+    ``pgs.R results/case_status --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2``
 
 ``results/case_status`` is the output prefix; ``--out results/case_status``
 is also accepted. The output directory is created if necessary. Omit the
@@ -34,12 +34,13 @@ to calculate the direct/population ratio.
 
 If the PGS file contains a combined ``parental`` score, add ``--parsum``:
 
-    ``Rscript snipar/scripts/pgs.R results/case_status_parsum --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --parsum``
+    ``pgs.R results/case_status_parsum --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --parsum``
 
 ``--parsum`` can also sum separate ``paternal`` and ``maternal`` scores.
 Add ``--fit_sib`` to include a ``sibling`` score in the two-generation model.
-The R script can run independently of Python once the scores are available;
-it does not compute scores from genotypes or SNP weights.
+To use the standalone script from a source checkout, replace ``pgs.R`` in
+the commands above with ``Rscript snipar/scripts/pgs.R``. This requires
+only R, ``lme4`` and the input files.
 
 .. _binary_pgs_inputs:
 
@@ -216,7 +217,7 @@ family count, boundary indicator and likelihood diagnostics.
 All command-line options
 -------------------------
 
-Run ``Rscript snipar/scripts/pgs.R --help`` for the full usage message.
+Run ``pgs.R --help`` for the full usage message.
 In addition to the required output prefix, ``--pgs`` and ``--phenofile``, the
 available options are ``--phen``, ``--phen_index``, ``--covar``,
 ``--covar_cols``, ``--parsum``, ``--fit_sib``, ``--scale_pgs``,

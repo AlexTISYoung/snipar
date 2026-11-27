@@ -11,14 +11,14 @@ The script requires R and the R package `lme4`:
 
 > `install.packages("lme4")`
 
-From the source checkout:
+To fit both models with covariates, run the installed command
 
-> `Rscript snipar/scripts/pgs.R results/trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2`
+> `pgs.R results/trait --pgs scores.pgs.txt --phenofile phenotypes.txt --phen case_status --covar covariates.txt --covar_cols age,sex,PC1,PC2`
 
 The first argument is the output prefix; `--out PREFIX` is also accepted. No
 additional ratio flag is needed.
-Use `--help` to list the options. The script can also run on its own without a
-Python installation; it does not compute scores from genotypes or SNP weights.
+Use `pgs.R --help` to list the options. From a source checkout, you can also
+run the script with `Rscript snipar/scripts/pgs.R` and the same arguments.
 
 ## Input files
 

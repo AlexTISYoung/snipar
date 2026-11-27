@@ -1,6 +1,6 @@
 # Coherent correlations between effects
 
-On the `tan` branch, the installed `correlate.py` command fits one positive
+The `correlate.py` command fits one positive
 semidefinite (PSD) covariance matrix from the direct and NTC estimates and their
 full per-SNP sampling covariance. All moments, correlations, and standard
 deviation ratios come from that matrix and share the same SNPs and genomic
@@ -18,7 +18,7 @@ row uses the reciprocal direction and reports a variance ratio.
 
 ## Run
 
-After installing this branch of snipar:
+To analyse chromosome-specific summary statistics and LD scores, run
 
 > `correlate.py 'path/to/trait_chr@' results/trait --chr_range 1-22 --ldscores 'path/to/chr@.l2.ldscore.gz' --n_blocks 200 --save_delete`
 
