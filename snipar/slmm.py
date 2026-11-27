@@ -169,7 +169,7 @@ def match_grm_ids(ids: Ids,
     """
     orig_ids = pd.DataFrame({'ids': ids, 'fam_labels': fam_labels})
     if grm_source == 'gcta':
-        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep='\s+', names=[
+        grm_ids = pd.read_csv(f'{grm_path}.grm.id', sep=r'\s+', names=[
                               '_', 'ids_'], dtype={'_': str, 'ids_': str})[['ids_']]
     elif grm_source == 'ibdrel':
         grm_ids = pd.read_csv(grm_path,

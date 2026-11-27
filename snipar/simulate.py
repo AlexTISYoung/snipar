@@ -805,4 +805,4 @@ def find_sibs_and_cousins(ped):
     cousins = cousins[cousins[:,0] != cousins[:,1],:]
     # Create relatedness file format output
     rel = np.vstack((np.array(['ID1', 'ID2', 'PropIBD', 'InfType']),sibs,cousins))
-    return rel 
+    return rel

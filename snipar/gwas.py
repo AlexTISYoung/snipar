@@ -29,7 +29,7 @@ def find_common_ind_ids(obsfiles, impfiles, pheno_ids, from_chr=None, covar=None
                 df_covar = pd.DataFrame(index=covar.ids)
                 df = df.merge(df_covar, how='inner', left_index=True, right_index=True)
             if keep is not None:
-                df_keep = pd.read_csv(keep, sep='\s+', header=None)
+                df_keep = pd.read_csv(keep, sep=r'\s+', header=None)
                 df_keep = df_keep.astype(str)
                 df_keep.index = df_keep[0]
                 del df_keep[0]

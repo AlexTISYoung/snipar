@@ -125,7 +125,7 @@ def main(args):
         with open(args.outprefix + 'selection_metadata.json', 'w') as handle:
             json.dump(selection_metadata, handle, indent=2, allow_nan=False)
     else:
-        new_haps, haps, father_indices, mother_indices, ibd, ped, a, V = forward_sim(haps, maps, args.n_random, args.n_am, unlinked, args.n_causal, args.h2, 
+        new_haps, haps, father_indices, mother_indices, ibd, ped, a, V = forward_sim(haps, maps, args.n_random, args.n_am, unlinked, args.n_causal, args.h2,
                                                                         v_indirect=args.v_indir, r_direct_indirect=args.r_dir_indir, r_y=args.r_par, beta_vert=args.beta_vert)
     ##############################################################
     ### Save variance components ###
