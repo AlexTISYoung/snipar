@@ -112,15 +112,18 @@ As with the ibd.py script, the impute.py script can use a user input :ref:`pedig
 Using the phased VCF
 ~~~~~~~~~~~~~~~~~~~~
 
-You can use ``chr_1.vcf.gz`` for both IBD inference and phased parental imputation.
-Use the example genetic map and pedigree, and give the VCF outputs their own prefix.
+Use :ref:`family.py <family.py>` with the example phased VCF, genetic map and
+pedigree. The command infers phased sibling IBD and reuses the inferred
+parental origin in imputation.
 
-    ``ibd.py --vcf chr_@.vcf.gz --pedigree pedigree.txt --map genetic_map.txt --out chr_@_vcf --threads 4 --ld_out``
+.. code-block:: sh
 
-    ``impute.py --vcf chr_@.vcf.gz --ibd chr_@_vcf.ibd --pedigree pedigree.txt --out chr_@_vcf --threads 4``
+   family.py --vcf chr_@.vcf.gz --pedigree pedigree.txt --map genetic_map.txt \
+       --impute --out chr_@_vcf --threads 4 --ld_out
 
 The IBD segments are saved to ``chr_1_vcf.ibd.segments.gz`` and the imputed
-parental genotypes to ``chr_1_vcf.hdf5``.
+parental genotypes to ``chr_1_vcf.hdf5``. To save the paternal and maternal
+offspring haplotypes, add ``--parent-origin-out chr_@.oriented.vcf.gz``.
 
 Family-based GWAS with imputed parental genotypes
 -------------------------------------------------

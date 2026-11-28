@@ -130,7 +130,8 @@ IBD files fixed while comparing origin-sidecar reuse to local recomputation.
 
 The output includes the exact commands and process timings, IBD accuracy
 and calibration, within-SNP calibration and variance recovery for imputed
-dosages, and equality checks for both masked-parent controls and origin
-reuse. The five empirical quads use the same held-out Mendelian truth as
+dosages, and equality checks for the zero-parent control and origin reuse.
+The driver also reports changes in pairs with one or two observed parents.
+The five empirical quads use the same held-out Mendelian truth as
 the earlier comparison. Re-running the driver in an existing output
 directory reuses completed fits.

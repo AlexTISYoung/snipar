@@ -347,6 +347,7 @@ def run_imputation(data):
     ibd_address = data.get("ibd_address")
     ibd_is_king = data.get("ibd_is_king")
     origin_path = data.get("parent_origin_source")
+    require_origin = data.get("parent_origin_required", origin_path is not None)
     posterior_path = data.get("ibd_posterior")
     if posterior_path is None and ibd_address is not None and not ibd_is_king:
         candidate = Path(f"{ibd_address}.posterior.hdf5")
@@ -374,6 +375,9 @@ def run_imputation(data):
         has_ibd_posterior=posterior_path is not None,
     )
     if sibships.empty:
+        if data.get("skip_empty", False):
+            logging.info("Chromosome %s has no families eligible for imputation", chromosomes[0])
+            return None
         raise ValueError("No families have the required sibling or parental genotypes for imputation")
     threads = min(threads, len(sibships))
     start_time = time()
@@ -408,7 +412,8 @@ def run_imputation(data):
             from snipar.imputation.duohmm import call_parental_origin
 
             source_path = origin_path
-            if source_path is None and ibd_address is not None and not ibd_is_king:
+            if (source_path is None and ibd_address is not None and not ibd_is_king
+                    and data.get("discover_parent_origin", True)):
                 candidate = Path(f"{ibd_address}.origin.hdf5")
                 if candidate.is_file():
                     source_path = str(candidate)
@@ -434,7 +439,7 @@ def run_imputation(data):
                     local_pairs = pairs[saved_origin.missing_rows]
                     logging.info("Reusing parental origin for %d duos at %d of %d markers from %s",
                                  len(saved_origin.target_rows), matched_markers, len(markers), source_path)
-                elif origin_path is not None:
+                elif require_origin:
                     raise ValueError(f"No matching parent-offspring pairs and markers in {source_path}")
                 else:
                     logging.info("No matching parental origin calls in %s", source_path)
@@ -565,11 +570,12 @@ def _vcf_samples(args, available_ids):
 
 @with_genotypes(output='auto', vcf_samples=_vcf_samples)
 def main(args):
-    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
-    Args:
-        args: list
-            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
-    """
+    """Run the imputation command on the selected genotype inputs."""
+    return run_prepared(args)
+
+
+def run_prepared(args, *, pedigree=None, chromosomes=None, ibd_prefixes=None, origin_paths=None):
+    """Run imputation on prepared genotypes and optional per-chromosome IBD outputs."""
     if args.bgen is None and args.bed is None:
         raise Exception("You should supplement the code with at least one genotype address") 
     
@@ -580,7 +586,8 @@ def main(args):
         logging.info("Running snipar from an uninstalled source tree")
 
     prepared_pedigree = getattr(args, "_vcf_pedigree", None)
-    pedigree = _load_pedigree(args) if prepared_pedigree is None else None
+    if pedigree is None and prepared_pedigree is None:
+        pedigree = _load_pedigree(args)
     pedigree_rows = len(pedigree) if prepared_pedigree is None else len(prepared_pedigree.table) - 1
     logging.info("Pedigree loaded.")
 
@@ -599,22 +606,17 @@ def main(args):
                 pcs = pcs[:,:args.pc_num]
         logging.info("pcs loaded")
     
-    chromosomes = [None]
-    if args.chr_range:
-        chromosomes = args.chr_range
-        if args.bed:
-            if not ("@" in args.bed):
-                raise Exception("with chr_range bed address requires a @ wildcard")
-        elif args.bgen:
-            if not ("@" in args.bgen):
-                raise Exception("with chr_range bgen address requires a @ wildcard")
-    else:
-        if (args.bed and "@" in args.bed):
-            files, chromosomes = parse_obsfiles(args.bed, "bed", False)
-            chromosomes = chromosomes.astype('str').tolist()
-        elif(args.bgen and "@" in args.bgen):
-            files, chromosomes = parse_obsfiles(args.bgen, "bgen", False)
-            chromosomes = chromosomes.astype('str').tolist()
+    skip_empty = chromosomes is not None
+    if chromosomes is None:
+        chromosomes = [None]
+        genotype_prefix, genotype_format = (args.bed, "bed") if args.bed else (args.bgen, "bgen")
+        if args.chr_range:
+            if "@" not in genotype_prefix:
+                raise ValueError("With --chr_range the genotype address requires a @ wildcard")
+            chromosomes = args.chr_range
+        elif "@" in genotype_prefix:
+            _, detected = parse_obsfiles(genotype_prefix, genotype_format, append=False)
+            chromosomes = detected.astype(str).tolist()
 
     if args.bed and args.bgen:
         if ("@" in args.bed) ^ ("@" in args.bgen):
@@ -649,7 +651,8 @@ def main(args):
             "use_backup":args.use_backup,
             "phased_address": none_tansform(args.bgen, "@", str(chromosome)),
             "unphased_address": none_tansform(args.bed, "@", str(chromosome)),
-            "ibd_address": none_tansform(args.ibd, "@", str(chromosome)),            
+            "ibd_address": (ibd_prefixes.get(chromosome) if ibd_prefixes is not None
+                            else none_tansform(args.ibd, "@", str(chromosome))),
             "ibd_is_king": args.ibd_is_king,
             "ibd_posterior": getattr(args, "ibd_posterior", None),
             "find_optimal_pc": args.find_optimal_pc,
@@ -662,13 +665,17 @@ def main(args):
             "worker_budget": budget // processes if processes > 1 else None,
             "chunks": args.chunks,
             "parent_origin": not getattr(args, "no_parent_origin", False),
-            "parent_origin_source": getattr(args, "parent_origin", None),
+            "parent_origin_source": (origin_paths.get(chromosome) if origin_paths is not None
+                                     else getattr(args, "parent_origin", None)),
+            "parent_origin_required": getattr(args, "parent_origin", None) is not None,
+            "discover_parent_origin": origin_paths is None,
             "parent_origin_map": none_tansform(getattr(args, "parent_origin_map", None), "@", str(chromosome)),
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
             "pedigree_nan":args.pedigree_nan,
-            'silent_progress':args.silent_progress
+            "silent_progress": args.silent_progress,
+            "skip_empty": skip_empty,
             }
             for chromosome in chromosomes]
     start_time = time()
@@ -678,11 +685,11 @@ def main(args):
         with worker_environment(1), get_context("spawn").Pool(
             processes, initializer=_init_chromosomes, initargs=chromosome_inputs,
         ) as pool:
-            pool.map(_run_chromosome_worker, inputs, chunksize=1)
+            results = pool.map(_run_chromosome_worker, inputs, chunksize=1)
     else:
-        for job in inputs:
-            _run_chromosome(*chromosome_inputs, job)
+        results = [_run_chromosome(*chromosome_inputs, job) for job in inputs]
     logging.info("Imputation time: %.2f seconds", time() - start_time)
+    return sum(result is not None for result in results)
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c',

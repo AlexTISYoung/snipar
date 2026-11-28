@@ -31,7 +31,7 @@ number of samples or families times the number of retained variants.
 VCF and BGEN input
 ------------------
 
-``ibd.py``, ``impute.py``, ``gwas.py``, ``gts_matrix.py``, and ``pgs.py``
+``family.py``, ``ibd.py``, ``impute.py``, ``gwas.py``, ``gts_matrix.py``, and ``pgs.py``
 accept ``--vcf FILE`` in place of the observed BED or BGEN input.
 ``correlate.py`` accepts it for computing LD scores. Plain VCF, gzip, and
 BGZF are supported. Supply one file with one or more autosomes or use
@@ -44,10 +44,11 @@ records. Missing or partially called genotypes produce missing calls.
 Records without IDs receive ``CHROM:POS:REF:ALT`` identifiers, with numeric
 chromosomes. The REF allele is the first allele in prepared files.
 
-Imputation and ``ibd.py --phased-ibd`` use phase when retained genotypes have
+Imputation and sibling IBD use phase when retained genotypes have
 a consistent phase frame for each sample and chromosome. Imputation switches
 to the unphased algorithm for unphased heterozygotes or when phase sets
-differ within a sample and chromosome. ``--phased-ibd`` requires consistent phase.
+differ within a sample and chromosome. The IBD flag ``--phased-ibd`` requires
+consistent phase and ``--unphased-ibd`` uses the dosage model.
 ``simulate.py`` requires phased founder haplotypes and accepts phased VCF
 through ``--vcf``. The other analysis modes use allele dosages from the VCF calls.
 
@@ -151,6 +152,37 @@ snipar_example_data.py
 ----------------------
 .. automodule:: snipar.example.snipar_example_data
 
+family.py
+---------
+.. _family.py:
+.. automodule:: snipar.scripts.family
+
+Use ``--impute`` to run the imputation pipeline. Chromosomes with genotyped
+full-sibling pairs produce IBD segments, marginal probabilities, and the
+genome-wide sibling relatedness summary. The imputer uses the generated
+files automatically. A singleton with one genotyped parent can be imputed
+without sibling IBD. Use ``--ibd`` for IBD alone or ``--impute --ibd-input PREFIX``
+to reuse segments. Reference the same options for quality filtering and
+variant selection as for the individual commands.
+
+.. code-block:: sh
+
+   family.py --vcf chr22.vcf.gz --pedigree pedigree.txt --map chr22.map \
+       --impute --out analysis --parent-origin-out paternal_maternal.vcf.gz
+
+``--parent-origin-out FILE`` writes offspring haplotypes in paternal, then
+maternal order. Use ``.vcf``, ``.vcf.gz``, or ``.bgen``. Export also works on
+its own and includes offspring with one or both genotyped parents, including
+singletons. Unresolved or conflicting heterozygous calls are marked missing.
+Use ``@`` in the output path for chromosome numbers. For multiple chromosomes
+without a placeholder, the export adds ``_chr_<N>`` before the extension.
+The file contains phased genotype calls for the exported offspring.
+
+``--map`` applies to both IBD and duoHMM. When a genotype error rate cannot
+be estimated from informative parent--offspring calls, ``family.py`` uses
+0.001. Set ``--p_error`` to specify it directly. The existing ``ibd.py`` and
+``impute.py`` commands use the same inference and imputation implementations.
+
 ibd.py
 ------
 .. _ibd.py:
@@ -178,15 +210,16 @@ without smoothing individual pairs. The optional HDF5 output contains the
 projected pair marginals. SNIPar uses the pair HMM and the usual segment
 smoothing for the remaining pairs.
 
-``--phased-ibd`` fits a phased sibling-pair HMM to statistically phased BGEN
-or VCF genotypes. With a pedigree, or with KING kinship and ``--agesex``,
-SNIPar first applies duoHMM to each sibling with exactly one genotyped
-parent. The phased sibling HMM uses confident child-origin calls and the
-observed parent's transmitted homologs as soft evidence. Families with zero
-or two genotyped parents use the phased pair model without this evidence.
+``ibd.py`` automatically fits the phased sibling-pair HMM to phased BGEN or
+VCF genotypes. With a pedigree, or with KING kinship and ``--agesex``,
+SNIPar first applies duoHMM to each genotyped parent and sibling. The phased
+sibling HMM uses confident child-origin calls and the observed parents'
+transmitted homologs as soft evidence. With neither parent genotyped, it
+uses the eight-state phased pair model.
 ``--no-duohmm`` disables the pre-phasing step. ``--phase-switch-rate`` sets the
 sibling model's switch probability per retained heterozygote (default 0.002).
-Run ``--joint`` separately for the joint unphased sibship model.
+``--unphased-ibd`` selects the dosage-pair model. ``--joint`` selects the joint
+unphased sibship model.
 
 DuoHMM uses the genetic map on the input marker grid before the IBD MAF,
 missingness, and error filters. When it runs, SNIPar saves the origin and

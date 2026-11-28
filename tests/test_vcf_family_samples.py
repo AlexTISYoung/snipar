@@ -55,7 +55,7 @@ def test_vcf_ibd_preserves_sibling_and_error_calibration_pairs(tmp_path, capsys,
         ages.write_text("FID IID sex age\n" + "".join(
             f"f {iid} M {55 if iid == 'err_parent' else 25}\n" for iid in names))
         relatedness = ["--king", str(king), "--agesex", str(ages)]
-    common = [*relatedness, "--threads", "1", "--map", str(genetic_map), "--ibdmatrix", "--ld_out"]
+    common = [*relatedness, "--threads", "1", "--map", str(genetic_map), "--ibdmatrix", "--ld_out", "--unphased-ibd"]
     for flag, path, prefix in [("--bed", all_samples.bed, "full"), ("--vcf", vcf, "selected")]:
         # LD estimation draws from the selected sibling rows.
         np.random.seed(116)
@@ -70,7 +70,7 @@ def test_vcf_ibd_preserves_sibling_and_error_calibration_pairs(tmp_path, capsys,
 def test_vcf_ibd_with_fixed_error_does_not_read_calibration_samples(tmp_path):
     pedigree = tmp_path / "pedigree.txt"
     pedigree.write_text("FID IID FATHER_ID MOTHER_ID\nf a father mother\nf b father mother\n")
-    args = ibd.parser.parse_args(["--pedigree", str(pedigree), "--p_error", ".001"])
+    args = ibd.parser.parse_args(["--pedigree", str(pedigree), "--p_error", ".001", "--unphased-ibd"])
     assert ibd._vcf_samples(args, ("a", "b", "father", "mother", "extra")) == {"a", "b"}
 
 

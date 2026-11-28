@@ -234,6 +234,23 @@ def test_absent_and_uninformative_duo_labels_reproduce_the_raw_result():
         np.testing.assert_array_equal(ref, no_information)
 
 
+@pytest.mark.parametrize(('parental_copy', 'other_copy', 'expected'), [(0, 0, 2), (0, 1, 1), (1, 0, 1), (1, 1, 0)])
+def test_phased_ibd_tracks_the_two_parents_sharing_bits(parental_copy, other_copy, expected):
+    markers = 8
+    haplotypes = np.full((2, markers, 2), -1, dtype=np.int8)
+    labels = np.zeros((2, markers), dtype=np.int8)
+    copies = labels.copy()
+    copies[1] = parental_copy
+    other = labels.copy()
+    other[1] = other_copy
+    result, probability = infer_phased_pair_ibd(
+        haplotypes, np.full(markers, .5), np.arange(markers) * .01, .002, .01,
+        parent_origin=labels, parent_haplotype=copies, other_parent_haplotype=other,
+    )
+    np.testing.assert_array_equal(result, expected)
+    assert np.all(probability[:, expected] > .999)
+
+
 @pytest.mark.parametrize('use_duo', [False, True])
 def test_ibd_only_decoder_matches_full_outputs(use_duo):
     rng = np.random.default_rng(109)

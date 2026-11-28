@@ -25,7 +25,7 @@ from snipar.resources import available_cpus
 from numba import config as numba_config
 import snipar.ibd
 import numpy as np
-from snipar.errors import estimate_genotyping_error_rate
+from snipar.errors import UninformativeParentOffspringError, estimate_genotyping_error_rate
 from snipar.ibd_output import Relatedness
 from snipar.utilities import get_parser_doc, parse_obsfiles
 from snipar.pedigree import create_pedigree, get_sibpairs_from_king, get_sibpairs_from_ped
@@ -74,7 +74,9 @@ model = parser.add_mutually_exclusive_group()
 model.add_argument('--joint', action='store_true',
                    help='Jointly model complete sets of three or four genotyped siblings, using unphased dosages.')
 model.add_argument('--phased-ibd', action='store_true',
-                   help='Use phased VCF or BGEN. Apply duoHMM and write reusable origin calls for siblings with one genotyped parent.')
+                   help='Require phased VCF or BGEN. By default SNIPar uses phased IBD when the input supports it.')
+model.add_argument('--unphased-ibd', action='store_true',
+                   help='Use the unphased pair model, including with phased input.')
 parser.add_argument('--no-duohmm', action='store_true',
                     help='Run phased IBD without duoHMM parent-of-origin calls.')
 parser.add_argument('--phase-switch-rate', type=float, default=.002,
@@ -85,11 +87,19 @@ parser.add_argument('--batches',type=int,help='Number of batches to split the da
 add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
+def phase_mode(args):
+    """True requires phase, False uses dosages, and None detects phase."""
+    if getattr(args, 'joint', False) or getattr(args, 'unphased_ibd', False):
+        return False
+    return True if getattr(args, 'phased_ibd', False) else None
+
+
 def _phased_with_duos(args):
-    return getattr(args, 'phased_ibd', False) and not getattr(args, 'no_duohmm', False)
+    return (phase_mode(args) is not False and getattr(args, 'bed', None) is None
+            and not getattr(args, 'no_duohmm', False))
 
 
-def _load_relationships(args):
+def _load_relationships(args, *, allow_no_siblings=False, load_parental_origin=False):
     ped = None
     if args.pedigree is not None:
         print('Reading pedigree from '+str(args.pedigree))
@@ -104,17 +114,19 @@ def _load_relationships(args):
             print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
         # Remove rows with missing parents
         sibpairs, _ = get_sibpairs_from_ped(ped)
-        if sibpairs is None:
-            raise(ValueError('No sibpairs found'))
     elif args.king is not None:
         print('Reading relationships from '+str(args.king))
         sibpairs = get_sibpairs_from_king(args.king)
     else:
         raise(ValueError('Must provide either KING kinship file or pedigree'))
     if sibpairs is None or not len(sibpairs):
-        raise ValueError("No sibling pairs found")
+        if not allow_no_siblings:
+            raise ValueError("No sibling pairs found")
+        sibpairs = np.empty((0, 2), dtype=str)
     print(f"Found {len(sibpairs)} full sibling pairs")
-    if ped is None and (args.p_error is None or (_phased_with_duos(args) and args.agesex is not None)):
+    load_duos = _phased_with_duos(args) or load_parental_origin
+    if ped is None and (args.p_error is None and not allow_no_siblings
+                        or load_duos and args.agesex is not None):
         if args.agesex is None:
             raise ValueError("Provide age and sex information (--agesex) with KING kinship "
                              "to estimate the genotyping error probability")
@@ -167,13 +179,53 @@ def _pair_batches(sibpairs, count, *, joint_groups=()):
     return [rows for rows in np.split(order, boundaries) if len(rows)]
 
 
-@with_genotypes(output=lambda args: 'phased' if getattr(args, 'phased_ibd', False) else 'bed',
-                vcf_samples=_vcf_samples)
+def vcf_format(args):
+    mode = phase_mode(args)
+    return 'auto' if mode is None else 'phased' if mode else 'bed'
+
+
+@with_genotypes(output=vcf_format, vcf_samples=_vcf_samples)
 def main(args):
-    """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
-    Args:
-        args: list
-            list of all the desired options and arguments. The possible values are all the values you can pass this script from commandline.
+    """Run sibling IBD from command-line input options."""
+    return run_prepared(args)
+
+
+def input_files(args):
+    """Resolve single-chromosome files from a prepared genotype prefix."""
+    if (args.bed is None) == (args.bgen is None):
+        raise ValueError('Provide exactly one observed genotype input')
+    mode = phase_mode(args)
+    if mode is True and args.bed is not None:
+        raise ValueError('--phased-ibd requires phased VCF or phased BGEN genotypes')
+    kind = 'bed' if args.bed is not None else 'bgen'
+    prefix = str(args.bed if args.bed is not None else args.bgen).removesuffix('.' + kind)
+    files, chroms = parse_obsfiles(prefix, kind, chromosomes=args.chr_range)
+    if args.chrom is not None:
+        if len(chroms) != 1:
+            raise ValueError('--chrom requires one input chromosome')
+        chroms[0] = args.chrom
+    empty = [None for _ in chroms]
+    return (files, empty, chroms) if kind == 'bed' else (empty, files, chroms)
+
+
+def _calibration_files(sibpairs, bedfiles, bgenfiles, threads):
+    """Skip IBD calibration for chromosomes without a complete sibling pair."""
+    from snipar.observed import open_observed
+    from snipar.read.family import IdIndex
+
+    keep = []
+    for i, (bed, bgen) in enumerate(zip(bedfiles, bgenfiles)):
+        with open_observed(bed, bgen, num_threads=threads) as source:
+            if (IdIndex(source.ids).lookup(sibpairs) >= 0).all(axis=1).any():
+                keep.append(i)
+    return keep
+
+
+def run_prepared(args, *, all_parental_origin=False, allow_no_siblings=False, origin_only=False):
+    """Run one or both analyses on already prepared BED/BGEN files.
+
+    Each input chromosome reports its label and the paths produced, including
+    when no siblings are genotyped and no IBD is computed.
     """
     # Set number of threads
     if args.threads is not None:
@@ -183,24 +235,7 @@ def main(args):
     set_num_threads(num_threads)
     print('Number of threads: '+str(num_threads))
 
-    # Check arguments
-    if args.bed is None and args.bgen is None:
-        raise(ValueError('Must provide one of --bedfiles and --bgenfiles'))
-    if args.bed is not None and args.bgen is not None:
-        raise(ValueError('Both bedfiles and bgenfiles provided. Please provide only one'))
-    phased_ibd = getattr(args, 'phased_ibd', False)
-    if phased_ibd and args.bed is not None:
-        raise ValueError('--phased-ibd requires phased VCF or phased BGEN genotypes')
-
-    # Find bed files
-    if args.bed is not None:
-        bedfiles, chroms = parse_obsfiles(args.bed, 'bed', chromosomes=args.chr_range)
-        bgenfiles = [None for x in range(chroms.shape[0])]
-    elif args.bgen is not None:
-        bgenfiles, chroms = parse_obsfiles(args.bgen, 'bgen', chromosomes=args.chr_range)
-        bedfiles = [None for x in range(chroms.shape[0])]
-    if args.chrom is not None and chroms.shape[0]==1:
-        chroms = np.array([args.chrom],dtype=int)
+    bedfiles, bgenfiles, chroms = input_files(args)
     # Set parameters
     if args.batches < 1:
         raise ValueError("--batches must be positive")
@@ -222,23 +257,40 @@ def main(args):
         raise ValueError('Max error probability must be between 0 and 1')
 
     relationships = getattr(args, "_vcf_relationships", None)
-    sibpairs, ped = _load_relationships(args) if relationships is None else relationships
+    if relationships is None:
+        relationships = _load_relationships(args, allow_no_siblings=allow_no_siblings or origin_only,
+                                            load_parental_origin=all_parental_origin or origin_only)
+    sibpairs, ped = relationships
 
-    #### Get genotyping error probability ####
-    if args.p_error is None:
+    error_prob = .001 if args.p_error is None else args.p_error
+    if not 0 <= error_prob <= 1:
+        raise ValueError("--p_error must be between 0 and 1")
+    error_probs = [None] * len(chroms)
+    if not origin_only and len(sibpairs) and args.p_error is None:
         print('No genotyping error probability provided. Will attempt to estimate from parent-offspring pairs.')
-        if args.bed is not None:
-            error_prob, error_probs = estimate_genotyping_error_rate(ped, bedfiles=bedfiles, min_maf=min_maf)
-        elif args.bgen:
-            error_prob, error_probs = estimate_genotyping_error_rate(ped, bgenfiles=bgenfiles, min_maf=min_maf)
-        print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
-        if error_prob > 0.01:
-            print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
-    else:
-        error_prob = args.p_error
-        if not 0 <= error_prob <= 1:
-            raise ValueError("--p_error must be between 0 and 1")
-        error_probs = None
+        indices = range(len(chroms))
+        if allow_no_siblings:
+            indices = _calibration_files(sibpairs, bedfiles, bgenfiles, num_threads)
+        if indices and ped is not None:
+            try:
+                error_prob, per_chrom = estimate_genotyping_error_rate(
+                    ped, bedfiles=[bedfiles[i] for i in indices] if args.bed is not None else None,
+                    bgenfiles=[bgenfiles[i] for i in indices] if args.bgen is not None else None,
+                    min_maf=min_maf, allow_missing=allow_no_siblings,
+                )
+            except UninformativeParentOffspringError:
+                if not allow_no_siblings:
+                    raise
+                print(f'Using genotyping error probability {error_prob:g}; no informative parent-offspring genotypes')
+            else:
+                if per_chrom is not None:
+                    for i, estimates in zip(indices, per_chrom):
+                        error_probs[i] = estimates
+                print('Estimated mean genotyping error probability: '+str(round(error_prob, 6)))
+                if error_prob > 0.01:
+                    print('Warning: high genotyping error rate detected. Check pedigree and/or genotype data.')
+        elif indices:
+            print(f'Using genotyping error probability {error_prob:g}; no parent-offspring pedigree available')
 
     joint_groups = []
     if getattr(args, 'joint', False):
@@ -248,10 +300,13 @@ def main(args):
     joint_mask = np.zeros(len(sibpairs), dtype=bool)
     for rows in joint_groups:
         joint_mask[rows] = True
-    batches = _pair_batches(sibpairs, args.batches, joint_groups=joint_groups)
+    batches = (_pair_batches(sibpairs, args.batches, joint_groups=joint_groups) if len(sibpairs) and not origin_only
+               else [np.empty(0, dtype=np.intp)])
     relatedness = Relatedness(sibpairs)
+    phase = phase_mode(args)
+    use_pedigree = (_phased_with_duos(args) or all_parental_origin or origin_only) and not getattr(args, 'no_duohmm', False)
+    outputs = []
     for i, chrom in enumerate(chroms):
-        error_probs_i = None if error_probs is None else error_probs[i]
         for j, rows in enumerate(batches, 1):
             outprefix = args.out
             if args.batches > 1:
@@ -260,18 +315,21 @@ def main(args):
             posterior = outprefix if getattr(args, 'posterior', False) else None
             with relatedness.chromosome_batch(rows, posterior) as store:
                 joint_rows = joint_mask[rows]
-                snipar.ibd.infer_ibd_chr(
-                    sibpairs[rows], error_prob, error_probs_i, outprefix, bedfile=bedfiles[i],
-                    bgenfile=bgenfiles[i], chrom=None if chrom == 0 else chrom,
+                files = snipar.ibd.infer_ibd_chr(
+                    sibpairs[rows], error_prob, error_probs[i], outprefix, bedfile=bedfiles[i],
+                    bgenfile=bgenfiles[i], chrom=None if chrom == 0 else int(chrom),
                     min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix,
                     ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
                     max_error=max_error, num_threads=num_threads, posterior_callback=store,
                     joint=joint_rows.any(), joint_pair_mask=joint_rows,
-                    phased_ibd=phased_ibd, phase_switch_rate=getattr(args, 'phase_switch_rate', .002),
-                    pedigree=ped if _phased_with_duos(args) else None,
+                    phased_ibd=phase, phase_switch_rate=getattr(args, 'phase_switch_rate', .002),
+                    pedigree=ped if use_pedigree else None, all_parental_origin=all_parental_origin,
+                    allow_no_siblings=allow_no_siblings, origin_only=origin_only,
                 )
+            outputs.append(files)
     if relatedness.chromosomes.any():
         print(f'Wrote sibling relatedness to {relatedness.write(args.out)}')
+    return outputs
 
 if __name__ == "__main__":
     args=parser.parse_args()

@@ -115,7 +115,7 @@ def _emissions(phase, f, errors, weight, likelihood, log_likelihood):
 
 
 @njit(cache=True)
-def _labeled_emissions(phase, f, errors, weight, origins, copies, origin_errors, copy_errors,
+def _labeled_emissions(phase, f, errors, weight, origins, copies, other_copies, origin_errors, copy_errors,
                        log_likelihood, pair_likelihood, pair_log_likelihood):
     if not _emissions(phase, f, errors, weight, pair_likelihood, pair_log_likelihood):
         return False
@@ -125,6 +125,8 @@ def _labeled_emissions(phase, f, errors, weight, origins, copies, origin_errors,
     second_match, second_mismatch = np.log1p(-b), np.log(b)
     both_copies_known = copies[0] >= 0 and copies[1] >= 0
     same_copy = copies[0] == copies[1]
+    both_other_copies_known = other_copies[0] >= 0 and other_copies[1] >= 0
+    same_other_copy = other_copies[0] == other_copies[1]
     # The reported equality is wrong exactly when one of the copy labels is wrong.
     a, b = copy_errors
     parity_error = a * (1 - b) + b * (1 - a)
@@ -137,6 +139,8 @@ def _labeled_emissions(phase, f, errors, weight, origins, copies, origin_errors,
             log_p += second_match if ((state >> 2) & 1) == second else second_mismatch
         if both_copies_known:
             log_p += match if bool(state & 2) == same_copy else mismatch
+        if both_other_copies_known:
+            log_p += match if bool(state & 1) == same_other_copy else mismatch
         log_likelihood[state] = log_p
     log_likelihood -= np.max(log_likelihood)
     return True
@@ -300,7 +304,8 @@ def _log_dot(left, right, mask):
 
 @njit(cache=True, nogil=True)
 def _infer_labeled_haplotypes(haplotypes, freqs, genetic_map, switches, errors, weights,
-                              state_path, posterior, switch_posterior, origins, copies, origin_errors, copy_errors):
+                              state_path, posterior, switch_posterior, origins, copies, other_copies,
+                              origin_errors, copy_errors):
     markers = len(freqs)
     alpha = np.empty((markers if posterior is not None else 0, 16))
     pointer = np.empty((markers, 16), dtype=np.int8)
@@ -310,7 +315,7 @@ def _infer_labeled_haplotypes(haplotypes, freqs, genetic_map, switches, errors, 
     stay, toggle = np.empty(4), np.empty(4)
     for t in range(markers):
         if not _labeled_emissions(haplotypes[:, t, :], freqs[t], errors[:, t], weights[t], origins[:, t], copies[:, t],
-                                  origin_errors[:, t], copy_errors[:, t], log_emission, pair_likelihood,
+                                  other_copies[:, t], origin_errors[:, t], copy_errors[:, t], log_emission, pair_likelihood,
                                   pair_log_likelihood):
             return t
         if t:
@@ -355,7 +360,8 @@ def _infer_labeled_haplotypes(haplotypes, freqs, genetic_map, switches, errors, 
             break
 
         _labeled_emissions(haplotypes[:, t, :], freqs[t], errors[:, t], weights[t], origins[:, t], copies[:, t],
-                           origin_errors[:, t], copy_errors[:, t], log_emission, pair_likelihood, pair_log_likelihood)
+                           other_copies[:, t], origin_errors[:, t], copy_errors[:, t], log_emission,
+                           pair_likelihood, pair_log_likelihood)
         _interval_logs(genetic_map[t] - genetic_map[t - 1], switches[0, t - 1], switches[1, t - 1], stay, toggle)
         beta += log_emission
         _mix_sum(beta, 1, stay[0], toggle[0])
@@ -396,7 +402,7 @@ def _parent_label_errors(errors, markers, name):
 
 
 def infer_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_error, *, weights=None,
-                      parent_origin=None, parent_haplotype=None, parent_origin_error=.01,
+                      parent_origin=None, parent_haplotype=None, other_parent_haplotype=None, parent_origin_error=.01,
                       parent_haplotype_error=.01):
     """Decode a pair from biallelic phased hard calls of shape (2, markers, 2).
 
@@ -412,7 +418,9 @@ def infer_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_error
     A parent origin is the original input haplotype index of the transmitted
     copy in that child. A parental haplotype is the index in the observed
     parent's input phase. Where both parental copies are called, their
-    equality informs IBD sharing from that parent. Origin information from
+    equality informs IBD sharing from that parent. With two observed parents,
+    ``other_parent_haplotype`` may specify homologs from the opposite parent.
+    Origin information from
     either child is propagated through the chromosome with the original
     phase switch rates. Label error inputs broadcast to (2, markers) and
     apply per call as soft observation probabilities in (0, 0.5]. These
@@ -426,15 +434,15 @@ def infer_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_error
     """
     path, posterior, switches = _decode_phased_pair(
         haplotypes, freqs, genetic_map, phase_switch, allele_error, weights, parent_origin, parent_haplotype,
-        parent_origin_error, parent_haplotype_error, posterior=True, full=True,
+        other_parent_haplotype, parent_origin_error, parent_haplotype_error, posterior=True, full=True,
     )
     ibd_posterior = np.column_stack([posterior[:, _IBD_COUNT == k].sum(axis=1) for k in range(3)])
     return PhasedPairResult(path, _IBD_COUNT[path], posterior, ibd_posterior, switches)
 
 
 def infer_phased_pair_ibd(haplotypes, freqs, genetic_map, phase_switch, allele_error, *, posterior=True,
-                          weights=None, parent_origin=None, parent_haplotype=None, parent_origin_error=.01,
-                          parent_haplotype_error=.01):
+                          weights=None, parent_origin=None, parent_haplotype=None, other_parent_haplotype=None,
+                          parent_origin_error=.01, parent_haplotype_error=.01):
     """Return the IBD count path and, optionally, P(IBD0, IBD1, IBD2).
 
     Inputs follow :func:`infer_phased_pair`. Set ``posterior=False`` to decode
@@ -442,13 +450,14 @@ def infer_phased_pair_ibd(haplotypes, freqs, genetic_map, phase_switch, allele_e
     """
     path, probabilities, _ = _decode_phased_pair(
         haplotypes, freqs, genetic_map, phase_switch, allele_error, weights, parent_origin, parent_haplotype,
-        parent_origin_error, parent_haplotype_error, posterior=posterior, full=False,
+        other_parent_haplotype, parent_origin_error, parent_haplotype_error, posterior=posterior, full=False,
     )
     return _IBD_COUNT[path], probabilities
 
 
 def _decode_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_error, weights, parent_origin,
-                        parent_haplotype, parent_origin_error, parent_haplotype_error, *, posterior, full):
+                        parent_haplotype, other_parent_haplotype, parent_origin_error, parent_haplotype_error,
+                        *, posterior, full):
     haps = np.asarray(haplotypes)
     if haps.ndim != 3 or haps.shape[0] != 2 or haps.shape[2] != 2 or not haps.shape[1]:
         raise ValueError("Provide phased alleles of shape (2, positive marker count, 2)")
@@ -477,19 +486,23 @@ def _decode_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_err
 
     origins = _parent_labels(parent_origin, markers, 'parent_origin')
     copies = _parent_labels(parent_haplotype, markers, 'parent_haplotype')
+    other = _parent_labels(other_parent_haplotype, markers, 'other_parent_haplotype')
     origin_errors = copies_errors = None
-    if origins is not None or copies is not None:
+    if origins is not None or copies is not None or other is not None:
         origin_errors = _parent_label_errors(parent_origin_error, markers, 'parent_origin_error')
         copies_errors = _parent_label_errors(parent_haplotype_error, markers, 'parent_haplotype_error')
         has_origins = origins is not None and np.any((origins >= 0) & (origin_errors < .5))
-        has_copies = copies is not None and np.any(np.all((copies >= 0) & (copies_errors < .5), axis=0))
+        has_copies = any(label is not None and np.any(np.all((label >= 0) & (copies_errors < .5), axis=0))
+                         for label in (copies, other))
         if has_origins or has_copies:
             if origins is None:
                 origins = np.full((2, markers), -1, dtype=np.int8)
             if copies is None:
                 copies = np.full((2, markers), -1, dtype=np.int8)
+            if other is None:
+                other = np.full((2, markers), -1, dtype=np.int8)
         else:
-            origins = copies = origin_errors = copies_errors = None
+            origins = copies = other = origin_errors = copies_errors = None
     path = np.empty(markers, np.int8)
     probabilities = np.empty((markers, 8 if full else 3), np.float32) if posterior else None
     switches = np.empty((2, markers - 1), np.float32) if full else None
@@ -498,7 +511,7 @@ def _decode_phased_pair(haplotypes, freqs, genetic_map, phase_switch, allele_err
                                   probabilities, switches)
     else:
         failed = _infer_labeled_haplotypes(haps, freqs, genetic_map, phase_switch, allele_error, weights, path,
-                                          probabilities, switches, origins, copies, origin_errors, copies_errors)
+                                          probabilities, switches, origins, copies, other, origin_errors, copies_errors)
     if failed >= 0:
         raise ValueError(f"No phased IBD path through marker {failed + 1}; check error rates and allele frequencies")
     return path, probabilities, switches

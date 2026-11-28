@@ -7,6 +7,7 @@ import pytest
 from snipar.config import nan_integer
 from snipar.ibd_prephase import _unpack, observed_parent_duos, pack_phased
 from snipar.scripts import ibd, impute
+from snipar.vcf import convert_vcf
 
 
 def test_packed_haplotypes_preserve_phase_and_partial_missing_calls():
@@ -18,12 +19,14 @@ def test_packed_haplotypes_preserve_phase_and_partial_missing_calls():
                                   calls[[1, 0]][:, [2, 0, 1]])
 
 
-def test_observed_parent_duos_require_exactly_one_genotyped_parent():
+def test_observed_parent_duos_identify_both_parental_roles():
     ped = [['one', 'c1', 'p1', 'm1'], ['two', 'c2', 'p1', 'p2'],
            ['zero', 'c3', 'p3', 'm3'], ['singleton', 'c4', '0', 'p2']]
     ids = np.array(['p2', 'outside', 'c2', 'c1', 'p1', 'c4', 'c3', '0'])
     children = np.array([1, 2, 3, 5, 6])
-    np.testing.assert_array_equal(observed_parent_duos(ped, ids, children), [[4, 3], [0, 5]])
+    duos, role = observed_parent_duos(ped, ids, children)
+    np.testing.assert_array_equal(duos, [[4, 2], [0, 2], [4, 3], [0, 5]])
+    np.testing.assert_array_equal(role, [0, 1, 0, 1])
 
 
 def test_phased_ibd_reuses_origin_in_imputation(tmp_path):
@@ -46,10 +49,10 @@ def test_phased_ibd_reuses_origin_in_imputation(tmp_path):
     genetic_map = tmp_path / 'map.txt'
     genetic_map.write_text('pposition gposition\n110 0\n170 0.001\n')
     common = ['--vcf', str(vcf), '--pedigree', str(pedigree), '--threads', '2']
-    for name, extra in [('phase', []), ('raw', ['--no-duohmm'])]:
+    for name, extra in [('phase', []), ('raw', ['--phased-ibd', '--no-duohmm'])]:
         np.random.seed(1407)
         ibd.main(ibd.parser.parse_args([
-            *common, '--phased-ibd', '--p_error', '0.001', '--map', str(genetic_map), '--posterior',
+            *common, '--p_error', '0.001', '--map', str(genetic_map), '--posterior',
             '--out', str(tmp_path / f'{name}_@'), *extra,
         ]))
 
@@ -94,3 +97,41 @@ def test_unphased_vcf_rejected_in_phased_ibd_mode(tmp_path):
             '--phased-ibd', '--p_error', '0.001', '--vcf', str(vcf), '--pedigree', str(pedigree),
             '--out', str(tmp_path / 'result'), '--threads', '1',
         ]))
+
+
+def test_phased_bgen_defaults_to_duohmm_for_both_parents(tmp_path):
+    vcf = tmp_path / 'four.vcf'
+    vcf.write_text('##fileformat=VCFv4.3\n'
+                   '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tp\tm\tc1\tc2\n'
+                   + ''.join(f'22\t{bp}\ts{bp}\tA\tG\t.\tPASS\t.\tGT\t0|0\t1|1\t0|1\t1|0\n'
+                             for bp in range(100, 170)))
+    bgen = convert_vcf(vcf, tmp_path / 'bgen', output='phased').bgen
+    pedigree = tmp_path / 'pedigree.txt'
+    pedigree.write_text('f c1 p m\nf c2 p m\n')
+    (tmp_path / 'map22.txt').write_text('pposition gposition\n105 0\n165 0.001\n')
+    args = ['--bgen', bgen, '--pedigree', str(pedigree), '--threads', '1', '--p_error', '0.001',
+            '--map', str(tmp_path / 'map@.txt'), '--posterior']
+    (phased,) = ibd.main(ibd.parser.parse_args([*args, '--out', str(tmp_path / 'phased')]))
+    assert phased.chromosome == 22
+    with h5py.File(phased.origin) as origins:
+        np.testing.assert_array_equal(origins['pairs'][:], [[b'p', b'c1'], [b'm', b'c1'], [b'p', b'c2'], [b'm', b'c2']])
+        np.testing.assert_array_equal(origins['origin'][:, 35], [0, 1, 1, 0])
+    (dosage,) = ibd.main(ibd.parser.parse_args([
+        *args, '--unphased-ibd', '--out', str(tmp_path / 'dosage'),
+    ]))
+    assert dosage.chromosome == 22 and dosage.stem is not None and dosage.origin is None
+    (joint,) = ibd.main(ibd.parser.parse_args([*args, '--joint', '--out', str(tmp_path / 'joint')]))
+    assert joint.origin is None
+
+    (origin_only,) = ibd.run_prepared(ibd.parser.parse_args([
+        *args, '--out', str(tmp_path / 'origin_only'),
+    ]), origin_only=True)
+    assert origin_only.chromosome == 22 and origin_only.stem is None and origin_only.origin is not None
+    single = tmp_path / 'single.txt'
+    single.write_text('f c1 p m\n')
+    (duo_only,) = ibd.run_prepared(ibd.parser.parse_args([
+        *args, '--pedigree', str(single), '--out', str(tmp_path / 'duo_only'),
+    ]), allow_no_siblings=True, all_parental_origin=True)
+    assert duo_only.chromosome == 22 and duo_only.stem is None
+    with h5py.File(duo_only.origin) as origins:
+        np.testing.assert_array_equal(origins['pairs'][:], [[b'p', b'c1'], [b'm', b'c1']])

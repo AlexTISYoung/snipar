@@ -15,21 +15,26 @@ from snipar.read.family import IdIndex
 from snipar.resources import plan_batches
 
 
-def observed_parent_duos(pedigree, sample_ids, sibling_rows):
-    """Return directed sample rows for siblings with exactly one observed parent."""
+def observed_parent_duos(pedigree, sample_ids, child_rows=None, *, sample_index=None):
+    """Return directed sample rows and the parental role (father 0, mother 1)."""
     if pedigree is None:
-        return np.empty((0, 2), dtype=np.intp)
+        return np.empty((0, 2), dtype=np.intp), np.empty(0, dtype=np.intp)
     pedigree = np.asarray(pedigree, dtype=str)
-    children = IdIndex(pedigree[:, 1]).lookup(sample_ids[sibling_rows])
+    if child_rows is None:
+        child_rows = np.arange(len(sample_ids), dtype=np.intp)
+    children = IdIndex(pedigree[:, 1]).lookup(sample_ids[child_rows])
     found = children >= 0
+    child_rows = child_rows[found]
     parent_ids = pedigree[children[found], 2:4]
-    parents = IdIndex(sample_ids).lookup(parent_ids)
+    if sample_index is None:
+        sample_index = IdIndex(sample_ids)
+    parents = sample_index.lookup(parent_ids)
     parents[parent_ids == '0'] = -1
-    one_parent = np.count_nonzero(parents >= 0, axis=1) == 1
-    child_rows = sibling_rows[found][one_parent]
-    parent_rows = parents[one_parent].max(axis=1)
-    valid = child_rows != parent_rows
-    return np.column_stack((parent_rows[valid], child_rows[valid]))
+    valid = (parents >= 0) & (parents != child_rows[:, None])
+    # A malformed pedigree naming the same parent twice cannot assign a role.
+    valid[parents[:, 0] == parents[:, 1]] = False
+    child, role = np.nonzero(valid)
+    return np.column_stack((parents[child, role], child_rows[child])), role
 
 
 def read_phased_calls(source, rows, variants):
@@ -104,7 +109,7 @@ class PhasedPairInference:
     """Reuse shared marker data and a bounded thread pool across IBD pair batches."""
 
     def __init__(self, stack, genotypes, markers, freqs, genetic_map, weights, errors, switch_rate,
-                 n_pairs, threads, *, duos, origin_path, origin_markers, posterior):
+                 n_pairs, threads, *, duos, duo_roles, origin_path, origin_markers, posterior):
         self.genotypes = genotypes
         self.markers = markers
         self.freqs = freqs
@@ -118,14 +123,14 @@ class PhasedPairInference:
         if origin_path is not None:
             self.origin = stack.enter_context(h5py.File(origin_path, 'r'))
             self.duos = duos
-            self.duo_by_child = np.full(len(genotypes), -1, dtype=np.intp)
-            self.duo_by_child[duos[:, 1]] = np.arange(len(duos), dtype=np.intp)
+            self.duo_by_child = np.full((len(genotypes), 2), -1, dtype=np.intp)
+            self.duo_by_child[duos[:, 1], duo_roles] = np.arange(len(duos), dtype=np.intp)
             source_to_origin = np.full(2 * genotypes.shape[1], -1, dtype=np.intp)
             source_to_origin[origin_markers] = np.arange(len(origin_markers), dtype=np.intp)
             origin_columns = source_to_origin[markers]
             self.has_origin_column = origin_columns >= 0
             self.origin_columns = origin_columns[self.has_origin_column]
-            per_pair += 8 * (len(origin_markers) + len(markers))
+            per_pair += 16 * (len(origin_markers) + len(markers))
         worker_bytes = 320 * len(markers) + 16 * 1024
         workers, _ = plan_batches(n_pairs, per_pair, workers=threads, fixed_bytes_per_worker=worker_bytes)
         cap = max(1, min(10000, (64 * 1024**2) // per_pair))
@@ -136,19 +141,35 @@ class PhasedPairInference:
         if self.origin is None:
             return None, None, None
         duo_rows = self.duo_by_child[pairs]
-        anchored = (duo_rows >= 0).all(axis=1)
-        anchored[anchored] = (self.duos[duo_rows[anchored, 0], 0] == self.duos[duo_rows[anchored, 1], 0])
-        if not anchored.any() or not self.has_origin_column.any():
+        present = duo_rows >= 0
+        if not present.any() or not self.has_origin_column.any():
             return None, None, None
-        duos = np.unique(duo_rows[anchored])
+        duos = np.unique(duo_rows[present])
         local = np.full_like(duo_rows, -1)
-        local[anchored] = np.searchsorted(duos, duo_rows[anchored])
+        local[present] = np.searchsorted(duos, duo_rows[present])
         labels = []
         for field in ('origin', 'parent_copy'):
-            data = np.full((len(duos), len(self.markers)), -1, dtype=np.int8)
-            data[:, self.has_origin_column] = self.origin[field][duos][:, self.origin_columns]
+            # The last row is an all-unknown sentinel addressable by local index -1.
+            data = np.full((len(duos) + 1, len(self.markers)), -1, dtype=np.int8)
+            data[:-1, self.has_origin_column] = self.origin[field][duos][:, self.origin_columns]
             labels.append(data)
         return local, *labels
+
+    def _pair_labels(self, pair, local, origins, copies):
+        father, mother = origins[local[:, 0]], origins[local[:, 1]]
+        maternal_origin = np.where(mother >= 0, 1 - mother, -1)
+        paternal_origin = np.where(father >= 0, father, maternal_origin)
+        conflict = (father >= 0) & (maternal_origin >= 0) & (father != maternal_origin)
+        paternal_origin[conflict] = -1
+        labels = {'parent_origin': paternal_origin}
+        pair_duos = self.duo_by_child[pair]
+        for role, name in enumerate(('parent_haplotype', 'other_parent_haplotype')):
+            left, right = pair_duos[:, role]
+            if left >= 0 and right >= 0 and self.duos[left, 0] == self.duos[right, 0]:
+                homologs = copies[local[:, role]]
+                homologs[conflict] = -1
+                labels[name] = homologs
+        return labels
 
     def __call__(self, pairs):
         local, origins, copies = self._read_labels(pairs)
@@ -162,8 +183,8 @@ class PhasedPairInference:
             heterozygous = (following[:, :, 0] >= 0) & (following[:, :, 1] >= 0)
             heterozygous &= following[:, :, 0] != following[:, :, 1]
             labels = {}
-            if local is not None and local[index, 0] >= 0:
-                labels = {'parent_origin': origins[local[index]], 'parent_haplotype': copies[local[index]]}
+            if local is not None and (local[index] >= 0).any():
+                labels = self._pair_labels(pairs[index], local[index], origins, copies)
             paths[index], probabilities = infer_phased_pair_ibd(
                 calls, self.freqs, self.genetic_map, self.switch_rate * heterozygous,
                 self.errors, weights=self.weights, posterior=self.posterior, **labels,

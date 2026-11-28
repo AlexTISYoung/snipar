@@ -213,7 +213,8 @@ def _bgen_inputs(args, table, thresholds, chromosomes):
 
 
 @contextmanager
-def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None, vcf_samples=None):
+def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None, vcf_samples=None,
+                    split_chromosomes=False):
     """Provide seekable genotype inputs for the lifetime of a CLI invocation."""
     table = getattr(args, 'bgen_quality', None)
     if table is not None and (getattr(args, 'bgen', None) is None or getattr(args, 'vcf', None) is not None):
@@ -240,7 +241,7 @@ def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None, v
         raise ValueError('Provide --vcf by itself as the observed genotype input')
     if getattr(args, 'fam', None) is not None or getattr(args, 'bim', None) is not None:
         raise ValueError('--fam and --bim require BED or BGEN input')
-    split = bool(chromosomes) or any('@' in str(getattr(args, name, None))
+    split = split_chromosomes or bool(chromosomes) or any('@' in str(getattr(args, name, None))
                                      for name in ('vcf', 'imp', 'ibd', 'out'))
     # Observed VCF MAF is independent of analysis sample selection.
     resolved = Namespace(**vars(args))

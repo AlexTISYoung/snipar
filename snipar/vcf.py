@@ -345,7 +345,7 @@ def _string16(value):
 class _PhasedWriter:
     """Write BGEN layout 2 with zlib and lossless one-bit hard calls."""
 
-    def __init__(self, stack, prefix, samples):
+    def __init__(self, stack, prefix, samples, *, header_data=b''):
         self.file = stack.enter_context(prefix.with_suffix('.bgen').open('xb'))
         if samples[0] == b'sample_0':
             # The existing BGEN readers interpret this ID as a placeholder.
@@ -353,8 +353,10 @@ class _PhasedWriter:
                 sample_file.write(b'ID_1 ID_2 missing\n0 0 0\n')
                 sample_file.writelines(sample + b' ' + sample + b' 0\n' for sample in samples)
         samples_size = 8 + sum(2 + len(sample) for sample in samples)
-        self.file.write(struct.pack('<4I4s3I', 20 + samples_size, 20, 0, len(samples), b'bgen',
-                                    (1 << 31) | (2 << 2) | 1, samples_size, len(samples)))
+        header_size = 20 + len(header_data)
+        self.file.write(struct.pack('<4I4s', header_size + samples_size, header_size, 0, len(samples), b'bgen'))
+        self.file.write(header_data)
+        self.file.write(struct.pack('<3I', (1 << 31) | (2 << 2) | 1, samples_size, len(samples)))
         self.file.writelines(_string16(sample) for sample in samples)
         self.raw = np.empty(10 + len(samples) + (len(samples) + 3) // 4, dtype=np.uint8)
         self.raw[:8] = np.frombuffer(struct.pack('<IHBB', len(samples), 2, 2, 2), dtype=np.uint8)

@@ -201,7 +201,7 @@ def score_sharing(cohort):
 
 
 def verify_ineligible_pairs(cohort):
-    """The phased comparator and duo arm must agree without a single observed parent."""
+    """Check that the phased comparator and duo arm agree with no observed parents."""
     paths = [cohort.ibd / method / 'chr_22.ibd.posterior.hdf5' for method in NEW_IBD]
     if not all(path.is_file() for path in paths):
         return None
@@ -209,7 +209,8 @@ def verify_ineligible_pairs(cohort):
     ped = np.loadtxt(cohort.fixture / 'pedigree.txt', dtype=str, skiprows=1, ndmin=2)
     parents = {child: int(father in visible) + int(mother in visible) for _, child, father, mother in ped}
     segment_tables = [_segments(path.parent / 'chr_22.ibd.segments.gz') for path in paths]
-    tested = dict(zero_parent_pairs=0, two_parent_pairs=0, one_parent_pairs_changed=0)
+    tested = dict(zero_parent_pairs=0, two_parent_pairs=0, one_parent_pairs_changed=0,
+                  two_parent_pairs_changed=0)
     with h5py.File(paths[0]) as raw, h5py.File(paths[1]) as duo:
         for key in ('pairs', 'positions', 'variant_ids', 'genetic_map_cm'):
             np.testing.assert_array_equal(raw[key][:], duo[key][:])
@@ -218,12 +219,15 @@ def verify_ineligible_pairs(cohort):
             parent_count = parents[left]
             hard_equal = segment_tables[0][pair] == segment_tables[1][pair]
             probabilities_equal = np.array_equal(raw['probabilities'][index], duo['probabilities'][index])
-            if parent_count != 1:
+            if parent_count == 0:
                 if not hard_equal or not probabilities_equal:
-                    raise ValueError(f'Duo changed an IBD pair with {parent_count} observed parents: {pair}')
-                tested['zero_parent_pairs' if parent_count == 0 else 'two_parent_pairs'] += 1
-            elif not (hard_equal and probabilities_equal):
-                tested['one_parent_pairs_changed'] += 1
+                    raise ValueError(f'Duo changed an IBD pair with no observed parents: {pair}')
+                tested['zero_parent_pairs'] += 1
+            elif parent_count == 1:
+                tested['one_parent_pairs_changed'] += int(not (hard_equal and probabilities_equal))
+            else:
+                tested['two_parent_pairs'] += 1
+                tested['two_parent_pairs_changed'] += int(not (hard_equal and probabilities_equal))
     return tested
 
 

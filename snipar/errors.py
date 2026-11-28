@@ -9,6 +9,10 @@ from snipar.resources import plan_batches
 from snipar.utilities import make_id_dict
 
 
+class UninformativeParentOffspringError(ValueError):
+    """There are no informative genotyped parent-offspring observations."""
+
+
 class g_error:
     def __init__(self, error_ests, ME, sum_het, sid):
         if not (len(error_ests) == len(ME) == len(sum_het) == len(sid)):
@@ -23,20 +27,30 @@ class g_error:
         self.error_ests = (self.ME + alpha) / (self.sum_het + beta)
 
 
-def estimate_genotyping_error_rate(ped, bedfiles=None, bgenfiles=None, min_maf=0.01):
+def estimate_genotyping_error_rate(ped, bedfiles=None, bgenfiles=None, min_maf=0.01, *,
+                                  allow_missing=False):
     if (bedfiles is None) == (bgenfiles is None):
         raise ValueError('Must provide BED or BGEN files')
-    if bedfiles is not None:
-        genome_errors = [mendelian_errors(ped, bedfile=f, min_maf=min_maf) for f in bedfiles]
-    else:
-        genome_errors = [mendelian_errors(ped, bgenfile=f, min_maf=min_maf) for f in bgenfiles]
+    files, key = (bedfiles, 'bedfile') if bedfiles is not None else (bgenfiles, 'bgenfile')
+    genome_errors = []
+    for filename in files:
+        try:
+            chromosome = mendelian_errors(ped, min_maf=min_maf, **{key: filename})
+        except UninformativeParentOffspringError:
+            if not allow_missing:
+                raise
+            chromosome = None
+        genome_errors.append(chromosome)
     if not genome_errors:
         raise ValueError('No genotype files were provided')
-    rates = np.concatenate([chrom.error_ests for chrom in genome_errors])
-    exposure = np.concatenate([chrom.sum_het for chrom in genome_errors])
+    informative_chromosomes = [chrom for chrom in genome_errors if chrom is not None]
+    if not informative_chromosomes:
+        raise UninformativeParentOffspringError('No genotyped parent-offspring pairs for genotyping error estimation')
+    rates = np.concatenate([chrom.error_ests for chrom in informative_chromosomes])
+    exposure = np.concatenate([chrom.sum_het for chrom in informative_chromosomes])
     informative = exposure > 0
     if not np.any(informative):
-        raise ValueError('No informative parent-offspring genotypes for genotyping error estimation')
+        raise UninformativeParentOffspringError('No informative parent-offspring genotypes for genotyping error estimation')
     rates = rates[informative]
     mean = np.mean(rates)
     if mean == 0:
@@ -45,7 +59,7 @@ def estimate_genotyping_error_rate(ped, bedfiles=None, bgenfiles=None, min_maf=0
     if overdispersion <= 0:
         return mean, None
     beta = 1 / overdispersion
-    for chromosome in genome_errors:
+    for chromosome in informative_chromosomes:
         chromosome.bayes_shrink(mean * beta, beta)
     return mean, genome_errors
 
@@ -55,10 +69,10 @@ def mendelian_errors(ped, bedfile=None, bgenfile=None, min_maf=0.01):
         raise ValueError('Must provide exactly one BED or BGEN file')
     with open_observed(bedfile, bgenfile, num_threads=get_num_threads()) as source:
         row = IdIndex(source.ids).lookup(ped[:, 1:4])
-        found = (row[:, :1] >= 0) & (row[:, 1:] >= 0)
+        found = (row[:, :1] >= 0) & (row[:, 1:] >= 0) & (row[:, :1] != row[:, 1:]) & (ped[:, 2:4] != '0')
         children, parents = np.where(found)
         if children.size == 0:
-            raise ValueError('No genotyped parent-offspring pairs for genotyping error estimation')
+            raise UninformativeParentOffspringError('No genotyped parent-offspring pairs for genotyping error estimation')
         pairs = np.column_stack((row[children, 0], row[children, parents + 1]))
         samples = np.unique(pairs)
         pairs = np.searchsorted(samples, pairs)
