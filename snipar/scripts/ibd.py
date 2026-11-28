@@ -70,13 +70,24 @@ parser.add_argument('--max_error', type=float, help='Maximum per-SNP genotyping 
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
 parser.add_argument('--posterior', action='store_true',
                     help='Write marginal IBD0, IBD1, and IBD2 probabilities at retained SNPs to HDF5.')
-parser.add_argument('--joint', action='store_true',
-                    help='Jointly model complete sets of three or four genotyped siblings, using unphased dosages.')
+model = parser.add_mutually_exclusive_group()
+model.add_argument('--joint', action='store_true',
+                   help='Jointly model complete sets of three or four genotyped siblings, using unphased dosages.')
+model.add_argument('--phased-ibd', action='store_true',
+                   help='Use phased VCF or BGEN. Apply duoHMM and write reusable origin calls for siblings with one genotyped parent.')
+parser.add_argument('--no-duohmm', action='store_true',
+                    help='Run phased IBD without duoHMM parent-of-origin calls.')
+parser.add_argument('--phase-switch-rate', type=float, default=.002,
+                    help='Phase switch probability per retained heterozygote in phased IBD (default 0.002).')
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
 parser.add_argument('--batches',type=int,help='Number of batches to split the data (by sibpair) into for IBD inference. Useful for large datasets.',default=1)
 add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
+
+def _phased_with_duos(args):
+    return getattr(args, 'phased_ibd', False) and not getattr(args, 'no_duohmm', False)
+
 
 def _load_relationships(args):
     ped = None
@@ -103,7 +114,7 @@ def _load_relationships(args):
     if sibpairs is None or not len(sibpairs):
         raise ValueError("No sibling pairs found")
     print(f"Found {len(sibpairs)} full sibling pairs")
-    if args.p_error is None and ped is None:
+    if ped is None and (args.p_error is None or (_phased_with_duos(args) and args.agesex is not None)):
         if args.agesex is None:
             raise ValueError("Provide age and sex information (--agesex) with KING kinship "
                              "to estimate the genotyping error probability")
@@ -115,7 +126,8 @@ def _load_relationships(args):
 def _vcf_samples(args, available_ids):
     sibpairs, ped = _load_relationships(args)
     available = set(sibpairs.flat)
-    if args.p_error is None:
+    use_duos = ped is not None and _phased_with_duos(args)
+    if args.p_error is None or use_duos:
         available.update(ped[:, 1:4].flat)
     available.intersection_update(available_ids)
     selected = set()
@@ -131,6 +143,11 @@ def _vcf_samples(args, available_ids):
                     selected.update((child, father))
                 if mother in available:
                     selected.update((child, mother))
+    elif use_duos:
+        siblings = selected.copy()
+        for child, father, mother in ped[:, 1:4]:
+            if child in siblings:
+                selected.update(parent for parent in (father, mother) if parent != '0' and parent in available)
     # Preserve the original pair ordering and batch boundaries. Each batch
     # still tests sample availability as for a direct BED/BGEN invocation.
     args._vcf_relationships = sibpairs, ped
@@ -150,7 +167,8 @@ def _pair_batches(sibpairs, count, *, joint_groups=()):
     return [rows for rows in np.split(order, boundaries) if len(rows)]
 
 
-@with_genotypes(vcf_samples=_vcf_samples)
+@with_genotypes(output=lambda args: 'phased' if getattr(args, 'phased_ibd', False) else 'bed',
+                vcf_samples=_vcf_samples)
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -170,6 +188,9 @@ def main(args):
         raise(ValueError('Must provide one of --bedfiles and --bgenfiles'))
     if args.bed is not None and args.bgen is not None:
         raise(ValueError('Both bedfiles and bgenfiles provided. Please provide only one'))
+    phased_ibd = getattr(args, 'phased_ibd', False)
+    if phased_ibd and args.bed is not None:
+        raise ValueError('--phased-ibd requires phased VCF or phased BGEN genotypes')
 
     # Find bed files
     if args.bed is not None:
@@ -246,6 +267,8 @@ def main(args):
                     ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
                     max_error=max_error, num_threads=num_threads, posterior_callback=store,
                     joint=joint_rows.any(), joint_pair_mask=joint_rows,
+                    phased_ibd=phased_ibd, phase_switch_rate=getattr(args, 'phase_switch_rate', .002),
+                    pedigree=ped if _phased_with_duos(args) else None,
                 )
     if relatedness.chromosomes.any():
         print(f'Wrote sibling relatedness to {relatedness.write(args.out)}')

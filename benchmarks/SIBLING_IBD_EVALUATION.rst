@@ -112,3 +112,25 @@ markers. Results are descriptive for five families.
    done
    python benchmarks/evaluate_empirical_ibd_quads.py "$root/empirical" "$root/empirical-results" \
        --legacy-python "$root/legacy-python" --current-python "$root/current-python"
+
+DuoHMM before phased IBD
+------------------------
+
+After generating the Beagle, IBD, and imputation outputs above, rerun the
+phased arm with the current ``ibd.py --phased-ibd`` CLI. The driver runs both
+the default duoHMM pre-phasing and ``--no-duohmm`` on the same calls. Both
+arms use duoHMM for imputation, so their comparison isolates the effect of
+using its calls in the sibling HMM. The driver also holds the duoHMM-informed
+IBD files fixed while comparing origin-sidecar reuse to local recomputation.
+
+.. code-block:: sh
+
+   python benchmarks/evaluate_duohmm_prephase.py "$root" "$root/duo-prephase" \
+       --python /path/to/current-python --empirical --threads 2 --jobs 2 --bootstrap 999
+
+The output includes the exact commands and process timings, IBD accuracy
+and calibration, within-SNP calibration and variance recovery for imputed
+dosages, and equality checks for both masked-parent controls and origin
+reuse. The five empirical quads use the same held-out Mendelian truth as
+the earlier comparison. Re-running the driver in an existing output
+directory reuses completed fits.

@@ -270,7 +270,8 @@ def _family_score(paths, fixture):
     return {mask: (rows, truth_sizes, coverage, pooled, centered) for mask, rows in masks.items() if rows.any()}
 
 
-def _mask_results(mask, rows, truth_sizes, coverage, pooled, centered, bootstrap_count, seed):
+def _mask_results(mask, rows, truth_sizes, coverage, pooled, centered, bootstrap_count, seed, *,
+                  references=("legacy_pair", "pair_hard_origin", "pair_hard")):
     n_families = int(rows.sum())
     rng = np.random.default_rng(seed)
     weights = rng.multinomial(n_families, np.full(n_families, 1 / n_families), size=bootstrap_count)
@@ -286,7 +287,7 @@ def _mask_results(mask, rows, truth_sizes, coverage, pooled, centered, bootstrap
                              n_common=int(p[:, 0].sum()), coverage=n_finite / n_truth,
                              estimates=dict(zip(METRICS, estimates.tolist())),
                              ci95=dict(zip(METRICS, np.nanquantile(draws[mode], [.025, .975], axis=0).T.tolist())))
-    references = [mode for mode in ("legacy_pair", "pair_hard_origin", "pair_hard") if mode in results]
+    references = [mode for mode in references if mode in results]
     for mode, entry in results.items():
         entry["paired_differences"] = {}
         for reference in references:

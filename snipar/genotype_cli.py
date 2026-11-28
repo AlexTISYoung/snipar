@@ -259,7 +259,8 @@ def with_genotypes(*, output='bed', vcf_samples=None):
     def decorate(main):
         @wraps(main)
         def run(args):
-            with genotype_inputs(args, output=output, vcf_samples=vcf_samples) as resolved:
+            genotype_format = output(args) if callable(output) else output
+            with genotype_inputs(args, output=genotype_format, vcf_samples=vcf_samples) as resolved:
                 return main(resolved)
         return run
     return decorate

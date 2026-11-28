@@ -44,11 +44,12 @@ records. Missing or partially called genotypes produce missing calls.
 Records without IDs receive ``CHROM:POS:REF:ALT`` identifiers, with numeric
 chromosomes. The REF allele is the first allele in prepared files.
 
-Imputation uses phase when retained genotypes have a consistent phase frame
-for each sample and chromosome. It uses the unphased algorithm for unphased
-heterozygotes or when phase sets differ within a sample and chromosome.
+Imputation and ``ibd.py --phased-ibd`` use phase when retained genotypes have
+a consistent phase frame for each sample and chromosome. Imputation switches
+to the unphased algorithm for unphased heterozygotes or when phase sets
+differ within a sample and chromosome. ``--phased-ibd`` requires consistent phase.
 ``simulate.py`` requires phased founder haplotypes and accepts phased VCF
-through ``--vcf``. The other commands use allele dosages from the VCF calls.
+through ``--vcf``. The other analysis modes use allele dosages from the VCF calls.
 
 Phased and unphased BGEN are supported for family genotype analysis. The
 dosage for an unphased BGEN genotype is the expected first-allele count
@@ -177,6 +178,28 @@ without smoothing individual pairs. The optional HDF5 output contains the
 projected pair marginals. SNIPar uses the pair HMM and the usual segment
 smoothing for the remaining pairs.
 
+``--phased-ibd`` fits a phased sibling-pair HMM to statistically phased BGEN
+or VCF genotypes. With a pedigree, or with KING kinship and ``--agesex``,
+SNIPar first applies duoHMM to each sibling with exactly one genotyped
+parent. The phased sibling HMM uses confident child-origin calls and the
+observed parent's transmitted homologs as soft evidence. Families with zero
+or two genotyped parents use the phased pair model without this evidence.
+``--no-duohmm`` disables the pre-phasing step. ``--phase-switch-rate`` sets the
+sibling model's switch probability per retained heterozygote (default 0.002).
+Run ``--joint`` separately for the joint unphased sibship model.
+
+DuoHMM uses the genetic map on the input marker grid before the IBD MAF,
+missingness, and error filters. When it runs, SNIPar saves the origin and
+homolog labels in ``<out>_chr_<N>.ibd.origin.hdf5``, using the same
+chromosome and batch names as the segments. The sidecar records directed
+parent–child IDs, marker identity, and the phased calls needed to verify
+the labels when imputation loads them.
+
+.. code-block:: sh
+
+   ibd.py --vcf chr_@.vcf.gz --pedigree pedigree.txt --map chr22.map \
+       --chr_range 22 --phased-ibd --posterior --out phased_@
+
 Every run also writes ``<out>.ibd.relatedness.tsv.gz``, with ``@`` replaced by
 ``genome``. For each pair, the file records the number of analyzed chromosomes,
 the span covered by retained markers, and the posterior expected lengths of
@@ -217,9 +240,25 @@ imputation uses the existing genotype and local haplotype rules. The output
 uses the standard imputation HDF5 layout.
 
 Supply ``--parent_origin_map`` with ``pposition`` (bp) and ``gposition`` (cM)
-columns to use a genetic map. Otherwise the model uses informative BIM cM
+columns to use a genetic map for locally inferred calls. SNIPar extends
+that map linearly at its endpoints. Otherwise the model uses informative BIM cM
 values when BED and phased BGEN are supplied together, or approximates 1 cM per
 Mb. ``--no_parent_origin`` runs the previous phased method on the same inputs.
+
+Use the same phased genotypes in both commands to reuse the saved origin
+calls. For a SNIPar ``--ibd`` prefix such as ``phased_@.ibd``,
+``impute.py`` automatically looks for ``phased_@.ibd.origin.hdf5``. Use
+``--parent-origin FILE`` to give the sidecar explicitly, with ``@`` for
+chromosome numbers. SNIPar matches parent–child pairs and markers, and
+verifies haplotype order against the current calls. It fits duoHMM locally
+for duos absent from the sidecar and uses its existing fallback at uncovered
+markers for matched duos. The saved calls supply transmission and homolog
+identity to both ordinary and hard-state imputation.
+
+.. code-block:: sh
+
+   impute.py --vcf chr_@.vcf.gz --pedigree pedigree.txt --chr_range 22 \
+       --ibd phased_@.ibd --out imputed_@
 
 Use ``--ibd-posterior PATH`` to supply sibling IBD probabilities from
 ``ibd.py --posterior``. An ``@`` in ``PATH`` stands for the chromosome number.

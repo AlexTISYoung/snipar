@@ -54,7 +54,7 @@ def reference_sensitivity(fixture, pairs, markers, cm, weights, truth, valid, ba
     return results
 
 
-def score_ibd(root, fixture, output):
+def score_ibd(root, fixture, output, *, methods=('baseline-pair', 'current-pair', 'phased-statistical')):
     pairs, markers, positions, cm, weights = common_markers(output)
     with np.load(root / 'heldout_truth.npz') as truth:
         all_variants = {sid: j for j, sid in enumerate(truth['variant_ids'])}
@@ -67,7 +67,6 @@ def score_ibd(root, fixture, output):
         raise ValueError('No held-out Mendelian labels among the common IBD markers')
     results = {}
     decoded = {}
-    methods = ('baseline-pair', 'current-pair', 'phased-statistical')
     for method in methods:
         stem = output / method / 'chr_22'
         segment_file = stem.with_suffix('.ibd.segments.gz')

@@ -643,7 +643,7 @@ def _infer_joint_block(row_pairs, labels, groups, genotypes, markers, transition
 def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
                        snps, positions, genetic_map, min_length, chrom, outprefix, ibdmatrix,
                        pair_batch, pair_indices, posterior_callback, tables, joint_families,
-                       freqs, weights, error_probs):
+                       freqs, weights, error_probs, phased_inference=None):
     labels, groups = joint_families
     if groups:
         print(f'Using joint IBD inference for {len(groups)} complete three- or four-sibling families')
@@ -659,7 +659,9 @@ def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions
         for start in range(0, len(pairs), pair_batch):
             end = min(start + pair_batch, len(pairs))
             joint_labels = labels[start:end] if groups else None
-            if joint_labels is not None and np.any(joint_labels >= 0):
+            if phased_inference is not None:
+                paths, posterior = phased_inference(row_pairs[start:end])
+            elif joint_labels is not None and np.any(joint_labels >= 0):
                 paths, posterior = _infer_joint_block(
                     row_pairs[start:end], joint_labels, groups, genotypes, markers, transitions, emissions,
                     layout, tables, freqs, genetic_map, weights, error_probs,
@@ -684,7 +686,7 @@ def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions
 def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None,
                   min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01,
                   max_missing=5, max_error=0.01, num_threads=None, *, posterior_callback=None, joint=False,
-                  joint_pair_mask=None):
+                  joint_pair_mask=None, phased_ibd=False, phase_switch_rate=.002, pedigree=None):
     """Decode one chromosome in bounded pair batches and optionally report marginal probabilities.
 
     ``posterior_callback`` receives chromosome, pair IDs, marker IDs, physical
@@ -694,12 +696,26 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
 
     An optional ``joint_pair_mask`` identifies pairs eligible for the joint
     model before restricting the input to a batch of the full sibling graph.
+    With ``phased_ibd``, a pedigree enables duoHMM for siblings with exactly
+    one genotyped parent. The original-slot calls are also written for imputation.
     """
     threads = get_num_threads() if num_threads is None else num_threads
+    if phased_ibd:
+        from snipar.ibd_prephase import (PhasedPairInference, observed_parent_duos, origin_grid,
+                                         pack_phased, read_phased_calls, write_parent_origins)
+
+        if joint:
+            raise ValueError('Phased and joint unphased IBD are separate models')
+        if not 0 <= phase_switch_rate <= .5:
+            raise ValueError('Phase switch probability must be between 0 and 0.5')
     # Marker decoding and Numba computation execute in separate phases.
     with ExitStack() as stack:
         source = stack.enter_context(open_observed(bedfile, bgenfile, num_threads=threads))
         sids = source.sid
+        if not len(sids):
+            raise ValueError('No observed variants on chromosome')
+        if phased_ibd and (source.bed or not source.phased):
+            raise ValueError('Phased IBD requires phased BGEN or phased VCF genotypes')
         reader = source.reader
         positions = reader.bp_position if source.bed else np.asarray(reader.positions)
         if chrom is None:
@@ -723,15 +739,21 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         pairs, row_pairs = sibpairs[present], row_pairs[present]
         rows = np.unique(row_pairs)
         n, m = len(rows), len(sids)
-        if not m:
-            raise ValueError('No observed variants on chromosome')
+        read_rows = rows
+        packing = 4
+        if phased_ibd:
+            duos = observed_parent_duos(pedigree, source.ids, rows)
+            read_rows = np.union1d(rows, duos[:, 0])
+            sibling_rows = np.searchsorted(read_rows, rows)
+            duos = np.searchsorted(read_rows, duos)
+            packing = 2
         print(f'Inferring IBD for {len(pairs)} sibling pairs on chromosome {chrom}')
         ld_rows = np.random.randint(0, n, size=min(n, 1000))
         memory = get_memory_budget()
         current_dir = Path(stack.enter_context(TemporaryDirectory(prefix='snipar-ibd-')))
-        packed_shape = (n, (m + 3) // 4)
+        packed_shape = (len(read_rows), (m + packing - 1) // packing)
         ld_shape = (m, 3, (len(ld_rows) + 63) // 64)
-        packed_bytes = n * packed_shape[1]
+        packed_bytes = np.prod(packed_shape, dtype=np.int64)
         ld_bytes = np.prod(ld_shape, dtype=np.int64) * np.dtype(np.uint64).itemsize
         in_memory_packed = packed_bytes <= memory // 5
         in_memory_ld = ld_bytes <= memory // 5
@@ -753,26 +775,36 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
                 raise OSError(f'IBD scratch needs {needed:,} bytes, with {available_disk:,} bytes available')
         if layout == 1:
             genotypes = _workspace(stack, current_dir, 'genotypes', packed_shape, np.uint8, memory // 5)
-            row_pairs = np.searchsorted(rows, row_pairs)
+            row_pairs = np.searchsorted(read_rows, row_pairs)
         ld_genotypes = _workspace(stack, current_dir, 'ld', ld_shape, np.uint64, memory // 5)
         fixed = source.fixed_bytes + (packed_bytes if layout == 1 and in_memory_packed else 0)
         fixed += ld_bytes if in_memory_ld else 0
-        _, variant_batch = plan_batches(m, n * (2 if source.bed else 24), fixed_bytes=fixed,
+        read_bytes = 40 * len(read_rows) if phased_ibd else n * (2 if source.bed else 24)
+        _, variant_batch = plan_batches(m, read_bytes, fixed_bytes=fixed,
                                         memory_limit=memory)
         if layout == 1 and variant_batch < m:
-            if variant_batch < 4:
-                raise MemoryError('IBD packing needs enough memory to decode four variants')
-            variant_batch -= variant_batch % 4
+            if variant_batch < packing:
+                raise MemoryError(f'IBD packing needs enough memory to decode {packing} variants')
+            variant_batch -= variant_batch % packing
         freqs = np.empty(m)
         missing = np.empty(m)
         for start in range(0, m, variant_batch):
             end = min(start + variant_batch, m)
-            values = source.read(rows, np.arange(start, end), require_calls=True)
+            columns = np.arange(start, end)
+            if phased_ibd:
+                calls = read_phased_calls(source, read_rows, columns)
+                pack_phased(calls, genotypes[:, start // 2:(end + 1) // 2])
+                # Each called allele is 0 or 1. Any sum involving a missing
+                # allele stays negative and is excluded by the dosage kernels.
+                values = np.add(calls[:, :, 0], calls[:, :, 1])[sibling_rows]
+                del calls
+            else:
+                values = source.read(rows, columns, require_calls=True)
             total, called = allele_stats(values)
             freqs[start:end] = np.where(called > 0, total / np.maximum(2 * called, 1), np.nan)
             missing[start:end] = 100 * (n - called) / n
             pack_ld_hardcalls(values[ld_rows, :], ld_genotypes[start:end])
-            if layout == 1:
+            if layout == 1 and not phased_ibd:
                 _pack_calls(values, genotypes[:, start // 4:(end + 3) // 4])
             del values
         p_error = np.full(m, error_prob, dtype=float)
@@ -785,7 +817,7 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         if not len(markers):
             raise ValueError('No SNPs remain after MAF, missingness and genotyping error filtering')
         marker_positions = positions[markers]
-        order_by_position = posterior_callback is not None or joint
+        order_by_position = posterior_callback is not None or joint or phased_ibd
         if order_by_position and np.any(marker_positions[1:] < marker_positions[:-1]):
             markers = markers[np.argsort(marker_positions, kind='stable')]
         if mapfile is None and source.bed:
@@ -803,29 +835,47 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
         snps, pos = sids[markers], positions[markers]
         marker_freqs, marker_errors = freqs[markers], p_error[markers]
-        transitions, emissions = _chromosome_hmm(marker_freqs, genetic_map, weights, marker_errors)
-        tables = _posterior_tables(transitions, emissions) if posterior_callback is not None else None
+        if phased_ibd:
+            origin_path = origin_markers = None
+            if len(duos):
+                origin_markers, origin_ids, alleles = origin_grid(reader, positions)
+                origin_pos = positions[origin_markers]
+                origin_map = _ibd_map(source, chrom, origin_pos, mapfile)
+                origin_path = outfile_name(outprefix, '.ibd.origin.hdf5', chrom)
+                print(f'Inferring parent of origin for {len(duos)} parent-offspring pairs')
+                write_parent_origins(origin_path, chrom, duos, source.ids[read_rows], genotypes, origin_markers,
+                                     origin_pos, origin_ids, alleles, origin_map, threads)
+            phased_inference = PhasedPairInference(
+                stack, genotypes, markers, marker_freqs, genetic_map, weights, marker_errors, phase_switch_rate,
+                len(pairs), threads, duos=duos, origin_path=origin_path, origin_markers=origin_markers,
+                posterior=posterior_callback is not None,
+            )
+            pair_batch = phased_inference.batch_size
+            transitions = emissions = tables = None
+        else:
+            phased_inference = None
+            transitions, emissions = _chromosome_hmm(marker_freqs, genetic_map, weights, marker_errors)
+            tables = _posterior_tables(transitions, emissions) if posterior_callback is not None else None
         joint_families = _joint_families(row_pairs, joint_pair_mask) if joint else (None, [])
-        has_joint_families = bool(joint_families[1])
-        nmarkers = len(markers)
-        pair_bytes = nmarkers * (1 if tables is None else 13) + 1
-        # When a batch mixes pair and joint inference, projecting the separate
-        # results temporarily needs another batch of output arrays.
-        if has_joint_families:
-            pair_bytes *= 2
-        worker_bytes = 3 * nmarkers + 128
-        if tables is not None:
-            worker_bytes += 24 * ((nmarkers + _LOG_BLOCK - 1) // _LOG_BLOCK + _LOG_BLOCK)
-        fixed_bytes = min(get_num_threads(), len(pairs)) * worker_bytes
-        if has_joint_families:
-            fixed_bytes += (4 + 6 * (1 if tables is None else 13)) * nmarkers
-        batch_cap = 10000 if tables is None else max(1, min(10000, 64 * 1024**2 // pair_bytes))
-        _, pair_batch = plan_batches(len(pairs), pair_bytes, batch_size=batch_cap, fixed_bytes=fixed_bytes)
+        if not phased_ibd:
+            nmarkers = len(markers)
+            output_bytes = 1 if tables is None else 13
+            pair_bytes = nmarkers * output_bytes + 1
+            worker_bytes = 3 * nmarkers + 128
+            if tables is not None:
+                worker_bytes += 24 * ((nmarkers + _LOG_BLOCK - 1) // _LOG_BLOCK + _LOG_BLOCK)
+            fixed_bytes = min(get_num_threads(), len(pairs)) * worker_bytes
+            # Projection needs an extra batch when inference mixes the two models.
+            if joint_families[1]:
+                pair_bytes *= 2
+                fixed_bytes += (4 + 6 * output_bytes) * nmarkers
+            batch_cap = 10000 if tables is None else max(1, min(10000, 64 * 1024**2 // pair_bytes))
+            _, pair_batch = plan_batches(len(pairs), pair_bytes, batch_size=batch_cap, fixed_bytes=fixed_bytes)
         print(f'Tracing IBD in blocks of up to {pair_batch} sibling pairs')
         _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
                            snps, pos, genetic_map, min_length, chrom, outprefix, ibdmatrix,
                            pair_batch, pair_indices, posterior_callback, tables, joint_families,
-                           marker_freqs, weights, marker_errors)
+                           marker_freqs, weights, marker_errors, phased_inference)
         if ld_out:
             filename = outfile_name(outprefix, '.l2.ldscore.gz', chrom)
             with gzip.open(filename, 'wt', compresslevel=3) as output:
