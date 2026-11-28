@@ -44,7 +44,51 @@ def check_ibd(fixture, output):
                 counts_by_true_then_inferred_state=confusion.tolist())
 
 
-def check_imputation(fixture, output):
+def _calibration_moments(dosage, error, *, within_snp):
+    """Return per-family moments for dosage calibration and variance recovery."""
+    called = np.isfinite(error)
+    x = np.where(called, dosage, 0.)
+    y = np.where(called, -error, 0.)
+    if within_snp:
+        count = np.maximum(called.sum(axis=0), 1)
+        x -= called * (x.sum(axis=0) / count)
+        y -= called * (y.sum(axis=0) / count)
+    return np.column_stack((called.sum(axis=1), x.sum(axis=1), y.sum(axis=1),
+                            np.square(x).sum(axis=1), (x * y).sum(axis=1),
+                            np.square(x + y).sum(axis=1)))
+
+
+def _fit_calibration(moments):
+    """Fit the calibration slope and cluster its uncertainty by simulated family."""
+    from scipy.stats import t
+
+    moments = moments[moments[:, 0] > 0]
+    families = len(moments)
+    if families < 2:
+        raise ValueError("Calibration requires imputed dosages from at least two families")
+    n, sx, sy, sxx, sxy, stt = moments.sum(axis=0)
+    xbar = sx / n
+    variance_sum = sxx - xbar * sx
+    true_variance_sum = stt - (sx + sy) ** 2 / n
+    if variance_sum <= 0:
+        raise ValueError("Calibration requires variable imputed dosages")
+    slope_error = (sxy - xbar * sy) / variance_sum
+    intercept = sy / n - slope_error * xbar
+    n_i, sx_i, sy_i, sxx_i, sxy_i = moments[:, :5].T
+    score = (sxy_i - intercept * sx_i - slope_error * sxx_i
+             - xbar * (sy_i - intercept * n_i - slope_error * sx_i))
+    df = families - 1
+    se = np.sqrt(families / df * np.square(score).sum()) / variance_sum
+    slope = 1 + slope_error
+    half_width = t.ppf(.975, df) * se
+    p = 2 * t.sf(abs(slope_error) / se, df) if se else float(slope_error == 0)
+    variance_ratio = float(variance_sum / true_variance_sum) if true_variance_sum > 0 else None
+    return dict(families=families, slope=float(slope), intercept=float(intercept), se=float(se),
+                ci95=[float(slope - half_width), float(slope + half_width)], p_slope_equals_one=float(p),
+                imputed_to_true_variance_ratio=variance_ratio)
+
+
+def check_imputation(fixture, output, *, paired_dosages=None, calibration=False):
     bed_path = fixture / "truth" / "chr_22.bed"
     families = np.loadtxt(bed_path.with_suffix(".fam"), usecols=0, dtype=str)[::2]
     snps, alt, ref = np.loadtxt(bed_path.with_suffix(".bim"), usecols=(1, 4, 5), dtype=str, unpack=True)
@@ -56,11 +100,14 @@ def check_imputation(fixture, output):
         output_families = file["families"].asstr()[:]
         status = file["parental_status"][:, :2].astype(bool)
         rows = np.flatnonzero(np.isin(output_families, families) & ~status.all(axis=1))
-        index = np.array([truth_families[output_families[row]] for row in rows])
-        parent_rows = np.column_stack((2 * index, 2 * index + 1)).ravel()
+        family_index = np.array([truth_families[output_families[row]] for row in rows])
+        parent_rows = np.column_stack((2 * family_index, 2 * family_index + 1)).ravel()
         father, mother = status[rows].T
         both_missing = ~(father | mother)
         one_missing = father ^ mother
+        statuses = (one_missing, both_missing)
+        if calibration:
+            moments = {group: np.zeros((2, int(status.sum()), 6)) for group, status in zip(groups, statuses)}
         columns = file["bim_columns"].asstr()[:].tolist()
         output_snps = file["bim_values"].asstr()[:]
         if "allele_ids" in columns:
@@ -87,17 +134,30 @@ def check_imputation(fixture, output):
             expected[mother] = father_gt[mother]
             imputed = file["imputed_par_gts"][rows, block]
             error = imputed - expected
+            if paired_dosages is not None:
+                error[~np.isfinite(paired_dosages[rows, block])] = np.nan
             # Report signed error with respect to the same ALT allele for every input format.
             error[:, flip[block]] *= -1
-            for summary, group in zip(totals, (one_missing, both_missing)):
-                delta = error[group]
+            if calibration:
+                dosage = imputed.astype(np.float64)
+                dosage[:, flip[block]] = 2 - dosage[:, flip[block]]
+            for index, (group, status) in enumerate(zip(groups, statuses)):
+                delta = error[status]
                 valid = delta[np.isfinite(delta)]
-                summary += delta.size, valid.size, valid.sum(dtype=np.float64), np.square(valid).sum(dtype=np.float64)
-    return {
+                totals[index] += delta.size, valid.size, valid.sum(dtype=np.float64), np.square(valid).sum(dtype=np.float64)
+                if calibration:
+                    moments[group][0] += _calibration_moments(dosage[status], delta, within_snp=False)
+                    moments[group][1] += _calibration_moments(dosage[status], delta, within_snp=True)
+    results = {
         group: dict(n=int(n), finite=int(finite), mean_error=float(bias / finite),
                     rmse=float(np.sqrt(squared / finite)))
         for group, (n, finite, bias, squared) in zip(groups, totals) if finite
     }
+    if calibration:
+        for group, result in results.items():
+            result["calibration"] = dict(pooled=_fit_calibration(moments[group][0]),
+                                         snp_centered=_fit_calibration(moments[group][1]))
+    return results
 
 
 def check_pgs(fixture, output):
@@ -124,15 +184,31 @@ def main():
     parser.add_argument("fixture", type=Path, help="Output directory from prepare_1000g_eur.py")
     parser.add_argument("--ibd", type=Path, help="Inferred .segments.gz file")
     parser.add_argument("--imputation", type=Path, help="Imputation .hdf5 file")
+    parser.add_argument("--compare-imputation", type=Path, help="Second imputation .hdf5 file for matched-call comparison")
+    parser.add_argument("--calibration", action="store_true", help="Fit true on imputed dosage calibration regressions")
     parser.add_argument("--pgs", type=Path, help="Calculated .pgs.txt file")
     args = parser.parse_args()
     if args.ibd is None and args.imputation is None and args.pgs is None:
         parser.error("Supply at least one output to validate")
+    if args.imputation is None and (args.compare_imputation is not None or args.calibration):
+        parser.error("--compare-imputation and --calibration require --imputation")
     results = {}
     if args.ibd is not None:
         results["ibd"] = check_ibd(args.fixture, args.ibd)
     if args.imputation is not None:
-        results["imputation"] = check_imputation(args.fixture, args.imputation)
+        if args.compare_imputation is None:
+            results["imputation"] = check_imputation(args.fixture, args.imputation, calibration=args.calibration)
+        else:
+            with (h5py.File(args.imputation, "r") as baseline,
+                  h5py.File(args.compare_imputation, "r") as comparison):
+                for key in ("families", "parental_status", "bim_columns", "bim_values"):
+                    np.testing.assert_array_equal(baseline[key][:], comparison[key][:], err_msg=key)
+                results["imputation"] = check_imputation(args.fixture, args.imputation,
+                                                          paired_dosages=comparison["imputed_par_gts"],
+                                                          calibration=args.calibration)
+                results["compare_imputation"] = check_imputation(args.fixture, args.compare_imputation,
+                                                                  paired_dosages=baseline["imputed_par_gts"],
+                                                                  calibration=args.calibration)
     if args.pgs is not None:
         results["pgs"] = check_pgs(args.fixture, args.pgs)
     print(json.dumps(results, indent=2))

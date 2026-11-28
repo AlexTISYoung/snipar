@@ -1,6 +1,7 @@
 from contextlib import ExitStack
 import gzip
 from pathlib import Path
+import re
 from shutil import disk_usage
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
@@ -226,8 +227,157 @@ def _call_at(genotypes, row, column, layout):
     return (2, -1, 1, 0)[call]
 
 
+@njit(inline='always')
+def _emission_index(call1, call2):
+    high, low = max(call1, call2), min(call1, call2)
+    return high * (high + 1) // 2 + low
+
+
+@njit(cache=True)
+def _posterior_tables(transitions, emissions):
+    """Make scaled likelihoods with only one entry per unordered genotype pair."""
+    n = len(emissions)
+    rates = np.zeros((n, 2))
+    likelihoods = np.empty((n, 6, 3))
+    for marker in range(n):
+        if marker:
+            rates[marker, 0] = np.exp(transitions[marker, 0, 0])
+            rates[marker, 1] = np.exp(transitions[marker, 0, 1])
+        for high in range(3):
+            for low in range(high + 1):
+                values = emissions[marker, high, low]
+                peak = max(values[0], values[1], values[2])
+                code = _emission_index(high, low)
+                for state in range(3):
+                    likelihoods[marker, code, state] = np.exp(values[state] - peak) if np.isfinite(peak) else 0
+    return rates, likelihoods
+
+
+@njit(inline='always')
+def _scale(p0, p1, p2):
+    total = p0 + p1 + p2
+    # The forward workspace is float32. If forward and backward support barely
+    # overlap, use the log-space fallback before rounding can affect the result.
+    if not total > 1e-25:
+        return 0., 0., 0.
+    inverse = 1. / total
+    return p0 * inverse, p1 * inverse, p2 * inverse
+
+
+@njit(inline='always')
+def _condition(a0, a1, a2, marker, call1, call2, likelihoods):
+    if min(call1, call2) >= 0:
+        index = _emission_index(call1, call2)
+        a0 *= likelihoods[marker, index, 0]
+        a1 *= likelihoods[marker, index, 1]
+        a2 *= likelihoods[marker, index, 2]
+    return _scale(a0, a1, a2)
+
+
+@njit(cache=True)
+def _backward_posterior(output, gts, row1, row2, markers, rates, likelihoods, layout):
+    b0, b1, b2 = 1., 1., 1.
+    for marker in range(len(markers) - 1, -1, -1):
+        p0, p1, p2 = _scale(output[marker, 0] * b0, output[marker, 1] * b1, output[marker, 2] * b2)
+        if p0 + p1 + p2 == 0:
+            return False
+        output[marker, 0], output[marker, 1], output[marker, 2] = p0, p1, p2
+        if marker:
+            call1 = _call_at(gts, row1, markers[marker], layout)
+            call2 = _call_at(gts, row2, markers[marker], layout)
+            b0, b1, b2 = _condition(b0, b1, b2, marker, call1, call2, likelihoods)
+            stay, move = rates[marker, 0], rates[marker, 1]
+            b0, b1, b2 = (
+                stay * b0 + move * b1,
+                move * .5 * (b0 + b2) + stay * b1,
+                move * b1 + stay * b2,
+            )
+    return True
+
+
+@njit(inline='always')
+def _log_add(a, b):
+    hi, lo = max(a, b), min(a, b)
+    if lo == -np.inf:
+        return hi
+    return hi + np.log1p(np.exp(lo - hi))
+
+
+@njit(inline='always')
+def _log_step(a0, a1, a2, marker, call1, call2, transitions, emissions, backward):
+    if backward and min(call1, call2) >= 0:
+        a0 += emissions[marker, call1, call2, 0]
+        a1 += emissions[marker, call1, call2, 1]
+        a2 += emissions[marker, call1, call2, 2]
+    if marker:
+        stay = transitions[marker, 0, 0]
+        move = transitions[marker, 0, 1]
+        half = transitions[marker, 1, 0]
+        out, inward = (move, half) if backward else (half, move)
+        a0, a1, a2 = (
+            _log_add(a0 + stay, a1 + out),
+            _log_add(a1 + stay, _log_add(a0, a2) + inward),
+            _log_add(a1 + out, a2 + stay),
+        )
+    if not backward and min(call1, call2) >= 0:
+        a0 += emissions[marker, call1, call2, 0]
+        a1 += emissions[marker, call1, call2, 1]
+        a2 += emissions[marker, call1, call2, 2]
+    peak = max(a0, a1, a2)
+    if peak == -np.inf:
+        return a0, a1, a2
+    return a0 - peak, a1 - peak, a2 - peak
+
+
+_LOG_BLOCK = 256
+
+
+@njit(cache=True)
+def _log_posterior(output, gts, row1, row2, markers, transitions, emissions, layout):
+    """Resolve extremely small overlaps in log space with checkpointed alpha vectors."""
+    n = len(markers)
+    checkpoints = np.empty(((n + _LOG_BLOCK - 1) // _LOG_BLOCK, 3))
+    a0, a1, a2 = np.log(.25), np.log(.5), np.log(.25)
+    for marker in range(n):
+        if marker % _LOG_BLOCK == 0:
+            checkpoints[marker // _LOG_BLOCK, 0] = a0
+            checkpoints[marker // _LOG_BLOCK, 1] = a1
+            checkpoints[marker // _LOG_BLOCK, 2] = a2
+        call1 = _call_at(gts, row1, markers[marker], layout)
+        call2 = _call_at(gts, row2, markers[marker], layout)
+        a0, a1, a2 = _log_step(a0, a1, a2, marker, call1, call2, transitions, emissions, False)
+    if max(a0, a1, a2) == -np.inf:
+        # The observations have zero likelihood under every possible path.
+        output.fill(np.nan)
+        return
+
+    alpha = np.empty((_LOG_BLOCK, 3))
+    b0, b1, b2 = 0., 0., 0.
+    for block in range(len(checkpoints) - 1, -1, -1):
+        start = block * _LOG_BLOCK
+        end = min(start + _LOG_BLOCK, n)
+        a0, a1, a2 = checkpoints[block, 0], checkpoints[block, 1], checkpoints[block, 2]
+        for marker in range(start, end):
+            call1 = _call_at(gts, row1, markers[marker], layout)
+            call2 = _call_at(gts, row2, markers[marker], layout)
+            a0, a1, a2 = _log_step(a0, a1, a2, marker, call1, call2, transitions, emissions, False)
+            alpha[marker - start, 0], alpha[marker - start, 1], alpha[marker - start, 2] = a0, a1, a2
+        for marker in range(end - 1, start - 1, -1):
+            p0 = alpha[marker - start, 0] + b0
+            p1 = alpha[marker - start, 1] + b1
+            p2 = alpha[marker - start, 2] + b2
+            peak = max(p0, p1, p2)
+            p0, p1, p2 = _scale(np.exp(p0 - peak), np.exp(p1 - peak), np.exp(p2 - peak))
+            output[marker, 0], output[marker, 1], output[marker, 2] = p0, p1, p2
+            if marker:
+                call1 = _call_at(gts, row1, markers[marker], layout)
+                call2 = _call_at(gts, row2, markers[marker], layout)
+                b0, b1, b2 = _log_step(b0, b1, b2, marker, call1, call2, transitions, emissions, True)
+
+
 @njit(cache=True, parallel=True)
-def _infer_prepared(sibpairs, gts, markers, transitions, emissions, layout):
+def _infer_prepared(sibpairs, gts, markers, transitions, emissions, layout,
+                    posterior=None, rates=None, likelihoods=None):
     n = markers.size
     ibd = np.empty((len(sibpairs), n), dtype=np.int8)
     for i in prange(len(sibpairs)):
@@ -239,10 +389,20 @@ def _infer_prepared(sibpairs, gts, markers, transitions, emissions, layout):
         call2 = _call_at(gts, row2, markers[0], layout)
         if min(call1, call2) >= 0:
             previous += emissions[0, call1, call2]
+        a0, a1, a2 = .25, .5, .25
+        if posterior is not None:
+            a0, a1, a2 = _condition(a0, a1, a2, 0, call1, call2, likelihoods)
+            posterior[i, 0, 0], posterior[i, 0, 1], posterior[i, 0, 2] = a0, a1, a2
         for marker in range(1, n):
             call1 = _call_at(gts, row1, markers[marker], layout)
             call2 = _call_at(gts, row2, markers[marker], layout)
             observed = min(call1, call2) >= 0
+            if posterior is not None:
+                stay, move = rates[marker, 0], rates[marker, 1]
+                half = .5 * move * a1
+                a0, a1, a2 = stay * a0 + half, move * (a0 + a2) + stay * a1, half + stay * a2
+                a0, a1, a2 = _condition(a0, a1, a2, marker, call1, call2, likelihoods)
+                posterior[i, marker, 0], posterior[i, marker, 1], posterior[i, marker, 2] = a0, a1, a2
             for dest in range(3):
                 best = 0
                 maximum = previous[0] + transitions[marker, 0, dest]
@@ -260,7 +420,22 @@ def _infer_prepared(sibpairs, gts, markers, transitions, emissions, layout):
         for marker in range(n - 1, 0, -1):
             state = pointers[marker, state]
             ibd[i, marker - 1] = state
+        if posterior is not None:
+            output = posterior[i]
+            if not _backward_posterior(output, gts, row1, row2, markers, rates, likelihoods, layout):
+                _log_posterior(output, gts, row1, row2, markers, transitions, emissions, layout)
     return ibd
+
+
+def infer_ibd_posteriors(sibpairs, gts, freqs, genetic_map, weights, error_probs):
+    """Return marginal P(IBD = 0, 1, 2) for each pair and in-memory marker."""
+    posterior = np.empty((len(sibpairs), gts.shape[1], 3), dtype=np.float32)
+    if gts.shape[1]:
+        transitions, emissions = _chromosome_hmm(freqs, genetic_map, weights, error_probs)
+        rates, likelihoods = _posterior_tables(transitions, emissions)
+        _infer_prepared(sibpairs, gts, np.arange(gts.shape[1]), transitions, emissions, 0,
+                        posterior, rates, likelihoods)
+    return posterior
 
 
 @njit(cache=True, parallel=True)
@@ -382,25 +557,96 @@ def _workspace(stack, scratch, name, shape, dtype, memory, order='C'):
     return result
 
 
-def _ibd_map(source, chrom, positions, mapfile):
+def _ibd_map(source, chrom, positions, mapfile, *, ordered_bim=True):
     if mapfile is not None:
-        return get_map_positions(mapfile, SimpleNamespace(pos=positions))
+        return get_map_positions(mapfile, SimpleNamespace(pos=positions), min_map_prop=None, extrapolate=True)
     if source.bed:
         # Keep the map in float64. The BED reader exposes a float32 cM
         # field, which can move a pair across the exact LD window boundary.
         genetic_map = np.loadtxt(Path(source.reader.location).with_suffix('.bim'),
                                  dtype=np.float64, usecols=2, ndmin=1)
         if np.any(genetic_map != 0) and (len(genetic_map) == 1 or np.any(genetic_map != genetic_map[0])):
-            if (not np.isfinite(genetic_map).all() or genetic_map[0] < 0 or genetic_map[-1] > 5000
-                    or np.any(np.diff(genetic_map) < 0)):
-                raise ValueError('BIM genetic map must be finite, nondecreasing, and within [0, 5000] cM')
+            if not np.isfinite(genetic_map).all() or np.min(genetic_map) < 0 or np.max(genetic_map) > 5000:
+                raise ValueError('BIM genetic map must be finite and within [0, 5000] cM')
+            if ordered_bim and np.any(np.diff(genetic_map) < 0):
+                raise ValueError('BIM genetic map must be nondecreasing')
             return genetic_map
-    return decode_map_from_pos(chrom, positions)
+    return decode_map_from_pos(chrom, positions, extrapolate=True)
+
+
+def _joint_families(row_pairs, eligible=None):
+    """Identify complete connected components of three or four siblings."""
+    from snipar.ibd_joint import joint_pair_groups
+
+    labels = np.full(len(row_pairs), -1, dtype=np.int64)
+    groups = []
+    rows = np.flatnonzero(eligible) if eligible is not None else None
+    if rows is not None and not len(rows):
+        return labels, groups
+    for edges in joint_pair_groups(row_pairs if rows is None else row_pairs[rows]):
+        if rows is not None:
+            edges = rows[edges]
+        labels[edges] = len(groups)
+        groups.append(np.unique(row_pairs[edges]))
+    return labels, groups
+
+
+@njit(cache=True)
+def _family_calls(genotypes, members, markers, layout):
+    calls = np.empty((len(members), len(markers)), dtype=np.int8)
+    for member in range(len(members)):
+        for marker in range(len(markers)):
+            calls[member, marker] = _call_at(genotypes, members[member], markers[marker], layout)
+    return calls
+
+
+def _infer_block(row_pairs, genotypes, markers, transitions, emissions, layout, tables):
+    if tables is None:
+        return _infer_prepared(row_pairs, genotypes, markers, transitions, emissions, layout), None
+    posterior = np.empty((len(row_pairs), len(markers), 3), dtype=np.float32)
+    paths = _infer_prepared(row_pairs, genotypes, markers, transitions, emissions, layout, posterior, *tables)
+    return paths, posterior
+
+
+def _infer_joint_block(row_pairs, labels, groups, genotypes, markers, transitions, emissions,
+                       layout, tables, freqs, genetic_map, weights, error_probs):
+    from snipar.ibd_joint import infer_joint_family
+
+    paths = np.empty((len(row_pairs), len(markers)), dtype=np.int8)
+    posterior = None if tables is None else np.empty((*paths.shape, 3), dtype=np.float32)
+    fallback = np.flatnonzero(labels < 0)
+    if fallback.size:
+        pair_paths, pair_posterior = _infer_block(row_pairs[fallback], genotypes, markers,
+                                                  transitions, emissions, layout, tables)
+        paths[fallback] = pair_paths
+        if posterior is not None:
+            posterior[fallback] = pair_posterior
+        del pair_paths, pair_posterior
+    joint_rows = np.flatnonzero(labels >= 0)
+    joint_rows = joint_rows[np.argsort(labels[joint_rows], kind='stable')]
+    boundaries = np.flatnonzero(labels[joint_rows[:-1]] != labels[joint_rows[1:]]) + 1
+    for in_group in np.split(joint_rows, boundaries):
+        label = labels[in_group[0]]
+        members = groups[label]
+        calls = _family_calls(genotypes, members, markers, layout)
+        local_pairs = np.searchsorted(members, row_pairs[in_group])
+        group_paths, group_posterior = infer_joint_family(
+            calls, local_pairs, freqs, genetic_map, weights, error_probs, posterior=posterior is not None,
+        )
+        paths[in_group] = group_paths
+        if posterior is not None:
+            posterior[in_group] = group_posterior
+        del calls, group_paths, group_posterior
+    return paths, posterior
 
 
 def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
                        snps, positions, genetic_map, min_length, chrom, outprefix, ibdmatrix,
-                       pair_batch):
+                       pair_batch, pair_indices, posterior_callback, tables, joint_families,
+                       freqs, weights, error_probs):
+    labels, groups = joint_families
+    if groups:
+        print(f'Using joint IBD inference for {len(groups)} complete three- or four-sibling families')
     with ExitStack() as stack:
         output = stack.enter_context(gzip.open(outfile_name(outprefix, '.ibd.segments.gz', chrom),
                                                'wt', compresslevel=3))
@@ -412,19 +658,43 @@ def _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions
             matrix.write('sib1 sib2 ' + ' '.join(snps) + '\n')
         for start in range(0, len(pairs), pair_batch):
             end = min(start + pair_batch, len(pairs))
-            paths = _infer_prepared(row_pairs[start:end], genotypes, markers, transitions, emissions, layout)
-            for (id1, id2), path in zip(pairs[start:end], paths):
-                path, segments = smooth_segments(path, genetic_map, snps, positions, min_length)
+            joint_labels = labels[start:end] if groups else None
+            if joint_labels is not None and np.any(joint_labels >= 0):
+                paths, posterior = _infer_joint_block(
+                    row_pairs[start:end], joint_labels, groups, genotypes, markers, transitions, emissions,
+                    layout, tables, freqs, genetic_map, weights, error_probs,
+                )
+            else:
+                paths, posterior = _infer_block(row_pairs[start:end], genotypes, markers,
+                                                transitions, emissions, layout, tables)
+            if posterior_callback is not None:
+                posterior_callback(chrom, pairs[start:end], snps, positions, genetic_map, posterior,
+                                   pair_indices[start:end])
+            for i, ((id1, id2), path) in enumerate(zip(pairs[start:end], paths)):
+                if joint_labels is not None and joint_labels[i] >= 0:
+                    segments = find_segments(path, genetic_map, snps, positions)
+                else:
+                    path, segments = smooth_segments(path, genetic_map, snps, positions, min_length)
                 output.writelines(seg.to_text(id1, id2, chrom) for seg in segments)
                 if matrix is not None:
                     matrix.write(f'{id1} {id2} ' + ' '.join(path.astype(str)) + '\n')
-            del paths
+            del paths, posterior
 
 
 def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bgenfile=None, chrom=None,
                   min_length=0.01, mapfile=None, ibdmatrix=False, ld_out=False, min_maf=0.01,
-                  max_missing=5, max_error=0.01, num_threads=None):
-    """Stream observed markers and decode IBD in memory-bounded sibling-pair blocks."""
+                  max_missing=5, max_error=0.01, num_threads=None, *, posterior_callback=None, joint=False,
+                  joint_pair_mask=None):
+    """Decode one chromosome in bounded pair batches and optionally report marginal probabilities.
+
+    ``posterior_callback`` receives chromosome, pair IDs, marker IDs, physical
+    positions, genetic positions, float32 P(IBD0, IBD1, IBD2), and the pair row
+    indices in the original ``sibpairs`` array. Consume the probabilities one
+    batch at a time to maintain bounded memory use.
+
+    An optional ``joint_pair_mask`` identifies pairs eligible for the joint
+    model before restricting the input to a batch of the full sibling graph.
+    """
     threads = get_num_threads() if num_threads is None else num_threads
     # Marker decoding and Numba computation execute in separate phases.
     with ExitStack() as stack:
@@ -437,10 +707,19 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
             if len(chromosomes) != 1:
                 raise ValueError('Provide observed genotypes for exactly one chromosome')
             chrom = chromosomes[0] or 0
+            numeric_label = re.fullmatch(r'(?:chr)?([0-9]+)(?:\.0+)?', str(chrom), flags=re.IGNORECASE)
+            if numeric_label is not None:
+                chrom = int(numeric_label[1])
         row_pairs = IdIndex(source.ids).lookup(sibpairs)
         present = (row_pairs >= 0).all(axis=1)
         if not np.any(present):
             raise ValueError('No genotyped sibling pairs found')
+        pair_indices = np.flatnonzero(present) if posterior_callback is not None else None
+        if joint and joint_pair_mask is not None:
+            joint_pair_mask = np.asarray(joint_pair_mask, dtype=bool)
+            if joint_pair_mask.shape != present.shape:
+                raise ValueError('Joint IBD eligibility must have one entry per input sibling pair')
+            joint_pair_mask = joint_pair_mask[present]
         pairs, row_pairs = sibpairs[present], row_pairs[present]
         rows = np.unique(row_pairs)
         n, m = len(rows), len(sids)
@@ -505,8 +784,12 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
                                  & (missing <= max_missing) & (p_error <= max_error))
         if not len(markers):
             raise ValueError('No SNPs remain after MAF, missingness and genotyping error filtering')
+        marker_positions = positions[markers]
+        order_by_position = posterior_callback is not None or joint
+        if order_by_position and np.any(marker_positions[1:] < marker_positions[:-1]):
+            markers = markers[np.argsort(marker_positions, kind='stable')]
         if mapfile is None and source.bed:
-            genetic_map = _ibd_map(source, chrom, positions, None)[markers]
+            genetic_map = _ibd_map(source, chrom, positions, None, ordered_bim=not order_by_position)[markers]
         else:
             genetic_map = _ibd_map(source, chrom, positions[markers], mapfile)
         keep = np.isfinite(genetic_map)
@@ -519,12 +802,30 @@ def infer_ibd_chr(sibpairs, error_prob, error_probs, outprefix, bedfile=None, bg
         ld = compute_ld_scores_packed(ld_genotypes, genetic_map, 1., markers)
         weights = 1 / np.where(np.isfinite(ld) & (ld > 0), ld, 1)
         snps, pos = sids[markers], positions[markers]
-        transitions, emissions = _chromosome_hmm(freqs[markers], genetic_map, weights, p_error[markers])
-        _, pair_batch = plan_batches(len(pairs), len(markers) + 1, batch_size=10000,
-                                     fixed_bytes=threads * (3 * len(markers) + 128))
+        marker_freqs, marker_errors = freqs[markers], p_error[markers]
+        transitions, emissions = _chromosome_hmm(marker_freqs, genetic_map, weights, marker_errors)
+        tables = _posterior_tables(transitions, emissions) if posterior_callback is not None else None
+        joint_families = _joint_families(row_pairs, joint_pair_mask) if joint else (None, [])
+        has_joint_families = bool(joint_families[1])
+        nmarkers = len(markers)
+        pair_bytes = nmarkers * (1 if tables is None else 13) + 1
+        # When a batch mixes pair and joint inference, projecting the separate
+        # results temporarily needs another batch of output arrays.
+        if has_joint_families:
+            pair_bytes *= 2
+        worker_bytes = 3 * nmarkers + 128
+        if tables is not None:
+            worker_bytes += 24 * ((nmarkers + _LOG_BLOCK - 1) // _LOG_BLOCK + _LOG_BLOCK)
+        fixed_bytes = min(get_num_threads(), len(pairs)) * worker_bytes
+        if has_joint_families:
+            fixed_bytes += (4 + 6 * (1 if tables is None else 13)) * nmarkers
+        batch_cap = 10000 if tables is None else max(1, min(10000, 64 * 1024**2 // pair_bytes))
+        _, pair_batch = plan_batches(len(pairs), pair_bytes, batch_size=batch_cap, fixed_bytes=fixed_bytes)
         print(f'Tracing IBD in blocks of up to {pair_batch} sibling pairs')
         _write_ibd_batches(pairs, row_pairs, genotypes, layout, markers, transitions, emissions,
-                           snps, pos, genetic_map, min_length, chrom, outprefix, ibdmatrix, pair_batch)
+                           snps, pos, genetic_map, min_length, chrom, outprefix, ibdmatrix,
+                           pair_batch, pair_indices, posterior_callback, tables, joint_families,
+                           marker_freqs, weights, marker_errors)
         if ld_out:
             filename = outfile_name(outprefix, '.l2.ldscore.gz', chrom)
             with gzip.open(filename, 'wt', compresslevel=3) as output:

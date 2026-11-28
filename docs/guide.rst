@@ -135,12 +135,12 @@ along with a :ref:`file giving the age and sex information <agesex>` on the geno
 (The age and sex information along with the parent-offspring and sibling relations inferred by KING are used to construct a pedigree
 if a pedigree is not provided.)
 
-The algorithm requires a genetic map to compute the probabilities of transitioning between different IBD states. 
-If the genetic map positions (in cM) are provided in the .bim file (if using .bed formatted genotypes), the script will use these. 
-Alternatively, the *--map* argument allows the user to specify a genetic map in the same format as used by SHAPEIT 
-(https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html#formats).
-If no genetic map is provided, then the deCODE sex-averaged map on GRCh38 coordinates (Halldorsson, Bjarni V., et al. "Characterizing mutagenic effects of recombination through a sequence-level genetic map." Science 363.6425 (2019).),
-which is distributed as part of *snipar*, will be used. 
+The algorithm uses a genetic map to compute the probabilities of transitioning
+between IBD states. Supply ``--map`` with a map in SHAPEIT format, with
+``pposition`` in bp and ``gposition`` in cM. SNIPar linearly extrapolates past
+either endpoint. Without ``--map``, it uses informative cM positions from the
+PLINK BIM file or the bundled deCODE sex-averaged map on GRCh38 coordinates
+(Halldorsson et al., *Science*, 2019).
 
 The HMM employs a genotyping error model that requires a genotyping error probability parameter. 
 By default, the algorithm will estimate the per-SNP genotyping error probability from Mendelian errors
@@ -149,8 +149,12 @@ then you will need to supply a genotyping error probability.
 If you have no external information on the genotyping error rate in your data, using a value of 1e-4 has 
 worked well when applied to typical genotyping array data. 
 
-The HMM will output the IBD segments to a :ref:`gzipped text file with suffix ibd.segments.gz <ibd_segments_file>`. As part of the algorithm,
-LD scores are calculated for each SNP. These can also be output in LDSC format using the --ld_out option. 
+The HMM writes :ref:`gzipped IBD segments <ibd_segments_file>` and a
+genome-wide relatedness summary for each pair. Use ``--posterior`` to also
+save marker-level probabilities for parental imputation. Use ``--joint`` to
+infer sharing together for complete three- or four-sibling families.
+:ref:`The ibd.py reference <ibd.py>` describes the output files and summary.
+Use ``--ld_out`` to export the SNP weights' underlying LD scores in LDSC format.
 
 Imputing missing parental genotypes 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -158,11 +162,12 @@ Imputing missing parental genotypes
 :ref:`impute.py <impute.py>` is responsible for imputing the missing parental genotypes.
 This is done for individuals with at least one sibling and/or parent genotyped but without both parents genotyped. 
 
-You should provide the script with identity-by-descent (IBD) segments shared between
-the siblings if there are genotyped sibling pairs in the sample. 
-Although we strongly recommend using IBD segments inferred by :ref:`ibd.py <ibd.py>`, 
-we also support IBD segments in the format that KING outputs (see https://www.kingrelatedness.com/manual.shtml#IBDSEG). 
-If IBD segments in KING format are used, it is necessary to add the –ibd_is_king flag.
+Supply sibling IBD segments with ``--ibd`` when there are genotyped sibling
+pairs. Use ``--ibd_is_king`` for segments in KING format. For two-sibling
+families, marker-level IBD probabilities can also inform the parental estimate.
+SNIPar discovers a matching HDF5 file alongside SNIPar segments, or you can
+supply one explicitly with ``--ibd-posterior``. See the
+:ref:`impute.py reference <impute.py>` for the filename and fallback behavior.
 
 The script needs information about family structure of the sample. You can either supply it with a :ref:`pedigree file <pedigree>` or
 let it build the pedigree from :ref:`kinship <kinship>` and :ref:`agesex <agesex>` files.

@@ -14,8 +14,10 @@ Args:
 
 Results:
     IBD segments
-        For each chromosome, a gzipped text file containing the IBD segments for the siblings is output. 
-        
+        Gzipped hard-call segments by chromosome, with optional per-marker state probabilities in HDF5.
+
+    Genome-wide relatedness
+        Posterior expected sharing for each sibling pair, weighted separately by genetic and physical distance.
 """
 import argparse
 from numba import set_num_threads
@@ -24,6 +26,7 @@ from numba import config as numba_config
 import snipar.ibd
 import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
+from snipar.ibd_output import Relatedness
 from snipar.utilities import get_parser_doc, parse_obsfiles
 from snipar.pedigree import create_pedigree, get_sibpairs_from_king, get_sibpairs_from_ped
 from snipar.numrange import parseNumRange, NumRangeAction
@@ -50,7 +53,8 @@ parser.add_argument('--pedigree',
                     type=str,
                     default=None,
                     help='Address of pedigree file')
-parser.add_argument('--map', type=str, help='Path to a SHAPEIT-format genetic map with pposition and gposition columns.')
+parser.add_argument('--map', type=str, help='SHAPEIT-format genetic map with pposition (bp) and gposition (cM) '
+                                           'columns. SNIPar linearly extends the map at both ends.')
 parser.add_argument('--out',
                     type=str,
                     default = 'ibd',
@@ -64,6 +68,10 @@ parser.add_argument('--max_missing', type=float,
                     help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
 parser.add_argument('--max_error', type=float, help='Maximum per-SNP genotyping error probability', default=0.01)
 parser.add_argument('--ibdmatrix',action='store_true',default=False,help='Output a matrix of SNP IBD states (in addition to segments file)')
+parser.add_argument('--posterior', action='store_true',
+                    help='Write marginal IBD0, IBD1, and IBD2 probabilities at retained SNPs to HDF5.')
+parser.add_argument('--joint', action='store_true',
+                    help='Jointly model complete sets of three or four genotyped siblings, using unphased dosages.')
 parser.add_argument('--ld_out',action='store_true',default=False,help='Output LD scores of SNPs (used internally for weighting).')
 parser.add_argument('--chrom',type=int,help='The chromosome of the input .bgen file. Helpful if inputting a single .bgen file without chromosome information.',default=None)
 parser.add_argument('--batches',type=int,help='Number of batches to split the data (by sibpair) into for IBD inference. Useful for large datasets.',default=1)
@@ -127,6 +135,19 @@ def _vcf_samples(args, available_ids):
     # still tests sample availability as for a direct BED/BGEN invocation.
     args._vcf_relationships = sibpairs, ped
     return selected
+
+
+def _pair_batches(sibpairs, count, *, joint_groups=()):
+    batches = np.array_split(np.arange(len(sibpairs), dtype=np.intp), min(count, len(sibpairs)))
+    if not joint_groups or len(batches) == 1:
+        return batches
+
+    assignments = np.repeat(np.arange(len(batches)), [len(batch) for batch in batches])
+    for rows in joint_groups:
+        assignments[rows] = assignments[rows[0]]
+    boundaries = np.bincount(assignments, minlength=len(batches)).cumsum()[:-1]
+    order = np.argsort(assignments, kind='stable')
+    return [rows for rows in np.split(order, boundaries) if len(rows)]
 
 
 @with_genotypes(vcf_samples=_vcf_samples)
@@ -198,21 +219,36 @@ def main(args):
             raise ValueError("--p_error must be between 0 and 1")
         error_probs = None
 
-    batches = np.array_split(sibpairs, min(args.batches, len(sibpairs)))
+    joint_groups = []
+    if getattr(args, 'joint', False):
+        from snipar.ibd_joint import joint_pair_groups
+
+        joint_groups = joint_pair_groups(sibpairs)
+    joint_mask = np.zeros(len(sibpairs), dtype=bool)
+    for rows in joint_groups:
+        joint_mask[rows] = True
+    batches = _pair_batches(sibpairs, args.batches, joint_groups=joint_groups)
+    relatedness = Relatedness(sibpairs)
     for i, chrom in enumerate(chroms):
         error_probs_i = None if error_probs is None else error_probs[i]
-        for j, batch in enumerate(batches, 1):
+        for j, rows in enumerate(batches, 1):
             outprefix = args.out
             if args.batches > 1:
                 print(f"Inferring IBD on batch {j} of {len(batches)}")
                 outprefix += str(j)
-            snipar.ibd.infer_ibd_chr(
-                batch, error_prob, error_probs_i, outprefix, bedfile=bedfiles[i],
-                bgenfile=bgenfiles[i], chrom=None if chrom == 0 else chrom,
-                min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix,
-                ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
-                max_error=max_error, num_threads=num_threads,
-            )
+            posterior = outprefix if getattr(args, 'posterior', False) else None
+            with relatedness.chromosome_batch(rows, posterior) as store:
+                joint_rows = joint_mask[rows]
+                snipar.ibd.infer_ibd_chr(
+                    sibpairs[rows], error_prob, error_probs_i, outprefix, bedfile=bedfiles[i],
+                    bgenfile=bgenfiles[i], chrom=None if chrom == 0 else chrom,
+                    min_length=min_length, mapfile=args.map, ibdmatrix=args.ibdmatrix,
+                    ld_out=args.ld_out, min_maf=min_maf, max_missing=max_missing,
+                    max_error=max_error, num_threads=num_threads, posterior_callback=store,
+                    joint=joint_rows.any(), joint_pair_mask=joint_rows,
+                )
+    if relatedness.chromosomes.any():
+        print(f'Wrote sibling relatedness to {relatedness.write(args.out)}')
 
 if __name__ == "__main__":
     args=parser.parse_args()

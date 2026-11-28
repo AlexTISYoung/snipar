@@ -177,6 +177,24 @@ def test_gwas_vcf_ignores_imputation_chromosome_absent_from_vcf(family_inputs, t
     assert (tmp_path / 'result_chr_22.sumstats.gz').is_file()
 
 
+def test_robust_gwas_uses_the_separate_hard_imputation_channel(family_inputs, tmp_path):
+    root, _, bed = family_inputs
+    soft = tmp_path / 'posterior.hdf5'
+    copyfile(root / 'parents.hdf5', soft)
+    with h5py.File(soft, 'r+') as output:
+        genotype = output['imputed_par_gts'][:]
+        output['robust_imputed_par_gts'] = genotype
+        output['imputed_par_gts'][:] = np.where(np.isfinite(genotype), 0, np.nan)
+    common = [str(root / 'phenotype.txt'), '--bed', bed, '--robust', '--vc_list', '.4', '.6']
+    tables = []
+    for source, name in [(root / 'parents', 'original'), (soft.with_suffix(''), 'posterior')]:
+        target = tmp_path / name
+        gwas.main(gwas.parser.parse_args([*common, '--imp', str(source), '--out', str(target)]))
+        tables.append(pd.read_csv(target.with_suffix('.sumstats.gz'), sep=r'\s+'))
+    assert tables[0].direct_Beta.notna().any()
+    pd.testing.assert_frame_equal(*tables)
+
+
 def test_parallel_gwas_is_safe_with_numba_workqueue(tmp_path):
     root = Path(__file__).resolve().parents[1]
     example = root / 'snipar' / 'example' / 'example_data'

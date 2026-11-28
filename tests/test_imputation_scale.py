@@ -147,3 +147,51 @@ def test_parent_child_fast_path_matches_general_imputation(individual_frequencie
                frequencies, threads=2, silent_progress=True)
     for key in outputs[0]:
         np.testing.assert_array_equal(outputs[0][key], outputs[1][key], err_msg=key)
+
+
+def test_parent_origin_is_duo_specific_and_indexes_the_output_slice():
+    families = pd.DataFrame({
+        "FID": [b"father_known", b"mother_known"], "IID": [[b"c"], [b"c"]],
+        "FATHER_ID": [b"f", b"0"], "MOTHER_ID": [b"0", b"m"],
+        "has_father": [True, False], "has_mother": [False, True], "single_parent": True,
+    })
+    ids = {b"c": 0, b"f": 1, b"m": 2}
+    phased = np.array([[[0, 1], [0, 1], [1, 0], [0, 1]],
+                       [[0, 1], [0, 1], [0, 1], [0, 1]],
+                       [[0, 1], [0, 1], [0, 1], [0, 1]]], dtype=np.int8)
+    dosage = phased.sum(axis=2, dtype=np.int8)
+    pos = np.arange(phased.shape[1])
+    freq = np.full((len(ids), 2), 0.25)
+    baseline, inferred = {}, {}
+    impute(families, ids, phased, dosage, {}, pos, baseline, "1", freq,
+           output_start=1, output_stop=3, silent_progress=True)
+    impute(families, ids, phased, dosage, {}, pos, inferred, "1", freq,
+           output_start=1, output_stop=3, silent_progress=True, threads=2,
+           parent_origin_index={(1, 0): 0, (2, 0): 1},
+           parent_origin=np.array([[0, -1], [1, -1]], dtype=np.int8))
+    np.testing.assert_allclose(baseline["imputed_par_gts"], 0.5)
+    np.testing.assert_allclose(inferred["imputed_par_gts"], [[1.25, 0.5], [0.25, 0.5]])
+
+
+def test_parent_origin_uses_siblings_ibd_states_and_preserves_mendelian_checks():
+    families = pd.DataFrame({
+        "FID": [b"fam"], "IID": [[b"a", b"b"]],
+        "FATHER_ID": [b"f"], "MOTHER_ID": [b"0"],
+        "has_father": True, "has_mother": False, "single_parent": True,
+    })
+    ids = {b"a": 0, b"b": 1, b"f": 2}
+    phased = np.array([[[0, 1], [0, 1], [0, 0], [0, 1], [0, 1], [1, 1]],
+                       [[1, 0], [0, 0], [0, 0], [1, 0], [1, 0], [0, 1]],
+                       [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]], dtype=np.int8)
+    dosage = phased.sum(axis=2, dtype=np.int8)
+    ibd = {("a", "b"): [0, 2, 1, 3, 3, 0, 4, 5, 2]}
+    origin = np.array([[0, 0, 0, 0, -1, 0], [1, 1, 1, 1, 1, 0]], dtype=np.int8)
+    parent_copy = np.array([[0, 1, 0, 0, -1, 0], [0, 1, 1, 0, 1, 0]], dtype=np.int8)
+    outputs = {}
+    impute(families, ids, phased, dosage, ibd, np.arange(phased.shape[1]), outputs,
+           "1", np.full(dosage.shape, 0.25), silent_progress=True,
+           parent_origin_index={(2, 0): 0, (2, 1): 1},
+           parent_origin=origin, parent_haplotype=parent_copy)
+    np.testing.assert_allclose(outputs["imputed_par_gts"], [[2, 1, 0.25, 2, 1.25, np.nan]])
+    np.testing.assert_allclose(outputs["num_observed_parental_alleles"], [[4, 4, 3, 4, 3, np.nan]])
+    np.testing.assert_allclose(outputs["mendelian_error_ratio"], [0, 0, 0, 0, 0, 0.5])

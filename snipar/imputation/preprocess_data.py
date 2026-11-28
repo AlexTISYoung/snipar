@@ -274,7 +274,7 @@ def prepare_imputation_pedigree(pedigree, genotype_ids, *, control=False, pedigr
 
 def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king,
                  bim_address=None, fam_address=None, control=False, chromosome=None,
-                 pedigree_nan="0", *, prepared_pedigree=None):
+                 pedigree_nan="0", *, prepared_pedigree=None, has_ibd_posterior=False):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -392,7 +392,7 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
     logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
     if ibd_address is None:
         logging.info(f"with chromosomes {chromosomes} making an empty ibd dataframe")
-        if (sibships["sib_count"]>1).any():
+        if not has_ibd_posterior and (sibships["sib_count"] > 1).any():
             raise Exception("Should provide ibd file in the presence of families with multiple sibs")
         ibd = {}
     else:
@@ -411,10 +411,11 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             # The compact native plan keeps only IBD for eligible families. At
             # ingestion, discard segments whose samples are absent entirely.
             genotype_ids = {iid.decode() for iid in ped_ids}
+            chromosome_labels = (str(chromosomes[0]), f"{chromosomes[0]}.0")
             with pd.read_csv(segments_path, sep=r"\s+", dtype=types,
                              keep_default_na=False, usecols=[*columns, "Chr"], chunksize=200_000) as parts:
                 for part in parts:
-                    selected = part["Chr"].isin(chromosomes.astype(str))
+                    selected = part["Chr"].isin(chromosome_labels)
                     selected &= part["ID1"].isin(genotype_ids) & part["ID2"].isin(genotype_ids)
                     for first, second, start, stop, ibd_type in part.loc[selected, columns].itertuples(
                             index=False, name=None):

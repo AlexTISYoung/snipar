@@ -44,7 +44,12 @@ cdef cpair[cpair[double, float], cpair[int, bint]] impute_snp_from_parent_offspr
                       int len_snp_ibd0,
                       int len_snp_ibd1,
                       int len_snp_ibd2,
-                      bint use_backup
+                      bint use_backup,
+                      int origin_snp,
+                      size_t family_start,
+                      const int[:] origin_rows,
+                      const signed char[:, :] parent_origin,
+                      const signed char[:, :] parent_haplotype,
                       ) noexcept nogil
 
 cdef cmap[cpair[cstring, cstring], vector[int]] dict_to_cmap(dict the_dict)

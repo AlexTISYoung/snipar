@@ -1,4 +1,5 @@
 from numba import njit
+from gzip import open as gzip_open
 import numpy as np
 from os import path
 import snipar
@@ -12,15 +13,20 @@ def pos_to_cM(pos, boundaries, cM_pos):
             output[i] = cM_pos[indices[i]]
     return output
 
-def decode_map_from_pos(chrom,pos):
+def decode_map_from_pos(chrom, pos, *, extrapolate=False):
     decode_map_path = path.join(path.dirname(snipar.__file__), f'util_data/decode_map/chr_{chrom}.gz')
     map = np.loadtxt(decode_map_path, dtype=float, skiprows=1)
     boundaries = np.hstack((np.array(map[0, 0], dtype=np.int_),np.array(map[:, 1], dtype=np.int_)))
-    return pos_to_cM(pos, boundaries, map[:, 2])
+    output = pos_to_cM(pos, boundaries, map[:, 2])
+    if extrapolate:
+        _linear_endpoints(pos, output, map[:, 0], map[:, 2], right=boundaries[-1])
+    return output
 
 
-def get_map_positions(mapfile, gts, min_map_prop=0.5):
-    with open(mapfile) as stream:
+def get_map_positions(mapfile, gts, min_map_prop=0.5, *, extrapolate=False):
+    """Interpolate cM positions, using all map anchors if min_map_prop is None."""
+    opener = gzip_open if str(mapfile).endswith('.gz') else open
+    with opener(mapfile, 'rt') as stream:
         header = stream.readline().split()
     if "pposition" not in header or "gposition" not in header:
         raise ValueError("Map file must contain columns pposition and gposition")
@@ -31,7 +37,7 @@ def get_map_positions(mapfile, gts, min_map_prop=0.5):
     )
     if not cm_pos.size:
         raise ValueError("Map file must contain at least one position")
-    if not np.isfinite(cm_pos).all():
+    if not np.isfinite(cm_pos).all() or not np.isfinite(bp_pos).all():
         raise ValueError("Map cannot have non-finite positions")
     if (np.diff(bp_pos) <= 0).any():
         raise ValueError("Physical positions in the map must be strictly increasing")
@@ -39,11 +45,16 @@ def get_map_positions(mapfile, gts, min_map_prop=0.5):
         raise ValueError("Map file cannot have negative values")
     if (np.diff(cm_pos) < 0).any():
         raise ValueError("Map not monotonic. Please make sure input is ordered correctly")
-    if cm_pos.size > 1 and cm_pos[0] == cm_pos[-1]:
+    if min_map_prop is not None and cm_pos.size > 1 and cm_pos[0] == cm_pos[-1]:
         raise ValueError("Map file has no variation")
     if cm_pos[-1] > 5000:
         raise ValueError("Maximum value of map too large")
 
+    if min_map_prop is None:
+        output = np.interp(gts.pos, bp_pos, cm_pos)
+        if extrapolate:
+            _linear_endpoints(gts.pos, output, bp_pos, cm_pos)
+        return output
     in_map = np.isin(gts.pos, bp_pos)
     prop_in_map = np.mean(in_map) if in_map.size else 0
     if prop_in_map < min_map_prop:
@@ -54,7 +65,24 @@ def get_map_positions(mapfile, gts, min_map_prop=0.5):
         print("Linearly interpolating genetic map for SNPs not in input map")
     # Retain interpolation between the common SNPs.
     shared_positions = np.unique(gts.pos[in_map])
-    return np.interp(gts.pos, shared_positions, cm_pos[np.searchsorted(bp_pos, shared_positions)])
+    shared_cm = cm_pos[np.searchsorted(bp_pos, shared_positions)]
+    output = np.interp(gts.pos, shared_positions, shared_cm)
+    if extrapolate:
+        _linear_endpoints(gts.pos, output, shared_positions, shared_cm)
+    return output
+
+
+def _linear_endpoints(positions, output, bp, cm, *, right=None):
+    """Extend a map using the slopes of its first and last anchor intervals."""
+    right = bp[-1] if right is None else right
+    left_mask, right_mask = positions < bp[0], positions >= right
+    if len(bp) == 1:
+        output[left_mask | right_mask] = cm[0]
+        return
+    first_rate = (cm[1] - cm[0]) / (bp[1] - bp[0])
+    last_rate = (cm[-1] - cm[-2]) / (bp[-1] - bp[-2])
+    output[left_mask] = cm[0] + first_rate * (positions[left_mask] - bp[0])
+    output[right_mask] = cm[-1] + last_rate * (positions[right_mask] - right)
 
 def map_from_bed(bedfile, chrom):
     bimfile = bedfile.removesuffix(".bed")+'.bim'

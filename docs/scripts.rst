@@ -155,10 +155,96 @@ ibd.py
 .. _ibd.py:
 .. automodule:: snipar.scripts.ibd
 
+``--map`` accepts a SHAPEIT-format map with ``pposition`` (bp) and
+``gposition`` (cM) columns. SNIPar interpolates between the map anchors and
+extrapolates linearly past either end using the slope of the nearest anchor
+interval. Without ``--map``, it uses informative BIM cM values when available
+or the bundled GRCh38 deCODE map, with linear extension at its endpoints.
+
+``--posterior`` writes one HDF5 file per chromosome at
+``<out>_chr_<N>.ibd.posterior.hdf5``. An ``@`` in ``--out`` is replaced by the
+chromosome number. The file contains sibling ``pairs``, marker ``positions``
+in bp, ``variant_ids``, ``genetic_map_cm``, and a float32 ``probabilities``
+array indexed by pair, retained marker, and IBD state (0, 1, or 2). Positions
+are sorted, and multiple markers can share a position. The gzipped hard
+segment files are also written. With ``--batches``, each posterior file uses
+the same batch number as its segment file.
+
+``--joint`` fits an exact inheritance-vector HMM to each complete set of
+three or four genotyped full siblings, using unphased genotype dosages.
+The hard segments for these families come from one coherent Viterbi path
+without smoothing individual pairs. The optional HDF5 output contains the
+projected pair marginals. SNIPar uses the pair HMM and the usual segment
+smoothing for the remaining pairs.
+
+Every run also writes ``<out>.ibd.relatedness.tsv.gz``, with ``@`` replaced by
+``genome``. For each pair, the file records the number of analyzed chromosomes,
+the span covered by retained markers, and the posterior expected lengths of
+IBD0, IBD1, and IBD2, in cM and Mb. Lengths are integrated by the trapezoidal
+rule between retained markers and summed across chromosomes. The sharing
+proportion is ``(0.5 * IBD1 + IBD2) / span`` in each unit. A zero span gives a
+missing sharing proportion.
+
+For one phased pair, the Python function
+``snipar.ibd_phased.infer_phased_pair`` takes phased alleles, a genetic map,
+allele frequencies, and explicit phase-switch and allele-error probabilities.
+It returns IBD state marginals and each sibling's phase-switch probabilities.
+During IBD2, equal switch rates give symmetric attribution of a relative
+phase switch. Unequal rates can change that attribution under the model.
+
+The :download:`1000 Genomes calibration script <../benchmarks/calibrate_ibd_posteriors.py>`
+holds out sites at positions divisible by five for Mendelian transmission
+labels. It estimates allele frequencies and LD in unrelated reference samples
+matched to each family's superpopulation. From the source checkout, supply
+the expanded NYGC single-chromosome VCF, the pedigree and population table,
+and a GRCh38 deCODE map with ``pos``, ``chr``, and ``cM`` columns.
+
+.. code-block:: sh
+
+   python benchmarks/calibrate_ibd_posteriors.py 1kg.chr22.vcf.gz pedigree_population.txt chr22.decode.map.gz calibration.json
+
 impute.py
 ---------
 .. _impute.py:
 .. automodule:: snipar.scripts.impute
+
+For phased BGEN and VCF inputs, ``impute.py`` uses a four-state duoHMM-style
+model for each observed parent and child in a family with one missing parent.
+The model follows transmission along the chromosome while allowing for phase
+switches, crossovers, and genotype mismatches. Calls with at least 99% posterior
+support inform which child allele came from the missing parent. At other sites,
+imputation uses the existing genotype and local haplotype rules. The output
+uses the standard imputation HDF5 layout.
+
+Supply ``--parent_origin_map`` with ``pposition`` (bp) and ``gposition`` (cM)
+columns to use a genetic map. Otherwise the model uses informative BIM cM
+values when BED and phased BGEN are supplied together, or approximates 1 cM per
+Mb. ``--no_parent_origin`` runs the previous phased method on the same inputs.
+
+Use ``--ibd-posterior PATH`` to supply sibling IBD probabilities from
+``ibd.py --posterior``. An ``@`` in ``PATH`` stands for the chromosome number.
+For a SNIPar ``--ibd`` prefix such as ``chr_@.ibd``, imputation automatically
+uses the matching ``chr_@.ibd.posterior.hdf5`` file when present. SNIPar matches
+pairs by sibling IID in either order, uses marker IDs to resolve shared
+positions when possible, and linearly interpolates between covered positions
+in bp.
+
+For two-sibling families using sibling IBD, SNIPar averages the state-specific
+parental dosage estimates using the posterior probabilities of compatible
+states. It uses the hard-state result where this average is unavailable.
+Larger families continue to use hard states. With ``--ibd``, hard states come
+from the supplied segments. When supplying only posteriors, SNIPar takes the
+most probable state for each covered pair and marker as the hard state.
+Pass the segment files to carry coherent ``--joint`` Viterbi calls into
+imputation. A combined posterior estimate for larger families requires
+their joint inheritance distribution.
+
+``imputed_par_gts`` stores the ordinary estimate. ``robust_imputed_par_gts``
+and ``num_observed_parental_alleles`` store the hard-state estimate and its
+measured allele count for robust analyses. The separate
+``num_expected_observed_parental_alleles`` dataset stores the posterior-weighted
+allele count, and ``posterior_num_sibships`` gives the number of successful
+two-sibling posterior imputations per marker.
 
 vcf_to_genotypes.py
 -------------------

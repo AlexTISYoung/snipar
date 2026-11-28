@@ -168,3 +168,176 @@ cohorts. Keep both outputs and compare the BED, BIM, and FAM files.
    cmp exact/genotypes.bed early/genotypes.bed
    cmp exact/genotypes.bim early/genotypes.bim
    cmp exact/genotypes.fam early/genotypes.fam
+
+Parent-of-origin imputation
+---------------------------
+
+Both modes received the same statistically phased genotypes on GRCh38
+chr22:17–25 Mb. In the empirical cohort, one complete trio was selected
+per EUR pedigree, then one parent was held out in each trio. The resulting
+86 singleton duos include 43 genotyped fathers and 43 genotyped mothers.
+SNPs were filtered at 1% observed-sample MAF. The simulated cohort uses the
+140 three-child families described above, including 47 sibships with one
+parent held out and 46 sibships with both parents held out.
+
+In both cohorts, Beagle 5.5 ``27Feb25.75f`` phased the visible samples
+jointly using only their unphased genotypes and the GRCh38 map. The
+published VCF's original family-informed phase was discarded before
+rephasing. In the simulation, the published phase of the founders was
+used to generate offspring before that phase was discarded. Both
+imputation runs used the same inferred sibling IBD segments. Automatic
+imputation-quality filtering was disabled because Beagle's typed sites
+have no DR2 values.
+
+Dosage RMSE compares the same finite dosages in both modes with the
+held-out parent's genotype or the mean of both held-out parents.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Cohort
+     - SNPs
+     - Dosages compared
+     - Statistical phase only RMSE
+     - Parent-of-origin RMSE
+   * - Empirical duos, one parent missing
+     - 28,188
+     - 2,422,213
+     - 0.352754
+     - 0.349284
+   * - Simulated sibships, one parent missing
+     - 28,964
+     - 1,360,576
+     - 0.224662
+     - 0.186773
+   * - Simulated sibships, both parents missing
+     - 28,964
+     - 1,332,322
+     - 0.131661
+     - 0.131661
+
+The empirical RMSE decreased by 0.98%, and the simulated
+one-parent-missing RMSE decreased by 16.86%. The origin-aware run imputed
+two additional dosages in the simulated one-parent-missing sibships and
+returned identical dosages for the 46 sibships with both parents missing.
+
+When the genotyped parent and child were both heterozygous and the
+held-out parent was homozygous, the empirical HMM called 173,307 of
+175,533 orientations. Of these, 168,637 (97.31%) agreed with Mendelian
+truth. Among simulated double heterozygotes, the HMM called 458,391 of
+459,157 orientations, with 457,622 correct (99.83%). Simulated offspring
+had Mendelian-consistent calls by construction. The results are specific
+to the EUR families, marker filter and chromosome interval.
+
+Wall time and sampled main-process peak RSS are medians over three runs
+after one warm-up. Each run used a fresh SNIPar process with four
+threads on Apple Silicon and Python 3.12.16. Times include VCF conversion
+and exclude the shared Beagle and IBD steps.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Cohort
+     - Statistical phase only, seconds
+     - Parent of origin, seconds
+     - Statistical phase only, MiB
+     - Parent of origin, MiB
+   * - Empirical duos
+     - 5.836
+     - 5.009
+     - 351.9
+     - 407.6
+   * - Simulated sibships
+     - 5.249
+     - 5.472
+     - 504.7
+     - 520.0
+
+Run times overlapped between modes in each cohort. The observed ranges
+were 5.099–6.136 seconds and 4.756–6.402 seconds for empirical duos, and
+5.104–5.288 seconds and 5.110–5.612 seconds for simulated sibships.
+
+With the same input downloads as above and the `Beagle JAR
+<https://faculty.washington.edu/browning/beagle/beagle.html>`_, run
+the following commands using an installed SNIPar environment or a built
+source checkout. The phase step requires Java and the comparison uses
+``psutil`` for memory measurements.
+
+.. code-block:: sh
+
+   python benchmarks/benchmark_parent_origin.py prepare-duos region/eur.chr_22.vcf.gz pedigree_population.txt chr22.map.gz empirical
+   python benchmarks/benchmark_parent_origin.py phase empirical chr22.map.gz phased-duos --beagle-jar beagle.27Feb25.75f.jar
+   python benchmarks/benchmark_parent_origin.py compare empirical phased-duos/beagle.vcf.gz compare-duos --origin-truth trios
+
+   python benchmarks/benchmark_parent_origin.py phase region chr22.map.gz phased-sibs --beagle-jar beagle.27Feb25.75f.jar
+   python -c 'import runpy, numpy as np; np.random.seed(20261127); runpy.run_module("snipar.scripts.ibd", run_name="__main__", alter_sys=True)' --vcf phased-sibs/beagle.vcf.gz --no-quality-filter --chr_range 22 --pedigree region/pedigree.txt --map region/map.txt --p_error .001 --threads 4 --out phased-sibs/ibd_@
+   python benchmarks/benchmark_parent_origin.py compare region phased-sibs/beagle.vcf.gz compare-sibs --ibd phased-sibs/ibd_22.ibd --origin-truth simulation
+
+Calibration of simulated parental dosages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We regressed the true masked dosage on the imputed dosage with an
+intercept, following the `paper's imputation bias check
+<https://pmc.ncbi.nlm.nih.gov/articles/PMC9197765/>`_ and
+`Supplementary Note §2, Lemma 1
+<https://alextisyoung.github.io/assets/pdf/snipar_supp.pdf#page=7>`_.
+The expected calibration slope is 1. The outcome for two missing
+parents was the true mean parental dosage, matching the HDF5 scale.
+Fits used ALT dosages finite under both methods. Confidence intervals
+cluster by simulated family and condition on the tested chr22 interval.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Masking
+     - Method
+     - Pooled slope (95% CI)
+     - SNP-centered slope (95% CI)
+   * - One parent, 47 families
+     - Statistical phase only
+     - 0.98364 (0.97160–0.99567)
+     - 0.97350 (0.94866–0.99834)
+   * - One parent, 47 families
+     - Parent of origin
+     - 0.98901 (0.98319–0.99483)
+     - 0.98628 (0.97565–0.99692)
+   * - Both parents, 46 families
+     - Both methods
+     - 0.99729 (0.99427–1.00032)
+     - 0.99668 (0.98901–1.00435)
+
+The one-parent pooled slopes were below 1 for both methods
+(*P* = 0.0088 and 0.00043). The paired slope difference was +0.00537
+(95% CI −0.00545 to +0.01619), using the difference of the two
+sets of family-level regression score contributions. The SNP-centered
+fit removes between-SNP differences in mean dosage.
+
+The ratio of imputed to true dosage variance uses the same matched
+calls. The SNP-centered ratio divides the summed within-SNP imputed
+squared deviations by the corresponding true squared deviations.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Masking
+     - Method
+     - Pooled variance ratio
+     - SNP-centered variance ratio
+   * - One parent, 47 families
+     - Statistical phase only
+     - 0.92326
+     - 0.82019
+   * - One parent, 47 families
+     - Parent of origin
+     - 0.94691
+     - 0.86927
+   * - Both parents, 46 families
+     - Both methods
+     - 0.95622
+     - 0.85292
+
+.. code-block:: sh
+
+   python benchmarks/validate_1000g_eur.py region --calibration \
+       --imputation compare-sibs/statistical_phase_0.hdf5 \
+       --compare-imputation compare-sibs/parent_origin_0.hdf5

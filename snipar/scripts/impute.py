@@ -11,6 +11,18 @@ Note that individuals are assumed to have unique individual IDS (IID). Siblings 
 Use the ``--king`` option to provide the KING relatedness inference output (usually has suffix .kin0) and the ``--agesex`` option to provide the age & sex information. The script
 constructs a pedigree from this information and outputs it in the HDF5 output.
 
+For phased BGEN or VCF input, a duoHMM-style model infers which offspring haplotype came from
+the observed parent across the chromosome before imputing the other parent. Uncertain assignments
+use the original imputation rules. Use ``--no_parent_origin`` to run the original phased method.
+
+Use ``--ibd-posterior`` to supply marker-level IBD probabilities. A sibling posterior file
+beside the ``--ibd`` segments is picked up automatically. For two-sibling families, imputation
+averages over genotype-compatible IBD states and uses the segment estimate when probabilities
+are unavailable. Larger families use hard states. The output preserves hard-state dosages
+in ``robust_imputed_par_gts`` and reports the posterior-weighted allele count separately in
+``num_expected_observed_parental_alleles``. ``posterior_num_sibships`` counts successful
+two-sibling posterior imputations at each marker.
+
 **Usage**
 
     ``impute.py --ibd chr_@.ibd --bed chr_@ --king king.kin0 --agesex agesex.txt --out chr_@ --threads 4``
@@ -29,6 +41,7 @@ from snipar.imputation.preprocess_data import (
     ImputationGenotypes, frequency_model_aic, prepare_data, prepare_gts, prepare_imputation_pedigree,
 )
 from snipar.imputation.impute_from_sibs import ImputationFamilies, impute
+from snipar.imputation.ibd_posterior import SiblingIBDPosteriors
 from snipar.pedigree import create_pedigree
 from snipar.utilities import parse_obsfiles
 from snipar.genotype_cli import add_vcf_options, with_genotypes
@@ -38,28 +51,34 @@ import numpy as np
 import pandas as pd
 import os
 import psutil
+from contextlib import nullcontext
 from multiprocessing import get_context
 from time import time
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryDirectory, TemporaryFile
+from types import SimpleNamespace
 from snipar.utilities import get_parser_doc
+from snipar.map import get_map_positions
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.resources import (
     MIB, available_cpus, get_memory_budget, limit_native_threads, plan_batches, worker_environment,
 )
 
 _MARKER_ROWS = {"bim_values"}
-_MARKER_COLUMNS = {"imputed_par_gts", "num_observed_parental_alleles", "maf_coefs"}
+_FAMILY_MARKER_COLUMNS = {"imputed_par_gts", "num_observed_parental_alleles",
+                          "robust_imputed_par_gts", "num_expected_observed_parental_alleles"}
+_MARKER_COLUMNS = _FAMILY_MARKER_COLUMNS | {"maf_coefs"}
 _MARKER_VECTORS = {
     "pos", "non_duplicates", "ratio_ibd0", "mendelian_error_ratio",
     "estimated_genotyping_error", "parent_ratio_backup", "sib_ratio_backup",
+    "posterior_num_sibships",
     "standard_f", "maf_TSS", "maf_RSS1", "maf_RSS2", "maf_R2_1", "maf_R2_2",
     "maf_larger1", "maf_less0",
 }
 
 
-def _write_block(file, values, first, stop, total, bim_dtype, compression, compression_opts):
-    """Append retained SNPs in bounded row tiles to the final HDF5 layout."""
+def _write_block(file, values, target, total, bim_dtype, compression, compression_opts, order=None):
+    """Write retained SNPs in bounded row tiles to the final HDF5 layout."""
     for key, source in values.items():
         if key in _MARKER_COLUMNS:
             axis = 1
@@ -73,7 +92,7 @@ def _write_block(file, values, first, stop, total, bim_dtype, compression, compr
         if key not in file:
             shape = list(source.shape)
             shape[axis] = total
-            if key in {"imputed_par_gts", "num_observed_parental_alleles"}:
+            if key in _FAMILY_MARKER_COLUMNS:
                 columns = min(128, source.shape[1])
                 max_rows = max(1, MIB // (2 * columns))
                 row_chunks = (shape[0] + max_rows - 1) // max_rows
@@ -85,17 +104,21 @@ def _write_block(file, values, first, stop, total, bim_dtype, compression, compr
                 file.create_dataset(key, shape, dtype=dtype)
         dest = file[key]
         if axis == 0:
-            dest[first:stop] = source
+            dest[target] = source if order is None else source[order]
         else:
             # Ask NumPy to round results to float16 before passing them to
             # HDF5, the same conversion used by the original direct writer.
             rows = max(1, 8 * MIB // max(1, source.shape[1] * dest.dtype.itemsize))
             for start in range(0, len(source), rows):
                 end = min(start + rows, len(source))
-                dest[start:end, first:stop] = np.ascontiguousarray(source[start:end], dtype=dest.dtype)
+                tile = source[start:end]
+                if order is not None:
+                    tile = tile[:, order]
+                dest[start:end, target] = np.ascontiguousarray(tile, dtype=dest.dtype)
 
 
-def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chunks, budget):
+def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chunks, budget, n_duos=0,
+                     posterior_pairs=None):
     """Plan core and phase-context memory, with independent BGEN decoder tiles."""
     samples = reader.n_samples
     if reader.bgen is not None:
@@ -121,11 +144,56 @@ def _plan_imputation(reader, marker_count, family_count, max_sibs, threads, chun
     # Float64 imputed dosages and float32 observed-allele counts are
     # rounded into HDF5 with a small, independent staging buffer.
     marker_bytes = max(1, 12 * family_count + 4 * samples + 64 * threads + phased_work_per_marker)
+    if n_duos:
+        # Two origin labels per duo, plus the forward probabilities for each worker.
+        marker_bytes += 2 * n_duos + 32 * min(threads, n_duos)
+        fixed_decode += 128 * n_duos + 32 * marker_count
+    if posterior_pairs is not None:
+        marker_bytes += 12 * family_count + 72 * posterior_pairs + 4 * threads
     if reader.matched_pcs is not None:
         marker_bytes += 72 * samples
     _, width = plan_batches(marker_count, marker_bytes, batch_size=(marker_count + chunks - 1) // chunks,
                             fixed_bytes=16 * MIB + fixed_decode + halo_bytes, memory_limit=budget)
     return width
+
+
+def _parent_origin_pairs(sibships, genotype_rows):
+    pair_index = {}
+    for father, mother, children, has_father, has_mother in sibships[
+        ["FATHER_ID", "MOTHER_ID", "IID", "has_father", "has_mother"]
+    ].itertuples(index=False, name=None):
+        if has_father != has_mother:
+            parent = genotype_rows[father if has_father else mother]
+            for child in children:
+                pair = parent, genotype_rows[child]
+                pair_index.setdefault(pair, len(pair_index))
+    return np.array(list(pair_index), dtype=np.intp).reshape(-1, 2), pair_index
+
+
+def _parent_origin_recombination(bim, markers, positions, mapfile):
+    from snipar.imputation.duohmm import recombination_probabilities
+
+    genetic_positions = None
+    if mapfile is not None:
+        genetic_positions = get_map_positions(mapfile, SimpleNamespace(pos=positions), min_map_prop=None)
+    elif "morgans" in bim:
+        # The third PLINK BIM field is in cM, as in SNIPAR's IBD input.
+        cm = bim["morgans"].to_numpy(dtype=np.float64)[markers]
+        if cm.size > 1 and np.any(cm != cm[0]):
+            genetic_positions = cm
+    return recombination_probabilities(positions, genetic_positions)
+
+
+def _write_origin_checkpoints(genotypes, markers, pairs, recombination, boundaries, threads, checkpoint):
+    from snipar.imputation.duohmm import advance_parental_origin
+
+    alpha = None
+    for first, stop in zip(boundaries[:-2], boundaries[1:-1]):
+        phased, dosages = genotypes.read_calls(markers[first:stop])
+        del dosages
+        alpha = advance_parental_origin(phased, pairs, recombination[first:stop], alpha, threads=threads)
+        checkpoint.write(alpha.tobytes())
+        del phased
 
 
 def _select_pc_model(genotypes, markers, width):
@@ -217,6 +285,12 @@ def run_imputation(data):
                 chunks: int
                     Minimum number of variant blocks. The memory budget can require more blocks.
 
+                parent_origin: bool, optional
+                    Infer parent of origin for phased data. Defaults to True.
+
+                parent_origin_map: str, optional
+                    Genetic map for the parental-origin model, with pposition and gposition columns in bp and cM.
+
                 output_compression: str, optional
                     Optional compression algorithm used in writing the output as an hdf5 file. It can be either gzip or lzf. None means no compression.
 
@@ -246,6 +320,11 @@ def run_imputation(data):
     find_optimal_pc = data["find_optimal_pc"]
     ibd_address = data.get("ibd_address")
     ibd_is_king = data.get("ibd_is_king")
+    posterior_path = data.get("ibd_posterior")
+    if posterior_path is None and ibd_address is not None and not ibd_is_king:
+        candidate = Path(f"{ibd_address}.posterior.hdf5")
+        if candidate.is_file():
+            posterior_path = str(candidate)
     output_address = data["output_address"]
     start = data.get("start")
     end = data.get("end")
@@ -265,6 +344,7 @@ def run_imputation(data):
         pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam,
         control, chromosome=chromosome, pedigree_nan=pedigree_nan,
         prepared_pedigree=data.get("prepared_pedigree"),
+        has_ibd_posterior=posterior_path is not None,
     )
     if sibships.empty:
         raise ValueError("No families have the required sibling or parental genotypes for imputation")
@@ -280,10 +360,36 @@ def run_imputation(data):
         raise ValueError("No unique SNPs in the requested slice")
     bim_dtype = bim.iloc[markers].to_numpy().astype("S").dtype
     output = Path(f"{output_address}.hdf5")
+    posterior_source = nullcontext(None)
+    if posterior_path is not None:
+        posterior_path = str(posterior_path).replace("@", str(chromosomes[0]))
+        posterior_source = SiblingIBDPosteriors(posterior_path, sibships, chromosome=chromosomes[0],
+                                               include_larger_families=ibd_address is None)
 
     with ImputationGenotypes(phased_address, unphased_address, bim, ped_ids, pcs, pc_ids,
-                             read_threads=threads) as genotypes:
-        prepared = ImputationFamilies(sibships, genotypes.id_rows, ibd, genotypes.n_samples)
+                             read_threads=threads) as genotypes, posterior_source as posteriors:
+        pair_posterior_index = None if posteriors is None else posteriors.pair_index
+        prepared = ImputationFamilies(sibships, genotypes.id_rows, ibd, genotypes.n_samples,
+                                      posterior_index=pair_posterior_index)
+        parent_origin = genotypes.with_phases and data.get("parent_origin", True) and sibships["single_parent"].any()
+        marker_order = None
+        n_duos = 0
+        if parent_origin:
+            from snipar.imputation.duohmm import call_parental_origin
+
+            pairs, pair_index = _parent_origin_pairs(sibships, genotypes.id_rows)
+            n_duos = len(pairs)
+            positions = bim["coordinate"].to_numpy(dtype=np.int64)[markers]
+            if np.any(positions[1:] < positions[:-1]):
+                marker_order = np.argsort(positions, kind="stable")
+                markers, positions = markers[marker_order], positions[marker_order]
+            recombination = _parent_origin_recombination(bim, markers, positions, data.get("parent_origin_map"))
+            logging.info("Inferring parent of origin for %d parent-offspring pairs", n_duos)
+        if posteriors is not None:
+            positions = bim["coordinate"].to_numpy(dtype=np.int64)[markers]
+            identifiers = bim["id"].to_numpy(dtype="S")[markers]
+            posteriors.align(positions, identifiers)
+            logging.info("Matched %d sibling pairs to IBD posteriors", len(pair_posterior_index))
         genotypes.id_rows = None
         del ibd, ped_ids
         budget = get_memory_budget()
@@ -291,7 +397,8 @@ def run_imputation(data):
             budget = min(budget, data["worker_budget"] - psutil.Process().memory_info().rss)
         budget = max(0, budget)
         width = _plan_imputation(genotypes, len(markers), len(sibships),
-                                 int(sibships["sib_count"].max()), threads, chunks, budget)
+                                 int(sibships["sib_count"].max()), threads, chunks, budget, n_duos,
+                                 None if posteriors is None else len(pair_posterior_index))
         count = max(min(chunks, len(markers)), (len(markers) + width - 1) // width)
         boundaries = np.linspace(0, len(markers), count + 1, dtype=int)
         logging.info("Using %d variant blocks (%d SNPs maximum, %.0f MiB budget, %d threads)",
@@ -304,25 +411,56 @@ def run_imputation(data):
         half_window = 50 if genotypes.with_phases else 0
         with TemporaryDirectory(prefix=".snipar-impute-", dir=output.parent) as directory:
             temporary_output = Path(directory) / "output.hdf5"
-            with h5py.File(temporary_output, "w") as file:
-                for i, (first, stop) in enumerate(zip(boundaries[:-1], boundaries[1:]), 1):
+            # Carry the HMM across block boundaries. Store one alpha per duo and block
+            # on disk, then smooth in reverse order while writing the final output.
+            scratch = TemporaryFile(dir=directory) if parent_origin and count > 1 else nullcontext(None)
+            with scratch as checkpoint, h5py.File(temporary_output, "w") as file:
+                blocks = range(count)
+                beta = None
+                if checkpoint is not None:
+                    logging.info("Computing parent-of-origin forward checkpoints for %d blocks", count)
+                    _write_origin_checkpoints(genotypes, markers, pairs, recombination, boundaries, threads, checkpoint)
+                    checkpoint_bytes = n_duos * 4 * np.dtype(np.float64).itemsize
+                    blocks = reversed(blocks)
+                for completed, block in enumerate(blocks, 1):
+                    first, stop = boundaries[block:block + 2]
                     first_read = max(0, first - half_window)
                     stop_read = min(len(markers), stop + half_window)
                     retained = slice(first - first_read, stop - first_read)
                     if count > 1:
-                        logging.info("Imputing variant block %d/%d", i, count)
+                        logging.info("Imputing variant block %d (%d/%d)", block + 1, completed, count)
                     phased, dosages, _, pos, freqs, metadata = prepare_gts(
                         phased_address, unphased_address, bim, pedigree_output, None,
                         chromosomes, start, end, marker_indices=markers[first_read:stop_read],
                         prepared=genotypes, retained=retained,
                     )
+                    origin_args = {}
+                    if parent_origin:
+                        alpha = None
+                        if block:
+                            checkpoint.seek((block - 1) * checkpoint_bytes)
+                            alpha = np.frombuffer(checkpoint.read(checkpoint_bytes), dtype=np.float64).reshape(n_duos, 4)
+                        origin, parent_haplotype, beta = call_parental_origin(
+                            phased[:, retained, :], pairs, recombination[first:stop], alpha, beta, threads=threads,
+                        )
+                        origin_args = dict(parent_origin=origin, parent_haplotype=parent_haplotype,
+                                           parent_origin_index=pair_index)
+                    posterior_block = None if posteriors is None else posteriors.read(first, stop)
                     impute(sibships, None, phased, dosages, None, pos, metadata, str(chromosomes),
                            freqs, threads=threads, silent_progress=silent_progress or count > 1,
                            use_backup=use_backup, prepared=prepared, return_genotypes=False,
-                           output_start=retained.start, output_stop=retained.stop)
-                    del phased, dosages, freqs
-                    _write_block(file, metadata, first, stop, len(markers), bim_dtype,
-                                 output_compression, output_compression_opts)
+                           output_start=retained.start, output_stop=retained.stop, ibd_posteriors=posterior_block,
+                           posterior_hard_fallback=ibd_address is None, **origin_args)
+                    if parent_origin:
+                        del origin, parent_haplotype, origin_args
+                    del phased, dosages, freqs, posterior_block
+                    target, order = slice(first, stop), None
+                    if marker_order is not None:
+                        targets = marker_order[first:stop]
+                        order = np.argsort(targets)
+                        target = targets[order]
+                    _write_block(file, metadata, target, len(markers), bim_dtype,
+                                 output_compression, output_compression_opts, order=order)
                     # Do not carry the completed genotype planes into the next read.
                     del metadata
             os.replace(temporary_output, output)
@@ -441,6 +579,7 @@ def main(args):
             "unphased_address": none_tansform(args.bed, "@", str(chromosome)),
             "ibd_address": none_tansform(args.ibd, "@", str(chromosome)),            
             "ibd_is_king": args.ibd_is_king,
+            "ibd_posterior": getattr(args, "ibd_posterior", None),
             "find_optimal_pc": args.find_optimal_pc,
             "output_address":output_for_chromosome(chromosome),
             "start": args.start,
@@ -450,6 +589,8 @@ def main(args):
             "threads": threads,
             "worker_budget": budget // processes if processes > 1 else None,
             "chunks": args.chunks,
+            "parent_origin": not getattr(args, "no_parent_origin", False),
+            "parent_origin_map": none_tansform(getattr(args, "parent_origin_map", None), "@", str(chromosome)),
             "output_compression":args.output_compression,
             "output_compression_opts":args.output_compression_opts,
             "chromosome":chromosome,
@@ -486,6 +627,7 @@ parser.add_argument('--ibd',
 parser.add_argument('--ibd_is_king',
                     action='store_true',
                     help='If not provided the ibd input is assumed to be in snipar. Otherwise its in king format with an allsegs file')
+parser.add_argument('--ibd-posterior', help='Sibling IBD posterior HDF5 file. Use @ for chromosome-specific files.')
 parser.add_argument('--bgen',
                     type=str, help='Prefix of phased or unphased .bgen genotypes. Use @ to substitute chromosome numbers.')
 parser.add_argument('--bed',
@@ -556,6 +698,11 @@ parser.add_argument('--chunks',
                     type=int,
                     default=1,
                     help='Minimum number of variant blocks per chromosome. Available memory may require more blocks.')
+parser.add_argument('--no_parent_origin', action='store_true',
+                    help='Use the original phased imputation method without parental-origin inference.')
+parser.add_argument('--parent_origin_map', type=str,
+                    help='Genetic map for parental-origin inference with pposition (bp) and gposition (cM) columns. '
+                         'Use @ for chromosome numbers. The default uses BIM cM if available or 1 cM per Mb.')
 parser.add_argument('--output_compression',
                     type=str,
                     default=None,

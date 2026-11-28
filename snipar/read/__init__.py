@@ -207,7 +207,11 @@ class _PreparedFamilyReader:
 
     @cached_property
     def _imputed_gts(self):
-        return self._imputation['imputed_par_gts'] if self._uses_imputation else None
+        if not self._uses_imputation:
+            return None
+        if self._robust and 'robust_imputed_par_gts' in self._imputation:
+            return self._imputation['robust_imputed_par_gts']
+        return self._imputation['imputed_par_gts']
 
     @cached_property
     def _num_al(self):
