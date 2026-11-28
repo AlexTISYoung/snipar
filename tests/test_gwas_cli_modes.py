@@ -2,7 +2,11 @@
 
 import gzip
 from itertools import combinations
+import os
+from pathlib import Path
 from shutil import copyfile
+import subprocess
+import sys
 
 import h5py
 import numpy as np
@@ -171,6 +175,26 @@ def test_gwas_vcf_ignores_imputation_chromosome_absent_from_vcf(family_inputs, t
                                     '--vc_list', '.4', '.6', '--threads', '1', '--out', str(out)]))
     assert '1 matched observed and imputed genotype files found' in capsys.readouterr().out
     assert (tmp_path / 'result_chr_22.sumstats.gz').is_file()
+
+
+def test_parallel_gwas_is_safe_with_numba_workqueue(tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    example = root / 'snipar' / 'example' / 'example_data'
+    code = ('from snipar import gwas, resources; '
+            'from snipar.scripts.gwas import main, parser; '
+            'gwas.available_cpus = resources.available_cpus = lambda: 4; '
+            'main(parser.parse_args())')
+    env = os.environ | {'NUMBA_THREADING_LAYER': 'workqueue', 'NUMBA_NUM_THREADS': '2'}
+    env['PYTHONPATH'] = os.pathsep.join(filter(None, (str(root), env.get('PYTHONPATH'))))
+    output = tmp_path / 'gwas'
+    command = [sys.executable, '-c', code, str(example / 'phenotype.txt'), '--bed', str(example / 'chr_1'),
+               '--pedigree', str(example / 'pedigree.txt'), '--sib_diff', '--cpus', '2', '--threads', '2',
+               '--vc_list', '.4', '.6', '--out', str(output), '--no_hdf5_out']
+    completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=120)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert 'and 2 workers' in completed.stdout
+    stats = pd.read_csv(output.with_suffix('.sumstats.gz'), sep=r'\s+')
+    assert stats.direct_Beta.notna().any()
 
 
 def test_gls_skips_roundoff_scale_collinearity_within_a_batch():

@@ -10,9 +10,10 @@ from snipar.utilities import make_id_dict
 from typing import Tuple
 from contextlib import contextmanager, ExitStack
 from functools import cached_property
+from threading import current_thread, main_thread
 
 from bed_reader import open_bed
-from numba import config, get_num_threads, set_num_threads
+from numba import config, get_num_threads, set_num_threads, threading_layer
 
 from snipar.gtarray import gtarray
 from snipar.read.family import IdIndex, _sample_plan, _assemble, _assemble_parallel, _read_imputed
@@ -274,8 +275,12 @@ class _PreparedFamilyReader:
         params = (output, observed, imputed, plan.genotype_rows, plan.parent_status, plan.sibling_members,
                   plan.member_offsets, plan.sibling_targets, plan.target_offsets, plan.parsum and not plan.trios_sibs,
                   plan.sib, plan.sib_diff, plan.trios_sibs, variants.flipped, self._robust, counts, num_al)
-        if self._num_threads is not None and self._num_threads > 1 and output.size >= 1_000_000:
+        parallel = self._num_threads is not None and self._num_threads > 1 and output.size >= 1_000_000
+        if parallel:
             previous = get_num_threads()
+            # The workqueue scheduler aborts if two GWAS threads enter it together.
+            parallel = current_thread() is main_thread() or threading_layer() != 'workqueue'
+        if parallel:
             set_num_threads(min(self._num_threads, config.NUMBA_NUM_THREADS))
             try:
                 _assemble_parallel(*params)
