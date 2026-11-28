@@ -17,7 +17,7 @@ import h5py
 import snipar.read as read
 import numpy as np
 from snipar.utilities import encode_str_array, outfile_name, parse_filelist, parse_obsfiles
-from snipar.genotype_cli import add_vcf_options, with_genotypes
+from snipar.genotype_cli import add_vcf_options, family_vcf_samples, read_id_list, with_genotypes
 from snipar.docgen import get_parser_doc
 from numba import set_num_threads
 from numba import config as numba_config
@@ -61,13 +61,13 @@ def _metadata(output, matrix, fit_sib, pedigree):
 
 def gts_matrix_chromosome(chrom_out, pedigree, outprefix, bedfile=None, bgenfile=None, par_gts_f=None,
                           fit_sib=False, parsum=False, max_missing=5, min_maf=0.01,
-                          imp_fams=None, num_threads=None, *, batch_size=None):
+                          imp_fams=None, num_threads=None, *, batch_size=None, ids=None):
     """Build and write genotype columns without retaining the entire chromosome."""
     if imp_fams is None and par_gts_f is not None and pedigree is None:
         pedigree, imp_fams = read.build_ped_from_par_gts(par_gts_f)
     outfile = Path(outfile_name(outprefix, '.genoarray.hdf5', chrom=chrom_out or None))
     with read.prepare_gts_matrix(ped=pedigree, imp_fams=imp_fams, bedfile=bedfile,
-                                 bgenfile=bgenfile, par_gts_f=par_gts_f, parsum=parsum,
+                                 bgenfile=bgenfile, par_gts_f=par_gts_f, parsum=parsum, ids=ids,
                                  sib=fit_sib, verbose=True, num_threads=num_threads) as reader:
         variants = reader.match_variants()
         n, k = reader.group_shapes[0]
@@ -135,6 +135,8 @@ parser.add_argument('--chr_range',
                     help='number of the chromosomes to be imputed. Should be a series of ranges with x-y format or integers.', default=None)
 parser.add_argument('--out', type=str, help="Output prefix. Writes one .genoarray.hdf5 file per chromosome, replacing @ with the chromosome number if present.",default='./')
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
+parser.add_argument('--keep', type=Path, help='Keep proband IIDs listed one per line, without a header. '
+                                             'Required relatives can contribute genotypes.')
 parser.add_argument('--parsum',action='store_true',help='Regress onto proband and sum of (imputed/observed) maternal and paternal genotypes. Default uses separate paternal and maternal genotypes when available.',default = False)
 parser.add_argument('--fit_sib',action='store_true',help='Fit indirect effect from sibling ',default=False)
 parser.add_argument('--min_maf',type=float,help='Ignore SNPs with minor allele frequency below min_maf (default 0.01)', default=0.01)
@@ -142,8 +144,23 @@ parser.add_argument('--threads',type=int,help='Number of threads to use. Uses al
 parser.add_argument('--max_missing',type=float,help='Ignore SNPs with greater percent missing calls than max_missing (default 5)', default=5)
 add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
-# Set number of threads
-@with_genotypes()
+
+
+def _keep_ids(args):
+    if getattr(args, 'keep', None) is None:
+        return None
+    ids = sorted(read_id_list(args.keep))
+    if not ids:
+        raise ValueError('--keep file contains no proband IDs')
+    return ids
+
+
+def _vcf_samples(args, available_ids):
+    return family_vcf_samples(args, available_ids, ids=_keep_ids(args), sib=args.fit_sib,
+                              regroup_pedigree=True)
+
+
+@with_genotypes(vcf_samples=_vcf_samples)
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -165,6 +182,7 @@ def main(args):
         raise(ValueError('Both bed files and bgen files provided. Please provide only one'))
     if args.imp is None and args.pedigree is None:
         raise(ValueError('Must provide pedigree if not providing imputed parental genotypes file(s)'))
+    ids = _keep_ids(args)
 
     # Find observed and imputed files
     if args.imp is None:
@@ -195,7 +213,7 @@ def main(args):
             print('Warning: only the first four pedigree columns will be used')
         if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
             ped = ped[1:]
-        _, ped = get_sibpairs_from_ped(ped[:, :4])
+        _, ped = get_sibpairs_from_ped(ped[:, :4], return_pairs=False)
 
     for i in range(chroms.shape[0]):
         if args.bed is not None:
@@ -210,7 +228,7 @@ def main(args):
             print('Obtaining genotype matrix')
         gts_matrix_chromosome(chroms[i], ped, args.out, bedfile=bedfiles[i], bgenfile=bgenfiles[i], par_gts_f=pargts_list[i],
                         fit_sib=args.fit_sib, parsum=args.parsum, max_missing=args.max_missing, min_maf=args.min_maf,
-                         num_threads=num_threads)
+                         num_threads=num_threads, ids=ids)
         
 if __name__ == "__main__":
     args=parser.parse_args()

@@ -9,7 +9,29 @@ import numpy as np
 import pytest
 from pysnptools.snpreader import Bed
 
+import snipar.simulate as simulation
+from snipar.genotype_cli import genotype_inputs
 from snipar.scripts import simulate
+
+
+def test_vcf_founder_selection_and_batched_phased_input(tmp_path, monkeypatch, capsys):
+    source = tmp_path / 'founders.vcf'
+    rng = np.random.default_rng(336)
+    haplotypes = rng.integers(0, 2, (8, 5, 2))
+    with source.open('w') as output:
+        output.write('##fileformat=VCFv4.3\n#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT')
+        output.write(''.join(f'\ts{i}' for i in range(len(haplotypes))) + '\n')
+        for j in range(haplotypes.shape[1]):
+            calls = '\t'.join(f'{a}|{b}' for a, b in haplotypes[:, j, :])
+            output.write(f'22\t{j + 1}\tv{j}\tA\tG\t.\tPASS\t.\tGT\t{calls}\n')
+    args = simulate.parser.parse_args(['2', '.5', str(tmp_path / 'sim'), '--vcf', str(source), '--nfam', '2'])
+    monkeypatch.setattr(simulation, 'decode_map_from_pos', lambda chrom, pos: np.asarray(pos, dtype=float))
+    monkeypatch.setattr(simulation, 'plan_batches', lambda *args, **kwargs: (1, 2))
+    with genotype_inputs(args, output='phased', vcf_samples=simulate._vcf_founders) as resolved:
+        observed, *_ = simulation.haps_from_bgen(resolved.bgen, None, nfam=2)
+    assert '4 samples as phased BGEN' in capsys.readouterr().out
+    expected = (haplotypes[:4] == 0).reshape(2, 2, 5, 2).transpose(1, 0, 2, 3)
+    np.testing.assert_array_equal(observed[0], expected)
 
 
 def test_two_chromosome_selection_outputs(tmp_path, monkeypatch):

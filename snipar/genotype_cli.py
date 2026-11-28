@@ -71,6 +71,86 @@ def read_id_list(path):
         return {identifier for line in source if (identifier := line.strip())}
 
 
+def family_vcf_samples(args, available_ids, *, ids=None, sib=False, compute_controls=False,
+                       expand_ids=None, regroup_pedigree=False, pedigree=None):
+    """Select observed probands and the relatives needed by a family design."""
+    import numpy as np
+
+    def pedigrees():
+        if args.imp is None:
+            if pedigree is not None:
+                yield pedigree
+            elif args.pedigree is not None:
+                ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
+                if ped.shape[1] < 4:
+                    raise ValueError('Not enough columns in pedigree file')
+                if regroup_pedigree:
+                    from snipar.pedigree import get_sibpairs_from_ped
+
+                    if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
+                        ped = ped[1:]
+                    _, ped = get_sibpairs_from_ped(ped[:, :4], return_pairs=False)
+                yield ped
+            return
+
+        import h5py
+
+        prefix = str(args.imp)
+        if '@' in prefix:
+            chromosomes = getattr(args, 'chr_range', None)
+            chromosomes = range(1, 23) if chromosomes is None else dict.fromkeys(map(int, chromosomes)) or range(1, 23)
+            if '@' in str(args.vcf):
+                from snipar.vcf import _vcf_files
+
+                chromosomes = (chrom for chrom, _ in _vcf_files(args.vcf, chromosomes))
+            files = (Path(prefix.replace('@', str(chrom)) + '.hdf5') for chrom in chromosomes)
+        else:
+            files = (Path(prefix + '.hdf5'),)
+        for file in files:
+            if file.is_file():
+                try:
+                    with h5py.File(file, 'r') as source:
+                        ped = source['pedigree'].asstr(encoding='utf-8')[1:].astype(str)
+                except (OSError, KeyError, TypeError, ValueError):
+                    # A candidate chromosome can disappear after site filtering.
+                    # Let the command validate only the chromosomes it analyzes.
+                    yield None
+                    return
+                if ped.ndim != 2 or ped.shape[1] < 4:
+                    yield None
+                    return
+                if not compute_controls:
+                    controls = np.char.startswith(ped[:, 0], '_')
+                    if controls.any():
+                        ped = ped[~controls]
+                yield ped
+
+    requested = None if ids is None else set(ids)
+    required = set() if requested is None else requested.copy()
+    have_pedigree = False
+    for ped in pedigrees():
+        if ped is None:
+            return None
+        have_pedigree = True
+        if requested is None:
+            rows = ped
+            required.update(ped[:, 1])
+        else:
+            probands = requested if expand_ids is None else set(expand_ids(ped, requested))
+            required.update(probands)
+            rows = ped[np.fromiter(map(probands.__contains__, ped[:, 1]), dtype=bool, count=len(ped))]
+        required.update(rows[:, 2])
+        required.update(rows[:, 3])
+        if sib and requested is not None:
+            families = set(rows[:, 0])
+            members = np.fromiter(map(families.__contains__, ped[:, 0]), dtype=bool, count=len(ped))
+            required.update(ped[members, 1])
+    if not have_pedigree:
+        return None
+    required.intersection_update(available_ids)
+    return required
+
+
 def prepare_vcf(args, destination, *, variant_ids=None, chromosomes=None, **options):
     from snipar.vcf import convert_vcf
 
@@ -133,7 +213,7 @@ def _bgen_inputs(args, table, thresholds, chromosomes):
 
 
 @contextmanager
-def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None):
+def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None, vcf_samples=None):
     """Provide seekable genotype inputs for the lifetime of a CLI invocation."""
     table = getattr(args, 'bgen_quality', None)
     if table is not None and (getattr(args, 'bgen', None) is None or getattr(args, 'vcf', None) is not None):
@@ -162,17 +242,24 @@ def genotype_inputs(args, *, output='bed', variant_ids=None, chromosomes=None):
         raise ValueError('--fam and --bim require BED or BGEN input')
     split = bool(chromosomes) or any('@' in str(getattr(args, name, None))
                                      for name in ('vcf', 'imp', 'ibd', 'out'))
+    # Observed VCF MAF is independent of analysis sample selection.
+    resolved = Namespace(**vars(args))
+    select_samples = None
+    if vcf_samples is not None and not getattr(args, 'vcf_min_maf', 0.):
+        def select_samples(available_ids):
+            return vcf_samples(resolved, available_ids)
     with TemporaryDirectory(prefix='snipar-vcf-') as directory:
-        converted = prepare_vcf(args, directory, variant_ids=variant_ids, output=output,
-                                chromosomes=chromosomes, split_chromosomes=split)
-        yield Namespace(**(vars(args) | {'bed': converted.bed, 'bgen': converted.bgen}))
+        converted = prepare_vcf(resolved, directory, variant_ids=variant_ids, output=output,
+                                chromosomes=chromosomes, split_chromosomes=split, select_samples=select_samples)
+        resolved.bed, resolved.bgen = converted.bed, converted.bgen
+        yield resolved
 
 
-def with_genotypes(*, output='bed'):
+def with_genotypes(*, output='bed', vcf_samples=None):
     def decorate(main):
         @wraps(main)
         def run(args):
-            with genotype_inputs(args, output=output) as resolved:
+            with genotype_inputs(args, output=output, vcf_samples=vcf_samples) as resolved:
                 return main(resolved)
         return run
     return decorate

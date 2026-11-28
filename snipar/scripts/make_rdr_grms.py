@@ -6,27 +6,40 @@ from contextlib import ExitStack
 
 import h5py
 import numpy as np
-from pysnptools.snpreader import Bed
+from bed_reader import open_bed
 
-from snipar.utilities import encode_str_array, make_id_dict
+from snipar.read.bed import _read_iids
+from snipar.resources import available_cpus
+from snipar.utilities import encode_str_array
 
 
 def _observed_trios(bedfile, ped, min_maf, max_missing):
-    bed = Bed(bedfile, count_A1=True)
-    index = make_id_dict(bed.iid[:, 1])
-    rows = np.array([[index.get(iid, -1) for iid in row] for row in ped[:, 1:4]])
-    keep = (rows >= 0).all(axis=1) & (ped[:, 2:4] != '0').all(axis=1)
-    if not np.any(keep):
-        raise ValueError('No individuals with both parents genotyped found')
-    observed, mapping = np.unique(rows[keep], return_inverse=True)
-    gts = bed[observed, :].read(dtype=np.float32).val
-    freqs = np.nansum(gts, axis=0) / np.maximum(2 * np.isfinite(gts).sum(axis=0), 1)
+    bedfile = str(bedfile)
+    if bedfile.lower().endswith('.bed'):
+        bedfile = bedfile[:-4]
+    bedfile += '.bed'
+    pedigree_ids = ped[:, 1:4]
+    requested = set(pedigree_ids.flat)
+    with open_bed(bedfile, count_A1=True) as bed:
+        index = {iid: row for row, iid in enumerate(_read_iids(bedfile, bed)) if iid in requested}
+        rows = np.fromiter((index.get(iid, -1) for iid in pedigree_ids.flat), dtype=np.intp,
+                           count=pedigree_ids.size).reshape(pedigree_ids.shape)
+        keep = (rows >= 0).all(axis=1) & (ped[:, 2:4] != '0').all(axis=1)
+        if not np.any(keep):
+            raise ValueError('No individuals with both parents genotyped found')
+        observed, mapping = np.unique(rows[keep], return_inverse=True)
+        gts = bed.read(index=(observed, slice(None)), dtype='float32', order='C', num_threads=available_cpus())
+    counts = np.isfinite(gts).sum(axis=0)
+    freqs = np.nansum(gts, axis=0) / np.maximum(2 * counts, 1)
     variants = ((freqs >= min_maf) & (freqs <= 1 - min_maf)
-                & (100 * np.isnan(gts).mean(axis=0) <= max_missing))
-    gts = gts[:, variants]
+                & (100 * ((len(observed) - counts) / len(observed)) <= max_missing))
+    if not variants.all():
+        gts = np.compress(variants, gts, axis=1)
     np.copyto(gts, 2 * freqs[variants], where=np.isnan(gts))
-    proband, father, mother = gts[mapping.reshape(-1, 3)].transpose(1, 0, 2)
-    return proband, father + mother, ped[keep, :2]
+    proband, father, mother = mapping.reshape(-1, 3).T
+    parent = gts[father]
+    parent += gts[mother]
+    return gts[proband], parent, ped[keep, :2]
 
 
 def _with_imputation(bedfile, imputation, ids, min_maf, max_missing):
@@ -39,14 +52,15 @@ def _with_imputation(bedfile, imputation, ids, min_maf, max_missing):
     freqs = np.nansum(proband, axis=0) / np.maximum(2 * called.sum(axis=0), 1)
     variants = ((freqs >= min_maf) & (freqs <= 1 - min_maf)
                 & (100 * (~called).mean(axis=0) <= max_missing))
-    return proband[:, variants], parent[:, variants], np.column_stack((matrix.fams, matrix.ids))
+    return (np.compress(variants, proband, axis=1), np.compress(variants, parent, axis=1),
+            np.column_stack((matrix.fams, matrix.ids)))
 
 
 def _standardize(dosages):
     called = np.isfinite(dosages)
     count = called.sum(axis=0)
     mean = np.nansum(dosages, axis=0, dtype=np.float64) / np.maximum(count, 1)
-    centered = dosages.astype(np.float32, copy=True)
+    centered = dosages.astype(np.float32, copy=False)
     centered -= mean
     np.copyto(centered, 0, where=~called)
     sd = np.sqrt(np.einsum('ij,ij->j', centered, centered, dtype=np.float64) / len(dosages))
@@ -123,9 +137,10 @@ def main(argv=None):
     if not np.any(valid):
         parser.error('No variants with variation in both proband and parental dosages passed filters')
     print(f'Computing relatedness matrices for {len(pedigree)} individuals and {np.sum(valid)} SNPs')
-    _write_matrices(np.ascontiguousarray(proband[:, valid], dtype=np.float32),
-                    np.ascontiguousarray(parent[:, valid], dtype=np.float32),
-                    pedigree, args.outprefix, args.hdf5_out)
+    if not valid.all():
+        proband = np.compress(valid, proband, axis=1)
+        parent = np.compress(valid, parent, axis=1)
+    _write_matrices(proband, parent, pedigree, args.outprefix, args.hdf5_out)
 
 
 if __name__ == '__main__':

@@ -379,7 +379,7 @@ class _PhasedWriter:
 
 def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_ids=None,
                 variant_ids=None, min_maf=0, min_info_maf=0, min_quality=None, pass_only=False,
-                split_chromosomes=False):
+                split_chromosomes=False, select_samples=None):
     """Convert plain, gzip or BGZF VCF into per-autosome analysis files.
 
     ``bed`` retains diploid dosages. ``phased`` requires a globally consistent
@@ -396,11 +396,16 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
     thresholds. By default, apply a 0.99 cutoff when a recognized numeric
     quality tag is declared in the file header. An empty mapping disables it.
     Site and ID filters run before even scanning the sample fields.
+
+    ``select_samples`` can derive sample IDs from the first header. The VCF
+    sources must share the original sample set when using this callback.
     """
     if output not in {'bed', 'auto', 'phased'}:
         raise ValueError('VCF output must be bed, auto or phased')
     if not (0 <= min_maf <= .5 and 0 <= min_info_maf <= .5):
         raise ValueError('VCF minimum allele frequencies must be in [0, 0.5]')
+    if sample_ids is not None and select_samples is not None:
+        raise ValueError('Specify VCF sample IDs or a sample selector')
     requested_quality = _info_quality_searches(min_quality)
     requested_chroms = tuple(dict.fromkeys(range(1, 23) if chromosomes is None else map(int, chromosomes)))
     if not requested_chroms or any(chrom not in range(1, 23) for chrom in requested_chroms):
@@ -411,6 +416,8 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     samples = None
+    first_header = None
+    indexed_header = None
     bed, bgen, phase_sets_by_chrom = {}, {}, {}
     phase_possible, saw_phase = output != 'bed', False
     phase_fallback = None
@@ -423,29 +430,40 @@ def convert_vcf(source, destination, *, chromosomes=None, output='bed', sample_i
         for expected_chrom, source_file in _vcf_files(source, requested_chroms):
             with _vcf_lines(source_file) as lines:
                 header, auto_quality_tag = _sample_header(lines, source_file, detect_quality=min_quality is None)
+                if select_samples is not None:
+                    if first_header is None:
+                        first_header = header
+                        selected_ids = select_samples(tuple(sample.decode('utf-8') for sample in header))
+                        if selected_ids is not None:
+                            requested_samples = {str(sample).encode() for sample in selected_ids}
+                    elif header != first_header and set(header) != set(first_header):
+                        raise ValueError('VCF files must contain the same set of samples')
                 quality_searches = (requested_quality if auto_quality_tag is None else
                                     _info_quality_searches({auto_quality_tag: DEFAULT_VARIANT_QUALITY}))
                 for prefix, _, minimum in quality_searches:
                     applied_quality[prefix[:-1].decode()] = minimum
-                selected = (header if requested_samples is None else
-                            tuple(sample for sample in header if sample in requested_samples))
-                if samples is None:
-                    samples = selected
-                    if not samples or requested_samples is not None and requested_samples != set(samples):
-                        raise ValueError(f'Requested VCF samples are missing from {source_file}')
-                    a, b = (np.empty(len(samples), dtype=np.int8) for _ in range(2))
-                    phased = np.empty(len(samples), dtype=np.bool_)
-                    phase_sets = np.empty(len(samples), dtype=np.int32)
-                elif selected != samples and set(selected) != set(samples):
-                    raise ValueError('VCF files must contain the same set of selected samples')
-                if header == samples:
-                    source_indices = sample_order = np.arange(len(samples), dtype=np.intp)
-                else:
-                    output_index = {sample: i for i, sample in enumerate(samples)}
-                    sample_order = np.array([output_index.get(sample, -1) for sample in header], dtype=np.intp)
-                    source_indices = np.empty(len(samples), dtype=np.intp)
-                    included = np.flatnonzero(sample_order >= 0)
-                    source_indices[sample_order[included]] = included
+                if header != indexed_header:
+                    selected = (header if requested_samples is None else
+                                tuple(sample for sample in header if sample in requested_samples))
+                    if samples is None:
+                        samples = selected
+                        if not samples or requested_samples is not None and len(requested_samples) != len(samples):
+                            raise ValueError(f'Requested VCF samples are missing from {source_file}')
+                        a, b = (np.empty(len(samples), dtype=np.int8) for _ in range(2))
+                        phased = np.empty(len(samples), dtype=np.bool_)
+                        phase_sets = np.empty(len(samples), dtype=np.int32)
+                    elif selected != samples and set(selected) != set(samples):
+                        raise ValueError('VCF files must contain the same set of selected samples')
+                    if header == samples:
+                        source_indices = sample_order = np.arange(len(samples), dtype=np.intp)
+                    else:
+                        output_index = {sample: i for i, sample in enumerate(samples)}
+                        sample_order = np.fromiter((output_index.get(sample, -1) for sample in header),
+                                                   dtype=np.intp, count=len(header))
+                        source_indices = np.empty(len(samples), dtype=np.intp)
+                        included = np.flatnonzero(sample_order >= 0)
+                        source_indices[sample_order[included]] = included
+                    indexed_header = header
 
                 for line in lines:
                     if not line or line[:1] in (b'\n', b'\r', b'#'):

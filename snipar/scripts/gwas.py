@@ -20,7 +20,7 @@ Results:
 import argparse
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.docgen import get_parser_doc
-from snipar.genotype_cli import add_vcf_options, with_genotypes
+from snipar.genotype_cli import add_vcf_options, family_vcf_samples, with_genotypes
 ######### Command line arguments #########
 parser = argparse.ArgumentParser(add_help=True)
 parser.add_argument('phenofile',type=str,help='Location of the phenotype file')
@@ -56,7 +56,43 @@ parser.add_argument('--no_hdf5_out',action='store_true',help='Suppress HDF5 outp
 add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_genotypes()
+def _read_analysis_phenotype(args):
+    import numpy as np
+    from snipar.read.phenotype import read_phenotype
+
+    y = read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
+    if args.keep is not None:
+        keep = np.loadtxt(args.keep, dtype=str, usecols=0, ndmin=1)
+        y.filter_ids(y.ids[np.isin(y.ids, keep)])
+    return y
+
+
+def _read_analysis_pedigree(path):
+    import numpy as np
+    from snipar.pedigree import get_sibpairs_from_ped
+
+    print('Reading pedigree from ' + path)
+    ped = np.loadtxt(path, dtype=str, ndmin=2)
+    if ped.shape[1] < 4:
+        raise ValueError('Not enough columns in pedigree file')
+    if ped.shape[1] > 4:
+        print('WARNING: only the first four pedigree columns will be used.')
+    if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
+        ped = ped[1:]
+    _, ped = get_sibpairs_from_ped(ped[:, :4], return_pairs=False)
+    return ped
+
+
+def _vcf_analysis_samples(args, available_ids):
+    args._vcf_phenotype = _read_analysis_phenotype(args)
+    if args.imp is None and args.pedigree is not None:
+        args._vcf_pedigree = _read_analysis_pedigree(args.pedigree)
+    return family_vcf_samples(args, available_ids, ids=args._vcf_phenotype.ids,
+                              sib=args.fit_sib or args.sib_diff or args.robust or args.imp is None,
+                              pedigree=getattr(args, '_vcf_pedigree', None))
+
+
+@with_genotypes(vcf_samples=_vcf_analysis_samples)
 def main(args):
     """Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -85,7 +121,6 @@ def _main(args, cpus, threads):
     import snipar.slmm as slmm
     from snipar.gwas import _fit_model, process_chromosome
     from snipar.resources import limit_native_threads
-    from snipar.pedigree import get_sibpairs_from_ped
     from snipar.preprocess import remove_sibs
     from snipar.utilities import parse_obsfiles, parse_filelist, make_id_dict
     # Check if mutually incompatible design arguments supplied
@@ -164,20 +199,13 @@ def _main(args, cpus, threads):
         raise(ValueError('No input genotype files found'))
     # Read phenotype and covariates
     ######### Read Phenotype ########
-    y = read.phenotype.read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
-    if args.keep is not None:
-        keep = np.loadtxt(args.keep, dtype=str, usecols=0, ndmin=1)
-        y.filter_ids(y.ids[np.isin(y.ids, keep)])
+    y = getattr(args, '_vcf_phenotype', None)
+    if y is None:
+        y = _read_analysis_phenotype(args)
     if args.imp is None:
-        print('Reading pedigree from ' + args.pedigree)
-        ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
-        if ped.shape[1] < 4:
-            raise ValueError('Not enough columns in pedigree file')
-        if ped.shape[1] > 4:
-            print('WARNING: only the first four pedigree columns will be used.')
-        if ped.size and tuple(ped[0, :2]) == ('FID', 'IID'):
-            ped = ped[1:]
-        _, ped = get_sibpairs_from_ped(ped[:, :4], return_pairs=False)
+        ped = getattr(args, '_vcf_pedigree', None)
+        if ped is None:
+            ped = _read_analysis_pedigree(args.pedigree)
     def pedigree_for(index):
         # Read at most one chromosome's pedigree at a time.
         if args.imp is None:

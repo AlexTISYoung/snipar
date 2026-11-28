@@ -63,15 +63,23 @@ def test_native_bgen_metadata():
                                       reader.read((np.array([0, 1, 2]), [0, 3]))[:, ::-1])
 
 
-def _write_bgen(filename, samples, variants):
-    """Write tiny Layout 2 rows with exact eight-bit probabilities."""
+def _write_bgen(filename, samples, variants, *, compression=1, bits=8):
+    """Write Layout 2 rows with integer probabilities."""
     def string(value, length="H"):
         field = value.encode("ascii")
         return struct.pack("<" + length, len(field)) + field
 
     ids = b"".join(string(sample) for sample in samples)
     sample_block = struct.pack("<II", len(ids) + 8, len(samples)) + ids
-    flags = (1 << 31) | (2 << 2) | 1
+    if compression == 2:
+        if sys.version_info >= (3, 14):
+            from compression.zstd import compress
+        else:
+            compress = pytest.importorskip('zstandard').compress
+    else:
+        compress = zlib.compress
+
+    flags = (1 << 31) | (2 << 2) | compression
     with filename.open("wb") as bgen:
         bgen.write(struct.pack("<IIII4sI", 20 + len(sample_block), 20, len(variants), len(samples), b"bgen", flags))
         bgen.write(sample_block)
@@ -80,9 +88,98 @@ def _write_bgen(filename, samples, variants):
             bgen.write(struct.pack("<IH", index * 100, 2) + string("A", "I") + string("G", "I"))
             copy_numbers = [value & 63 for value in ploidy]
             payload = struct.pack("<IHBB", len(samples), 2, min(copy_numbers), max(copy_numbers))
-            payload += bytes(ploidy) + bytes((phased, 8)) + bytes(probabilities)
-            block = zlib.compress(payload)
-            bgen.write(struct.pack("<II", len(block) + 4, len(payload)) + block)
+            payload += np.asarray(ploidy, dtype=np.uint8).tobytes() + bytes((phased, bits))
+            if bits < 8:
+                words = np.asarray(probabilities, dtype=np.uint8)
+                padding = -len(words) % (8 // bits)
+                values = np.pad(words, (0, padding)).reshape(-1, 8 // bits)
+                payload += np.bitwise_or.reduce(values << np.arange(0, 8, bits, dtype=np.uint8), axis=1).tobytes()
+            else:
+                payload += np.asarray(probabilities, dtype=f'<u{bits // 8}').tobytes()
+            if compression:
+                block = compress(payload)
+                bgen.write(struct.pack("<II", len(block) + 4, len(payload)) + block)
+            else:
+                bgen.write(struct.pack("<I", len(payload)) + payload)
+
+
+@pytest.mark.parametrize('compression,bits,phased', [
+    (0, 1, False), (1, 1, True), (1, 2, False), (1, 4, True),
+    (1, 8, False), (1, 8, True), (1, 16, False), (2, 8, False),
+    (2, 1, True), (2, 8, True), (2, 16, False),
+])
+@pytest.mark.parametrize('backend', ['legacy', 'native'])
+def test_packed_bgen_subset_matches_full_decoder(tmp_path, monkeypatch, compression, bits, phased, backend):
+    from snipar import bgen_packed
+    from snipar.read.bgen import _first_allele_dosage, read_diploid_probabilities, read_hard_calls
+
+    if backend == 'native':
+        library = pytest.importorskip('bgen')
+        from snipar.bgen_io import BgenFile
+        opener = BgenFile
+        packed_expected = compression != 1 and (bits == 1 or (
+            bits == 8 and library.__version__ == '1.11.0' and (not phased or bgen_packed._NATIVE_PHASED_8)
+        ))
+    else:
+        if compression == 0:
+            pytest.skip('cbgen cannot index the uncompressed Layout 2 fixture')
+        library = pytest.importorskip('bgen_reader')
+
+        def opener(path):
+            return library.open_bgen(path, verbose=False)
+
+        packed_expected = True
+    filename = tmp_path / 'packed.bgen'
+    # Native decoding is faster on small files. Use a partial final byte for both readers.
+    count = 32_769 if backend == 'native' else 2049
+    ids = [f'sample{i}' for i in range(count)]
+    rng = np.random.default_rng(2026)
+    maximum = (1 << bits) - 1
+    records = []
+    for row in range(4):
+        first = rng.integers(maximum + 1, size=count)
+        second = rng.integers(maximum + 1 if phased else maximum + 1 - first, size=count)
+        missing = (np.arange(count) + row) % 7 == 0
+        states = np.column_stack((first, second))
+        states[missing] = 0
+        records.append((phased, np.where(missing, 130, 2), states.ravel()))
+    _write_bgen(filename, ids, records, compression=compression, bits=bits)
+    original_read = bgen_packed.PackedBgenSubset.read
+    used = []
+
+    def track_read(self, offset):
+        result = original_read(self, offset)
+        used.append(result is not None)
+        return result
+
+    monkeypatch.setattr(bgen_packed.PackedBgenSubset, 'read', track_read)
+    variants = [3, 0, 2, 2, -3]
+    samples = np.array([-1, 19, 0, 1, 6, 7, 2, 9, 8, 0, -7])
+    boolean_mask = np.isin(np.arange(count), [0, 1, 6, 7, count - 1])
+    with opener(str(filename)) as reader:
+        probabilities = read_diploid_probabilities(reader, None, variants, phased)
+        dosage = _first_allele_dosage(reader, None, variants)
+        calls = read_hard_calls(reader, None, variants, phased, nan_integer)
+        assert not used
+        for selected in (samples, boolean_mask, slice(50, 3, -2)):
+            np.testing.assert_array_equal(
+                read_diploid_probabilities(reader, selected, variants, phased, num_threads=2),
+                probabilities[selected],
+            )
+            np.testing.assert_array_equal(_first_allele_dosage(reader, selected, variants, num_threads=2),
+                                          dosage[selected])
+            np.testing.assert_array_equal(read_hard_calls(reader, selected, variants, phased, nan_integer,
+                                                          num_threads=2), calls[selected])
+    if compression == 2 and bits == 8 and not phased:
+        from snipar.bgen_filter import BGEN_SUBSET_SUFFIX, filter_bgen, open_bgen_subset
+
+        target = tmp_path / ('view' + BGEN_SUBSET_SUFFIX)
+        filter_bgen(filename, target, {'id1', 'id4'})
+        with open_bgen_subset(target, lambda path, verbose=False: opener(path)) as reader:
+            np.testing.assert_array_equal(_first_allele_dosage(reader, samples, [1, 0, 1]),
+                                          dosage[samples][:, [0, 1, 0]])
+    assert any(used) == packed_expected
+    assert all(value == packed_expected for value in used)
 
 
 @pytest.fixture

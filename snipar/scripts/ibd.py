@@ -24,8 +24,8 @@ from numba import config as numba_config
 import snipar.ibd
 import numpy as np
 from snipar.errors import estimate_genotyping_error_rate
-from snipar.utilities import *
-from snipar.pedigree import *
+from snipar.utilities import get_parser_doc, parse_obsfiles
+from snipar.pedigree import create_pedigree, get_sibpairs_from_king, get_sibpairs_from_ped
 from snipar.numrange import parseNumRange, NumRangeAction
 from snipar.genotype_cli import add_vcf_options, with_genotypes
 parser = argparse.ArgumentParser()
@@ -70,7 +70,66 @@ parser.add_argument('--batches',type=int,help='Number of batches to split the da
 add_vcf_options(parser, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_genotypes()
+def _load_relationships(args):
+    ped = None
+    if args.pedigree is not None:
+        print('Reading pedigree from '+str(args.pedigree))
+        ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
+        if ped.size and tuple(ped[0, :4]) == ("FID", "IID", "FATHER_ID", "MOTHER_ID"):
+            ped = ped[1:]
+        if not ped.size:
+            raise ValueError("No sibling pairs found")
+        if ped.shape[1] < 4:
+            raise(ValueError('Not enough columns in pedigree file'))
+        elif ped.shape[1] > 4:
+            print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
+        # Remove rows with missing parents
+        sibpairs, _ = get_sibpairs_from_ped(ped)
+        if sibpairs is None:
+            raise(ValueError('No sibpairs found'))
+    elif args.king is not None:
+        print('Reading relationships from '+str(args.king))
+        sibpairs = get_sibpairs_from_king(args.king)
+    else:
+        raise(ValueError('Must provide either KING kinship file or pedigree'))
+    if sibpairs is None or not len(sibpairs):
+        raise ValueError("No sibling pairs found")
+    print(f"Found {len(sibpairs)} full sibling pairs")
+    if args.p_error is None and ped is None:
+        if args.agesex is None:
+            raise ValueError("Provide age and sex information (--agesex) with KING kinship "
+                             "to estimate the genotyping error probability")
+        print("Constructing pedigree from " + str(args.king) + " and " + str(args.agesex))
+        ped = np.array(create_pedigree(args.king, args.agesex), dtype=str)
+    return sibpairs, ped
+
+
+def _vcf_samples(args, available_ids):
+    sibpairs, ped = _load_relationships(args)
+    available = set(sibpairs.flat)
+    if args.p_error is None:
+        available.update(ped[:, 1:4].flat)
+    available.intersection_update(available_ids)
+    selected = set()
+    for first, second in sibpairs:
+        if first in available and second in available:
+            selected.update((first, second))
+    if not selected:
+        raise ValueError("No genotyped sibling pairs found")
+    if args.p_error is None:
+        for child, father, mother in ped[:, 1:4]:
+            if child in available:
+                if father in available:
+                    selected.update((child, father))
+                if mother in available:
+                    selected.update((child, mother))
+    # Preserve the original pair ordering and batch boundaries. Each batch
+    # still tests sample availability as for a direct BED/BGEN invocation.
+    args._vcf_relationships = sibpairs, ped
+    return selected
+
+
+@with_genotypes(vcf_samples=_vcf_samples)
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -104,7 +163,6 @@ def main(args):
     if args.batches < 1:
         raise ValueError("--batches must be positive")
     min_length = args.min_length
-    kinfile = args.king
 
     if 0 <= args.min_maf <= 0.5:
         min_maf = args.min_maf
@@ -121,40 +179,12 @@ def main(args):
     else:
         raise ValueError('Max error probability must be between 0 and 1')
 
-    #### Find sibling pairs ####
-    if args.pedigree is not None:
-        print('Reading pedigree from '+str(args.pedigree))
-        ped = np.loadtxt(args.pedigree, dtype=str, ndmin=2)
-        if ped.size and tuple(ped[0, :4]) == ("FID", "IID", "FATHER_ID", "MOTHER_ID"):
-            ped = ped[1:]
-        if not ped.size:
-            raise ValueError("No sibling pairs found")
-        if ped.shape[1] < 4:
-            raise(ValueError('Not enough columns in pedigree file'))
-        elif ped.shape[1] > 4:
-            print('Warning: pedigree file has more than 4 columns. The first four columns only will be used')
-        # Remove rows with missing parents
-        sibpairs, _ = get_sibpairs_from_ped(ped)
-        if sibpairs is None:
-            raise(ValueError('No sibpairs found'))
-    elif kinfile is not None:
-        print('Reading relationships from '+str(kinfile))
-        sibpairs = get_sibpairs_from_king(kinfile)
-    else:
-        raise(ValueError('Must provide either KING kinship file or pedigree'))
-    if sibpairs.shape[0]==0:
-        raise(ValueError('No sibling pairs found'))
-    print('Found '+str(sibpairs.shape[0])+' full sibling pairs')
+    relationships = getattr(args, "_vcf_relationships", None)
+    sibpairs, ped = _load_relationships(args) if relationships is None else relationships
 
     #### Get genotyping error probability ####
     if args.p_error is None:
         print('No genotyping error probability provided. Will attempt to estimate from parent-offspring pairs.')
-        if args.pedigree is None:
-            if args.agesex is not None:
-                print('Constructing pedigree from '+str(kinfile)+' and age and sex information from '+str(args.agesex))
-                ped = np.array(create_pedigree(kinfile, args.agesex), dtype=str)
-            else:
-                raise(ValueError('Must provide age and sex information (--agesex) in addition to KING kinship file, if estimating genotyping error probability'))
         if args.bed is not None:
             error_prob, error_probs = estimate_genotyping_error_rate(ped, bedfiles=bedfiles, min_maf=min_maf)
         elif args.bgen:

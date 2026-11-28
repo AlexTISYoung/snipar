@@ -64,7 +64,13 @@ parser.add_argument('--unphased_impute',action='store_true',help='Impute parenta
 add_vcf_options(parser, phased_only=True, bgen_quality=True)
 __doc__ = __doc__.replace("@parser@", get_parser_doc(parser))
 
-@with_genotypes(output='phased')
+def _vcf_founders(args, available_ids):
+    if not args.n_stabilizing and args.nfam is not None and args.nfam > 0:
+        return available_ids[:2 * args.nfam]
+    return None
+
+
+@with_genotypes(output='phased', vcf_samples=_vcf_founders)
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:

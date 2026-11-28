@@ -46,6 +46,18 @@ Alternatively, add ``--phenofile`` to the score-computation command. A
 precomputed ``--pgs`` input requires a phenotype file. Use either the
 weights/genotype workflow or the precomputed-score workflow in a command.
 
+Use ``--keep analysis_iids.txt`` to score only a selected set of probands
+and restrict any regression to those IIDs. List one IID per line without a
+header. Genotyped parents and siblings can contribute to the selected
+probands' scores even when absent from the list. Score centering and the
+initial assortative-mating adjustment use the scoring cohort. With
+``--grandpar``, eligible parents can also be scored internally to obtain
+grandparental scores. The score file contains only the selected probands.
+
+Without ``--keep``, the genotype workflow writes scores for all eligible
+probands. ``--phenofile`` then selects the regression sample. With an
+existing ``--pgs`` file, ``--keep`` restricts the regression sample.
+
 PGS input and score columns
 ---------------------------
 

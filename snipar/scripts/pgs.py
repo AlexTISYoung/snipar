@@ -30,15 +30,18 @@ Results:
         two-generation terms in columns.
 """
 import argparse
+from pathlib import Path
+
 import numpy as np
 import snipar.pgs as pgs
 import snipar.read as read
-from snipar.utilities import *
+from snipar.docgen import get_parser_doc
+from snipar.utilities import parse_filelist, parse_obsfiles
 from snipar.numrange import parseNumRange, NumRangeAction
 from numba import set_num_threads
 from numba import config as numba_config
 from snipar.resources import available_cpus
-from snipar.genotype_cli import add_vcf_options, genotype_inputs
+from snipar.genotype_cli import add_vcf_options, family_vcf_samples, genotype_inputs, read_id_list
 ######### Command line arguments #########
 parser=argparse.ArgumentParser()
 parser.add_argument('out',type=str,help='Prefix for computed PGS file and/or regression results files')
@@ -53,6 +56,8 @@ parser.add_argument('--chr_range',
                     action=NumRangeAction,
                     help='Chromosomes for score computation. Supply ranges in x-y format or individual chromosome numbers.', default=None)
 parser.add_argument('--pedigree',type=str,help='Address of pedigree file. Must be provided if not providing imputed parental genotypes.',default=None)
+parser.add_argument('--keep', type=Path, help='Keep proband IIDs listed one per line, without a header, '
+                                             'for scoring and regression. Required relatives can contribute genotypes.')
 score_input = parser.add_mutually_exclusive_group(required=True)
 score_input.add_argument('--weights',type=str,help='Location of the PGS allele weights', default=None)
 parser.add_argument('--SNP',type=str,help='Name of column in weights file with SNP IDs',default='SNP')
@@ -103,16 +108,29 @@ def _read_score_weights(args):
 
 
 def main(args):
+    ids = None
+    if getattr(args, 'keep', None) is not None:
+        ids = sorted(read_id_list(args.keep))
+        if not ids:
+            raise ValueError('--keep file contains no proband IDs')
     weights = None
     if getattr(args, 'vcf', None) is not None:
         if args.weights is None:
             raise ValueError('--vcf requires --weights when computing a PGS')
         weights = _read_score_weights(args)
-    with genotype_inputs(args, variant_ids=None if weights is None else weights.snp_dict) as resolved:
-        return _main(resolved, weights)
+
+    expand_ids = pgs.grandparent_score_ids if ids is not None and args.grandpar else None
+
+    def vcf_samples(args, available_ids):
+        return family_vcf_samples(args, available_ids, ids=ids, sib=args.fit_sib,
+                                  compute_controls=args.compute_controls, expand_ids=expand_ids)
+
+    with genotype_inputs(args, variant_ids=None if weights is None else weights.snp_dict,
+                         vcf_samples=vcf_samples) as resolved:
+        return _main(resolved, weights, ids=ids)
 
 
-def _main(args, weights):
+def _main(args, weights, *, ids=None):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
         args: list
@@ -173,9 +191,13 @@ def _main(args, weights):
             print('Observed genotypes file:', bedfile if bedfile is not None else bgenfile)
             if imputed is not None:
                 print('Imputed genotypes file:', imputed)
+            score_ids = ids
+            if ids is not None and args.grandpar:
+                score_pedigree = ped if ped is not None else read.build_ped_from_par_gts(imputed)[0]
+                score_ids = pgs.grandparent_score_ids(score_pedigree, ids)
             scores = pgs.compute(p, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=imputed, ped=ped,
                                  sib=args.fit_sib, compute_controls=args.compute_controls,
-                                 batch_size=args.batch_size, num_threads=num_threads)
+                                 batch_size=args.batch_size, num_threads=num_threads, ids=score_ids)
             if scores is not None:
                 if pg is None:
                     pg = scores
@@ -196,10 +218,11 @@ def _main(args, weights):
             r_am = 0
         ####### Compute grandparental PGSs #######
         if args.grandpar:
-            if args.compute_controls:
-                pg[0].compute_grandpar(r_am)
-            else:
-                pg.compute_grandpar(r_am)
+            primary = pg[0] if args.compute_controls else pg
+            primary.compute_grandpar(r_am)
+            if ids is not None:
+                for scores in pg if args.compute_controls else (pg,):
+                    scores.filter_ids(scores.ids[np.isin(scores.ids, ids)])
         ####### Write PGS to file ########
         if args.compute_controls:
             pg[0].write(args.out + '.pgs.txt', scale=args.scale_pgs, return_array=False)
@@ -213,18 +236,21 @@ def _main(args, weights):
             raise ValueError('Pre-computed PGS provided but no phenotype provided')
         print('Reading PGS from '+args.pgs)
         pg = pgs.read_pgs(args.pgs)
-        if not args.parsum:
-            if 'parental' in pg.sid and 'paternal' not in pg.sid:
-                print('Using sum of paternal and maternal PGS as no paternal & maternal PGS values found')
-                args.parsum = True
+        if ids is not None:
+            pg.filter_ids(pg.ids[np.isin(pg.ids, ids)])
     else:
         raise ValueError('Weights or PGS must be provided')
 
     if args.phenofile is not None:
+        if not args.parsum and 'parental' in pg.sid and 'paternal' not in pg.sid:
+            print('Using the parental sum because separate paternal and maternal scores are unavailable')
+            args.parsum = True
         print('Fitting PGS for '+str(args.phenofile))
         # Read phenotype
         y = read.phenotype.read_phenotype(args.phenofile, column=args.phen, column_index=args.phen_index, na_values=args.missing_char)
         print('Number of non-missing phenotype observations: ' + str(y.shape[0]))
+        if ids is not None:
+            y.filter_ids(y.ids[np.isin(y.ids, pg.ids)])
         if args.covar is not None:
             print('Reading covariates')
             covariates = read.phenotype.read_covariates(args.covar, pheno_ids=y.ids, missing_char=args.missing_char)

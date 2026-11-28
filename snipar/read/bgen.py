@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 
 import numpy as np
+from snipar.bgen_packed import PackedBgenSubset, subset_samples
 from snipar.gtarray import gtarray
 from snipar.utilities import make_id_dict, open_bgen
 
@@ -43,18 +45,18 @@ def _first_allele_dosage(reader, samples, variants, *, num_threads=None, order=N
         variants, n_variants = _read_index(variants, len(reader._vaddr))
         result = np.empty((n_samples, n_variants), dtype=np.float32, order=order or 'F')
 
-        def store(index, genotype):
+        def store(index, probabilities, phased, missing, selected):
             target = result[:, index]
-            probabilities = genotype.probability
-            p_first = probabilities[samples, 0]
-            if genotype.phased:
-                np.add(p_first, probabilities[samples, 2], out=target)
+            p_first = probabilities[selected, 0]
+            if phased:
+                np.add(p_first, probabilities[selected, 2], out=target)
             else:
                 np.multiply(p_first, 2, out=target)
-                np.add(target, probabilities[samples, 1], out=target)
-            target[genotype.missing[samples]] = np.nan
+                np.add(target, probabilities[selected, 1], out=target)
+            if missing is not None:
+                target[missing[selected]] = np.nan
 
-        _legacy_diploid(reader, samples, variants, num_threads or 1, store)
+        _legacy_diploid(reader, samples, n_samples, variants, num_threads or 1, store)
         return result
     kwargs = {} if num_threads is None else {'num_threads': num_threads}
     probabilities = reader.read((samples, variants), np.float32, **kwargs)
@@ -86,13 +88,13 @@ def read_diploid_probabilities(reader, samples, variants, phased, *, num_threads
     variants, n_variants = _read_index(variants, len(reader._vaddr))
     result = np.empty((n_samples, n_variants, 4 if phased else 3), dtype=np.float32, order='F')
 
-    def store(index, genotype):
-        if genotype.phased != phased:
+    def store(index, probabilities, is_phased, missing, selected):
+        if is_phased != phased:
             raise ValueError('BGEN hard calls require a consistently phased or unphased file')
         # Excluded samples may have higher ploidy and additional probability states.
-        result[:, index, :] = genotype.probability[samples, :result.shape[2]]
+        result[:, index, :] = probabilities[selected, :result.shape[2]]
 
-    _legacy_diploid(reader, samples, variants, num_threads, store)
+    _legacy_diploid(reader, samples, n_samples, variants, num_threads, store)
     return result
 
 
@@ -104,13 +106,12 @@ def read_hard_calls(reader, samples, variants, phased, missing, *, num_threads=1
     result = np.empty((n_samples, n_variants), dtype=np.int8, order='F')
     n_probabilities = 4 if phased else 3
     if hasattr(reader, '_vaddr'):
-        def store(index, genotype):
-            if genotype.phased != phased:
+        def store(index, probabilities, is_phased, missing_mask, selected):
+            if is_phased != phased:
                 raise ValueError('BGEN hard calls require a consistently phased or unphased file')
-            values = genotype.probability[samples, :n_probabilities]
-            hard_calls(values, phased, missing, out=result[:, index])
+            hard_calls(probabilities[selected, :n_probabilities], phased, missing, out=result[:, index])
 
-        _legacy_diploid(reader, samples, variants, num_threads, store)
+        _legacy_diploid(reader, samples, n_samples, variants, num_threads, store)
         return result
 
     # Keep the native probability tiles and temporary masks small regardless
@@ -138,7 +139,7 @@ def _read_index(index, size):
     return index, np.count_nonzero(index) if index.dtype.kind == 'b' else len(index)
 
 
-def _legacy_diploid(reader, samples, variants, num_threads, store):
+def _legacy_diploid(reader, samples, n_samples, variants, num_threads, store):
     """Validate selected variants during decode instead of decompressing a chromosome up front."""
 
     from cbgen import bgen_file
@@ -147,14 +148,30 @@ def _legacy_diploid(reader, samples, variants, num_threads, store):
     alleles = reader.nalleles[variants]
     if np.any(alleles != 2):
         raise ValueError('Expected diploid, biallelic BGEN genotypes')
+    count = len(reader.samples)
+    selected = subset_samples(samples, count, n_samples)
+    all_selected = slice(None)
 
     def fill(start, stop):
-        with bgen_file(reader._filepath) as source:
+        with ExitStack() as contexts:
+            packed = None
+            if selected is not None:
+                stream = contexts.enter_context(open(reader._filepath, 'rb'))
+                packed = PackedBgenSubset.from_stream(stream, count, selected)
+            source = None
             for column in range(start, stop):
-                genotype = source.read_genotype(int(offsets[column]), precision=32)
+                offset = int(offsets[column])
+                decoded = packed.read(offset) if packed is not None else None
+                if decoded is not None:
+                    probabilities, phased = decoded
+                    store(column, probabilities, phased, None, all_selected)
+                    continue
+                if source is None:
+                    source = contexts.enter_context(bgen_file(reader._filepath))
+                genotype = source.read_genotype(offset, precision=32)
                 if np.any(genotype.ploidy[samples] != 2):
                     raise ValueError('Expected diploid, biallelic BGEN genotypes')
-                store(column, genotype)
+                store(column, genotype.probability, genotype.phased, genotype.missing, samples)
 
     threads = min(num_threads, len(offsets))
     if threads == 1:

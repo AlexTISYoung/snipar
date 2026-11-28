@@ -105,16 +105,39 @@ require a PASS record.
 ``INFO/AN``) or frequency (``INFO/AF``) reported in the input. Sites with no
 usable annotation are still considered. ``--vcf-min-maf`` computes the
 frequency from the called genotypes before writing the prepared files.
-These opt-in filters use the annotation cohort or the selected VCF samples.
-An analysis cohort can have different allele frequencies, and its own
-``--min_maf`` rules still apply.
+The annotation and genotype frequencies can differ from those in the
+analysis cohort. The analysis command's own ``--min_maf`` rules still apply.
+
+When you pass ``--vcf`` directly, SNIPar converts only the samples needed
+for the requested analysis. ``gwas.py`` starts with non-missing phenotypes
+and applies ``--keep`` if supplied. ``pgs.py`` and ``gts_matrix.py`` start
+with the pedigree and also accept ``--keep`` to restrict proband output.
+These commands retain observed parents and, for sibling designs, genotyped
+siblings needed by the selected probands. IBD inference retains the sibling
+pairs and any parent–offspring pairs used to estimate genotype error.
+Imputation retains the genotyped relatives and offspring used to estimate
+allele frequencies. ``simulate.py`` with ``--nfam`` stages the requested
+founders in ordinary simulations. Stabilizing-selection simulations use the
+full input breeding pool. ``correlate.py`` uses the full supplied LD reference.
+
+Direct VCF commands use the full input panel for ``--vcf-min-maf`` and
+therefore stage all its samples when the threshold is positive. For a
+one-time conversion with an explicit sample list, use
+``vcf_to_genotypes.py --samples FILE``. Its genotype-based MAF filter uses
+those selected samples.
 
 An analysis command writes a temporary seekable BED or phased BGEN, then
-removes it when the command finishes. Available scratch space and VCF
-decompression can affect performance. Prepare commonly reused input once
+removes it when the command finishes. The reader still streams the entire
+compressed VCF, so decompression and scratch space can affect performance.
+Prepare commonly reused input once
 with ``vcf_to_genotypes.py`` and pass the reported BED or BGEN prefix to
 subsequent commands. Use ``--format auto`` to preserve consistent phase or
 ``--format phased`` to require it.
+
+When an analysis selects a small fraction of a BGEN panel, SNIPar can
+decode just those samples from supported packed diploid, biallelic blocks.
+It still reads and decompresses each retained block. Other encodings use
+the installed BGEN reader.
 
 .. code-block:: sh
 
@@ -161,6 +184,7 @@ imputation or pedigree inputs as the scoring command.
 
 It writes one ``.genoarray.hdf5`` file per chromosome. The files include sample
 and variant identifiers, and ``--help`` lists the filtering options.
+Use ``--keep FILE`` with one proband IID per line to limit the output rows.
 
 make_rdr_grms.py
 ----------------

@@ -214,6 +214,33 @@ def test_vcf_multichromosome_sources_align_sample_ids(tmp_path):
             np.testing.assert_array_equal(reader.read()[:, 0], [0, 2])
 
 
+def test_vcf_header_selector_aligns_the_subset_and_checks_panel_membership(tmp_path):
+    for chrom, samples, calls in [(1, ('001', 'NA', 'extra'), ('0/0', '1/1', '0/0')),
+                                 (2, ('extra', 'NA', '001'), ('1/1', '1/1', '0/0'))]:
+        (tmp_path / f'chr{chrom}.vcf').write_bytes(_vcf([
+            (str(chrom), '5', f's{chrom}', 'A', 'G', '.', 'PASS', '.', 'GT', *calls),
+        ], samples))
+    headers = []
+
+    def select(samples):
+        headers.append(samples)
+        return {'NA'}
+
+    source = tmp_path / 'chr@.vcf'
+    result = convert_vcf(source, tmp_path / 'output', select_samples=select)
+    assert headers == [('001', 'NA', 'extra')]
+    assert result.n_samples == 1
+    for chrom in (1, 2):
+        with open_bed(result.bed.replace('@', str(chrom)) + '.bed') as reader:
+            np.testing.assert_array_equal(reader.iid, ['NA'])
+            np.testing.assert_array_equal(reader.read()[:, 0], [0])
+
+    chromosome_two = tmp_path / 'chr2.vcf'
+    chromosome_two.write_bytes(chromosome_two.read_bytes().replace(b'extra', b'other'))
+    with pytest.raises(ValueError, match='same set of samples'):
+        convert_vcf(source, tmp_path / 'mismatch', select_samples=select)
+
+
 def test_vcf_accepts_diploid_phasing_flags_and_downgrades_allele_specific_sets(tmp_path):
     source = tmp_path / 'latest.vcf'
     source.write_bytes(_vcf([

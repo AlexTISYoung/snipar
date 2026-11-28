@@ -2,6 +2,8 @@ import numpy as np
 from numba import njit, prange
 from snipar.utilities import *
 from snipar.map import decode_map_from_pos
+from snipar.read.bgen import read_diploid_probabilities
+from snipar.resources import plan_batches
 
 ### Read haplotypes from bgen
 def haps_from_bgen(bgenfiles, chr_range, nfam=None):
@@ -36,11 +38,20 @@ def haps_from_bgen(bgenfiles, chr_range, nfam=None):
             raise ValueError(f"No SNPs on chromosome {chroms[i]} have genetic map positions")
         order = np.argsort(bgen.positions[markers], kind="stable")
         markers = markers[order]
-        probs = bgen.read((rows, markers), np.float32)
-        if probs.shape[2] != 4 or not np.isfinite(probs).all():
-            raise ValueError("Found missing or unphased genotypes; simulation requires complete phased biallelic BGEN input")
-        calls = probs[:, :, [0, 2]] >= .5
-        haps.append(calls.reshape((2, n_pairs, len(markers), 2)).transpose(1, 0, 2, 3).copy())
+        _, width = plan_batches(len(markers), 20 * len(rows),
+                                fixed_bytes=2 * len(rows) * len(markers) + 32 * len(bgen.samples))
+        founders = np.empty((n_pairs, 2, len(markers), 2), dtype=bool)
+        for start in range(0, len(markers), width):
+            end = min(start + width, len(markers))
+            probs = read_diploid_probabilities(bgen, rows, markers[start:end], phased=True)
+            if probs.shape[2] != 4 or not np.isfinite(probs).all():
+                raise ValueError('Simulation requires complete phased biallelic BGEN genotypes')
+            target = founders[:, :, start:end]
+            for allele in (0, 1):
+                values = probs[:, :, 2 * allele].reshape(2, n_pairs, end - start).transpose(1, 0, 2)
+                np.greater_equal(values, .5, out=target[..., allele])
+            del probs, values
+        haps.append(founders)
         maps.append(genetic_map[markers])
         positions.append(bgen.positions[markers])
         snp_ids.append(bgen.rsids[markers])

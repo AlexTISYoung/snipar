@@ -26,7 +26,7 @@ Results:
 """
 import logging
 from snipar.imputation.preprocess_data import (
-    ImputationGenotypes, frequency_model_aic, prepare_data, prepare_gts,
+    ImputationGenotypes, frequency_model_aic, prepare_data, prepare_gts, prepare_imputation_pedigree,
 )
 from snipar.imputation.impute_from_sibs import ImputationFamilies, impute
 from snipar.pedigree import create_pedigree
@@ -144,14 +144,15 @@ def _select_pc_model(genotypes, markers, width):
     genotypes.matched_pcs = genotypes.matched_pcs[:, :chosen]
 
 
-def _run_chromosome(pedigree, pcs, pc_ids, args):
+def _run_chromosome(pedigree, prepared_pedigree, pcs, pc_ids, args):
     with limit_native_threads(1):
-        return run_imputation(dict(args, pedigree=pedigree, pcs=pcs, pc_ids=pc_ids))
+        return run_imputation(dict(args, pedigree=pedigree, prepared_pedigree=prepared_pedigree,
+                                   pcs=pcs, pc_ids=pc_ids))
 
 
-def _init_chromosomes(pedigree, pcs, pc_ids):
+def _init_chromosomes(pedigree, prepared_pedigree, pcs, pc_ids):
     global _chromosome_inputs
-    _chromosome_inputs = pedigree, pcs, pc_ids
+    _chromosome_inputs = pedigree, prepared_pedigree, pcs, pc_ids
 
 
 def _run_chromosome_worker(args):
@@ -263,6 +264,7 @@ def run_imputation(data):
     sibships, ibd, bim, chromosomes, ped_ids, pedigree_output = prepare_data(
         pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim, fam,
         control, chromosome=chromosome, pedigree_nan=pedigree_nan,
+        prepared_pedigree=data.get("prepared_pedigree"),
     )
     if sibships.empty:
         raise ValueError("No families have the required sibling or parental genotypes for imputation")
@@ -326,8 +328,32 @@ def run_imputation(data):
             os.replace(temporary_output, output)
     return time() - start_time
 
-#does the imputation and writes the results
-@with_genotypes(output='auto')
+def _load_pedigree(args):
+    if args.pedigree:
+        logging.info("Reading pedigree")
+        pedigree = pd.read_csv(args.pedigree, sep=r"\s+", dtype=str, keep_default_na=False)
+    else:
+        logging.info("Creating pedigree")
+        pedigree = create_pedigree(args.king, args.agesex)
+    return pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]]
+
+
+def _vcf_samples(args, available_ids):
+    pedigree = _load_pedigree(args)
+    pedigree_ids = set(pedigree["IID"])
+    pedigree_ids.update(pedigree["FATHER_ID"], pedigree["MOTHER_ID"])
+    pedigree_ids.intersection_update(available_ids)
+    prepared = prepare_imputation_pedigree(pedigree, pedigree_ids, control=args.c,
+                                           pedigree_nan=args.pedigree_nan)
+    if prepared.sibships.empty:
+        raise ValueError("No families have the required sibling or parental genotypes for imputation")
+    # The output pedigree describes the original observations, including
+    # complete trios whose genotypes are not needed for parental imputation.
+    args._vcf_pedigree = prepared
+    return {iid.decode() for iid in prepared.sample_ids}
+
+
+@with_genotypes(output='auto', vcf_samples=_vcf_samples)
 def main(args):
     """"Calling this function with args is equivalent to running this script from commandline with the same arguments.
     Args:
@@ -343,17 +369,11 @@ def main(args):
     except PackageNotFoundError:
         logging.info("Running snipar from an uninstalled source tree")
 
-    #fids starting with _ are reserved for control
-    #Families should not have grandparents
-    if not args.pedigree:
-        logging.info("creating pedigree ...")
-        pedigree = create_pedigree(args.king, args.agesex)
-    else:
-        logging.info("reading pedigree ...")
-        pedigree = pd.read_csv(args.pedigree, sep=r"\s+", dtype=str, keep_default_na=False)
-    pedigree = pedigree[['FID', 'IID', 'FATHER_ID', 'MOTHER_ID']]
-    logging.info("pedigree loaded.")
-    
+    prepared_pedigree = getattr(args, "_vcf_pedigree", None)
+    pedigree = _load_pedigree(args) if prepared_pedigree is None else None
+    pedigree_rows = len(pedigree) if prepared_pedigree is None else len(prepared_pedigree.table) - 1
+    logging.info("Pedigree loaded.")
+
     pcs = None
     pc_ids = None
     if args.pcs:
@@ -408,11 +428,11 @@ def main(args):
     budget = get_memory_budget()
     # Subprocesses share neither Python metadata nor native scratch under
     # spawn. Give each a bounded share, including the cost of its metadata.
-    fixed_per_worker = 256 * MIB + len(pedigree) * 1024
+    fixed_per_worker = 256 * MIB + pedigree_rows * 1024
     if pcs is not None:
         fixed_per_worker += 2 * pcs.nbytes
     if args.bgen:
-        fixed_per_worker += 550 * len(pedigree)
+        fixed_per_worker += 550 * pedigree_rows
     processes = min(args.processes, len(chromosomes), cpu_count, max(1, budget // fixed_per_worker))
     threads = min(args.threads or cpu_count, max(1, cpu_count // processes))
     inputs = [{"control":args.c,
@@ -439,14 +459,15 @@ def main(args):
             for chromosome in chromosomes]
     start_time = time()
     logging.info("Allocating %d chromosome processes and %d threads per process", processes, threads)
+    chromosome_inputs = pedigree, prepared_pedigree, pcs, pc_ids
     if processes > 1:
         with worker_environment(1), get_context("spawn").Pool(
-            processes, initializer=_init_chromosomes, initargs=(pedigree, pcs, pc_ids),
+            processes, initializer=_init_chromosomes, initargs=chromosome_inputs,
         ) as pool:
             pool.map(_run_chromosome_worker, inputs, chunksize=1)
     else:
         for job in inputs:
-            _run_chromosome(pedigree, pcs, pc_ids, job)
+            _run_chromosome(*chromosome_inputs, job)
     logging.info("Imputation time: %.2f seconds", time() - start_time)
 
 parser = argparse.ArgumentParser()

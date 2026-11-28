@@ -19,6 +19,8 @@ from array import array
 from contextlib import nullcontext
 from itertools import chain
 import logging
+from typing import NamedTuple
+
 import pandas as pd
 import numpy as np
 from pysnptools.snpreader import Bed
@@ -218,7 +220,61 @@ def preprocess_king(ibd, segs, bim, chromosomes, sibships):
                         ibd_dict[(sib1, sib2)] = flatten_seg_as_ibd0
     return ibd_dict
 
-def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king, bim_address = None, fam_address = None, control = False, chromosome = None, pedigree_nan = '0'):
+
+class PreparedPedigree(NamedTuple):
+    sibships: pd.DataFrame
+    sample_ids: set[bytes]
+    table: np.ndarray
+
+
+def prepare_imputation_pedigree(pedigree, genotype_ids, *, control=False, pedigree_nan="0"):
+    """Determine imputation families, genotype rows for estimation, and pedigree metadata."""
+    pedigree = pedigree.copy()
+    id_columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID"]
+    pedigree[id_columns] = pedigree[id_columns].astype(str)
+    logging.info("Filtering pedigree file")
+    pedigree = pedigree[pedigree["IID"].isin(genotype_ids)].copy()
+    pedigree["has_father"] = pedigree["FATHER_ID"].isin(genotype_ids) & (pedigree["FATHER_ID"] != pedigree_nan)
+    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(genotype_ids) & (pedigree["MOTHER_ID"] != pedigree_nan)
+    if control:
+        logging.info("Adding control to the pedigree ...")
+        pedigree = add_control(pedigree)
+        logging.info("Control Added.")
+    no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
+    # Keep a singleton with one observed parent, even when the missing parent's ID is unknown.
+    has_known_parents = ((no_parent_pedigree["MOTHER_ID"] != pedigree_nan) &
+                         (no_parent_pedigree["FATHER_ID"] != pedigree_nan))
+    single_observed = no_parent_pedigree["has_father"] ^ no_parent_pedigree["has_mother"]
+    no_parent_pedigree = no_parent_pedigree.loc[has_known_parents | single_observed].copy()
+    no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
+    group_keys = ["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]
+    grouped = no_parent_pedigree.groupby(group_keys)
+    sibships = grouped.size().rename("sib_count").reset_index()
+    sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
+    eligible = (sibships["sib_count"] > 1) | sibships["single_parent"]
+    group_index = grouped.ngroup().to_numpy()
+    selected = eligible.to_numpy()[group_index]
+    rows = np.argsort(group_index[selected], kind="stable")
+    iid = no_parent_pedigree["IID"].to_numpy()[selected][rows]
+    sibships = sibships.loc[eligible].copy()
+    ends = np.cumsum(sibships["sib_count"].to_numpy())
+    groups = np.empty(len(ends), dtype=object)
+    for index, (first, end) in enumerate(zip(np.r_[0, ends], ends)):
+        groups[index] = iid[first:end]
+    sibships["IID"] = groups
+    # The frequency estimate includes candidate offspring from families
+    # ineligible for imputation, as well as observed parents used by the fit.
+    ped_ids = set(no_parent_pedigree["IID"])
+    ped_ids.update(sibships.loc[sibships["has_father"], "FATHER_ID"])
+    ped_ids.update(sibships.loc[sibships["has_mother"], "MOTHER_ID"])
+    del grouped, no_parent_pedigree
+    table = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values)).astype("S")
+    return PreparedPedigree(sibships, ped_ids, table)
+
+
+def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is_king,
+                 bim_address=None, fam_address=None, control=False, chromosome=None,
+                 pedigree_nan="0", *, prepared_pedigree=None):
     """Processes the non_gts required data for the imputation and returns it.
 
     Outputs for used for the imputation have ascii bytes instead of strings.
@@ -284,10 +340,12 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             bim_address = unphased_address+'.bim'
         bim = pd.read_csv(bim_address, sep=r"\s+", header=None, names=["Chr", "id", "morgans", "coordinate", "allele1", "allele2"],
                           dtype={"id": str, "allele1": str, "allele2": str}, keep_default_na=False)
-        if fam_address is None:
-            fam_address = unphased_address+'.fam'
-        fam = pd.read_csv(fam_address, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"],
-                          usecols=["IID"], dtype={"IID": str}, keep_default_na=False)
+        if prepared_pedigree is None:
+            if fam_address is None:
+                fam_address = unphased_address + ".fam"
+            fam = pd.read_csv(fam_address, sep=r"\s+", header=None, names=["FID", "IID", "PID", "MID", "SEX", "Phen"],
+                              usecols=["IID"], dtype={"IID": str}, keep_default_na=False)
+            genotype_ids = set(fam["IID"])
 
     else:
         if bim_address is None:
@@ -313,61 +371,23 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
             else:
                 bim = read_bgen(bim_address)["variants"].compute()
             variant_ids = np.where(np.isin(reader.rsids, ("", ".")), reader.ids, reader.rsids)
-            ids = np.array(reader.samples)
+            if prepared_pedigree is None and fam_address == bim_address:
+                genotype_ids = set(reader.samples)
         bim = bim.rename(columns={"chrom": "Chr", "pos": "coordinate"})
         bim["id"] = variant_ids
         bim["Chr"] = chromosome
-        if fam_address != bim_address:
+        if prepared_pedigree is None and fam_address != bim_address:
             with open_bgen(fam_address) as reader:
-                ids = np.array(reader.samples)
-        fam = pd.DataFrame({"IID": ids})
+                genotype_ids = set(reader.samples)
 
     chromosomes = bim["Chr"].unique().astype(int)
     if len(chromosomes) != 1:
         raise ValueError("Imputation requires one chromosome per genotype file")
-    pedigree = pedigree.copy()
-    id_columns = ["FID", "IID", "FATHER_ID", "MOTHER_ID"]
-    pedigree[id_columns] = pedigree[id_columns].astype(str)
-    genotype_ids = set(fam["IID"].astype(str))
-    logging.info(f"with chromosomes {chromosomes} initializing non_gts data")
-    logging.info(f"with chromosomes {chromosomes} loading and filtering pedigree file ...")
-    #Keep individuals in fam
-    pedigree = pedigree[pedigree["IID"].isin(genotype_ids)].copy()
-    pedigree["has_father"] = pedigree["FATHER_ID"].isin(genotype_ids) & (pedigree["FATHER_ID"] != pedigree_nan)
-    pedigree["has_mother"] = pedigree["MOTHER_ID"].isin(genotype_ids) & (pedigree["MOTHER_ID"] != pedigree_nan)
-    del genotype_ids, fam
-    if control:
-        logging.info("Adding control to the pedigree ...")
-        pedigree = add_control(pedigree)
-        logging.info("Control Added.")
-    #keeping individuals with no parents
-    no_parent_pedigree = pedigree[~(pedigree["has_mother"] & pedigree["has_father"])]
-    # Keep a singleton with one observed parent, even when the missing parent's ID is unknown.
-    has_known_parents = ((no_parent_pedigree["MOTHER_ID"] != pedigree_nan) &
-                         (no_parent_pedigree["FATHER_ID"] != pedigree_nan))
-    single_observed = no_parent_pedigree["has_father"] ^ no_parent_pedigree["has_mother"]
-    no_parent_pedigree = no_parent_pedigree.loc[has_known_parents | single_observed].copy()
-    no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]] = no_parent_pedigree[["FID", "IID", "FATHER_ID", "MOTHER_ID"]].astype("S")
-    #finding siblings in each family
-    group_keys = ["FID", "FATHER_ID", "MOTHER_ID", "has_father", "has_mother"]
-    grouped = no_parent_pedigree.groupby(group_keys)
-    sibships = grouped.size().rename("sib_count").reset_index()
-    sibships["single_parent"] = sibships["has_father"] ^ sibships["has_mother"]
-    eligible = (sibships["sib_count"] > 1) | sibships["single_parent"]
-    group_index = grouped.ngroup().to_numpy()
-    selected = eligible.to_numpy()[group_index]
-    rows = np.argsort(group_index[selected], kind="stable")
-    iid = no_parent_pedigree["IID"].to_numpy()[selected][rows]
-    sibships = sibships.loc[eligible].copy()
-    ends = np.cumsum(sibships["sib_count"].to_numpy())
-    groups = np.empty(len(ends), dtype=object)
-    for index, (first, end) in enumerate(zip(np.r_[0, ends], ends)):
-        groups[index] = iid[first:end]
-    sibships["IID"] = groups
-    ped_ids = set(no_parent_pedigree["IID"])
-    ped_ids.update(sibships.loc[sibships["has_father"], "FATHER_ID"])
-    ped_ids.update(sibships.loc[sibships["has_mother"], "MOTHER_ID"])
-    del grouped, no_parent_pedigree
+    if prepared_pedigree is None:
+        prepared_pedigree = prepare_imputation_pedigree(
+            pedigree, genotype_ids, control=control, pedigree_nan=pedigree_nan,
+        )
+    sibships, ped_ids, pedigree_output = prepared_pedigree
     logging.info(f"with chromosomes {chromosomes} loading bim file ...")      
     logging.info(f"with chromosomes {chromosomes} loading and transforming ibd file ...")
     if ibd_address is None:
@@ -410,7 +430,6 @@ def prepare_data(pedigree, phased_address, unphased_address, ibd_address, ibd_is
         logging.warning(f"with chromosomes {chromosomes} no matching ibd segments")        
     logging.info("ibd loaded.")        
     logging.info(f"with chromosomes {chromosomes} initializing non_gts data done ...")
-    pedigree_output = np.concatenate(([pedigree.columns.values.tolist()], pedigree.values)).astype('S')
     return sibships, ibd, bim, chromosomes, ped_ids, pedigree_output
 
 def _fit_frequency_model(x, dosage, called):

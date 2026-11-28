@@ -2,6 +2,7 @@
 
 import gzip
 from itertools import combinations
+from shutil import copyfile
 
 import h5py
 import numpy as np
@@ -143,6 +144,33 @@ def test_gwas_phenotype_selection_and_output_options(family_inputs, tmp_path):
         assert not prefix.with_suffix('.sumstats.hdf5').exists()
         results.append(pd.read_csv(f'{prefix}.sumstats.gz', sep=r'\s+'))
     pd.testing.assert_frame_equal(*results)
+
+
+def test_gwas_vcf_stages_only_selected_families(family_inputs, tmp_path, capsys):
+    root, vcf, bed = family_inputs
+    keep = tmp_path / 'keep'
+    keep.write_text(''.join(f'f{i}_0\n' for i in range(12)))
+    common = [str(root / 'phenotype.txt'), '--pedigree', str(root / 'pedigree.txt'), '--keep', str(keep),
+              '--vc_list', '.4', '.6', '--threads', '1', '--batch_size', '20', '--no_hdf5_out']
+    for flag, source in [('--bed', bed), ('--vcf', vcf)]:
+        gwas.main(gwas.parser.parse_args([*common, flag, str(source), '--out', str(tmp_path / flag[2:])]))
+    log = capsys.readouterr().out
+    assert '48 samples as BED' in log  # 36 siblings and 12 observed parents
+    assert log.count('Using 12 individuals eligible') == 2
+    pd.testing.assert_frame_equal(*(pd.read_csv(tmp_path / f'{fmt}.sumstats.gz', sep=r'\s+')
+                                    for fmt in ('bed', 'vcf')))
+
+
+def test_gwas_vcf_ignores_imputation_chromosome_absent_from_vcf(family_inputs, tmp_path, capsys):
+    root, vcf, _ = family_inputs
+    copyfile(root / 'parents.hdf5', tmp_path / 'parents_22.hdf5')
+    (tmp_path / 'parents_21.hdf5').write_bytes(b'incomplete')
+    out = tmp_path / 'result'
+    gwas.main(gwas.parser.parse_args([str(root / 'phenotype.txt'), '--vcf', str(vcf),
+                                    '--imp', str(tmp_path / 'parents_@'), '--chr_range', '21', '22',
+                                    '--vc_list', '.4', '.6', '--threads', '1', '--out', str(out)]))
+    assert '1 matched observed and imputed genotype files found' in capsys.readouterr().out
+    assert (tmp_path / 'result_chr_22.sumstats.gz').is_file()
 
 
 def test_gls_skips_roundoff_scale_collinearity_within_a_batch():

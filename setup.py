@@ -41,6 +41,7 @@ install_requires = [
     '(python_version < "3.12" or sys_platform != "linux" or platform_machine != "aarch64")',
     'bgen>=1.11,<2; python_version >= "3.13" or '
     '(python_version >= "3.12" and sys_platform == "linux" and platform_machine == "aarch64")',
+    'zstandard>=0.22; python_version < "3.14"',
     "pandas>=2.2.3,<3",
     "pysnptools>=1.0.1,<2",
     "networkx>=3.3,<4",

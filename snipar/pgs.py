@@ -199,7 +199,15 @@ def read_pgs(pgs_file):
                    par_status=par_status, ped=ped)
 
 
-def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None, num_threads=None):
+def grandparent_score_ids(pedigree, ids):
+    """Include parents whose own parental scores can supply grandparental scores."""
+    ids = np.array(list(ids), dtype=str)
+    selected = pedigree[np.isin(pedigree[:, 1], ids), 2:4]
+    parents = selected.ravel()
+    return np.union1d(ids, parents[(parents != '0') & (parents != '')])
+
+
+def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=False, compute_controls=False, verbose=True, batch_size=None, num_threads=None, *, ids=None):
     """Compute a polygenic score (PGS) for the individuals with observed genotypes and observed/imputed parental genotypes.
 
     Args:
@@ -213,6 +221,8 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
             Compute the PGS for genotyped individuals with at least one genotyped sibling and observed/imputed parental genotypes. Default False.
         compute_controls : :class:`bool`
             Compute polygenic scores for control families (families with observed parental genotypes set to missing). Default False.
+        ids : :class:`~numpy:numpy.array`
+            Optional proband IDs. Observed relatives may contribute genotypes even when absent from this list.
 
     Returns:
         pg : :class:`snipar.gtarray`
@@ -227,7 +237,7 @@ def compute(pgs, bedfile=None, bgenfile=None, par_gts_f=None, ped=None, sib=Fals
     if batch_size is not None and (int(batch_size) != batch_size or batch_size < 1):
         raise ValueError('PGS batch size must be a positive integer')
 
-    with prepare_gts_matrix(ped=ped, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f,
+    with prepare_gts_matrix(ped=ped, bedfile=bedfile, bgenfile=bgenfile, par_gts_f=par_gts_f, ids=ids,
                             sib=sib, compute_controls=compute_controls, verbose=verbose,
                             num_threads=num_threads) as reader:
         try:
